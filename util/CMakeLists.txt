@@ -1,0 +1,27 @@
+#
+# $Id$
+#
+# (C) Copyright 2012 Johns Hopkins University (JHU), All Rights Reserved.
+#
+# --- begin cisst license - do not edit ---
+#
+# This software is provided "as is" under an open source license, with
+# no warranty.  The complete license can be found in license.txt and
+# http://www.cisst.org/cisst/license.txt.
+#
+# --- end cisst license ---
+
+# Backward compatibility
+cmake_minimum_required(VERSION 2.6)
+project(util1394)
+
+# Set the ouptut path for the libraries and executables
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})
+
+set(PROGRAMS block1394 info1394 time1394)
+
+foreach(program ${PROGRAMS})
+  add_executable(${program} ${program}.c)
+  target_link_libraries(${program} raw1394)
+endforeach(program)
+
