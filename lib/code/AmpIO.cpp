@@ -18,7 +18,6 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <byteswap.h>
-#include <string.h>
 #include <iostream>
 
 #include "AmpIO.h"
