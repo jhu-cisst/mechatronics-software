@@ -1,8 +1,8 @@
 /******************************************************************************
  *
  * This is a minimial Linux command line program that reads/writes blocks of
- * data from/to the 1394-based controller. As a special case, if QUAD1394
- * is defined, it reads/write one quadlet (32-bit value).
+ * data from/to the 1394-based controller. As a special case, if the program
+ * name (argv[0]) contains quad1394, it reads/write one quadlet (32-bit value).
  *
  * Compile: gcc -Wall -lraw1394 <name of this file> -o <name of executable>
  * Usage: <name of executable> [-pP] [-nN] address [size] [value1, ....]
@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
+#include <string.h>
 #include <byteswap.h>
 #include <libraw1394/raw1394.h>
 
@@ -61,6 +62,8 @@ int main(int argc, char** argv)
 
     signal(SIGINT, signal_handler);
 
+    int isQuad1394 = (strstr(argv[0], "quad1394") != 0);
+
     port = 0;
     node = 0;
     size = 1;
@@ -81,10 +84,9 @@ int main(int argc, char** argv)
         else {
             if (args_found == 0)
                 addr = strtoull(argv[i], 0, 16);
-            else if (args_found == 1) {
-#ifdef QUAD1394
+            else if ((args_found == 1) && (isQuad1394))
                 data1 = bswap_32(strtoul(argv[i], 0, 16));
-#else
+            else if ((args_found == 1) && (!isQuad1394)) {
                 size = strtoul(argv[i], 0, 10);
                 /* Allocate data array, initializing contents to 0 */
                 data = (quadlet_t *) calloc(sizeof(quadlet_t), size);
@@ -92,26 +94,21 @@ int main(int argc, char** argv)
                     fprintf(stderr, "Failed to allocate memory for %d quadlets", size);
                     exit(-1);
                 }
-#endif
             }
-            else {
-#ifdef QUAD1394
+            else if (!isQuad1394 && (j < size))
+                data[j++] = bswap_32(strtoul(argv[i], 0, 16));
+            else
                 fprintf(stderr, "Warning: extra parameter: %s\n", argv[i]);
-#else
-                if (j < size)
-                    data[j++] = bswap_32(strtoul(argv[i], 0, 16));
-#endif
-            }
+
             args_found++;
         }
     }
 
     if (args_found < 1) {
-#ifdef QUAD1394
-        printf("Usage: %s [-pP] [-nN] <address in hex> [value to write in hex]\n", argv[0]);
-#else
-        printf("Usage: %s [-pP] [-nN] <address in hex> <size in quadlets> [write data quadlets in hex]\n", argv[0]);
-#endif
+        if (isQuad1394)
+            printf("Usage: %s [-pP] [-nN] <address in hex> [value to write in hex]\n", argv[0]);
+        else
+            printf("Usage: %s [-pP] [-nN] <address in hex> <size in quadlets> [write data quadlets in hex]\n", argv[0]);
         printf("       where P = port number, N = node number\n");
         exit(0);
     }
@@ -155,11 +152,8 @@ int main(int argc, char** argv)
     int target_node = (id & 0xFFC0)+node;
 
     /* determine whether to read or write based on args_found */
-#ifdef QUAD1394
-    if (args_found == 1) {
-#else
-    if (args_found <= 2) {
-#endif
+    if ((isQuad1394 && (args_found == 1)) ||
+        (!isQuad1394 && (args_found <= 2))) {
         /* read the data block and print out the values */
         rc = raw1394_read(handle, target_node, addr, size*4, data);
         if (!rc) {

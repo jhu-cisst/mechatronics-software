@@ -8,8 +8,8 @@ all: $(EXEC)
 %: %.c
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
 
-quad1394: block1394.c
-	$(CC) -DQUAD1394 $(CFLAGS) block1394.c -o quad1394 $(LDFLAGS)
+quad1394: block1394
+	cp block1394 quad1394
 
 clean:
 	rm -rf $(EXEC)
