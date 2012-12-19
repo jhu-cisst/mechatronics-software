@@ -3,13 +3,12 @@
 
 /******************************************************************************
  *
- * This is a preliminary curses program for continuously reading the encoder
- * values from Channel 1 of a single connected 1394-based controller.
+ * This program continuously displays the sensor feedback from the selected
+ * board. It relies on the curses library and the AmpIO library (which
+ * depends on libraw1394).
  *
- * Compile: gcc -Wall -lraw1394 -lcurses <name of this file> -o <name of exec>
- * Usage: <name of exec>
- *
- * Note: Assumes only one node is connected (and its 1394 ID is 0)
+ * Usage: sensor [-pP] <board num>
+ *        where P is the Firewire port number (default 0)
  *
  ******************************************************************************/
 
@@ -17,7 +16,6 @@
 #include <unistd.h>
 #include <curses.h>
 #include <iostream>
-
 
 #include "FirewirePort.h"
 #include "AmpIO.h"
