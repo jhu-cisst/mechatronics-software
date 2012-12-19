@@ -44,8 +44,15 @@ protected:
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
     static PortListType PortList;
+    bus_reset_handler_t old_reset_handler;
     // callback for 1394 bus reset event
     static int reset_handler(raw1394handle_t hdl, uint gen);
+
+    // Initialize Firewire port
+    bool Init(void);
+
+    // Cleanup Firewire port
+    void Cleanup(void);
 
     // Look for nodes on the bus
     bool ScanNodes(void);
@@ -53,6 +60,8 @@ protected:
 public:
     FirewirePort(int portNum);
     ~FirewirePort();
+
+    void Reset(void);
 
     bool IsOK(void) { return (handle != NULL); }
 

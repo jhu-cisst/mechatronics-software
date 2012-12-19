@@ -29,11 +29,17 @@ FirewirePort::PortListType FirewirePort::PortList;
 
 FirewirePort::FirewirePort(int portNum) : PortNum(portNum), max_board(0)
 {
+    memset(BoardList, 0, sizeof(BoardList));
+    Init();
+}
+
+bool FirewirePort::Init(void)
+{
     // create firewire port handle 
     handle = raw1394_new_handle();
     if (!handle) {
         std::cerr << "FirewirePort: could not create handle" << std::endl;
-        return;
+        return false;
     }
 
     PortListType::const_iterator it;
@@ -46,53 +52,62 @@ FirewirePort::FirewirePort(int portNum) : PortNum(portNum), max_board(0)
     }
     PortList.push_back(this);
 
-    memset(Node2Board, 0, sizeof(Node2Board));
-    memset(BoardList, 0, sizeof(BoardList));
+    memset(Node2Board, MAX_BOARDS, sizeof(Node2Board));
 
     // set the bus reset handler
-    raw1394_set_bus_reset_handler(handle, reset_handler);
+    old_reset_handler = raw1394_set_bus_reset_handler(handle, reset_handler);
 
     // get number of ports
     int nports = raw1394_get_port_info(handle, NULL, 0);
     std::cerr << "FirewirePort: number of ports = " << nports << std::endl;
-    if (nports < portNum) {
-        std::cerr << "FirewirePort: port " << portNum << " does not exist" << std::endl;
+    if (nports < PortNum) {
+        std::cerr << "FirewirePort: port " << PortNum << " does not exist" << std::endl;
         raw1394_destroy_handle(handle);
         handle = NULL;
-        return;
+        return false;
     }
 
-    if (raw1394_set_port(handle, portNum)) {
-        std::cerr << "FirewirePort: error setting port to " << portNum << std::endl;
+    if (raw1394_set_port(handle, PortNum)) {
+        std::cerr << "FirewirePort: error setting port to " << PortNum << std::endl;
         raw1394_destroy_handle(handle);
         handle = NULL;
-        return;
+        return false;
     }
-    std::cerr << "FirewirePort: successfully initialized port " << portNum << std::endl;
+    std::cerr << "FirewirePort: successfully initialized port " << PortNum << std::endl;
 
-    ScanNodes();
+    return ScanNodes();
 }
 
 FirewirePort::~FirewirePort()
 {
+    Cleanup();
+}
 
+void FirewirePort::Cleanup(void)
+{
     PortListType::iterator it = std::find(PortList.begin(), PortList.end(), this);
     if (it == PortList.end())
-        std::cerr << "FirewirePort destructor could not find entry for port " << PortNum << std::endl;
+        std::cerr << "FirewirePort cleanup could not find entry for port " << PortNum << std::endl;
     else
         PortList.erase(it);
     raw1394_destroy_handle(handle);
+    handle = NULL;
+}
+
+void FirewirePort::Reset(void)
+{
+    Cleanup();
+    Init();
 }
 
 int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
 {
+    int ret = 0;
     std::cerr << "Firewire bus reset: generation = " << gen << std::endl;
-    // Are following 2 lines necessary??
-    raw1394_get_local_id(hdl);
-    raw1394_update_generation(hdl, gen);
     PortListType::iterator it;
     for (it = PortList.begin(); it != PortList.end(); it++) {
-        if ((*it)->handle = hdl) {
+        if ((*it)->handle == hdl) {
+            ret = (*it)->old_reset_handler(hdl, gen);
             std::cerr << "Firewire bus reset: scanning port " << (*it)->PortNum << std::endl;
             (*it)->ScanNodes();
             break;
@@ -100,7 +115,7 @@ int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
     }
     if (it == PortList.end())
         std::cerr << "Firewire bus reset: could not find port" << std::endl;
-    return 0;
+    return ret;
 }
 
 bool FirewirePort::ScanNodes(void)
@@ -108,19 +123,19 @@ bool FirewirePort::ScanNodes(void)
     int node, board;  // loop counters
 
     // Clear any existing Node2Board
-    memset(Node2Board, 0, sizeof(Node2Board));
+    memset(Node2Board, MAX_BOARDS, sizeof(Node2Board));
 
     // Get base node id (zero out 6 lsb)
     baseNodeId = raw1394_get_local_id(handle) & 0xFFC0;
-    std::cerr << "ScanNodes: base node id = " << baseNodeId << std::endl;
+    std::cerr << "ScanNodes: base node id = " << std::hex << baseNodeId << std::endl;
 
     // iterate through all the nodes and find out their boardId
     int numNodes = raw1394_get_nodecount(handle);
 
     std::cerr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
-    // iterate through all connected nodes
-    // need a better way to make sure we only choose compatible nodes
-    for (node = 0; node < numNodes; node++){
+    // Iterate through all connected nodes (except for last one, which is the PC).
+    // Need a better way to make sure we only choose compatible nodes
+    for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
         if (raw1394_read(handle, baseNodeId+node, 0, 4, &data)) {
             std::cerr << "ScanNodes: unable to read from node " << node << std::endl;
@@ -132,7 +147,8 @@ bool FirewirePort::ScanNodes(void)
         if ((board >= 0) && (board < MAX_BOARDS)) {
             std::cerr << "  Node " << node << ", BoardId = " << board << std::endl;
             if (Node2Board[node] < MAX_BOARDS)
-                std::cerr << "    Duplicate entry, previous value = " << Node2Board[node] << std::endl;
+                std::cerr << "    Duplicate entry, previous value = "
+                          << static_cast<int>(Node2Board[node]) << std::endl;
             Node2Board[node] = board;
         }
         else  // can't happen unless BOARD_ID_MASK changes
@@ -141,7 +157,7 @@ bool FirewirePort::ScanNodes(void)
 
     for (board = 0; board < MAX_BOARDS; board++) {
         Board2Node[board] = MAX_NODES;
-        for (node = 0; node < numNodes; node++) {
+        for (node = 0; node < numNodes-1; node++) {
             if (Node2Board[node] == board) {
                 if (Board2Node[board] < MAX_NODES)
                     std::cerr << "Warning: GetNodeId detected duplicate board id for " << board << std::endl;
@@ -208,7 +224,7 @@ bool FirewirePort::ReadAllBoards(void)
         return false;
     }
     bool allOK = true;
-    for (int board = 0; board < max_board; board++) {
+    for (int board = 0; board <= max_board; board++) {
         if (BoardList[board]) {
             bool ret = false;
             int node = Board2Node[board];
