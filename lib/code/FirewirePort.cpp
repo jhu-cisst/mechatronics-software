@@ -176,8 +176,8 @@ bool FirewirePort::AddBoard(BoardIO *board)
         return false;
     }
     BoardList[board->BoardId] = board;
-    if (board->BoardId > max_board)
-        max_board = board->BoardId;
+    if (board->BoardId >= max_board)
+        max_board = board->BoardId+1;
     board->port = this;
     return true;
 }
@@ -194,11 +194,11 @@ bool FirewirePort::RemoveBoard(unsigned char boardId)
         return false;
     }    
     BoardList[boardId] = 0;
-    if (boardId >= max_board) {
+    if (boardId >= max_board-1) {
         // If max_board was just removed, find the new max_board
         max_board = 0;
         for (int bd = 0; bd < boardId; bd++)
-            if (BoardList[bd]) max_board = bd;
+            if (BoardList[bd]) max_board = bd+1;
     }
     board->port = 0;
     return true;
@@ -224,7 +224,7 @@ bool FirewirePort::ReadAllBoards(void)
         return false;
     }
     bool allOK = true;
-    for (int board = 0; board <= max_board; board++) {
+    for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             bool ret = false;
             int node = Board2Node[board];
@@ -241,7 +241,7 @@ bool FirewirePort::ReadAllBoards(void)
 bool FirewirePort::WriteAllBoards(void)
 {
     if (!handle) {
-        std::cerr << "ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
+        std::cerr << "WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
     }
     bool allOK = true;

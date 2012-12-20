@@ -90,17 +90,18 @@ int main(int argc, char** argv)
             mvwprintw(stdscr, 13, 16, "none");
 
         Port.ReadAllBoards();
-        if (!Board.ValidRead()) continue;
+        if (Board.ValidRead()) {
 
-        for (i = 0; i < 4; i++) {
-            mvwprintw(stdscr, 5, 9+8+i*10, "0x%04X", Board.GetEncoderPosition(i));
-            mvwprintw(stdscr, 6, 9+8+i*10, "0x%04X", Board.GetAnalogPosition(i));
-            mvwprintw(stdscr, 7, 9+8+i*10, "0x%04X", Board.GetEncoderVelocity(i));
-            mvwprintw(stdscr, 8, 9+8+i*10, "0x%04X", Board.GetEncoderFrequency(i));
-            mvwprintw(stdscr, 9, 9+8+i*10, "0x%04X", Board.GetMotorCurrent(i));
+            for (i = 0; i < 4; i++) {
+                mvwprintw(stdscr, 5, 9+8+i*10, "0x%04X", Board.GetEncoderPosition(i));
+                mvwprintw(stdscr, 6, 9+8+i*10, "0x%04X", Board.GetAnalogPosition(i));
+                mvwprintw(stdscr, 7, 9+8+i*10, "0x%04X", Board.GetEncoderVelocity(i));
+                mvwprintw(stdscr, 8, 9+8+i*10, "0x%04X", Board.GetEncoderFrequency(i));
+                mvwprintw(stdscr, 9, 9+8+i*10, "0x%04X", Board.GetMotorCurrent(i));
+            }
+            mvwprintw(stdscr, 11, 9, "Status:  0x%08X    Timestamp: %08X", 
+                      Board.GetStatus(), Board.GetTimestamp());
         }
-        mvwprintw(stdscr, 11, 9, "Status:  0x%08X    Timestamp: %08X", 
-                  Board.GetStatus(), Board.GetTimestamp());
 
         wrefresh(stdscr);
         usleep(500);
