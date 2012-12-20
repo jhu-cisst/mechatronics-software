@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <curses.h>
 #include <iostream>
+#include <sstream>
 
 #include "FirewirePort.h"
 #include "AmpIO.h"
@@ -44,7 +45,8 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    FirewirePort Port(port);
+    std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
+    FirewirePort Port(port, debugStream);
     if (!Port.IsOK()) {
         std::cerr << "Failed to initialize firewire port " << port << std::endl;
         return -1;
@@ -75,12 +77,30 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 13, 9, "Node:");
 
     int loop_cnt = 0;
+    int last_debug_line = 15;
     while (1) {
         int c = getch();
         if (c == ' ') break;
         if (c == 'r') Port.Reset();
 
         mvwprintw(stdscr, 13, 41, "%10d", loop_cnt++);
+
+        if (!debugStream.str().empty()) {
+            int cur_line = 15;
+            char line[80];
+            memset(line, ' ', sizeof(line));
+            for (i = cur_line; i < last_debug_line; i++)
+                mvwprintw(stdscr, i, 9, line);
+            while (!debugStream.eof()) {
+                debugStream.getline(line, sizeof(line));
+                mvwprintw(stdscr,cur_line++, 9, line);
+            }
+            debugStream.clear();
+            debugStream.str("");
+            last_debug_line = cur_line;
+        }
+
+
         if (!Port.IsOK()) continue;
 
         int node = Port.GetNodeId(board);

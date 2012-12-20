@@ -21,6 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 #define __FirewirePort_H__
 
 #include <vector>
+#include <ostream>
 #include <libraw1394/raw1394.h>
 #include "BoardIO.h"
 
@@ -38,6 +39,9 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     unsigned char Board2Node[MAX_BOARDS];
 
+    // Stream for debugging output (default is std::cerr)
+    std::ostream &outStr;
+
     int max_board;  // highest index of used (non-zero) entry in BoardList
     BoardIO *BoardList[MAX_BOARDS];
 
@@ -47,6 +51,9 @@ protected:
     bus_reset_handler_t old_reset_handler;
     // callback for 1394 bus reset event
     static int reset_handler(raw1394handle_t hdl, uint gen);
+
+    // Poll for IEEE 1394 events, such as bus reset.
+    void PollEvents(void);
 
     // Initialize Firewire port
     bool Init(void);
@@ -58,7 +65,8 @@ protected:
     bool ScanNodes(void);
 
 public:
-    FirewirePort(int portNum);
+    // Initialize IEEE-1394 (Firewire) port.
+    FirewirePort(int portNum, std::ostream &debugStream = std::cerr);
     ~FirewirePort();
 
     void Reset(void);

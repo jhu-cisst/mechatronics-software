@@ -21,13 +21,14 @@ http://www.cisst.org/cisst/license.txt.
 #include <algorithm>
 #include <string.h>
 #include <byteswap.h>
+#include <sys/select.h>
 #include "FirewirePort.h"
 
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
 
 FirewirePort::PortListType FirewirePort::PortList;
 
-FirewirePort::FirewirePort(int portNum) : PortNum(portNum), max_board(0)
+FirewirePort::FirewirePort(int portNum, std::ostream &ostr) : PortNum(portNum), outStr(ostr), max_board(0)
 {
     memset(BoardList, 0, sizeof(BoardList));
     Init();
@@ -38,17 +39,17 @@ bool FirewirePort::Init(void)
     // create firewire port handle 
     handle = raw1394_new_handle();
     if (!handle) {
-        std::cerr << "FirewirePort: could not create handle" << std::endl;
+        outStr << "FirewirePort: could not create handle" << std::endl;
         return false;
     }
 
     PortListType::const_iterator it;
     for (it = PortList.begin(); it != PortList.end(); it++) {
         if ((*it)->PortNum == PortNum)
-            std::cerr << "WARNING: Firewire port " << PortNum
+            outStr << "WARNING: Firewire port " << PortNum
                       << " is already used (be careful about thread safety)" << std::endl;
         if ((*it)->handle == handle) // should never happen
-            std::cerr << "WARNING: Firewire handle is already used" << std::endl;
+            outStr << "WARNING: Firewire handle is already used" << std::endl;
     }
     PortList.push_back(this);
 
@@ -59,21 +60,21 @@ bool FirewirePort::Init(void)
 
     // get number of ports
     int nports = raw1394_get_port_info(handle, NULL, 0);
-    std::cerr << "FirewirePort: number of ports = " << nports << std::endl;
+    outStr << "FirewirePort: number of ports = " << nports << std::endl;
     if (nports < PortNum) {
-        std::cerr << "FirewirePort: port " << PortNum << " does not exist" << std::endl;
+        outStr << "FirewirePort: port " << PortNum << " does not exist" << std::endl;
         raw1394_destroy_handle(handle);
         handle = NULL;
         return false;
     }
 
     if (raw1394_set_port(handle, PortNum)) {
-        std::cerr << "FirewirePort: error setting port to " << PortNum << std::endl;
+        outStr << "FirewirePort: error setting port to " << PortNum << std::endl;
         raw1394_destroy_handle(handle);
         handle = NULL;
         return false;
     }
-    std::cerr << "FirewirePort: successfully initialized port " << PortNum << std::endl;
+    outStr << "FirewirePort: successfully initialized port " << PortNum << std::endl;
 
     return ScanNodes();
 }
@@ -87,7 +88,7 @@ void FirewirePort::Cleanup(void)
 {
     PortListType::iterator it = std::find(PortList.begin(), PortList.end(), this);
     if (it == PortList.end())
-        std::cerr << "FirewirePort cleanup could not find entry for port " << PortNum << std::endl;
+        outStr << "FirewirePort cleanup could not find entry for port " << PortNum << std::endl;
     else
         PortList.erase(it);
     raw1394_destroy_handle(handle);
@@ -103,12 +104,12 @@ void FirewirePort::Reset(void)
 int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
 {
     int ret = 0;
-    std::cerr << "Firewire bus reset: generation = " << gen << std::endl;
     PortListType::iterator it;
     for (it = PortList.begin(); it != PortList.end(); it++) {
         if ((*it)->handle == hdl) {
+            (*it)->outStr << "Firewire bus reset: generation = " << gen << std::endl;
             ret = (*it)->old_reset_handler(hdl, gen);
-            std::cerr << "Firewire bus reset: scanning port " << (*it)->PortNum << std::endl;
+            (*it)->outStr << "Firewire bus reset: scanning port " << (*it)->PortNum << std::endl;
             (*it)->ScanNodes();
             break;
       }
@@ -116,6 +117,21 @@ int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
     if (it == PortList.end())
         std::cerr << "Firewire bus reset: could not find port" << std::endl;
     return ret;
+}
+
+// This function checks if there is a pending read on the IEEE-1394 bus,
+// which could include a bus reset
+void FirewirePort::PollEvents(void)
+{
+    fd_set fds;
+    struct timeval timeout = {0, 0};
+
+    int fd = raw1394_get_fd(handle);
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+    int ret = select(fd+1, &fds, 0, 0, &timeout);
+    if (ret > 0)
+        raw1394_loop_iterate(handle);
 }
 
 bool FirewirePort::ScanNodes(void)
@@ -127,32 +143,32 @@ bool FirewirePort::ScanNodes(void)
 
     // Get base node id (zero out 6 lsb)
     baseNodeId = raw1394_get_local_id(handle) & 0xFFC0;
-    std::cerr << "ScanNodes: base node id = " << std::hex << baseNodeId << std::endl;
+    outStr << "ScanNodes: base node id = " << std::hex << baseNodeId << std::endl;
 
     // iterate through all the nodes and find out their boardId
     int numNodes = raw1394_get_nodecount(handle);
 
-    std::cerr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
+    outStr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
     // Iterate through all connected nodes (except for last one, which is the PC).
     // Need a better way to make sure we only choose compatible nodes
     for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
         if (raw1394_read(handle, baseNodeId+node, 0, 4, &data)) {
-            std::cerr << "ScanNodes: unable to read from node " << node << std::endl;
+            outStr << "ScanNodes: unable to read from node " << node << std::endl;
             return false;
         }
         data = bswap_32(data);
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
         board = (data & BOARD_ID_MASK) >> 24;
         if ((board >= 0) && (board < MAX_BOARDS)) {
-            std::cerr << "  Node " << node << ", BoardId = " << board << std::endl;
+            outStr << "  Node " << node << ", BoardId = " << board << std::endl;
             if (Node2Board[node] < MAX_BOARDS)
-                std::cerr << "    Duplicate entry, previous value = "
+                outStr << "    Duplicate entry, previous value = "
                           << static_cast<int>(Node2Board[node]) << std::endl;
             Node2Board[node] = board;
         }
         else  // can't happen unless BOARD_ID_MASK changes
-            std::cerr << "  Node " << node << " does not appear to be a QLA" << std::endl;
+            outStr << "  Node " << node << " does not appear to be a QLA" << std::endl;
     }
 
     for (board = 0; board < MAX_BOARDS; board++) {
@@ -160,7 +176,7 @@ bool FirewirePort::ScanNodes(void)
         for (node = 0; node < numNodes-1; node++) {
             if (Node2Board[node] == board) {
                 if (Board2Node[board] < MAX_NODES)
-                    std::cerr << "Warning: GetNodeId detected duplicate board id for " << board << std::endl;
+                    outStr << "Warning: GetNodeId detected duplicate board id for " << board << std::endl;
                 Board2Node[board] = node;
             }
         }
@@ -172,7 +188,7 @@ bool FirewirePort::ScanNodes(void)
 bool FirewirePort::AddBoard(BoardIO *board)
 {
     if ((board->BoardId < 0) || (board->BoardId >= MAX_BOARDS)) {
-        std::cerr << "AddBoard: board number out of range: " << board->BoardId << std::endl;
+        outStr << "AddBoard: board number out of range: " << board->BoardId << std::endl;
         return false;
     }
     BoardList[board->BoardId] = board;
@@ -185,12 +201,12 @@ bool FirewirePort::AddBoard(BoardIO *board)
 bool FirewirePort::RemoveBoard(unsigned char boardId)
 {
     if ((boardId < 0) || (boardId >= MAX_BOARDS)) {
-        std::cerr << "RemoveBoard: board number out of range: " << boardId << std::endl;
+        outStr << "RemoveBoard: board number out of range: " << boardId << std::endl;
         return false;
     }
     BoardIO *board = BoardList[boardId];
     if (!board) {
-        std::cerr << "RemoveBoard: board not found: " << boardId << std::endl;
+        outStr << "RemoveBoard: board not found: " << boardId << std::endl;
         return false;
     }    
     BoardList[boardId] = 0;
@@ -220,10 +236,11 @@ int FirewirePort::GetNodeId(unsigned char boardId) const
 bool FirewirePort::ReadAllBoards(void)
 {
     if (!handle) {
-        std::cerr << "ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
+        outStr << "ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
     }
     bool allOK = true;
+    bool noneRead = true;
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             bool ret = false;
@@ -231,20 +248,24 @@ bool FirewirePort::ReadAllBoards(void)
             if (node < MAX_NODES)
                 ret = !raw1394_read(handle, baseNodeId+node, 0, BoardList[board]->GetReadNumBytes(),
                                     BoardList[board]->GetReadBuffer());
-            if (!ret) allOK = false;
+            if (ret) noneRead = false;
+            else allOK = false;
             BoardList[board]->SetReadValid(ret);
         }
     }
+    if (noneRead)
+        PollEvents();
     return allOK;
 }
 
 bool FirewirePort::WriteAllBoards(void)
 {
     if (!handle) {
-        std::cerr << "WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
+        outStr << "WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
     }
     bool allOK = true;
+    bool noneWritten = true;
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             bool ret = false;
@@ -252,10 +273,13 @@ bool FirewirePort::WriteAllBoards(void)
             if (node < MAX_NODES)
                 ret = !raw1394_write(handle, baseNodeId+node, 0, BoardList[board]->GetWriteNumBytes(),
                                      BoardList[board]->GetWriteBuffer());
-            if (!ret) allOK = false;
+            if (ret) noneWritten = false;
+            else allOK = false;
             BoardList[board]->SetWriteValid(ret);
         }
     }
+    if (noneWritten)
+        PollEvents();
     return allOK;
 }
 
