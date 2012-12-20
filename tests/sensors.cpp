@@ -24,20 +24,20 @@
 void EncUp(AmpIO &bd, unsigned long dig_out)
 {
 
-    bd.SetDigitalOutput(~0x0000);
-    bd.SetDigitalOutput(~0x0008);
-    bd.SetDigitalOutput(~0x000C);
-    bd.SetDigitalOutput(~0x0004);
-    bd.SetDigitalOutput(~0x0000);
+    bd.SetDigitalOutput(0x0000);
+    bd.SetDigitalOutput(0x0008);
+    bd.SetDigitalOutput(0x000C);
+    bd.SetDigitalOutput(0x0004);
+    bd.SetDigitalOutput(0x0000);
 }
 
 void EncDown(AmpIO &bd, unsigned long dig_out)
 {
-    bd.SetDigitalOutput(~0x0000);
-    bd.SetDigitalOutput(~0x0004);
-    bd.SetDigitalOutput(~0x000C);
-    bd.SetDigitalOutput(~0x0008);
-    bd.SetDigitalOutput(~0x0000);
+    bd.SetDigitalOutput(0x0000);
+    bd.SetDigitalOutput(0x0004);
+    bd.SetDigitalOutput(0x000C);
+    bd.SetDigitalOutput(0x0008);
+    bd.SetDigitalOutput(0x0000);
 }
 
 
@@ -75,7 +75,7 @@ int main(int argc, char** argv)
     Port.AddBoard(&Board);
 
     for (i = 0; i < 4; i++)
-        Board.SetEncoderPreload(i, 0x1000*i);
+        Board.SetEncoderPreload(i, 0x1000*i + 0x1000);
 
     initscr();
     cbreak();
@@ -109,9 +109,9 @@ int main(int argc, char** argv)
             dig_out = dig_out^(1<<(c-'0'));
             Board.SetDigitalOutput(dig_out);
         }
-        else if (c == '+')
+        else if (c == 'w')
             EncUp(Board, dig_out);
-        else if (c == '-')
+        else if (c == 's')
             EncDown(Board, dig_out);
 
         mvwprintw(stdscr, 14, 41, "%10d", loop_cnt++);
@@ -144,7 +144,7 @@ int main(int argc, char** argv)
         if (Board.ValidRead()) {
 
             for (i = 0; i < 4; i++) {
-                mvwprintw(stdscr, 5, 9+8+i*10, "0x%04X", Board.GetEncoderPosition(i));
+                mvwprintw(stdscr, 5, 9+5+i*10, "0x%07X", Board.GetEncoderPosition(i));
                 mvwprintw(stdscr, 6, 9+8+i*10, "0x%04X", Board.GetAnalogPosition(i));
                 mvwprintw(stdscr, 7, 9+8+i*10, "0x%04X", Board.GetEncoderVelocity(i));
                 mvwprintw(stdscr, 8, 9+8+i*10, "0x%04X", Board.GetEncoderFrequency(i));
