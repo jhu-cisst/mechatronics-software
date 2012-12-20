@@ -79,7 +79,7 @@ int main(int argc, char** argv)
     unsigned long dig_out = 0;
 
     int loop_cnt = 0;
-    int last_debug_line = 15;
+    int last_debug_line = 16;
     while (1) {
         int c = getch();
         if (c == ' ') break;
@@ -90,10 +90,10 @@ int main(int argc, char** argv)
             Board.SetDigitalOutput(dig_out);
         }
 
-        mvwprintw(stdscr, 13, 41, "%10d", loop_cnt++);
+        mvwprintw(stdscr, 14, 41, "%10d", loop_cnt++);
 
         if (!debugStream.str().empty()) {
-            int cur_line = 15;
+            int cur_line = 16;
             char line[80];
             memset(line, ' ', sizeof(line));
             for (i = cur_line; i < last_debug_line; i++)
@@ -112,9 +112,9 @@ int main(int argc, char** argv)
 
         int node = Port.GetNodeId(board);
         if (node < FirewirePort::MAX_NODES)        
-            mvwprintw(stdscr, 13, 16, "%d   ", Port.GetNodeId(board));
+            mvwprintw(stdscr, 14, 16, "%d   ", Port.GetNodeId(board));
         else
-            mvwprintw(stdscr, 13, 16, "none");
+            mvwprintw(stdscr, 14, 16, "none");
 
         Port.ReadAllBoards();
         if (Board.ValidRead()) {
@@ -129,6 +129,9 @@ int main(int argc, char** argv)
             dig_out = Board.GetDigitalOutput();
             mvwprintw(stdscr, 11, 9, "Status:  0x%08X    Timestamp: %08X   DigOut: 0x%01X", 
                       Board.GetStatus(), Board.GetTimestamp(), dig_out);
+            unsigned long dig_in = Board.GetDigitalInput();
+            mvwprintw(stdscr, 12, 9, "NegLim:  0x%01X    PosLim:  0x%01X  Home: 0x%01X",
+                      (dig_in&0x0f00)>>8, (dig_in&0x00f0)>>4, dig_in&0x000f);
         }
 
         wrefresh(stdscr);

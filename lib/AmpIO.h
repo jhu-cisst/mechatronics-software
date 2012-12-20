@@ -39,6 +39,7 @@ public:
     unsigned long GetEncoderVelocity( unsigned int ) const;
     unsigned long GetEncoderFrequency(unsigned int ) const;
     unsigned long GetDigitalOutput() const;
+    unsigned long GetDigitalInput() const;
 
     bool SetPowerControl(                  unsigned long );
     bool SetMotorCurrent(    unsigned int, unsigned long );

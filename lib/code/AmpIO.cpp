@@ -196,3 +196,11 @@ unsigned long AmpIO::GetDigitalOutput() const
         read_data = bswap_32(read_data) & 0x000F;
     return static_cast<unsigned long>(read_data);
 }
+
+unsigned long AmpIO::GetDigitalInput() const
+{
+    quadlet_t read_data = 0;
+    if (port->ReadQuadlet(BoardId, 7, read_data))
+        read_data = bswap_32(read_data) & 0x0FFF;
+    return static_cast<unsigned long>(read_data);
+}
