@@ -21,6 +21,26 @@
 #include "FirewirePort.h"
 #include "AmpIO.h"
 
+void EncUp(AmpIO &bd, unsigned long dig_out)
+{
+
+    bd.SetDigitalOutput(~0x0000);
+    bd.SetDigitalOutput(~0x0008);
+    bd.SetDigitalOutput(~0x000C);
+    bd.SetDigitalOutput(~0x0004);
+    bd.SetDigitalOutput(~0x0000);
+}
+
+void EncDown(AmpIO &bd, unsigned long dig_out)
+{
+    bd.SetDigitalOutput(~0x0000);
+    bd.SetDigitalOutput(~0x0004);
+    bd.SetDigitalOutput(~0x000C);
+    bd.SetDigitalOutput(~0x0008);
+    bd.SetDigitalOutput(~0x0000);
+}
+
+
 int main(int argc, char** argv)
 {
     int i;
@@ -74,7 +94,7 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 7, 9, "Vel:");
     mvwprintw(stdscr, 8, 9, "VelF:");
     mvwprintw(stdscr, 9, 9, "Cur:");
-    mvwprintw(stdscr, 13, 9, "Node:");
+    mvwprintw(stdscr, 14, 9, "Node:");
 
     unsigned long dig_out = 0;
 
@@ -83,12 +103,16 @@ int main(int argc, char** argv)
     while (1) {
         int c = getch();
         if (c == ' ') break;
-        if (c == 'r') Port.Reset();
-        if ((c >= '0') && (c <= '3')) {
+        else if (c == 'r') Port.Reset();
+        else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));
             Board.SetDigitalOutput(dig_out);
         }
+        else if (c == '+')
+            EncUp(Board, dig_out);
+        else if (c == '-')
+            EncDown(Board, dig_out);
 
         mvwprintw(stdscr, 14, 41, "%10d", loop_cnt++);
 
