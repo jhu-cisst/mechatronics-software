@@ -62,7 +62,7 @@ AmpIO::~AmpIO()
     }
 }
 
-void AmpIO::DisplayReadBuffer()
+void AmpIO::DisplayReadBuffer() const
 {
     // first two quadlets are timestamp and status, resp.
     std::cout << std::hex << bswap_32(read_buffer[0]) << std::endl;
@@ -79,17 +79,17 @@ void AmpIO::DisplayReadBuffer()
     }
 }
 
-unsigned long AmpIO::GetStatus()
+unsigned long AmpIO::GetStatus() const
 {
     return bswap_32(read_buffer[STATUS_OFFSET]);
 }
 
-unsigned long AmpIO::GetTimestamp()
+unsigned long AmpIO::GetTimestamp() const
 {
     return bswap_32(read_buffer[TIMESTAMP_OFFSET]);
 }
 
-unsigned long AmpIO::GetMotorCurrent(unsigned int index)
+unsigned long AmpIO::GetMotorCurrent(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -101,7 +101,7 @@ unsigned long AmpIO::GetMotorCurrent(unsigned int index)
     return static_cast<unsigned long>(buff) & ADC_MASK;
 }
 
-unsigned long AmpIO::GetAnalogPosition(unsigned int index)
+unsigned long AmpIO::GetAnalogPosition(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -114,7 +114,7 @@ unsigned long AmpIO::GetAnalogPosition(unsigned int index)
     return static_cast<unsigned long>(buff) & ADC_MASK;
 }
 
-unsigned long AmpIO::GetEncoderPosition(unsigned int index)
+unsigned long AmpIO::GetEncoderPosition(unsigned int index) const
 {
     if (index < NUM_CHANNELS)
         return bswap_32(read_buffer[index+ENC_POS_OFFSET]) & ENC_POS_MASK;
@@ -124,7 +124,7 @@ unsigned long AmpIO::GetEncoderPosition(unsigned int index)
 
 // temp current the enc period velocity is unsigned 16 bits
 // for low level function the + MIDRANGE_VEL
-unsigned long AmpIO::GetEncoderVelocity(unsigned int index)
+unsigned long AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -137,7 +137,7 @@ unsigned long AmpIO::GetEncoderVelocity(unsigned int index)
     return static_cast<unsigned long>(buff) & ENC_VEL_MASK;
 }
 
-unsigned long AmpIO::GetEncoderFrequency(unsigned int index)
+unsigned long AmpIO::GetEncoderFrequency(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -155,13 +155,13 @@ unsigned long AmpIO::GetEncoderFrequency(unsigned int index)
  * Set commands
  */
 
-bool AmpIO::SetPowerControl(const unsigned long sdata)
+bool AmpIO::SetPowerControl(unsigned long sdata)
 {
     quadlet_t write_data = bswap_32(sdata & ENABLE_MASK);
     return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
 }
 
-bool AmpIO::SetMotorCurrent(unsigned int index, const unsigned long sdata)
+bool AmpIO::SetMotorCurrent(unsigned int index, unsigned long sdata)
 {
     quadlet_t data = VALID_BIT | DAC_WR_A | (sdata & DAC_MASK);
 
@@ -173,7 +173,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, const unsigned long sdata)
         return false;
 }
 
-bool AmpIO::SetEncoderPreload(unsigned int index, const unsigned long sdata)
+bool AmpIO::SetEncoderPreload(unsigned int index, unsigned long sdata)
 {
     unsigned int channel = (index+1) << 4;
 
@@ -181,4 +181,18 @@ bool AmpIO::SetEncoderPreload(unsigned int index, const unsigned long sdata)
         return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, bswap_32(sdata));
     else
         return false;
+}
+
+bool AmpIO::SetDigitalOutput(unsigned long bits)
+{
+    quadlet_t write_data = bswap_32(bits & 0x000F);
+    return port->WriteQuadlet(BoardId, 6, write_data);
+}
+
+unsigned long AmpIO::GetDigitalOutput() const
+{
+    quadlet_t read_data = 0;
+    if (port->ReadQuadlet(BoardId, 6, read_data))
+        read_data = bswap_32(read_data) & 0x000F;
+    return static_cast<unsigned long>(read_data);
 }

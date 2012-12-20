@@ -28,20 +28,22 @@ public:
     AmpIO(unsigned char board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    void DisplayReadBuffer();
+    void DisplayReadBuffer() const;
 
     //  Interface methods
-    unsigned long GetStatus();
-    unsigned long GetTimestamp();
-    unsigned long GetMotorCurrent(    unsigned int );
-    unsigned long GetAnalogPosition(  unsigned int );
-    unsigned long GetEncoderPosition( unsigned int );
-    unsigned long GetEncoderVelocity( unsigned int );
-    unsigned long GetEncoderFrequency(unsigned int );
+    unsigned long GetStatus() const;
+    unsigned long GetTimestamp() const;
+    unsigned long GetMotorCurrent(    unsigned int ) const;
+    unsigned long GetAnalogPosition(  unsigned int ) const;
+    unsigned long GetEncoderPosition( unsigned int ) const;
+    unsigned long GetEncoderVelocity( unsigned int ) const;
+    unsigned long GetEncoderFrequency(unsigned int ) const;
+    unsigned long GetDigitalOutput() const;
 
-    bool SetPowerControl(                  const unsigned long );
-    bool SetMotorCurrent(    unsigned int, const unsigned long );
-    bool SetEncoderPreload(  unsigned int, const unsigned long );
+    bool SetPowerControl(                  unsigned long );
+    bool SetMotorCurrent(    unsigned int, unsigned long );
+    bool SetEncoderPreload(  unsigned int, unsigned long );
+    bool SetDigitalOutput(   unsigned long);
 
 private:
 

@@ -64,7 +64,7 @@ int main(int argc, char** argv)
     nodelay(stdscr, TRUE);
 
     mvwprintw(stdscr, 1, 9, "Sensor Feedback for Board %d", board);
-    mvwprintw(stdscr, 2, 9, "Press space to quit, r to reset port");
+    mvwprintw(stdscr, 2, 9, "Press space to quit, r to reset port, 0-3 to toggle digital output bit");
     wrefresh(stdscr);
 
     for (i = 0; i < 4; i++)
@@ -76,12 +76,19 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 9, 9, "Cur:");
     mvwprintw(stdscr, 13, 9, "Node:");
 
+    unsigned long dig_out = 0;
+
     int loop_cnt = 0;
     int last_debug_line = 15;
     while (1) {
         int c = getch();
         if (c == ' ') break;
         if (c == 'r') Port.Reset();
+        if ((c >= '0') && (c <= '3')) {
+            // toggle digital output bit
+            dig_out = dig_out^(1<<(c-'0'));
+            Board.SetDigitalOutput(dig_out);
+        }
 
         mvwprintw(stdscr, 13, 41, "%10d", loop_cnt++);
 
@@ -119,8 +126,9 @@ int main(int argc, char** argv)
                 mvwprintw(stdscr, 8, 9+8+i*10, "0x%04X", Board.GetEncoderFrequency(i));
                 mvwprintw(stdscr, 9, 9+8+i*10, "0x%04X", Board.GetMotorCurrent(i));
             }
-            mvwprintw(stdscr, 11, 9, "Status:  0x%08X    Timestamp: %08X", 
-                      Board.GetStatus(), Board.GetTimestamp());
+            dig_out = Board.GetDigitalOutput();
+            mvwprintw(stdscr, 11, 9, "Status:  0x%08X    Timestamp: %08X   DigOut: 0x%01X", 
+                      Board.GetStatus(), Board.GetTimestamp(), dig_out);
         }
 
         wrefresh(stdscr);
