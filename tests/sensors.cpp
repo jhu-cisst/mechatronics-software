@@ -79,6 +79,11 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    // Currently hard-coded for up to 2 boards; initialize at mid-range
+    unsigned long MotorCurrents[2][4] = { {0x7fff, 0x7fff, 0x7fff, 0x7fff },
+                                          {0x7fff, 0x7fff, 0x7fff, 0x7fff }};
+
+
     std::vector<AmpIO*> BoardList;
     BoardList.push_back(new AmpIO(board1));
     Port.AddBoard(BoardList[0]);
@@ -91,6 +96,9 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++)
             BoardList[j]->SetEncoderPreload(i, 0x1000*i + 0x1000);
     }
+    bool power_on = false;
+    for (j = 0; j < BoardList.size(); j++)
+        BoardList[j]->SetPowerControl(0xff00);
 
     initscr();
     cbreak();
@@ -102,23 +110,26 @@ int main(int argc, char** argv)
         mvwprintw(stdscr, 1, 9, "Sensor Feedback for Boards %d, %d", board1, board2);
     else
         mvwprintw(stdscr, 1, 9, "Sensor Feedback for Board %d", board1);
-    mvwprintw(stdscr, 2, 9, "Press space to quit, r to reset port, 0-3 to toggle digital output bit");
+    mvwprintw(stdscr, 2, 9, "Press space to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
+    mvwprintw(stdscr, 3, 9, "+/- to increase/decrease commanded current (DAC)");
     wrefresh(stdscr);
 
     int numAxes = (BoardList.size() > 1)?8:4;
     for (i = 0; i < numAxes; i++)
-        mvwprintw(stdscr, 4, 9+8+i*13, "Axis%d", i);
-    mvwprintw(stdscr, 5, 9, "Enc:");
-    mvwprintw(stdscr, 6, 9, "Pot:");
-    mvwprintw(stdscr, 7, 9, "Vel:");
-    mvwprintw(stdscr, 8, 9, "VelF:");
-    mvwprintw(stdscr, 9, 9, "Cur:");
-    mvwprintw(stdscr, 14, 9, "Node:");
+        mvwprintw(stdscr, 5, 9+8+i*13, "Axis%d", i);
+    mvwprintw(stdscr, 6, 9, "Enc:");
+    mvwprintw(stdscr, 7, 9, "Pot:");
+    mvwprintw(stdscr, 8, 9, "Vel:");
+    mvwprintw(stdscr, 9, 9, "VelF:");
+    mvwprintw(stdscr, 10, 9, "Cur:");
+    mvwprintw(stdscr, 11, 9, "DAC:");
+    mvwprintw(stdscr, 16, 9, "Node:");
 
     unsigned long dig_out = 0;
 
     int loop_cnt = 0;
-    int last_debug_line = 16;
+    const int DEBUG_START_LINE = 18;
+    int last_debug_line = DEBUG_START_LINE;
     while (1) {
         int c = getch();
         if (c == ' ') break;
@@ -137,11 +148,29 @@ int main(int argc, char** argv)
             for (j = 0; j < BoardList.size(); j++)
                 EncDown(*(BoardList[j]), dig_out);
         }
+        else if (c == 'p') {
+            power_on = !power_on;
+            for (j = 0; j < BoardList.size(); j++)
+                BoardList[j]->SetPowerControl(power_on ? 0xffff : 0xff00);
+        }
+        else if (c == '+') {
+            for (j = 0; j < BoardList.size(); j++) {
+                for (i = 0; i < 4; i++)
+                    MotorCurrents[j][i]++;
+            }
+        }
+        else if (c == '-') {
+            for (j = 0; j < BoardList.size(); j++) {
+                for (i = 0; i < 4; i++)
+                    MotorCurrents[j][i]--;
+            }
+        }
 
-        mvwprintw(stdscr, 14, 41, "%10d", loop_cnt++);
+
+        mvwprintw(stdscr, 16, 41, "%10d", loop_cnt++);
 
         if (!debugStream.str().empty()) {
-            int cur_line = 16;
+            int cur_line = DEBUG_START_LINE;
             char line[80];
             memset(line, ' ', sizeof(line));
             for (i = cur_line; i < last_debug_line; i++)
@@ -160,15 +189,15 @@ int main(int argc, char** argv)
 
         int node = Port.GetNodeId(board1);
         if (node < FirewirePort::MAX_NODES)        
-            mvwprintw(stdscr, 14, 16, "%d   ", node);
+            mvwprintw(stdscr, 16, 16, "%d   ", node);
         else
-            mvwprintw(stdscr, 14, 16, "none");
+            mvwprintw(stdscr, 16, 16, "none");
         if (BoardList.size() > 1) {
             node = Port.GetNodeId(board2);
             if (node < FirewirePort::MAX_NODES)        
-                mvwprintw(stdscr, 14, 22, "%d   ", node);
+                mvwprintw(stdscr, 16, 22, "%d   ", node);
             else
-                mvwprintw(stdscr, 14, 22, "none");
+                mvwprintw(stdscr, 16, 22, "none");
         }
 
         Port.ReadAllBoards();
@@ -176,27 +205,34 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
-                    mvwprintw(stdscr, 5, 9+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i));
-                    mvwprintw(stdscr, 6, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogPosition(i));
-                    mvwprintw(stdscr, 7, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
-                    mvwprintw(stdscr, 8, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderFrequency(i));
-                    mvwprintw(stdscr, 9, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
+                    mvwprintw(stdscr, 6, 9+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i));
+                    mvwprintw(stdscr, 7, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogPosition(i));
+                    mvwprintw(stdscr, 8, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
+                    mvwprintw(stdscr, 9, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderFrequency(i));
+                    mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
-                mvwprintw(stdscr, 11, 9+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X", 
+                mvwprintw(stdscr, 13, 9+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X", 
                           BoardList[j]->GetStatus(), BoardList[j]->GetTimestamp(), dig_out);
                 unsigned long dig_in = BoardList[j]->GetDigitalInput();
-                mvwprintw(stdscr, 12, 9+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
+                mvwprintw(stdscr, 14, 9+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
                           (dig_in&0x0f00)>>8, (dig_in&0x00f0)>>4, dig_in&0x000f);
             }
+            for (i = 0; i < 4; i++) {
+                mvwprintw(stdscr, 11, 9+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
+                BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
+            }
         }
+        Port.WriteAllBoards();
 
         wrefresh(stdscr);
         usleep(500);
     }
 
-    for (j= 0; j < BoardList.size(); j++)
+    for (j= 0; j < BoardList.size(); j++) {
+        BoardList[j]->SetPowerControl(0xff00);   // Turn power off
         Port.RemoveBoard(BoardList[j]->GetBoardId());
+    }
 
     endwin();
     return 0;

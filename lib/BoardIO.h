@@ -30,6 +30,10 @@ class FirewirePort;
 class BoardIO
 {
 protected:
+    // Prevent copies
+    BoardIO(const BoardIO &);
+    BoardIO& operator=(const BoardIO&);
+
     unsigned char BoardId;
 
     FirewirePort *port;

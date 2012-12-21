@@ -46,8 +46,7 @@ public:
     bool SetEncoderPreload(  unsigned int, unsigned long );
     bool SetDigitalOutput(   unsigned long);
 
-private:
-
+protected:
     unsigned int NumAxes;   // not currently used
 
     // Number of channels in the node
