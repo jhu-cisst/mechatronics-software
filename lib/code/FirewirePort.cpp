@@ -24,6 +24,8 @@ http://www.cisst.org/cisst/license.txt.
 #include <sys/select.h>
 #include "FirewirePort.h"
 
+const unsigned long QLA1_String = 0x514C4131;
+
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
 
 FirewirePort::PortListType FirewirePort::PortList;
@@ -53,7 +55,7 @@ bool FirewirePort::Init(void)
     }
     PortList.push_back(this);
 
-    memset(Node2Board, MAX_BOARDS, sizeof(Node2Board));
+    memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
     // set the bus reset handler
     old_reset_handler = raw1394_set_bus_reset_handler(handle, reset_handler);
@@ -139,7 +141,7 @@ bool FirewirePort::ScanNodes(void)
     int node, board;  // loop counters
 
     // Clear any existing Node2Board
-    memset(Node2Board, MAX_BOARDS, sizeof(Node2Board));
+    memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
     // Get base node id (zero out 6 lsb)
     baseNodeId = raw1394_get_local_id(handle) & 0xFFC0;
@@ -150,9 +152,17 @@ bool FirewirePort::ScanNodes(void)
 
     outStr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
     // Iterate through all connected nodes (except for last one, which is the PC).
-    // Need a better way to make sure we only choose compatible nodes
     for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
+        if (raw1394_read(handle, baseNodeId+node, 4, 4, &data)) {
+            outStr << "ScanNodes: unable to read from node " << node << std::endl;
+            return false;
+        }
+        data = bswap_32(data);
+        if ((data != 0xC0FFEE) && (data != QLA1_String)) {
+            outStr << "Node " << node << " is not a QLA board" << std::endl;
+            continue;
+        }
         if (raw1394_read(handle, baseNodeId+node, 0, 4, &data)) {
             outStr << "ScanNodes: unable to read from node " << node << std::endl;
             return false;
@@ -160,9 +170,9 @@ bool FirewirePort::ScanNodes(void)
         data = bswap_32(data);
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
         board = (data & BOARD_ID_MASK) >> 24;
-        if ((board >= 0) && (board < MAX_BOARDS)) {
+        if ((board >= 0) && (board < BoardIO::MAX_BOARDS)) {
             outStr << "  Node " << node << ", BoardId = " << board << std::endl;
-            if (Node2Board[node] < MAX_BOARDS)
+            if (Node2Board[node] < BoardIO::MAX_BOARDS)
                 outStr << "    Duplicate entry, previous value = "
                           << static_cast<int>(Node2Board[node]) << std::endl;
             Node2Board[node] = board;
@@ -171,7 +181,7 @@ bool FirewirePort::ScanNodes(void)
             outStr << "  Node " << node << " does not appear to be a QLA" << std::endl;
     }
 
-    for (board = 0; board < MAX_BOARDS; board++) {
+    for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
         Board2Node[board] = MAX_NODES;
         for (node = 0; node < numNodes-1; node++) {
             if (Node2Board[node] == board) {
@@ -187,20 +197,21 @@ bool FirewirePort::ScanNodes(void)
 
 bool FirewirePort::AddBoard(BoardIO *board)
 {
-    if ((board->BoardId < 0) || (board->BoardId >= MAX_BOARDS)) {
-        outStr << "AddBoard: board number out of range: " << board->BoardId << std::endl;
+    int id = board->BoardId;
+    if ((id < 0) || (id >= BoardIO::MAX_BOARDS)) {
+        outStr << "AddBoard: board number out of range: " << id << std::endl;
         return false;
     }
-    BoardList[board->BoardId] = board;
-    if (board->BoardId >= max_board)
-        max_board = board->BoardId+1;
+    BoardList[id] = board;
+    if (id >= max_board)
+        max_board = id+1;
     board->port = this;
     return true;
 }
 
 bool FirewirePort::RemoveBoard(unsigned char boardId)
 {
-    if ((boardId < 0) || (boardId >= MAX_BOARDS)) {
+    if ((boardId < 0) || (boardId >= BoardIO::MAX_BOARDS)) {
         outStr << "RemoveBoard: board number out of range: " << boardId << std::endl;
         return false;
     }
@@ -227,7 +238,7 @@ BoardIO *FirewirePort::GetBoard(unsigned char boardId) const
 
 int FirewirePort::GetNodeId(unsigned char boardId) const
 {
-    if (boardId < MAX_BOARDS)
+    if (boardId < BoardIO::MAX_BOARDS)
         return Board2Node[boardId];
     else
         return MAX_NODES;

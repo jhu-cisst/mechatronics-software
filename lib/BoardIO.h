@@ -54,9 +54,16 @@ protected:
     quadlet_t *GetWriteBuffer() { return WriteBuffer; }
 
 public:
+    enum {MAX_BOARDS = 16};   // Maximum number of boards
+
     BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
                                       ReadBufferSize(0), ReadBuffer(0), WriteBufferSize(0), WriteBuffer(0) {}
     virtual ~BoardIO() {}
+
+    inline unsigned char GetBoardId() const { return BoardId; }
+
+    // Returns true if a valid board
+    inline bool IsValid() const { return (BoardId < MAX_BOARDS); }
 
     inline bool ValidRead() const { return readValid; }
     inline bool ValidWrite() const { return writeValid; }

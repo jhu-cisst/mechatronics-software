@@ -43,9 +43,10 @@ void EncDown(AmpIO &bd, unsigned long dig_out)
 
 int main(int argc, char** argv)
 {
-    int i;
+    int i, j;
     int port = 0;
-    int board = 0;
+    int board1 = BoardIO::MAX_BOARDS;
+    int board2 = BoardIO::MAX_BOARDS;
 
     int args_found = 0;
     for (i = 1; i < argc; i++) {
@@ -54,13 +55,19 @@ int main(int argc, char** argv)
             std::cerr << "Selecting port " << port << std::endl;
         }
         else {
-            board = atoi(argv[i]);
-            std::cerr << "Selecting board " << board << std::endl;
+            if (args_found == 0) {
+                board1 = atoi(argv[i]);
+                std::cerr << "Selecting board " << board1 << std::endl;
+            }
+            else if (args_found == 1) {
+                board2 = atoi(argv[i]);
+                std::cerr << "Selecting board " << board2 << std::endl;
+            }
             args_found++;
         }
     }
     if (args_found < 1) {
-        std::cerr << "Usage: sensors <board-num> [-pP]" << std::endl
+        std::cerr << "Usage: sensors <board-num> [<board-num>] [-pP]" << std::endl
                   << "       where P = port number (default 0)" << std::endl;
         return 0;
     }
@@ -71,11 +78,19 @@ int main(int argc, char** argv)
         std::cerr << "Failed to initialize firewire port " << port << std::endl;
         return -1;
     }
-    AmpIO Board(board);
-    Port.AddBoard(&Board);
 
-    for (i = 0; i < 4; i++)
-        Board.SetEncoderPreload(i, 0x1000*i + 0x1000);
+    std::vector<AmpIO*> BoardList;
+    BoardList.push_back(new AmpIO(board1));
+    Port.AddBoard(BoardList[0]);
+    if (board2 < BoardIO::MAX_BOARDS) {
+        BoardList.push_back(new AmpIO(board2));
+        Port.AddBoard(BoardList[1]);
+    }
+
+    for (i = 0; i < 4; i++) {
+        for (j = 0; j < BoardList.size(); j++)
+            BoardList[j]->SetEncoderPreload(i, 0x1000*i + 0x1000);
+    }
 
     initscr();
     cbreak();
@@ -83,12 +98,16 @@ int main(int argc, char** argv)
     noecho();
     nodelay(stdscr, TRUE);
 
-    mvwprintw(stdscr, 1, 9, "Sensor Feedback for Board %d", board);
+    if (BoardList.size() > 1)
+        mvwprintw(stdscr, 1, 9, "Sensor Feedback for Boards %d, %d", board1, board2);
+    else
+        mvwprintw(stdscr, 1, 9, "Sensor Feedback for Board %d", board1);
     mvwprintw(stdscr, 2, 9, "Press space to quit, r to reset port, 0-3 to toggle digital output bit");
     wrefresh(stdscr);
 
-    for (i = 0; i < 4; i++)
-        mvwprintw(stdscr, 4, 9+8+i*10, "Axis%d", i);
+    int numAxes = (BoardList.size() > 1)?8:4;
+    for (i = 0; i < numAxes; i++)
+        mvwprintw(stdscr, 4, 9+8+i*13, "Axis%d", i);
     mvwprintw(stdscr, 5, 9, "Enc:");
     mvwprintw(stdscr, 6, 9, "Pot:");
     mvwprintw(stdscr, 7, 9, "Vel:");
@@ -107,12 +126,17 @@ int main(int argc, char** argv)
         else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));
-            Board.SetDigitalOutput(dig_out);
+            for (j = 0; j < BoardList.size(); j++)
+                BoardList[j]->SetDigitalOutput(dig_out);
         }
-        else if (c == 'w')
-            EncUp(Board, dig_out);
-        else if (c == 's')
-            EncDown(Board, dig_out);
+        else if (c == 'w') {
+            for (j = 0; j < BoardList.size(); j++)
+                EncUp(*(BoardList[j]), dig_out);
+        }
+        else if (c == 's') {
+            for (j = 0; j < BoardList.size(); j++)
+                EncDown(*(BoardList[j]), dig_out);
+        }
 
         mvwprintw(stdscr, 14, 41, "%10d", loop_cnt++);
 
@@ -134,35 +158,45 @@ int main(int argc, char** argv)
 
         if (!Port.IsOK()) continue;
 
-        int node = Port.GetNodeId(board);
+        int node = Port.GetNodeId(board1);
         if (node < FirewirePort::MAX_NODES)        
-            mvwprintw(stdscr, 14, 16, "%d   ", Port.GetNodeId(board));
+            mvwprintw(stdscr, 14, 16, "%d   ", node);
         else
             mvwprintw(stdscr, 14, 16, "none");
+        if (BoardList.size() > 1) {
+            node = Port.GetNodeId(board2);
+            if (node < FirewirePort::MAX_NODES)        
+                mvwprintw(stdscr, 14, 22, "%d   ", node);
+            else
+                mvwprintw(stdscr, 14, 22, "none");
+        }
 
         Port.ReadAllBoards();
-        if (Board.ValidRead()) {
-
-            for (i = 0; i < 4; i++) {
-                mvwprintw(stdscr, 5, 9+5+i*10, "0x%07X", Board.GetEncoderPosition(i));
-                mvwprintw(stdscr, 6, 9+8+i*10, "0x%04X", Board.GetAnalogPosition(i));
-                mvwprintw(stdscr, 7, 9+8+i*10, "0x%04X", Board.GetEncoderVelocity(i));
-                mvwprintw(stdscr, 8, 9+8+i*10, "0x%04X", Board.GetEncoderFrequency(i));
-                mvwprintw(stdscr, 9, 9+8+i*10, "0x%04X", Board.GetMotorCurrent(i));
+        int j = 0;
+        for (j = 0; j < BoardList.size(); j++) {
+            if (BoardList[j]->ValidRead()) {
+                for (i = 0; i < 4; i++) {
+                    mvwprintw(stdscr, 5, 9+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i));
+                    mvwprintw(stdscr, 6, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogPosition(i));
+                    mvwprintw(stdscr, 7, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
+                    mvwprintw(stdscr, 8, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderFrequency(i));
+                    mvwprintw(stdscr, 9, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
+                }
+                dig_out = BoardList[j]->GetDigitalOutput();
+                mvwprintw(stdscr, 11, 9+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X", 
+                          BoardList[j]->GetStatus(), BoardList[j]->GetTimestamp(), dig_out);
+                unsigned long dig_in = BoardList[j]->GetDigitalInput();
+                mvwprintw(stdscr, 12, 9+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
+                          (dig_in&0x0f00)>>8, (dig_in&0x00f0)>>4, dig_in&0x000f);
             }
-            dig_out = Board.GetDigitalOutput();
-            mvwprintw(stdscr, 11, 9, "Status:  0x%08X    Timestamp: %08X   DigOut: 0x%01X", 
-                      Board.GetStatus(), Board.GetTimestamp(), dig_out);
-            unsigned long dig_in = Board.GetDigitalInput();
-            mvwprintw(stdscr, 12, 9, "NegLim:  0x%01X    PosLim:  0x%01X  Home: 0x%01X",
-                      (dig_in&0x0f00)>>8, (dig_in&0x00f0)>>4, dig_in&0x000f);
         }
 
         wrefresh(stdscr);
         usleep(500);
     }
 
-    Port.RemoveBoard(&Board);
+    for (j= 0; j < BoardList.size(); j++)
+        Port.RemoveBoard(BoardList[j]->GetBoardId());
 
     endwin();
     return 0;

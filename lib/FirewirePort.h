@@ -27,9 +27,8 @@ http://www.cisst.org/cisst/license.txt.
 
 class FirewirePort {
 public:
-    enum { MAX_NODES = 64,     // maximum number of nodes (IEEE-1394 limit)
-           MAX_BOARDS = 16,    // maximum number of Amp boards (16-pos switch)
-    };
+    enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
+
 protected:
     int PortNum;
 
@@ -37,13 +36,13 @@ protected:
     nodeid_t baseNodeId;
 
     unsigned char Node2Board[MAX_NODES];
-    unsigned char Board2Node[MAX_BOARDS];
+    unsigned char Board2Node[BoardIO::MAX_BOARDS];
 
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
 
     int max_board;  // highest index of used (non-zero) entry in BoardList
-    BoardIO *BoardList[MAX_BOARDS];
+    BoardIO *BoardList[BoardIO::MAX_BOARDS];
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
