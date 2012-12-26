@@ -206,7 +206,7 @@ int main(int argc, char** argv)
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
                     mvwprintw(stdscr, 6, 9+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i));
-                    mvwprintw(stdscr, 7, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogPosition(i));
+                    mvwprintw(stdscr, 7, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogInput(i));
                     mvwprintw(stdscr, 8, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
                     mvwprintw(stdscr, 9, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderFrequency(i));
                     mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));

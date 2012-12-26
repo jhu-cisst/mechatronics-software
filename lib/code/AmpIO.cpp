@@ -68,14 +68,14 @@ void AmpIO::DisplayReadBuffer() const
     std::cout << std::hex << bswap_32(read_buffer[0]) << std::endl;
     std::cout << std::hex << bswap_32(read_buffer[1]) << std::endl;
 
-    // remaining 28 quadlets are in 4 groups of 7 as follows:
-    //   - motor current and analog pot x7 channels
-    //   - encoder position x7 channels
-    //   - encoder velocity x7 channels
-    //   - encoder frequency x7 channels
-    for (int i=2; i<30; i++) {
+    // remaining quadlets are in 4 groups of NUM_CHANNELS as follows:
+    //   - motor current and analog pot per channel
+    //   - encoder position per channel
+    //   - encoder velocity per channel
+    //   - encoder frequency per channel
+    for (int i=2; i<ReadBufSize; i++) {
         std::cout << std::hex << bswap_32(read_buffer[i]) << " ";
-        if (!((i-1)%7)) std::cout << std::endl;
+        if (!((i-1)%NUM_CHANNELS)) std::cout << std::endl;
     }
 }
 
@@ -101,7 +101,7 @@ unsigned long AmpIO::GetMotorCurrent(unsigned int index) const
     return static_cast<unsigned long>(buff) & ADC_MASK;
 }
 
-unsigned long AmpIO::GetAnalogPosition(unsigned int index) const
+unsigned long AmpIO::GetAnalogInput(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;

@@ -34,7 +34,7 @@ public:
     unsigned long GetStatus() const;
     unsigned long GetTimestamp() const;
     unsigned long GetMotorCurrent(    unsigned int ) const;
-    unsigned long GetAnalogPosition(  unsigned int ) const;
+    unsigned long GetAnalogInput(  unsigned int ) const;
     unsigned long GetEncoderPosition( unsigned int ) const;
     unsigned long GetEncoderVelocity( unsigned int ) const;
     unsigned long GetEncoderFrequency(unsigned int ) const;
@@ -62,18 +62,18 @@ protected:
 
     // Offsets of real-time read buffer contents, 30 quadlets
     enum {
-        TIMESTAMP_OFFSET  =  0,    // one quadlet
-        STATUS_OFFSET     =  1,    // one quadlet
-        MOTOR_CURR_OFFSET =  2,    // half quadlet x7 channels (lower half)
-        ANALOG_POS_OFFSET =  2,    // half quadlet x7 channels (upper half)
-        ENC_POS_OFFSET    =  9,    // one quadlet x7 channels
-        ENC_VEL_OFFSET    = 16,    // one quadlet x7 channels
-        ENC_FRQ_OFFSET    = 23     // one quadlet x7 channels
-    };      // negate for sign to match that of motor command voltage
+        TIMESTAMP_OFFSET  = 0,    // one quadlet
+        STATUS_OFFSET     = 1,    // one quadlet
+        MOTOR_CURR_OFFSET = 2,    // half quadlet per channel (lower half)
+        ANALOG_POS_OFFSET = 2,    // half quadlet per channel (upper half)
+        ENC_POS_OFFSET    = 2+NUM_CHANNELS,    // one quadlet per channel
+        ENC_VEL_OFFSET    = 2+2*NUM_CHANNELS,  // one quadlet per channel
+        ENC_FRQ_OFFSET    = 2+3*NUM_CHANNELS   // one quadlet per channel
+    };
 
-    // offsets of real-time write buffer contents, 7 quadlets
+    // offsets of real-time write buffer contents
     enum {
-        WB_CURR_OFFSET = 0         // one quadlet x7 channels
+        WB_CURR_OFFSET = 0         // one quadlet per channel
     };
 
     // Hardware device address offsets, not to be confused with buffer offsets.
