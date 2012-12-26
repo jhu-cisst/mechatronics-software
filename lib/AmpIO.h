@@ -51,7 +51,7 @@ protected:
 
     // Number of channels in the node
     // Only 4 axes exist on 1 QLA board;
-    // Due to FPGA firmware implementation, NUM_CHANNELS is set to 7 (soon to be 8)
+    // Due to FPGA firmware implementation, NUM_CHANNELS is set to 8
     enum { NUM_CHANNELS = 8 };
 
     enum { ReadBufSize = 2+4*NUM_CHANNELS,
