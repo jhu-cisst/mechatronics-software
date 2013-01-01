@@ -11,6 +11,8 @@
 #
 # --- end cisst license ---
 
+project(Mechatronics)
+
 cmake_minimum_required(VERSION 2.6)
 
 # Allow generated c++ code to find lib header files
@@ -22,3 +24,5 @@ link_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_subdirectory(util)
 add_subdirectory(lib)
 add_subdirectory(tests)
+add_subdirectory(programmer)
+
