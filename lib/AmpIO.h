@@ -40,6 +40,8 @@ public:
     unsigned long GetEncoderFrequency(unsigned int ) const;
     unsigned long GetDigitalOutput() const;
     unsigned long GetDigitalInput() const;
+    bool GetPromData(unsigned long addr, unsigned char *data,
+                     unsigned int nbytes);
 
     bool SetPowerControl(                  unsigned long );
     bool SetMotorCurrent(    unsigned int, unsigned long );

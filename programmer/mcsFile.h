@@ -44,6 +44,7 @@ public:
     bool ReadNextSector();
     unsigned long GetSectorAddress() const { return startAddr; }
     const unsigned char *GetSectorData() const { return curSector; }
+    bool VerifySector(const unsigned char *data, unsigned long len) const;
     void CloseFile();
 };
 

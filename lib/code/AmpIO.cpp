@@ -200,7 +200,40 @@ unsigned long AmpIO::GetDigitalOutput() const
 unsigned long AmpIO::GetDigitalInput() const
 {
     quadlet_t read_data = 0;
-    if (port->ReadQuadlet(BoardId, 9, read_data))
+    if (port->ReadQuadlet(BoardId, 10, read_data))
         read_data = bswap_32(read_data) & 0x0FFF;
     return static_cast<unsigned long>(read_data);
+}
+
+bool AmpIO::GetPromData(unsigned long addr, unsigned char *data,
+                        unsigned int nbytes)
+{
+    unsigned long addr24 = addr&0x00ffffff;
+    if (addr24+nbytes > 0x00ffffff)
+        return false;
+    quadlet_t *qptr = (quadlet_t *)data;
+    quadlet_t write_data = 0x03000000|addr24;
+    int i;
+    for (i = 0; i < nbytes/4; i++, write_data += 4) {
+        if (!port->WriteQuadlet(BoardId, 8, bswap_32(write_data)))
+            return false;
+        // Should be ready by now...
+        if (!port->ReadQuadlet(BoardId, 9, qptr[i]))
+            return false;
+    }
+    // Get any left-over bytes
+    int extra = nbytes%4;
+    if (extra) {
+        if (!port->WriteQuadlet(BoardId, 8, write_data))
+            return false;
+        union {
+            quadlet_t q;
+            unsigned char b[4];
+        } read_data;
+        if (!port->ReadQuadlet(BoardId, 9, read_data.q))
+            return false;
+        for (i = 0; i < extra; i++)
+            data[nbytes-extra+i] = read_data.b[i];
+    }
+    return true;
 }

@@ -2,6 +2,7 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 #include <iostream>
+#include <string.h>
 
 #include "mcsFile.h"
 
@@ -137,6 +138,23 @@ bool mcsFile::ReadNextSector()
     else if (nb > sizeof(curSector))
         std::cerr << "ReadNextSector: too many bytes = " << nb << std::endl;
     return true;
+}
+
+bool mcsFile::VerifySector(const unsigned char *data, unsigned long len) const
+{
+    unsigned int lim = (len < sizeof(curSector)) ? len : sizeof(curSector);
+    int num = 0;  // number of mismatches
+    int i;
+    for (i = 0; i < lim; i++) {
+        if (curSector[i] != data[i]) {
+            std::cout << std::hex << "Mismatch at address " << startAddr+i
+                      << ", file = " << (unsigned int)curSector[i]
+                      << ", prom = " << (unsigned int)data[i] << std::endl;
+            if (++num >= 10)
+                break;
+        }
+    }
+    return (i == lim) && (num == 0);
 }
 
 void mcsFile::CloseFile()
