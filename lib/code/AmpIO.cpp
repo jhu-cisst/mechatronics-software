@@ -205,8 +205,39 @@ unsigned long AmpIO::GetDigitalInput() const
     return static_cast<unsigned long>(read_data);
 }
 
-bool AmpIO::GetPromData(unsigned long addr, unsigned char *data,
-                        unsigned int nbytes)
+unsigned long AmpIO::PromGetId()
+{
+    unsigned long id = 0;
+    quadlet_t data = 0x9f000000;
+    if (port->WriteQuadlet(BoardId, 8, bswap_32(data))) {
+        // Should be ready by now...
+        id = PromGetResult();
+    }
+    return id;
+}
+
+unsigned long AmpIO::PromGetStatus()
+{
+    unsigned long status = 0x80000000;
+    quadlet_t data = 0x05000000;
+    if (port->WriteQuadlet(BoardId, 8, bswap_32(data))) {
+        // Should be ready by now...
+        status = PromGetResult();
+    }
+    return status;
+}
+
+unsigned long AmpIO::PromGetResult()
+{
+    unsigned long result = 0xffffffff;
+    quadlet_t data;
+    if (port->ReadQuadlet(BoardId, 9, data))
+        result = static_cast<unsigned long>(bswap_32(data));
+    return result;
+}
+
+bool AmpIO::PromReadData(unsigned long addr, unsigned char *data,
+                         unsigned int nbytes)
 {
     unsigned long addr24 = addr&0x00ffffff;
     if (addr24+nbytes > 0x00ffffff)
@@ -235,5 +266,71 @@ bool AmpIO::GetPromData(unsigned long addr, unsigned char *data,
         for (i = 0; i < extra; i++)
             data[nbytes-extra+i] = read_data.b[i];
     }
+    return true;
+}
+
+bool AmpIO::PromWriteEnable()
+{
+    quadlet_t write_data = 0x06000000;
+    return port->WriteQuadlet(BoardId, 8, bswap_32(write_data));
+}
+
+bool AmpIO::PromWriteDisable()
+{
+    quadlet_t write_data = 0x04000000;
+    return port->WriteQuadlet(BoardId, 8, bswap_32(write_data));
+}
+
+bool AmpIO::PromSectorErase(unsigned long addr)
+{
+    std::cout << "Erasing sector " << std::hex << addr << std::dec;
+    PromWriteEnable();
+    quadlet_t write_data = 0xd8000000 | (addr&0x00ffffff);
+    if (!port->WriteQuadlet(BoardId, 8, bswap_32(write_data)))
+        return false;
+    // Wait for erase to finish
+    unsigned char status;
+    while (PromGetStatus())
+        std::cout << ".";
+    std::cout << std::endl;
+    return true;
+}
+
+bool AmpIO::PromProgramPage(unsigned long addr, const unsigned char *bytes,
+                            unsigned int nbytes)
+{
+    const unsigned int MAX_PAGE = 256;
+    if (nbytes > MAX_PAGE) {
+        std::cout << "PromProgramPage: error, nbytes = " << nbytes
+                  << " (max = " << MAX_PAGE << ")" << std::endl;
+        return false;
+    }
+    std::cout << "Programming page " << std::hex << addr << std::dec;
+    PromWriteEnable();
+    // Block write of the data
+    quadlet_t write_data = 0x02000000 | (addr & 0x00ffffff);
+    unsigned char page_data[MAX_PAGE+sizeof(quadlet_t)];
+    quadlet_t *data_ptr = reinterpret_cast<quadlet_t *>(page_data);
+    data_ptr[0] = bswap_32(write_data);   // Page program
+    memcpy(page_data+sizeof(quadlet_t), bytes, nbytes);
+    if (!port->WriteBlock(BoardId, 0xc0, data_ptr, nbytes+sizeof(quadlet_t)))
+        return false;
+    // Read prom status register; if 4 LSB are 0, command has finished
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 8, read_data)) return false;
+    int cnt = 0;
+    while (read_data&0x000f) {
+        std::cout << ".";
+        if (!port->ReadQuadlet(BoardId, 8, read_data)) return false;
+        if (cnt++ > 100) {
+            std::cout << "timeout" << std::endl;
+            break;
+        }
+    }
+    // Now, read result. This should be the number of quadlets written.
+    std::cout << ", result = " << std::hex << PromGetResult() << std::dec << std::endl;
+    // Wait for "Write in Progress" bit to be cleared
+    while (PromGetStatus()&MASK_WIP)
+        std::cout << ".";
     return true;
 }

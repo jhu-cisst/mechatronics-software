@@ -40,11 +40,16 @@ class mcsFile {
 public:
     mcsFile();
     ~mcsFile();
+    // Open file
     bool OpenFile(const std::string &fileName);
+    // Read next sector
     bool ReadNextSector();
     unsigned long GetSectorAddress() const { return startAddr; }
     const unsigned char *GetSectorData() const { return curSector; }
+    // Compare current sector to specified data
     bool VerifySector(const unsigned char *data, unsigned long len) const;
+    // Seek back to beginning of file
+    void Rewind();
     void CloseFile();
 };
 

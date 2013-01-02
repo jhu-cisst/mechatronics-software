@@ -40,13 +40,47 @@ public:
     unsigned long GetEncoderFrequency(unsigned int ) const;
     unsigned long GetDigitalOutput() const;
     unsigned long GetDigitalInput() const;
-    bool GetPromData(unsigned long addr, unsigned char *data,
-                     unsigned int nbytes);
 
     bool SetPowerControl(                  unsigned long );
     bool SetMotorCurrent(    unsigned int, unsigned long );
     bool SetEncoderPreload(  unsigned int, unsigned long );
     bool SetDigitalOutput(   unsigned long);
+
+    // Methods for reading or programming the FPGA configuration PROM (M25P16)
+
+    // Returns the PROM ID (should be 0x00202015 for the M25P16)
+    unsigned long PromGetId();
+
+    // PromGetStatus returns the status register from the M25P16 PROM
+    // (this is different than the interface status read from address offset 8)
+    // The following masks are for the useful status register bits.
+    enum { MASK_WIP = 1, MASK_WEL = 2 };   // status register bit masks
+    unsigned long PromGetStatus();
+
+    // PromGetResult returns the result (if any) from the last command sent
+    unsigned long PromGetResult();
+
+    // Returns nbytes data read from the specified address
+    bool PromReadData(unsigned long addr, unsigned char *data,
+                      unsigned int nbytes);
+
+    // Enable programming commands (erase and program page)
+    // This sets the WEL bit in the status register.
+    // This mode is automatically cleared after a programming command is executed.
+    bool PromWriteEnable();
+
+    // Disable programming commands
+    // This clears the WEL bit in the status register.    
+    bool PromWriteDisable();
+
+    // Erase a sector (64K) at the specified address.
+    // This command calls PromWriteEnable.
+    bool PromSectorErase(unsigned long addr);
+
+    // Program a page (up to 256 bytes) at the specified address.
+    // This command calls PromWriteEnable.
+    bool PromProgramPage(unsigned long addr, const unsigned char *bytes,
+                         unsigned int nbytes);
 
 protected:
     unsigned int NumAxes;   // not currently used

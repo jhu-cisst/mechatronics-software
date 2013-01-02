@@ -254,11 +254,8 @@ bool FirewirePort::ReadAllBoards(void)
     bool noneRead = true;
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            bool ret = false;
-            int node = Board2Node[board];
-            if (node < MAX_NODES)
-                ret = !raw1394_read(handle, baseNodeId+node, 0, BoardList[board]->GetReadNumBytes(),
-                                    BoardList[board]->GetReadBuffer());
+            bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(),
+                                 BoardList[board]->GetReadNumBytes());
             if (ret) noneRead = false;
             else allOK = false;
             BoardList[board]->SetReadValid(ret);
@@ -279,11 +276,8 @@ bool FirewirePort::WriteAllBoards(void)
     bool noneWritten = true;
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            bool ret = false;
-            int node = Board2Node[board];
-            if (node < MAX_NODES)
-                ret = !raw1394_write(handle, baseNodeId+node, 0, BoardList[board]->GetWriteNumBytes(),
-                                     BoardList[board]->GetWriteBuffer());
+            bool ret = WriteBlock(board, 0, BoardList[board]->GetWriteBuffer(),
+                                  BoardList[board]->GetWriteNumBytes());
             if (ret) noneWritten = false;
             else allOK = false;
             BoardList[board]->SetWriteValid(ret);
@@ -309,6 +303,26 @@ bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_
     int node = GetNodeId(boardId);
     if (node < MAX_NODES)
         return !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
+    else
+        return false;
+}
+
+bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+                             unsigned int nbytes)
+{
+    int node = GetNodeId(boardId);
+    if (node < MAX_NODES)
+        return !raw1394_read(handle, baseNodeId+node, addr, nbytes, data);
+    else
+        return false;
+}
+
+bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+                              unsigned int nbytes)
+{
+    int node = GetNodeId(boardId);
+    if (node < MAX_NODES)
+        return !raw1394_write(handle, baseNodeId+node, addr, nbytes, data);
     else
         return false;
 }

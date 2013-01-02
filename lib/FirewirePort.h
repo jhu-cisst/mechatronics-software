@@ -90,11 +90,19 @@ public:
     // Write to all boards
     bool WriteAllBoards(void);
 
-    // Read a quadlet to the specified board
+    // Read a quadlet from the specified board
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
+
+    // Read a block from the specified board
+    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+                   unsigned int nbytes);
+
+    // Write a block to the specified board
+    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+                    unsigned int nbytes);
 };
 
 #endif // __FirewirePort_H__

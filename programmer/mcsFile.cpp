@@ -157,6 +157,11 @@ bool mcsFile::VerifySector(const unsigned char *data, unsigned long len) const
     return (i == lim) && (num == 0);
 }
 
+void mcsFile::Rewind()
+{
+    file.seekg(0, std::ios_base::beg);
+}
+
 void mcsFile::CloseFile()
 {
     std::cout << "Processed " << line_num << " lines" << std::endl;
