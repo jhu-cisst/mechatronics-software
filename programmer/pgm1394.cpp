@@ -48,7 +48,8 @@ int main(int argc, char** argv)
             std::cout << "Read sector, address = " << std::hex 
                       << promFile.GetSectorAddress() << std::endl;
             std::cout << "Verifying ...";
-            if (!Board.GetPromData(0L, DownloadedSector, 
+            if (!Board.GetPromData(promFile.GetSectorAddress(),
+                                   DownloadedSector, 
                                    sizeof(DownloadedSector))) {
                 std::cout << "Error reading PROM data" << std::endl;
                 break;
