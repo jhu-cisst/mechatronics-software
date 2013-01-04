@@ -22,13 +22,15 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "BoardIO.h"
 
+class ostream;
+
 class AmpIO : public BoardIO
 {
 public:
     AmpIO(unsigned char board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    void DisplayReadBuffer() const;
+    void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
     //  Interface methods
     unsigned long GetStatus() const;
@@ -47,6 +49,12 @@ public:
     bool SetDigitalOutput(   unsigned long);
 
     // Methods for reading or programming the FPGA configuration PROM (M25P16)
+
+    // User-supplied callback, called when software needs to wait for an
+    // action, or when an error occurs. In the latter case, the error message
+    // is passed as a parameter (NULL if no error). If the callback returns
+    // false, the current wait operation is aborted.
+    typedef bool (*ProgressCallback)(const char *msg);
 
     // Returns the PROM ID (should be 0x00202015 for the M25P16)
     unsigned long PromGetId();
@@ -75,12 +83,17 @@ public:
 
     // Erase a sector (64K) at the specified address.
     // This command calls PromWriteEnable.
-    bool PromSectorErase(unsigned long addr);
+    // If non-zero, the callback (cb) is called while the software is waiting
+    // for the PROM to be erased, or if there is an error.
+    bool PromSectorErase(unsigned long addr, const ProgressCallback cb = 0);
 
     // Program a page (up to 256 bytes) at the specified address.
     // This command calls PromWriteEnable.
-    bool PromProgramPage(unsigned long addr, const unsigned char *bytes,
-                         unsigned int nbytes);
+    // If non-zero, the callback (cb) is called while the software is waiting
+    // for the PROM to be programmed, or if there is an error.
+    // Returns the number of bytes programmed (-1 if error).
+    int PromProgramPage(unsigned long addr, const unsigned char *bytes,
+                        unsigned int nbytes, const ProgressCallback cb = 0);
 
 protected:
     unsigned int NumAxes;   // not currently used

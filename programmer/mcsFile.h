@@ -17,6 +17,7 @@ class mcsFile {
     std::ifstream file;
     int line_num;                    // current line number
     unsigned long startAddr;         // start address
+    unsigned long numBytes;          // number of bytes in sector
     unsigned char curSector[65536];  // current sector
 
     struct RecInfo {
@@ -45,6 +46,7 @@ public:
     // Read next sector
     bool ReadNextSector();
     unsigned long GetSectorAddress() const { return startAddr; }
+    unsigned long GetSectorNumBytes() const { return numBytes; }
     const unsigned char *GetSectorData() const { return curSector; }
     // Compare current sector to specified data
     bool VerifySector(const unsigned char *data, unsigned long len) const;

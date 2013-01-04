@@ -19,6 +19,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <byteswap.h>
 #include <iostream>
+#include <sstream>
 
 #include "AmpIO.h"
 #include "FirewirePort.h"
@@ -42,6 +43,21 @@ const unsigned long ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder freque
 const unsigned long DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
 
+// PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
+//                    the parameter is NULL, but the function returns an error if
+//                    the callback returns false.
+// ERROR_CALLBACK:    inform the caller of an error; in this case, the error message
+//                    (char *) is passed as a parameter, and the return value is ignored.
+
+#define PROGRESS_CALLBACK(CB, ERR)             \
+    if (CB) { if (!(*CB)(0)) return ERR; }     \
+    else std::cout << '.';
+
+#define ERROR_CALLBACK(CB, MSG)         \
+    if (CB) (*CB)(MSG.str().c_str());   \
+    else { std::cout << MSG.str() << std::endl; }
+
+
 AmpIO::AmpIO(unsigned char board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes)
 {
     memset(read_buffer, 0, sizeof(read_buffer));
@@ -62,11 +78,11 @@ AmpIO::~AmpIO()
     }
 }
 
-void AmpIO::DisplayReadBuffer() const
+void AmpIO::DisplayReadBuffer(std::ostream &out) const
 {
     // first two quadlets are timestamp and status, resp.
-    std::cout << std::hex << bswap_32(read_buffer[0]) << std::endl;
-    std::cout << std::hex << bswap_32(read_buffer[1]) << std::endl;
+    out << std::hex << bswap_32(read_buffer[0]) << std::endl;
+    out << std::hex << bswap_32(read_buffer[1]) << std::endl;
 
     // remaining quadlets are in 4 groups of NUM_CHANNELS as follows:
     //   - motor current and analog pot per channel
@@ -74,9 +90,10 @@ void AmpIO::DisplayReadBuffer() const
     //   - encoder velocity per channel
     //   - encoder frequency per channel
     for (int i=2; i<ReadBufSize; i++) {
-        std::cout << std::hex << bswap_32(read_buffer[i]) << " ";
-        if (!((i-1)%NUM_CHANNELS)) std::cout << std::endl;
+        out << std::hex << bswap_32(read_buffer[i]) << " ";
+        if (!((i-1)%NUM_CHANNELS)) out << std::endl;
     }
+    out << std::dec;
 }
 
 unsigned long AmpIO::GetStatus() const
@@ -281,9 +298,8 @@ bool AmpIO::PromWriteDisable()
     return port->WriteQuadlet(BoardId, 8, bswap_32(write_data));
 }
 
-bool AmpIO::PromSectorErase(unsigned long addr)
+bool AmpIO::PromSectorErase(unsigned long addr, const ProgressCallback cb)
 {
-    std::cout << "Erasing sector " << std::hex << addr << std::dec;
     PromWriteEnable();
     quadlet_t write_data = 0xd8000000 | (addr&0x00ffffff);
     if (!port->WriteQuadlet(BoardId, 8, bswap_32(write_data)))
@@ -291,46 +307,56 @@ bool AmpIO::PromSectorErase(unsigned long addr)
     // Wait for erase to finish
     unsigned char status;
     while (PromGetStatus())
-        std::cout << ".";
-    std::cout << std::endl;
+        PROGRESS_CALLBACK(cb, false);
     return true;
 }
 
-bool AmpIO::PromProgramPage(unsigned long addr, const unsigned char *bytes,
-                            unsigned int nbytes)
+int AmpIO::PromProgramPage(unsigned long addr, const unsigned char *bytes,
+                           unsigned int nbytes, const ProgressCallback cb)
 {
     const unsigned int MAX_PAGE = 256;
     if (nbytes > MAX_PAGE) {
-        std::cout << "PromProgramPage: error, nbytes = " << nbytes
-                  << " (max = " << MAX_PAGE << ")" << std::endl;
-        return false;
+        std::ostringstream msg;
+        msg << "PromProgramPage: error, nbytes = " << nbytes
+            << " (max = " << MAX_PAGE << ")";
+        ERROR_CALLBACK(cb, msg);
+        return -1;
     }
-    std::cout << "Programming page " << std::hex << addr << std::dec;
     PromWriteEnable();
     // Block write of the data
-    quadlet_t write_data = 0x02000000 | (addr & 0x00ffffff);
     unsigned char page_data[MAX_PAGE+sizeof(quadlet_t)];
     quadlet_t *data_ptr = reinterpret_cast<quadlet_t *>(page_data);
-    data_ptr[0] = bswap_32(write_data);   // Page program
+    // First quadlet is the "page program" instruction (0x02)
+    data_ptr[0] = bswap_32(0x02000000 | (addr & 0x00ffffff));
+    // Remaining quadlets are the data to be programmed. These do not
+    // need to be byte-swapped.
     memcpy(page_data+sizeof(quadlet_t), bytes, nbytes);
     if (!port->WriteBlock(BoardId, 0xc0, data_ptr, nbytes+sizeof(quadlet_t)))
-        return false;
-    // Read prom status register; if 4 LSB are 0, command has finished
+        return -1;
+    // Read FPGA status register; if 4 LSB are 0, command has finished
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 8, read_data)) return false;
-    int cnt = 0;
+    if (!port->ReadQuadlet(BoardId, 8, read_data)) return -1;
+    read_data = bswap_32(read_data);
     while (read_data&0x000f) {
-        std::cout << ".";
+        PROGRESS_CALLBACK(cb, -1);
         if (!port->ReadQuadlet(BoardId, 8, read_data)) return false;
-        if (cnt++ > 100) {
-            std::cout << "timeout" << std::endl;
-            break;
-        }
+        read_data = bswap_32(read_data);
+    }
+    if (read_data & 0xff000000) { // shouldn't happen
+        std::ostringstream msg;
+        msg << "PromProgramPage: FPGA error = " << read_data;
+        ERROR_CALLBACK(cb, msg);
     }
     // Now, read result. This should be the number of quadlets written.
-    std::cout << ", result = " << std::hex << PromGetResult() << std::dec << std::endl;
+    unsigned long nWritten = 4*(PromGetResult()-1);
+    if (nWritten != nbytes) {
+        std::ostringstream msg;
+        msg << "PromProgramPage: wrote " << nWritten << " of "
+            << nbytes << "bytes";
+        ERROR_CALLBACK(cb, msg);
+    }                      
     // Wait for "Write in Progress" bit to be cleared
     while (PromGetStatus()&MASK_WIP)
-        std::cout << ".";
-    return true;
+        PROGRESS_CALLBACK(cb, 0);
+    return nWritten;
 }

@@ -112,17 +112,17 @@ bool mcsFile::ReadNextSector()
         return false;
     }
     startAddr = ((rec.data[0]<<16)+rec.data[1]) << 16;
-    int nb = 0;
-    while ((nb < sizeof(curSector)) && ProcessNextLine(rec)) {
+    numBytes = 0L;
+    while ((numBytes < sizeof(curSector)) && ProcessNextLine(rec)) {
         if (rec.type == RECORD_DATA) {
-            if (nb != rec.addr) {
+            if (numBytes != rec.addr) {
                 std::cerr << "ReadNextSector: line " << line_num
-                          << ", expected offset " << nb << ", got offset "
+                          << ", expected offset " << numBytes << ", got offset "
                           << rec.addr << std::endl;
                 return false;
             }
-            memcpy(curSector+nb, rec.data, rec.ndata);
-            nb += rec.ndata;
+            memcpy(curSector+numBytes, rec.data, rec.ndata);
+            numBytes += rec.ndata;
         }
         else if (rec.type == RECORD_EOF)
             break;
@@ -130,13 +130,12 @@ bool mcsFile::ReadNextSector()
             std::cerr << "ReadNextSector: line " << line_num 
                       << " ignoring record type " << rec.type << std::endl;
     }
-    if (nb < sizeof(curSector)) {
-        std::cerr << "ReadNextSector: padding incomplete sector, num bytes = " 
-                  << nb << std::endl;
-        memset(curSector+nb, 0xff, sizeof(curSector)-nb);
+    // Pad sector with 0xff, just in case
+    if (numBytes < sizeof(curSector)) {
+        memset(curSector+numBytes, 0xff, sizeof(curSector)-numBytes);
     }
-    else if (nb > sizeof(curSector))
-        std::cerr << "ReadNextSector: too many bytes = " << nb << std::endl;
+    else if (numBytes > sizeof(curSector))
+        std::cerr << "ReadNextSector: too many bytes = " << numBytes << std::endl;
     return true;
 }
 
@@ -159,6 +158,7 @@ bool mcsFile::VerifySector(const unsigned char *data, unsigned long len) const
 
 void mcsFile::Rewind()
 {
+    file.clear();
     file.seekg(0, std::ios_base::beg);
 }
 

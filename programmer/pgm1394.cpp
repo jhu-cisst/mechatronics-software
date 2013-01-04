@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <termios.h>
 #include <iostream>
+#include <iomanip>
+#include <unistd.h>
+#include <sys/time.h>
 #include "mcsFile.h"
 #include "FirewirePort.h"
 #include "AmpIO.h"
@@ -29,7 +32,8 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 
         std::cout << "0) Exit programmer" << std::endl
                   << "1) Program PROM" << std::endl
-                  << "2) Verify PROM" << std::endl << std::endl;
+                  << "2) Verify PROM" << std::endl
+                  << "3) Read and display first 256 bytes" << std::endl << std::endl;
 
         std::cout << "Select option: ";
         c = getchar();
@@ -40,24 +44,53 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     return (c-'0');
 }
 
+double gettime_us()
+{
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    return (double)tv.tv_usec + (double)1e6 * (double)tv.tv_sec;
+}
+
+bool PromProgramCallback(const char *msg)
+{
+    if (msg) std::cout << std::endl << msg << std::endl;
+    else {
+        static time_t t1 = time(NULL);
+        time_t t2 = time(NULL);
+        if (difftime(t2, t1) > 0.1) {
+            std::cout << "." << std::flush;
+            t1 = t2;
+        }
+    }        
+    return true;   // continue
+}
+
 
 bool PromProgram(AmpIO &Board, mcsFile &promFile)
 {
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
         unsigned long addr = promFile.GetSectorAddress();
-#if 1
-        if (!Board.PromSectorErase(addr)) {
+        std::cout << "Erasing sector " << std::hex << addr << std::dec << std::flush;
+        if (!Board.PromSectorErase(addr, PromProgramCallback)) {
             std::cout << "Failed to erase sector " << addr << std::endl;
             return false;
         }
-#endif
-        if (!Board.PromProgramPage(addr, promFile.GetSectorData(), 256)) {
-            std::cout << "Failed to program page " << addr << std::endl;
-            return false;
+        std::cout << std::endl << "Programming sector " << std::hex << addr
+                  << std::dec << std::flush;
+        const unsigned char *sectorData = promFile.GetSectorData();
+        unsigned long numBytes = promFile.GetSectorNumBytes();
+        unsigned long page = 0;
+        while (page < numBytes) {
+            unsigned int bytesToProgram = std::min(numBytes-page, 256UL);
+            if (!Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram,
+                                       PromProgramCallback)) {
+                std::cout << "Failed to program page " << addr << std::endl;
+                return false;
+            }
+            page += bytesToProgram;
         }
-        // For now, erase Sector 0 and program page 0
-        break;
+        std::cout << std::endl;
     }
     return true;
 }
@@ -68,22 +101,42 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
     unsigned char DownloadedSector[65536];
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
-        std::cout << "Read sector, address = " << std::hex 
-                  << promFile.GetSectorAddress() << std::endl;
-        std::cout << "Verifying ...";
-        if (!Board.PromReadData(promFile.GetSectorAddress(),
-                                DownloadedSector, 
-                                sizeof(DownloadedSector))) {
+        unsigned long addr = promFile.GetSectorAddress();
+        unsigned long numBytes = promFile.GetSectorNumBytes();
+        std::cout << "Verifying sector " << std::hex << addr << "..." << std::flush;
+        if (numBytes > sizeof(DownloadedSector)) {
+            std::cout << "Error: sector too large = " << numBytes << std::endl;
+            return false;
+        }
+        if (!Board.PromReadData(addr, DownloadedSector, numBytes)) {
             std::cout << "Error reading PROM data" << std::endl;
             return false;
         }
-        if (!promFile.VerifySector(DownloadedSector,
-                                   sizeof(DownloadedSector)))
+        if (!promFile.VerifySector(DownloadedSector, numBytes))
             return false;
         std::cout << std::endl;
     }
+    std::cout << std::dec;
     return true;
 }
+
+bool PromDisplayPage(AmpIO &Board, unsigned long addr)
+{
+    unsigned char bytes[256];
+    if (!Board.PromReadData(addr, bytes, sizeof(bytes)))
+        return false;
+    std::cout << std::hex << std::setfill('0');
+    for (int i = 0; i < sizeof(bytes); i += 16) {
+        std::cout << std::setw(4) << i << ": ";
+        for (int j = 0; j < 16; j++)
+            std::cout << std::setw(2) << (unsigned int) bytes[i+j] << "  ";
+        std::cout << std::endl;
+    }
+    //std::cout.unsetf(std::ios_base::setfill | std::ios_base::setw);
+    std::cout << std::dec;
+    return true;
+}
+
 
 int main(int argc, char** argv)
 {
@@ -135,6 +188,9 @@ int main(int argc, char** argv)
             break;
         case 2:
             PromVerify(Board, promFile);
+            break;
+        case 3:
+            PromDisplayPage(Board, 0L);
             break;
         default:
             std::cout << "Not yet implemented" << std::endl;
