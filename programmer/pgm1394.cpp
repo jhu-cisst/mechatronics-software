@@ -33,7 +33,7 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
         std::cout << "0) Exit programmer" << std::endl
                   << "1) Program PROM" << std::endl
                   << "2) Verify PROM" << std::endl
-                  << "3) Read and display first 256 bytes" << std::endl << std::endl;
+                  << "3) Read PROM data" << std::endl << std::endl;
 
         std::cout << "Select option: ";
         c = getchar();
@@ -44,22 +44,24 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     return (c-'0');
 }
 
-double gettime_us()
+// Returns time in seconds
+double get_time()
 {
     struct timeval tv;
     gettimeofday(&tv, 0);
-    return (double)tv.tv_usec + (double)1e6 * (double)tv.tv_sec;
+    return (1e-6*tv.tv_usec + tv.tv_sec);
 }
+
+static double Callback_StartTime = 0.0;
 
 bool PromProgramCallback(const char *msg)
 {
     if (msg) std::cout << std::endl << msg << std::endl;
     else {
-        static time_t t1 = time(NULL);
-        time_t t2 = time(NULL);
-        if (difftime(t2, t1) > 0.1) {
+        double t = get_time();
+        if ((t - Callback_StartTime) > 0.1) {
             std::cout << "." << std::flush;
-            t1 = t2;
+            Callback_StartTime = t;
         }
     }        
     return true;   // continue
@@ -68,10 +70,12 @@ bool PromProgramCallback(const char *msg)
 
 bool PromProgram(AmpIO &Board, mcsFile &promFile)
 {
+    double startTime = get_time();
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
         unsigned long addr = promFile.GetSectorAddress();
         std::cout << "Erasing sector " << std::hex << addr << std::dec << std::flush;
+        Callback_StartTime = get_time();
         if (!Board.PromSectorErase(addr, PromProgramCallback)) {
             std::cout << "Failed to erase sector " << addr << std::endl;
             return false;
@@ -81,6 +85,7 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         const unsigned char *sectorData = promFile.GetSectorData();
         unsigned long numBytes = promFile.GetSectorNumBytes();
         unsigned long page = 0;
+        Callback_StartTime = get_time();
         while (page < numBytes) {
             unsigned int bytesToProgram = std::min(numBytes-page, 256UL);
             if (!Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram,
@@ -92,12 +97,15 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         }
         std::cout << std::endl;
     }
+    std::cout << "PROM programming time = " << get_time() - startTime << " seconds"
+              << std::endl;
     return true;
 }
 
 
 bool PromVerify(AmpIO &Board, mcsFile &promFile)
 {
+    double startTime = get_time();
     unsigned char DownloadedSector[65536];
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
@@ -117,6 +125,8 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
         std::cout << std::endl;
     }
     std::cout << std::dec;
+    std::cout << "PROM verification time = " << get_time() - startTime << " seconds"
+              << std::endl;
     return true;
 }
 
@@ -127,7 +137,7 @@ bool PromDisplayPage(AmpIO &Board, unsigned long addr)
         return false;
     std::cout << std::hex << std::setfill('0');
     for (int i = 0; i < sizeof(bytes); i += 16) {
-        std::cout << std::setw(4) << i << ": ";
+        std::cout << std::setw(4) << addr+i << ": ";
         for (int j = 0; j < 16; j++)
             std::cout << std::setw(2) << (unsigned int) bytes[i+j] << "  ";
         std::cout << std::endl;
@@ -179,7 +189,7 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    
+    unsigned long addr;
 
     while (int c = GetMenuChoice(Board, mcsName)) {
         switch (c) {
@@ -190,7 +200,10 @@ int main(int argc, char** argv)
             PromVerify(Board, promFile);
             break;
         case 3:
-            PromDisplayPage(Board, 0L);
+            std::cout << "Enter address (hex): ";
+            std::cin >> std::hex >> addr;
+            std::cin.ignore(10,'\n');
+            PromDisplayPage(Board, addr);
             break;
         default:
             std::cout << "Not yet implemented" << std::endl;
