@@ -111,7 +111,7 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
     while (promFile.ReadNextSector()) {
         unsigned long addr = promFile.GetSectorAddress();
         unsigned long numBytes = promFile.GetSectorNumBytes();
-        std::cout << "Verifying sector " << std::hex << addr << "..." << std::flush;
+        std::cout << "Verifying sector " << std::hex << addr << std::flush;
         if (numBytes > sizeof(DownloadedSector)) {
             std::cout << "Error: sector too large = " << numBytes << std::endl;
             return false;
@@ -153,7 +153,7 @@ int main(int argc, char** argv)
     int i, j;
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
-    std::string mcsName("FPGA1394qla.mcs");
+    std::string mcsName("FPGA1394-QLA.mcs");
 
     int args_found = 0;
     for (i = 1; i < argc; i++) {

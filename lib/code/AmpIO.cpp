@@ -259,29 +259,41 @@ bool AmpIO::PromReadData(unsigned long addr, unsigned char *data,
     unsigned long addr24 = addr&0x00ffffff;
     if (addr24+nbytes > 0x00ffffff)
         return false;
-    quadlet_t *qptr = (quadlet_t *)data;
     quadlet_t write_data = 0x03000000|addr24;
-    int i;
-    for (i = 0; i < nbytes/4; i++, write_data += 4) {
+    unsigned long page = 0;
+    while (page < nbytes) {
+        unsigned int bytesToRead = std::min(nbytes-page, 256UL);
         if (!port->WriteQuadlet(BoardId, 8, bswap_32(write_data)))
             return false;
-        // Should be ready by now...
-        if (!port->ReadQuadlet(BoardId, 9, qptr[i]))
+        // Read FPGA status register; if 4 LSB are 0, command has finished.
+        // The IEEE-1394 clock is 24.576 MHz, so it should take
+        // about 256*8*(1/24.576) = 83.3 microseconds to read 256 bytes.
+        // Experimentally, 1 iteration of the loop below is sufficient
+        // most of the time, with 2 iterations required occasionally.
+        quadlet_t read_data = 0x000f;
+        int i;
+        const int MAX_LOOP_CNT = 8;
+        for (i = 0; (i < MAX_LOOP_CNT) && read_data; i++) {
+            usleep(10);
+            if (!port->ReadQuadlet(BoardId, 8, read_data)) return false;
+            read_data = bswap_32(read_data)&0x000f;
+        }
+        if (i == MAX_LOOP_CNT) {
+            std::cout << "PromReadData: command failed to finish, status = "
+                      << std::hex << read_data << std::dec << std::endl;
             return false;
-    }
-    // Get any left-over bytes
-    int extra = nbytes%4;
-    if (extra) {
-        if (!port->WriteQuadlet(BoardId, 8, write_data))
+        }
+        // Now, read result. This should be the number of quadlets written.
+        unsigned long nRead = 4*PromGetResult();
+        if (nRead != 256) { // should never happen
+            std::cout << "PromReadData: incorrect number of bytes = "
+                      << nRead << std::endl;
             return false;
-        union {
-            quadlet_t q;
-            unsigned char b[4];
-        } read_data;
-        if (!port->ReadQuadlet(BoardId, 9, read_data.q))
+        }
+        if (!port->ReadBlock(BoardId, 0xc0, (quadlet_t *)(data+page), bytesToRead))
             return false;
-        for (i = 0; i < extra; i++)
-            data[nbytes-extra+i] = read_data.b[i];
+        write_data += bytesToRead;
+        page += bytesToRead;
     }
     return true;
 }
