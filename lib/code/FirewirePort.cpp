@@ -163,22 +163,31 @@ bool FirewirePort::ScanNodes(void)
             outStr << "Node " << node << " is not a QLA board" << std::endl;
             continue;
         }
+        // Now, read firmware version
+        unsigned long fver = 0;
+        if (data == QLA1_String) {
+            if (raw1394_read(handle, baseNodeId+node, 7, 4, &data)) {
+                outStr << "ScanNodes: unable to read firmware version from node "
+                       << node << std::endl;
+                return false;
+            }
+            data = bswap_32(data);
+            fver = data;
+        }
         if (raw1394_read(handle, baseNodeId+node, 0, 4, &data)) {
-            outStr << "ScanNodes: unable to read from node " << node << std::endl;
+            outStr << "ScanNodes: unable to read status from node " << node << std::endl;
             return false;
         }
         data = bswap_32(data);
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
         board = (data & BOARD_ID_MASK) >> 24;
-        if ((board >= 0) && (board < BoardIO::MAX_BOARDS)) {
-            outStr << "  Node " << node << ", BoardId = " << board << std::endl;
-            if (Node2Board[node] < BoardIO::MAX_BOARDS)
-                outStr << "    Duplicate entry, previous value = "
-                          << static_cast<int>(Node2Board[node]) << std::endl;
-            Node2Board[node] = board;
-        }
-        else  // can't happen unless BOARD_ID_MASK changes
-            outStr << "  Node " << node << " does not appear to be a QLA" << std::endl;
+        outStr << "  Node " << node << ", BoardId = " << board 
+               << ", Firmware Version = " << fver << std::endl;
+        if (Node2Board[node] < BoardIO::MAX_BOARDS)
+            outStr << "    Duplicate entry, previous value = "
+                      << static_cast<int>(Node2Board[node]) << std::endl;
+        Node2Board[node] = board;
+        FirmwareVersion[board] = fver;
     }
 
     for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
@@ -242,6 +251,14 @@ int FirewirePort::GetNodeId(unsigned char boardId) const
         return Board2Node[boardId];
     else
         return MAX_NODES;
+}
+
+unsigned long FirewirePort::GetFirmwareVersion(unsigned char boardId) const
+{
+    if (boardId < BoardIO::MAX_BOARDS)
+        return FirmwareVersion[boardId];
+    else
+        return 0;
 }
 
 bool FirewirePort::ReadAllBoards(void)

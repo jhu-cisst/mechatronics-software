@@ -37,6 +37,7 @@ protected:
 
     unsigned char Node2Board[MAX_NODES];
     unsigned char Board2Node[BoardIO::MAX_BOARDS];
+    unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
@@ -83,6 +84,7 @@ public:
     BoardIO *GetBoard(unsigned char boardId) const;
 
     int GetNodeId(unsigned char boardId) const;
+    unsigned long GetFirmwareVersion(unsigned char boardId) const;
 
     // Read all boards
     bool ReadAllBoards(void);

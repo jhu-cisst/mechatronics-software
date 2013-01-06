@@ -30,6 +30,8 @@ public:
     AmpIO(unsigned char board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
+    unsigned long GetFirmwareVersion() const;
+
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
     //  Interface methods

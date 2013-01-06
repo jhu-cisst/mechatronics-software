@@ -78,6 +78,11 @@ AmpIO::~AmpIO()
     }
 }
 
+unsigned long AmpIO::GetFirmwareVersion() const
+{
+    return (port ? port->GetFirmwareVersion(BoardId) : 0);
+}
+
 void AmpIO::DisplayReadBuffer(std::ostream &out) const
 {
     // first two quadlets are timestamp and status, resp.
