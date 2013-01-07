@@ -37,18 +37,21 @@ public:
     //  Interface methods
     unsigned long GetStatus() const;
     unsigned long GetTimestamp() const;
+    unsigned char GetDigitalOutput() const;
+    unsigned long GetDigitalInput() const;
+    unsigned char GetAmpTemperature(unsigned int ) const;
     unsigned long GetMotorCurrent(    unsigned int ) const;
     unsigned long GetAnalogInput(  unsigned int ) const;
     unsigned long GetEncoderPosition( unsigned int ) const;
     unsigned long GetEncoderVelocity( unsigned int ) const;
     unsigned long GetEncoderFrequency(unsigned int ) const;
-    unsigned long GetDigitalOutput() const;
-    unsigned long GetDigitalInput() const;
 
-    bool SetPowerControl(                  unsigned long );
+    bool SetPowerEnable(                      bool state );
+    bool SetAmpEnable( unsigned char mask, unsigned char state);
+    bool EnableSafetyRelay(                   bool state );
     bool SetMotorCurrent(    unsigned int, unsigned long );
     bool SetEncoderPreload(  unsigned int, unsigned long );
-    bool SetDigitalOutput(   unsigned long);
+    bool SetDigitalOutput(unsigned char mask, unsigned char bits);
 
     // Methods for reading or programming the FPGA configuration PROM (M25P16)
 
@@ -105,7 +108,7 @@ protected:
     // Due to FPGA firmware implementation, NUM_CHANNELS is set to 8
     enum { NUM_CHANNELS = 8 };
 
-    enum { ReadBufSize = 2+4*NUM_CHANNELS,
+    enum { ReadBufSize = 4+4*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS };
 
     quadlet_t read_buffer[ReadBufSize];     // buffer for real-time reads
@@ -115,11 +118,13 @@ protected:
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet
-        MOTOR_CURR_OFFSET = 2,    // half quadlet per channel (lower half)
-        ANALOG_POS_OFFSET = 2,    // half quadlet per channel (upper half)
-        ENC_POS_OFFSET    = 2+NUM_CHANNELS,    // one quadlet per channel
-        ENC_VEL_OFFSET    = 2+2*NUM_CHANNELS,  // one quadlet per channel
-        ENC_FRQ_OFFSET    = 2+3*NUM_CHANNELS   // one quadlet per channel
+        DIGIO_OFFSET      = 2,    // digital I/O (one quadlet)
+        TEMP_OFFSET       = 3,    // temperature (one quadlet)
+        MOTOR_CURR_OFFSET = 4,    // half quadlet per channel (lower half)
+        ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
+        ENC_POS_OFFSET    = 4+NUM_CHANNELS,    // one quadlet per channel
+        ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS,  // one quadlet per channel
+        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS   // one quadlet per channel
     };
 
     // offsets of real-time write buffer contents

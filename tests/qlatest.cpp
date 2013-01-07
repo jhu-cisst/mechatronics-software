@@ -25,18 +25,18 @@
 void EncUp(AmpIO &bd)
 {
 
-    bd.SetDigitalOutput(0x0000);
-    bd.SetDigitalOutput(0x0008);
-    bd.SetDigitalOutput(0x000C);
-    bd.SetDigitalOutput(0x0004);
+    bd.SetDigitalOutput(0x0f, 0x00);
+    bd.SetDigitalOutput(0x0f, 0x08);
+    bd.SetDigitalOutput(0x0f, 0x0C);
+    bd.SetDigitalOutput(0x0f, 0x04);
 }
 
 void EncDown(AmpIO &bd)
 {
-    bd.SetDigitalOutput(0x0000);
-    bd.SetDigitalOutput(0x0004);
-    bd.SetDigitalOutput(0x000C);
-    bd.SetDigitalOutput(0x0008);
+    bd.SetDigitalOutput(0x0f, 0x00);
+    bd.SetDigitalOutput(0x0f, 0x04);
+    bd.SetDigitalOutput(0x0f, 0x0C);
+    bd.SetDigitalOutput(0x0f, 0x08);
 }
 
 void ClearLines(int start, int end)
@@ -56,8 +56,8 @@ bool TestDigitalInputs(int curLine, AmpIO &Board)
 
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT1 and all digital inputs");
-    Board.SetDigitalOutput(0x0001);  // DOUT is active low
-    data = (Board.GetDigitalInput() & 0x0fff);
+    Board.SetDigitalOutput(0x0f, 0x01);  // DOUT is active low
+    data = Board.GetDigitalInput();
     if (!data)
         sprintf(buf, "Setting all inputs low - PASS (%03lx)", data);
     else {
@@ -65,8 +65,8 @@ bool TestDigitalInputs(int curLine, AmpIO &Board)
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
-    Board.SetDigitalOutput(0x0000);  // DOUT is active low
-    data = (Board.GetDigitalInput() & 0x0fff);
+    Board.SetDigitalOutput(0x0f, 0x00);  // DOUT is active low
+    data = Board.GetDigitalInput();
     if (data == 0x0fff)
         sprintf(buf, "Setting all inputs high - PASS (%03lx)", data);
     else {
@@ -87,7 +87,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
 
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
-    Board.SetDigitalOutput(0x0000);
+    Board.SetDigitalOutput(0x0f, 0x00);
     // First, test setting of encoder preload
     for (i = 0; i < 4; i++)
         Board.SetEncoderPreload(i, 0x8000);
@@ -173,8 +173,6 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port)
     bool pass = true;
 
     mvprintw(curLine++, 9, "This test uses the pot on the test board to set a voltage (+/-0.25V)");
-    nodelay(stdscr, FALSE);
-    echo();
     bool tmp_pass = false;
     while (!tmp_pass) {
         mvprintw(curLine, 9, "Enter pot voltage: ");
@@ -182,8 +180,6 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port)
         if (sscanf(buf, "%lf", &measured) == 1) tmp_pass = true;
     }
     curLine++;
-    nodelay(stdscr, TRUE);
-    noecho();
     // Average 16 readings to reduce noise
     unsigned long pot[4] = { 0, 0, 0, 0};
     double potV[4];
@@ -207,6 +203,80 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port)
                 potV[0], potV[1], potV[2], potV[3]);
 
     mvprintw(curLine, 9, buf);
+    return pass;
+}
+
+bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
+{
+    char buf[100];
+    unsigned long status;
+    bool pass = true;
+
+    // Turning power on
+    Board.SetPowerEnable(true);
+    Board.SetAmpEnable(0x0f, 0x0f);
+    Port.ReadAllBoards();
+    status = Board.GetStatus();
+    if ((status&0x0000000f) != 0x0000000f) {
+        sprintf(buf, "Enable motor power - FAIL to set status (%08lx)", status);
+        pass = false;
+    }
+    else if ((status&0x00000f00) != 0x00000f00) {
+        sprintf(buf, "Enable motor power - FAIL to enable amps (%08lx) - is motor power connected?",
+                status);
+        pass = false;
+    }
+    else
+        sprintf(buf, "Enable motor power - PASS (%08lx)", status);
+    mvprintw(curLine++, 9, buf);
+
+    refresh();
+    sleep(1);    // wait 1 second (LEDs should be ON)
+
+    // Turning power off
+    Board.SetPowerEnable(false);
+    Board.SetAmpEnable(0x0f, 0);
+    Port.ReadAllBoards();
+    status = Board.GetStatus();
+    if ((status&0x0000000f) != 0) {
+        sprintf(buf, "Disable motor power - FAIL to clear status (%08lx)", status);
+        pass = false;
+    }
+    else if ((status&0x000000f00) != 0) {
+        sprintf(buf, "Disable motor power - FAIL to disable amps (%08lx)", status);
+        pass = false;
+    }
+    else
+        sprintf(buf, "Disable motor power - PASS (%08lx)", status);
+    mvprintw(curLine++, 9, buf);
+
+    // Turn on safety relay
+    Board.EnableSafetyRelay(true);
+    Port.ReadAllBoards();
+    status = Board.GetStatus();
+    if ((status&0x00030000) != 0x00030000) {
+        sprintf(buf, "Enable safety relay - FAIL (%08lx) - is +12V connected to relay?", status);
+        pass = false;
+    }
+    else
+        sprintf(buf, "Enable safety relay - PASS (%08lx)", status);
+    mvprintw(curLine++, 9, buf);
+
+    refresh();
+    sleep(1);
+
+    // Turn off safety relay
+    Board.EnableSafetyRelay(false);
+    Port.ReadAllBoards();
+    status = Board.GetStatus();
+    if ((status&0x00030000) != 0) {
+        sprintf(buf, "Disable safety relay - FAIL (%08lx)", status);
+        pass = false;
+    }
+    else
+        sprintf(buf, "Disable safety relay - PASS (%08lx)", status);
+    mvprintw(curLine++, 9, buf);
+
     return pass;
 }
 
@@ -246,63 +316,24 @@ int main(int argc, char** argv)
     initscr();
     cbreak();
     keypad(stdscr, TRUE);
-    noecho();
-    nodelay(stdscr, TRUE);
 
     mvprintw(1, 9, "QLA Test for Board %d", board);
-    mvprintw(2, 9, "Press ESC to quit");
 
-    mvprintw(5, 9, "1) Test digital input:");
-    mvprintw(6, 9, "2) Test encoder feedback:");
-    mvprintw(7, 9, "3) Test analog feedback:");
-    mvprintw(8, 9, "4) Test motor power control:");
-    mvprintw(9, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
+    mvprintw(3, 9, "0) Quit");
+    mvprintw(4, 9, "1) Test digital input:");
+    mvprintw(5, 9, "2) Test encoder feedback:");
+    mvprintw(6, 9, "3) Test analog feedback:");
+    mvprintw(7, 9, "4) Test motor power control:");
+    mvprintw(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
 
-    wrefresh(stdscr);
+    refresh();
 
-    const int TEST_START_LINE = 11;
+    const int TEST_START_LINE = 12;
     const int DEBUG_START_LINE = 18;
     int last_debug_line = DEBUG_START_LINE;
-    const int ESC_CHAR = 0x1b;
-    int c;
-    unsigned long data;
-    unsigned long darray[4];
-    bool pass;
-    bool tmp_pass;
-    char buf[100];
-    while ((c = getch()) != ESC_CHAR) {
-        int curLine = TEST_START_LINE;
-        switch (c) {
-            case '1':   // Test digital input
-                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestDigitalInputs(curLine, Board))
-                    mvprintw(5, 46, "PASS");
-                else
-                    mvprintw(5, 46, "FAIL");
-                break;
 
-            case '2':    // Test encoder feedback
-                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestEncoders(curLine, Board, Port))
-                    mvprintw(6, 46, "PASS");
-                else
-                    mvprintw(6, 46, "FAIL");
-                break;
-
-            case '3':    // Test analog feedback
-                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestAnalogInputs(curLine, Board, Port))
-                    mvprintw(7, 46, "PASS");
-                else
-                    mvprintw(7, 46, "FAIL");
-                break;
-            case '4': 
-                mvprintw(8, 46, "PASS");
-                break;
-            case '5': 
-                mvprintw(9, 46, "PASS");
-                break;
-    }
+    bool done = false;
+    while (!done) {
 
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
@@ -319,8 +350,51 @@ int main(int argc, char** argv)
             last_debug_line = cur_line;
         }
 
-        wrefresh(stdscr);
-        usleep(500);
+        mvprintw(10, 9, "Select option: ");
+        int c = getch();
+
+        switch (c) {
+            case '0':   // Quit
+                done = true;
+                break;
+            case '1':   // Test digital input
+                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
+                if (TestDigitalInputs(TEST_START_LINE, Board))
+                    mvprintw(4, 46, "PASS");
+                else
+                    mvprintw(4, 46, "FAIL");
+                break;
+
+            case '2':    // Test encoder feedback
+                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
+                if (TestEncoders(TEST_START_LINE, Board, Port))
+                    mvprintw(5, 46, "PASS");
+                else
+                    mvprintw(5, 46, "FAIL");
+                break;
+
+            case '3':    // Test analog feedback
+                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
+                if (TestAnalogInputs(TEST_START_LINE, Board, Port))
+                    mvprintw(6, 46, "PASS");
+                else
+                    mvprintw(6, 46, "FAIL");
+                break;
+
+            case '4': 
+                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
+                if (TestMotorPowerControl(TEST_START_LINE, Board, Port))
+                    mvprintw(7, 46, "PASS");
+                else
+                    mvprintw(7, 46, "FAIL");
+                break;
+
+            case '5': 
+                mvprintw(8, 46, "NOT IMPLEMENTED");
+                break;
+        }
+
+        refresh();
     }
 
     Port.RemoveBoard(board);

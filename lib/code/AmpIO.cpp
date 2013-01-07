@@ -31,6 +31,10 @@ const unsigned long MIDRANGE_FRQ     = 0x00008000;  /*!< Midrange value of encod
 const unsigned long MIDRANGE_ACC     = 0x00008000;  /*!< Midrange value of encoder acc */
 const unsigned long ENC_PRELOAD      = 0x007fffff;  /*!< Encoder preload value */
 
+const unsigned long PWR_ENABLE       = 0x000c0000;  /*!< Turn pwr_en on             */
+const unsigned long PWR_DISABLE      = 0x00080000;  /*!< Turn pwr_en off            */
+const unsigned long RELAY_ON         = 0x00030000;  /*!< Turn safety relay on       */
+const unsigned long RELAY_OFF        = 0x00020000;  /*!< Turn safety relay off      */
 const unsigned long ENABLE_MASK      = 0x0000ffff;  /*!< Mask for power enable bits */
 const unsigned long MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current adc bits */
 const unsigned long ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
@@ -88,13 +92,16 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     // first two quadlets are timestamp and status, resp.
     out << std::hex << bswap_32(read_buffer[0]) << std::endl;
     out << std::hex << bswap_32(read_buffer[1]) << std::endl;
+    // next two quadlets are digital I/O and amplifier temperature
+    out << std::hex << bswap_32(read_buffer[2]) << std::endl;
+    out << std::hex << bswap_32(read_buffer[3]) << std::endl;
 
     // remaining quadlets are in 4 groups of NUM_CHANNELS as follows:
     //   - motor current and analog pot per channel
     //   - encoder position per channel
     //   - encoder velocity per channel
     //   - encoder frequency per channel
-    for (int i=2; i<ReadBufSize; i++) {
+    for (int i=4; i<ReadBufSize; i++) {
         out << std::hex << bswap_32(read_buffer[i]) << " ";
         if (!((i-1)%NUM_CHANNELS)) out << std::endl;
     }
@@ -109,6 +116,26 @@ unsigned long AmpIO::GetStatus() const
 unsigned long AmpIO::GetTimestamp() const
 {
     return bswap_32(read_buffer[TIMESTAMP_OFFSET]);
+}
+
+unsigned long AmpIO::GetDigitalInput() const
+{
+    return bswap_32(read_buffer[DIGIO_OFFSET])&0x00000fff;
+}
+
+unsigned char AmpIO::GetDigitalOutput() const
+{
+    return static_cast<unsigned char>((bswap_32(read_buffer[DIGIO_OFFSET])>>12)&0x000f);
+}
+
+unsigned char AmpIO::GetAmpTemperature(unsigned int index) const
+{
+    unsigned char temp = 0;
+    if (index == 0)
+        temp = (bswap_32(read_buffer[TEMP_OFFSET])>>8) & 0x000000ff;
+    else if (index == 1)
+        temp = bswap_32(read_buffer[TEMP_OFFSET]) & 0x000000ff;
+    return temp;
 }
 
 unsigned long AmpIO::GetMotorCurrent(unsigned int index) const
@@ -177,10 +204,22 @@ unsigned long AmpIO::GetEncoderFrequency(unsigned int index) const
  * Set commands
  */
 
-bool AmpIO::SetPowerControl(unsigned long sdata)
+bool AmpIO::SetPowerEnable(bool state)
 {
-    quadlet_t write_data = bswap_32(sdata & ENABLE_MASK);
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    unsigned long write_data = state ? PWR_ENABLE : PWR_DISABLE;
+    return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
+}
+
+bool AmpIO::SetAmpEnable(unsigned char mask, unsigned char state)
+{
+    quadlet_t write_data = (mask << 8) | state;
+    return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
+}
+
+bool AmpIO::EnableSafetyRelay(bool state)
+{
+    unsigned long write_data = state ? RELAY_ON : RELAY_OFF;
+    return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
 }
 
 bool AmpIO::SetMotorCurrent(unsigned int index, unsigned long sdata)
@@ -205,26 +244,10 @@ bool AmpIO::SetEncoderPreload(unsigned int index, unsigned long sdata)
         return false;
 }
 
-bool AmpIO::SetDigitalOutput(unsigned long bits)
+bool AmpIO::SetDigitalOutput(unsigned char mask, unsigned char bits)
 {
-    quadlet_t write_data = bswap_32(bits & 0x000F);
-    return port->WriteQuadlet(BoardId, 6, write_data);
-}
-
-unsigned long AmpIO::GetDigitalOutput() const
-{
-    quadlet_t read_data = 0;
-    if (port->ReadQuadlet(BoardId, 6, read_data))
-        read_data = bswap_32(read_data) & 0x000F;
-    return static_cast<unsigned long>(read_data);
-}
-
-unsigned long AmpIO::GetDigitalInput() const
-{
-    quadlet_t read_data = 0;
-    if (port->ReadQuadlet(BoardId, 10, read_data))
-        read_data = bswap_32(read_data) & 0x0FFF;
-    return static_cast<unsigned long>(read_data);
+    quadlet_t write_data = (mask << 8) | bits;
+    return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));
 }
 
 unsigned long AmpIO::PromGetId()
