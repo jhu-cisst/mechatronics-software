@@ -110,9 +110,8 @@ int main(int argc, char** argv)
         mvwprintw(stdscr, 1, 9, "Sensor Feedback for Boards %d, %d", board1, board2);
     else
         mvwprintw(stdscr, 1, 9, "Sensor Feedback for Board %d", board1);
-    mvwprintw(stdscr, 2, 9, "Press space to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
+    mvwprintw(stdscr, 2, 9, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
     mvwprintw(stdscr, 3, 9, "+/- to increase/decrease commanded current (DAC)");
-    wrefresh(stdscr);
 
     int numAxes = (BoardList.size() > 1)?8:4;
     for (i = 0; i < numAxes; i++)
@@ -124,16 +123,17 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 10, 9, "Cur:");
     mvwprintw(stdscr, 11, 9, "DAC:");
     mvwprintw(stdscr, 16, 9, "Node:");
+    wrefresh(stdscr);
 
     unsigned long dig_out = 0;
 
     int loop_cnt = 0;
     const int DEBUG_START_LINE = 18;
     int last_debug_line = DEBUG_START_LINE;
-    while (1) {
-        int c = getch();
-        if (c == ' ') break;
-        else if (c == 'r') Port.Reset();
+    const int ESC_CHAR = 0x1b;
+    int c;
+    while ((c = getch()) != ESC_CHAR) {
+        if (c == 'r') Port.Reset();
         else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));

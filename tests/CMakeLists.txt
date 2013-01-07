@@ -19,5 +19,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../lib)
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/../lib)
 
 add_executable(sensors sensors.cpp)
-
 target_link_libraries(sensors Amp1394 raw1394 curses)
+
+add_executable(qlatest qlatest.cpp)
+target_link_libraries(qlatest Amp1394 raw1394 curses)
