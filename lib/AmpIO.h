@@ -103,10 +103,8 @@ public:
 protected:
     unsigned int NumAxes;   // not currently used
 
-    // Number of channels in the node
-    // Only 4 axes exist on 1 QLA board;
-    // Due to FPGA firmware implementation, NUM_CHANNELS is set to 8
-    enum { NUM_CHANNELS = 8 };
+    // Number of channels in the node (4 for QLA)
+    enum { NUM_CHANNELS = 4 };
 
     enum { ReadBufSize = 4+4*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS };
