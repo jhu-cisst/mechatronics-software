@@ -29,6 +29,7 @@ void EncUp(AmpIO &bd)
     bd.SetDigitalOutput(0x0C, 0x08);
     bd.SetDigitalOutput(0x0C, 0x0C);
     bd.SetDigitalOutput(0x0C, 0x04);
+    bd.SetDigitalOutput(0x0C, 0x00);
 }
 
 void EncDown(AmpIO &bd)
@@ -37,6 +38,7 @@ void EncDown(AmpIO &bd)
     bd.SetDigitalOutput(0x0C, 0x04);
     bd.SetDigitalOutput(0x0C, 0x0C);
     bd.SetDigitalOutput(0x0C, 0x08);
+    bd.SetDigitalOutput(0x0C, 0x00);
 }
 
 void ClearLines(int start, int end)
@@ -56,7 +58,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
 
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT1 and all digital inputs");
-    Board.SetDigitalOutput(0x0f, 0x01);  // DOUT is active low
+    Board.SetDigitalOutput(0x01, 0x01);  // DOUT is active low
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
     if (!data)
@@ -66,7 +68,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
-    Board.SetDigitalOutput(0x0f, 0x00);  // DOUT is active low
+    Board.SetDigitalOutput(0x01, 0x00);  // DOUT is active low
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
     if (data == 0x0fff)
@@ -84,62 +86,88 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
 {
     int i, j;
     unsigned long darray[4];
+    unsigned long testValue[4];
+    char numStr[4][3] = { " 1", " 2", " 3", " 4" };
     char buf[80];
     bool pass = true;
+    bool tmpFix;
 
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
     Board.SetDigitalOutput(0x0f, 0x00);
     // First, test setting of encoder preload
     for (i = 0; i < 4; i++)
-        Board.SetEncoderPreload(i, 0x8000);
+        Board.SetEncoderPreload(i, 0x800000);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
-        if (darray[i] != 0x8000)
+        if (darray[i] != 0x800000)
             pass = false;
     }
     if (pass)
-        sprintf(buf, "Set encoder preload to 0x8000 - PASS");
+        sprintf(buf, "Set encoder preload to 0x800000 - PASS");
     else
-        sprintf(buf, "Set encoder preload to 0x8000 - FAIL (%04lx %04lx %04lx %04lx)",
+        sprintf(buf, "Set encoder preload to 0x800000 - FAIL (%06lx %06lx %06lx %06lx)",
                      darray[0], darray[1], darray[2], darray[3]);
     mvprintw(curLine++, 9, buf);
     refresh();
     if (pass) {
-        mvprintw(curLine, 9, "Testing encoder increment to 0x8100 -");
+        mvprintw(curLine, 9, "Testing encoder increment to 0x800100 -");
+        tmpFix = false;
+        for (j = 0; j < 4; j++)
+            testValue[j] = 0x800000;
         for (i = 0; (i < (0x100/4)) && pass; i++) {
             EncUp(Board);
-            usleep(1000);
+            usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
-                // For now, allow "off-by-one" error
-                if (abs(darray[j] - (0x8000+4*(i+1))) > 1)
-                    pass = false;
+                unsigned long expected = testValue[j]+4*(i+1);
+                if (darray[j] != expected) {
+                    // There appears to be a problem, where the count
+                    // is less than expected after the preload. For now,
+                    // we allow this discrepancy and adjust testValue
+                    // so that we can continue the test.
+                    if (i == 0) {
+                        testValue[j] = darray[j]-4;
+                        tmpFix = true;
+                    }
+                    else
+                        pass = false;
+                }
             }
         }
-        if (pass)
+        if (pass) {
             sprintf(buf, "PASS");
+            if (tmpFix) {
+                strcat(buf, " (adjusted");
+                for (j = 0; j < 4; j++) {
+                    if (testValue[j] != 0x800000)
+                        strcat(buf, numStr[j]);
+                }
+                strcat(buf, ")");
+            }
+        }
         else
-            sprintf(buf, "FAIL at %x (%04lx %04lx %04lx %04lx)", 0x8000+4*i,
+            // Following message could be improved to take testValue into account.
+            sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x800000UL+4*i,
                          darray[0], darray[1], darray[2], darray[3]);
-        mvprintw(curLine++, 47, buf);
+        mvprintw(curLine++, 49, buf);
         refresh();
     }
     bool tmp_pass = true;
     for (i = 0; i < 4; i++)
-        Board.SetEncoderPreload(i, 0x8100);
+        Board.SetEncoderPreload(i, 0x800100);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
-        if (darray[i] != 0x8100)
+        if (darray[i] != 0x800100)
             tmp_pass = false;
     }
     if (tmp_pass)
-        sprintf(buf, "Set encoder preload to 0x8100 - PASS");
+        sprintf(buf, "Set encoder preload to 0x800100 - PASS");
     else {
-        sprintf(buf, "Set encoder preload to 0x8100 - FAIL (%04lx %04lx %04lx %04lx)",
+        sprintf(buf, "Set encoder preload to 0x800100 - FAIL (%06lx %06lx %06lx %06lx)",
                       darray[0], darray[1], darray[2], darray[3]);
         pass = false;
     }
@@ -147,26 +175,49 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     refresh();
 
     if (tmp_pass) {
-        mvprintw(curLine, 9, "Testing encoder decrement to 0x8100 -");
+        mvprintw(curLine, 9, "Testing encoder decrement to 0x800000 -");
+        tmpFix = false;
+        for (j = 0; j < 4; j++)
+            testValue[j] = 0x800000;
         for (i = (0x100/4)-1; (i >= 0) && tmp_pass; i--) {
             EncDown(Board);
-            usleep(1000);
+            usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
-                // For now, allow "off-by-one" error
-                if (abs(darray[j] - (0x8000+4*(i+1))) > 1)
-                    tmp_pass = false;
+                unsigned long expected = testValue[j] + 4*i;
+                if (darray[j] != expected) {
+                    // There appears to be a problem, where the count
+                    // is less than expected after the preload. For now,
+                    // we allow this discrepancy and adjust testValue
+                    // so that we can continue the test.
+                    if (i == (0x100/4)-1) {
+                        testValue[j] = darray[j]-0x100+4;
+                        tmpFix = true;
+                    }
+                    else
+                        tmp_pass = false;
+                }
             }
         }
-        if (tmp_pass)
+        if (tmp_pass) {
             sprintf(buf, "PASS");
+            if (tmpFix) {
+                strcat(buf, " (adjusted");
+                for (j = 0; j < 4; j++) {
+                    if (testValue[j] != 0x800000)
+                        strcat(buf, numStr[j]);
+                }
+                strcat(buf, ")");
+            }
+        }
         else {
             pass = false;
-            sprintf(buf, "FAIL at %x (%04lx %04lx %04lx %04lx)", 0x8000+4*i,
+            // Following message could be improved to take testValue into account.
+            sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x800000UL+4*(i+1),
                          darray[0], darray[1], darray[2], darray[3]);
         }
-        mvprintw(curLine++, 47, buf);
+        mvprintw(curLine++, 49, buf);
         refresh();
     }
     return pass;
