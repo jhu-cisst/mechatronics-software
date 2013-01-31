@@ -11,19 +11,29 @@
 #
 # --- end cisst license ---
 
-cmake_minimum_required(VERSION 2.6)
 project(Amp1394)
 
-# Allow generated c++ code to find header files
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+set (HEADERS
+     BoardIO.h
+     AmpIO.h
+     FirewirePort.h)
 
-# To link with build libraries
-link_directories(${CMAKE_CURRENT_BINARY_DIR})
-
-# Create galilRobot library
+set (SOURCE_FILES
+     code/AmpIO.cpp
+     code/FirewirePort.cpp)
+              
+# Create Amp1394 library
 add_library(Amp1394 ${IS_SHARED}
-            BoardIO.h
-            AmpIO.h code/AmpIO.cpp
-            FirewirePort.h code/FirewirePort.cpp)
+            ${HEADERS} ${SOURCE_FILES})
 
 target_link_libraries(Amp1394 raw1394)
+
+# Install files
+install (TARGETS Amp1394 COMPONENT Amp1394
+         RUNTIME DESTINATION bin
+         LIBRARY DESTINATION lib
+         ARCHIVE DESTINATION lib)
+
+install (FILES ${HEADERS}
+         DESTINATION include/Amp1394
+         COMPONENT Amp1394-dev)

@@ -11,15 +11,16 @@
 #
 # --- end cisst license ---
 
-cmake_minimum_required(VERSION 2.6)
-
 project(Amp1394Tests)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../lib)
-link_directories(${CMAKE_CURRENT_BINARY_DIR}/../lib)
+include_directories (${CURSES_INCLUDE_DIR})
 
 add_executable(sensors sensors.cpp)
-target_link_libraries(sensors Amp1394 raw1394 curses)
+target_link_libraries(sensors Amp1394 raw1394 ${CURSES_LIBRARIES})
 
 add_executable(qlatest qlatest.cpp)
-target_link_libraries(qlatest Amp1394 raw1394 curses)
+target_link_libraries(qlatest Amp1394 raw1394 ${CURSES_LIBRARIES})
+
+install (TARGETS sensors qlatest
+         COMPONENT Amp1394-utils
+         RUNTIME DESTINATION bin)

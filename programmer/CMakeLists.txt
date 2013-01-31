@@ -11,9 +11,10 @@
 #
 # --- end cisst license ---
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../lib)
-link_directories(${CMAKE_CURRENT_BINARY_DIR}/../lib)
-
 add_executable(pgm1394 pgm1394.cpp mcsFile.h mcsFile.cpp)
 
 target_link_libraries(pgm1394 Amp1394 raw1394)
+
+install (TARGETS pgm1394
+         COMPONENT Amp1394-utils
+         RUNTIME DESTINATION bin)

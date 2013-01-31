@@ -15,14 +15,25 @@ project(Mechatronics)
 
 cmake_minimum_required(VERSION 2.6)
 
-# Allow generated c++ code to find lib header files
+# To find Amp1394 library headers
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
 # To link with build libraries
 link_directories(${CMAKE_CURRENT_BINARY_DIR})
 
+# Utilities to test libraw1394
 add_subdirectory(util)
-add_subdirectory(lib)
-add_subdirectory(tests)
-add_subdirectory(programmer)
 
+# Code for library Amp1394
+add_subdirectory(lib)
+
+# Test program using curse for text based display
+find_package (Curses)
+if (CURSES_FOUND)
+  add_subdirectory(tests)
+else (CURSES_FOUND)
+  message ("Can't compile curses based test programs for Amp1394, make sure you have libcurses dev installed")
+endif (CURSES_FOUND)
+
+# Utility to flash/test board
+add_subdirectory(programmer)
