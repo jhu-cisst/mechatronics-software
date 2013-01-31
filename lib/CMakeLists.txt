@@ -23,7 +23,7 @@ set (SOURCE_FILES
      code/FirewirePort.cpp)
               
 # Create Amp1394 library
-add_library(Amp1394 ${IS_SHARED}
+add_library(Amp1394 STATIC
             ${HEADERS} ${SOURCE_FILES})
 
 target_link_libraries(Amp1394 raw1394)

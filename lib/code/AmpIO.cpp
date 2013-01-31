@@ -345,7 +345,6 @@ bool AmpIO::PromSectorErase(unsigned long addr, const ProgressCallback cb)
     if (!port->WriteQuadlet(BoardId, 8, bswap_32(write_data)))
         return false;
     // Wait for erase to finish
-    unsigned char status;
     while (PromGetStatus())
         PROGRESS_CALLBACK(cb, false);
     return true;
