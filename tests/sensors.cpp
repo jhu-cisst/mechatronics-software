@@ -24,20 +24,20 @@
 void EncUp(AmpIO &bd)
 {
 
-    bd.SetDigitalOutput(0x0C, 0x00);
-    bd.SetDigitalOutput(0x0C, 0x08);
-    bd.SetDigitalOutput(0x0C, 0x0C);
-    bd.SetDigitalOutput(0x0C, 0x04);
-    bd.SetDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x08);
+    bd.WriteDigitalOutput(0x0C, 0x0C);
+    bd.WriteDigitalOutput(0x0C, 0x04);
+    bd.WriteDigitalOutput(0x0C, 0x00);
 }
 
 void EncDown(AmpIO &bd)
 {
-    bd.SetDigitalOutput(0x0C, 0x00);
-    bd.SetDigitalOutput(0x0C, 0x04);
-    bd.SetDigitalOutput(0x0C, 0x0C);
-    bd.SetDigitalOutput(0x0C, 0x08);
-    bd.SetDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x04);
+    bd.WriteDigitalOutput(0x0C, 0x0C);
+    bd.WriteDigitalOutput(0x0C, 0x08);
+    bd.WriteDigitalOutput(0x0C, 0x00);
 }
 
 
@@ -94,12 +94,12 @@ int main(int argc, char** argv)
 
     for (i = 0; i < 4; i++) {
         for (j = 0; j < BoardList.size(); j++)
-            BoardList[j]->SetEncoderPreload(i, 0x1000*i + 0x1000);
+            BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
     }
     bool power_on = false;
     for (j = 0; j < BoardList.size(); j++) {
-        BoardList[j]->SetPowerEnable(false);
-        BoardList[j]->SetAmpEnable(0x0f, 0);
+        BoardList[j]->WritePowerEnable(false);
+        BoardList[j]->WriteAmpEnable(0x0f, 0);
     }
 
     initscr();
@@ -139,7 +139,7 @@ int main(int argc, char** argv)
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));
             for (j = 0; j < BoardList.size(); j++)
-                BoardList[j]->SetDigitalOutput(0x0f, dig_out);
+                BoardList[j]->WriteDigitalOutput(0x0f, dig_out);
         }
         else if (c == 'w') {
             for (j = 0; j < BoardList.size(); j++)
@@ -152,8 +152,8 @@ int main(int argc, char** argv)
         else if (c == 'p') {
             power_on = !power_on;
             for (j = 0; j < BoardList.size(); j++) {
-                BoardList[j]->SetPowerEnable(power_on?true:false);
-                BoardList[j]->SetAmpEnable(0x0f, power_on?0x0f:0);
+                BoardList[j]->WritePowerEnable(power_on?true:false);
+                BoardList[j]->WriteAmpEnable(0x0f, power_on?0x0f:0);
             }
         }
         else if (c == '+') {
@@ -240,8 +240,8 @@ int main(int argc, char** argv)
     }
 
     for (j= 0; j < BoardList.size(); j++) {
-        BoardList[j]->SetPowerEnable(false);   // Turn power off
-        BoardList[j]->SetAmpEnable(0x0f, 0);   // Turn power off
+        BoardList[j]->WritePowerEnable(false);   // Turn power off
+        BoardList[j]->WriteAmpEnable(0x0f, 0);   // Turn power off
         Port.RemoveBoard(BoardList[j]->GetBoardId());
     }
 

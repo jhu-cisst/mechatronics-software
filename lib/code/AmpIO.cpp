@@ -220,19 +220,19 @@ bool AmpIO::GetAmpStatus(unsigned int index) const
  * Set commands
  */
 
-bool AmpIO::SetPowerEnable(bool state)
+bool AmpIO::WritePowerEnable(bool state)
 {
     unsigned long write_data = state ? PWR_ENABLE : PWR_DISABLE;
     return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
 }
 
-bool AmpIO::SetAmpEnable(unsigned char mask, unsigned char state)
+bool AmpIO::WriteAmpEnable(unsigned char mask, unsigned char state)
 {
     quadlet_t write_data = (mask << 8) | state;
     return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
 }
 
-bool AmpIO::EnableSafetyRelay(bool state)
+bool AmpIO::WriteSafetyRelay(bool state)
 {
     unsigned long write_data = state ? RELAY_ON : RELAY_OFF;
     return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
@@ -250,7 +250,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, unsigned long sdata)
         return false;
 }
 
-bool AmpIO::SetEncoderPreload(unsigned int index, unsigned long sdata)
+bool AmpIO::WriteEncoderPreload(unsigned int index, unsigned long sdata)
 {
     unsigned int channel = (index+1) << 4;
 
@@ -260,7 +260,7 @@ bool AmpIO::SetEncoderPreload(unsigned int index, unsigned long sdata)
         return false;
 }
 
-bool AmpIO::SetDigitalOutput(unsigned char mask, unsigned char bits)
+bool AmpIO::WriteDigitalOutput(unsigned char mask, unsigned char bits)
 {
     quadlet_t write_data = (mask << 8) | bits;
     return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));

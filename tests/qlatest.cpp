@@ -25,20 +25,20 @@
 void EncUp(AmpIO &bd)
 {
 
-    bd.SetDigitalOutput(0x0C, 0x00);
-    bd.SetDigitalOutput(0x0C, 0x08);
-    bd.SetDigitalOutput(0x0C, 0x0C);
-    bd.SetDigitalOutput(0x0C, 0x04);
-    bd.SetDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x08);
+    bd.WriteDigitalOutput(0x0C, 0x0C);
+    bd.WriteDigitalOutput(0x0C, 0x04);
+    bd.WriteDigitalOutput(0x0C, 0x00);
 }
 
 void EncDown(AmpIO &bd)
 {
-    bd.SetDigitalOutput(0x0C, 0x00);
-    bd.SetDigitalOutput(0x0C, 0x04);
-    bd.SetDigitalOutput(0x0C, 0x0C);
-    bd.SetDigitalOutput(0x0C, 0x08);
-    bd.SetDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x04);
+    bd.WriteDigitalOutput(0x0C, 0x0C);
+    bd.WriteDigitalOutput(0x0C, 0x08);
+    bd.WriteDigitalOutput(0x0C, 0x00);
 }
 
 void ClearLines(int start, int end)
@@ -58,7 +58,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
 
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT1 and all digital inputs");
-    Board.SetDigitalOutput(0x01, 0x01);  // DOUT is active low
+    Board.WriteDigitalOutput(0x01, 0x01);  // DOUT is active low
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
     if (!data)
@@ -68,7 +68,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
-    Board.SetDigitalOutput(0x01, 0x00);  // DOUT is active low
+    Board.WriteDigitalOutput(0x01, 0x00);  // DOUT is active low
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
     if (data == 0x0fff)
@@ -94,10 +94,10 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
 
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
-    Board.SetDigitalOutput(0x0f, 0x00);
+    Board.WriteDigitalOutput(0x0f, 0x00);
     // First, test setting of encoder preload
     for (i = 0; i < 4; i++)
-        Board.SetEncoderPreload(i, 0x800000);
+        Board.WriteEncoderPreload(i, 0x800000);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
@@ -157,7 +157,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     }
     bool tmp_pass = true;
     for (i = 0; i < 4; i++)
-        Board.SetEncoderPreload(i, 0x800100);
+        Board.WriteEncoderPreload(i, 0x800100);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
@@ -273,7 +273,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
     unsigned long mask;
 
     // Enabling motor power supply
-    Board.SetPowerEnable(true);
+    Board.WritePowerEnable(true);
     mvprintw(curLine, 9, "Enable motor power -");
     refresh();
     sleep(1);
@@ -293,7 +293,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
     }
 
     // Enabling individual amplifiers
-    Board.SetAmpEnable(0x0f, 0x0f);
+    Board.WriteAmpEnable(0x0f, 0x0f);
     usleep(1000);
     Port.ReadAllBoards();
     status = Board.GetStatus();
@@ -310,7 +310,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
     sleep(1);    // wait 1 second (LEDs should be ON)
 
     // Turning amplifiers off
-    Board.SetAmpEnable(0x0f, 0);
+    Board.WriteAmpEnable(0x0f, 0);
     usleep(1000);
     Port.ReadAllBoards();
     status = Board.GetStatus();
@@ -322,7 +322,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
         sprintf(buf, "Disable power amplifiers - PASS (%08lx)", status);
     mvprintw(curLine++, 9, buf);
 
-    Board.SetPowerEnable(false);
+    Board.WritePowerEnable(false);
     mvprintw(curLine, 9, "Disable motor power -");
     refresh();
     sleep(1);
@@ -337,7 +337,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
     mvprintw(curLine++, 31, buf);
 
     // Turn on safety relay
-    Board.EnableSafetyRelay(true);
+    Board.WriteSafetyRelay(true);
     usleep(1000);
     Port.ReadAllBoards();
     status = Board.GetStatus();
@@ -353,7 +353,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
     sleep(1);
 
     // Turn off safety relay
-    Board.EnableSafetyRelay(false);
+    Board.WriteSafetyRelay(false);
     usleep(1000);
     Port.ReadAllBoards();
     status = Board.GetStatus();
@@ -379,8 +379,8 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
     mvprintw(curLine, 9, "Temperature sensors - ");
     refresh();
 
-    Board.SetPowerEnable(true);
-    Board.SetAmpEnable(0x0f, 0x0f);
+    Board.WritePowerEnable(true);
+    Board.WriteAmpEnable(0x0f, 0x0f);
     dac = 0x8000;
     for (i = 0; i < 4; i++)
         Board.SetMotorCurrent(i, dac);
@@ -450,8 +450,8 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
     for (i = 0; i < 4; i++)
         Board.SetMotorCurrent(i, 0x8000);
     Port.WriteAllBoards();
-    Board.SetAmpEnable(0x0f, 0);
-    Board.SetPowerEnable(false);
+    Board.WriteAmpEnable(0x0f, 0);
+    Board.WritePowerEnable(false);
     return pass;
 }
 

@@ -31,34 +31,63 @@ public:
     ~AmpIO();
 
     unsigned long GetFirmwareVersion() const;
-
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
-    //  Interface methods
+    // *********************** GET Methods ***********************************
+    // The GetXXX methods below return data from local buffers that were filled
+    // by FirewirePort::ReadAllBoards.
+
     unsigned long GetStatus() const;
+
     unsigned long GetTimestamp() const;
+
     unsigned char GetDigitalOutput() const;
+
     unsigned long GetDigitalInput() const;
-    unsigned char GetAmpTemperature(unsigned int ) const;
-    unsigned long GetMotorCurrent(    unsigned int ) const;
-    unsigned long GetAnalogInput(  unsigned int ) const;
-    unsigned long GetEncoderPosition( unsigned int ) const;
-    unsigned long GetEncoderVelocity( unsigned int ) const;
-    unsigned long GetEncoderFrequency(unsigned int ) const;
+
+    unsigned char GetAmpTemperature(unsigned int index) const;
+
+    unsigned long GetMotorCurrent(unsigned int index) const;
+
+    unsigned long GetAnalogInput(unsigned int index) const;
+
+    unsigned long GetEncoderPosition(unsigned int index) const;
+
+    unsigned long GetEncoderVelocity(unsigned int index) const;
+
+    unsigned long GetEncoderFrequency(unsigned int index) const;
+
     // GetAmpEnable: returns true if system is requesting amplifier to
     // be enabled (but, amplifier might be in fault state)
-    bool GetAmpEnable( unsigned int ) const;
+    bool GetAmpEnable(unsigned int index) const;
+
     // GetAmpStatus: returns true if amplifier is enabled; false if
     // amplifier is in fault state.
-    bool GetAmpStatus( unsigned int ) const;
+    bool GetAmpStatus(unsigned int index) const;
 
-    bool SetPowerEnable(                      bool state );
-    bool SetAmpEnable( unsigned char mask, unsigned char state);
-    bool EnableSafetyRelay(                   bool state );
-    bool SetMotorCurrent(    unsigned int, unsigned long );
-    bool SetEncoderPreload(  unsigned int, unsigned long );
-    bool SetDigitalOutput(unsigned char mask, unsigned char bits);
+    // *********************** SET Methods ***********************************
+    // The SetXXX methods below write data to local buffers that are sent over
+    // IEEE-1394 via FirewirePort::WriteAllBoards. To immediately write to
+    // the boards, you can use a WriteXXX method.
 
+    bool SetMotorCurrent(unsigned int index, unsigned long mcur);
+
+    // ********************** WRITE Methods **********************************
+
+    // Enable motor power to the entire board (it is still necessary
+    // to enable power to the individual amplifiers).
+    bool WritePowerEnable(bool state);
+
+    // Enable individual amplifiers
+    bool WriteAmpEnable(unsigned char mask, unsigned char state);
+
+    bool WriteSafetyRelay(bool state);
+
+    bool WriteEncoderPreload(unsigned int index, unsigned long enc);
+
+    bool WriteDigitalOutput(unsigned char mask, unsigned char bits);
+
+    // ********************** PROM Methods ***********************************
     // Methods for reading or programming the FPGA configuration PROM (M25P16)
 
     // User-supplied callback, called when software needs to wait for an
