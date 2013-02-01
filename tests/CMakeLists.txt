@@ -15,12 +15,12 @@ project(Amp1394Tests)
 
 include_directories (${CURSES_INCLUDE_DIR})
 
-add_executable(sensors sensors.cpp)
-target_link_libraries(sensors Amp1394 raw1394 ${CURSES_LIBRARIES})
+add_executable(qladisp sensors.cpp)
+target_link_libraries(qladisp Amp1394 raw1394 ${CURSES_LIBRARIES})
 
 add_executable(qlatest qlatest.cpp)
 target_link_libraries(qlatest Amp1394 raw1394 ${CURSES_LIBRARIES})
 
-install (TARGETS sensors qlatest
+install (TARGETS qladisp qlatest
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
