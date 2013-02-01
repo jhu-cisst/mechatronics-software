@@ -45,6 +45,12 @@ public:
     unsigned long GetEncoderPosition( unsigned int ) const;
     unsigned long GetEncoderVelocity( unsigned int ) const;
     unsigned long GetEncoderFrequency(unsigned int ) const;
+    // GetAmpEnable: returns true if system is requesting amplifier to
+    // be enabled (but, amplifier might be in fault state)
+    bool GetAmpEnable( unsigned int ) const;
+    // GetAmpStatus: returns true if amplifier is enabled; false if
+    // amplifier is in fault state.
+    bool GetAmpStatus( unsigned int ) const;
 
     bool SetPowerEnable(                      bool state );
     bool SetAmpEnable( unsigned char mask, unsigned char state);

@@ -199,6 +199,22 @@ unsigned long AmpIO::GetEncoderFrequency(unsigned int index) const
     return static_cast<unsigned long>(buff) & ENC_FRQ_MASK;
 }
 
+bool AmpIO::GetAmpEnable(unsigned int index) const
+{
+    if (index >= NUM_CHANNELS)
+        return false;
+    unsigned long mask = (0x00000001 << index);
+    return GetStatus()&mask;
+}
+
+bool AmpIO::GetAmpStatus(unsigned int index) const
+{
+    if (index >= NUM_CHANNELS)
+        return false;
+    unsigned long mask = (0x00000100 << index);
+    return GetStatus()&mask;
+}
+
 
 /*******************************************************************************
  * Set commands
