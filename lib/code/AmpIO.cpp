@@ -199,6 +199,17 @@ unsigned long AmpIO::GetEncoderFrequency(unsigned int index) const
     return static_cast<unsigned long>(buff) & ENC_FRQ_MASK;
 }
 
+bool AmpIO::GetPowerStatus() const
+{
+    return (GetStatus()&0x00080000);
+ 
+}
+
+bool AmpIO::GetSafetyRelayStatus() const
+{
+    return (GetStatus()&0x00020000);
+}
+
 bool AmpIO::GetAmpEnable(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
@@ -220,6 +231,59 @@ bool AmpIO::GetAmpStatus(unsigned int index) const
  * Set commands
  */
 
+void AmpIO::SetPowerEnable(bool state)
+{
+    unsigned long enable_mask = bswap_32(0x00080000);
+    write_buffer[WB_CTRL_OFFSET] |=  enable_mask;
+    unsigned long state_mask  = bswap_32(0x00040000);
+    if (state)
+        write_buffer[WB_CTRL_OFFSET] |=  state_mask;
+    else
+        write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
+}
+
+bool AmpIO::SetAmpEnable(unsigned int index, bool state)
+{
+    if (index < NUM_CHANNELS) {
+        unsigned long enable_mask = bswap_32(0x00000100 << index);
+        write_buffer[WB_CTRL_OFFSET] |=  enable_mask;
+        unsigned long state_mask  = bswap_32(0x00000001 << index);
+        if (state)
+            write_buffer[WB_CTRL_OFFSET] |=  state_mask;
+        else
+            write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
+        return true;
+    }
+    return false;
+}
+
+void AmpIO::SetSafetyRelay(bool state)
+{
+    unsigned long enable_mask = bswap_32(0x00020000);
+    write_buffer[WB_CTRL_OFFSET] |=  enable_mask;
+    unsigned long state_mask  = bswap_32(0x00010000);
+    if (state)
+        write_buffer[WB_CTRL_OFFSET] |=  state_mask;
+    else
+        write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
+}
+
+bool AmpIO::SetMotorCurrent(unsigned int index, unsigned long sdata)
+{
+    quadlet_t data = VALID_BIT | DAC_WR_A | (sdata & DAC_MASK);
+
+    if (index < NUM_CHANNELS) {
+        write_buffer[index+WB_CURR_OFFSET] = bswap_32(data);
+        return true;
+    }
+    else
+        return false;
+}
+
+/*******************************************************************************
+ * Write commands
+ */
+
 bool AmpIO::WritePowerEnable(bool state)
 {
     unsigned long write_data = state ? PWR_ENABLE : PWR_DISABLE;
@@ -238,18 +302,6 @@ bool AmpIO::WriteSafetyRelay(bool state)
     return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
 }
 
-bool AmpIO::SetMotorCurrent(unsigned int index, unsigned long sdata)
-{
-    quadlet_t data = VALID_BIT | DAC_WR_A | (sdata & DAC_MASK);
-
-    if (index < NUM_CHANNELS) {
-        write_buffer[index+WB_CURR_OFFSET] = bswap_32(data);
-        return true;
-    }
-    else
-        return false;
-}
-
 bool AmpIO::WriteEncoderPreload(unsigned int index, unsigned long sdata)
 {
     unsigned int channel = (index+1) << 4;
@@ -265,6 +317,10 @@ bool AmpIO::WriteDigitalOutput(unsigned char mask, unsigned char bits)
     quadlet_t write_data = (mask << 8) | bits;
     return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));
 }
+
+/*******************************************************************************
+ * PROM commands
+ */
 
 unsigned long AmpIO::PromGetId()
 {

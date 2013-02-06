@@ -57,6 +57,14 @@ public:
 
     unsigned long GetEncoderFrequency(unsigned int index) const;
 
+    // GetPowerStatus: returns true if motor power supply voltage
+    // is present on the QLA. If not present, it could be because
+    // power is disabled or the power supply is off.
+    bool GetPowerStatus() const;
+
+    // GetSafetyRelayStatus: returns true if safety relay contacts are closed
+    bool GetSafetyRelayStatus() const;
+
     // GetAmpEnable: returns true if system is requesting amplifier to
     // be enabled (but, amplifier might be in fault state)
     bool GetAmpEnable(unsigned int index) const;
@@ -69,6 +77,10 @@ public:
     // The SetXXX methods below write data to local buffers that are sent over
     // IEEE-1394 via FirewirePort::WriteAllBoards. To immediately write to
     // the boards, you can use a WriteXXX method.
+
+    void SetPowerEnable(bool state);
+    bool SetAmpEnable(unsigned int index, bool state);
+    void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, unsigned long mcur);
 
@@ -142,7 +154,7 @@ protected:
     enum { NUM_CHANNELS = 4 };
 
     enum { ReadBufSize = 4+4*NUM_CHANNELS,
-           WriteBufSize = NUM_CHANNELS };
+           WriteBufSize = NUM_CHANNELS+1 };
 
     quadlet_t read_buffer[ReadBufSize];     // buffer for real-time reads
     quadlet_t write_buffer[WriteBufSize];   // buffer for real-time writes
@@ -162,7 +174,8 @@ protected:
 
     // offsets of real-time write buffer contents
     enum {
-        WB_CURR_OFFSET = 0         // one quadlet per channel
+        WB_CURR_OFFSET = 0,             // one quadlet per channel
+        WB_CTRL_OFFSET = NUM_CHANNELS   // control register (power control)
     };
 
     // Hardware device address offsets, not to be confused with buffer offsets.

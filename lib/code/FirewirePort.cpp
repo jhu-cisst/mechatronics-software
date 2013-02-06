@@ -220,7 +220,7 @@ bool FirewirePort::AddBoard(BoardIO *board)
 
 bool FirewirePort::RemoveBoard(unsigned char boardId)
 {
-    if ((boardId < 0) || (boardId >= BoardIO::MAX_BOARDS)) {
+    if (boardId >= BoardIO::MAX_BOARDS) {
         outStr << "RemoveBoard: board number out of range: " << boardId << std::endl;
         return false;
     }
@@ -293,11 +293,23 @@ bool FirewirePort::WriteAllBoards(void)
     bool noneWritten = true;
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            bool ret = WriteBlock(board, 0, BoardList[board]->GetWriteBuffer(),
-                                  BoardList[board]->GetWriteNumBytes());
+            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
+            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
+            unsigned int numQuads = numBytes/4;
+            // Currently (Rev 1 firmware), the last quadlet (Status/Control register)
+            // is done as a separate quadlet write.
+            bool ret = WriteBlock(board, 0, buf, numBytes-4);
             if (ret) noneWritten = false;
             else allOK = false;
-            BoardList[board]->SetWriteValid(ret);
+            quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
+            bool ret2 = true;
+            if (ctrl) {    // if anything non-zero, write it
+                ret2 = WriteQuadlet(board, 0, ctrl);
+                if (ret2) noneWritten = false;
+                else allOK = false;
+            }
+            // SetWriteValid clears the buffer if the write was valid
+            BoardList[board]->SetWriteValid(ret&&ret2);
         }
     }
     if (noneWritten)

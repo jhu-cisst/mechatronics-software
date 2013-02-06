@@ -426,8 +426,6 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
 
         unsigned short newTemp1 = Board.GetAmpTemperature(0)/2;
         unsigned short newTemp2 = Board.GetAmpTemperature(1)/2;        
-        bool pass1 = (newTemp1 >= temp1) ? true : false;
-        bool pass2 = (newTemp2 >= temp2) ? true : false;
         sprintf(buf, "%4d (%s)    %4d (%s)", newTemp1, ((newTemp1 >= temp1) ? "PASS" : "FAIL"),
                 newTemp2, ((newTemp2 >= temp2) ? "PASS" : "FAIL"));
         mvprintw(curLine+3, 15, buf);
@@ -457,7 +455,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
 
 int main(int argc, char** argv)
 {
-    int i, j;
+    int i;
     int port = 0;
     int board;
 
