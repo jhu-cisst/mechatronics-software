@@ -99,6 +99,8 @@ public:
 
     bool WriteDigitalOutput(unsigned char mask, unsigned char bits);
 
+    bool WriteWatchdogPeriod(unsigned long counts);
+
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming the FPGA configuration PROM (M25P16)
 

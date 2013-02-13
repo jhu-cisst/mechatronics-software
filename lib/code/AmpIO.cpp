@@ -318,6 +318,12 @@ bool AmpIO::WriteDigitalOutput(unsigned char mask, unsigned char bits)
     return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));
 }
 
+bool AmpIO::WriteWatchdogPeriod(unsigned long counts)
+{
+    // period = counts(16 bits) * 5.208333 us (default = 0 = no timeout)
+    return port->WriteQuadlet(BoardId, 3, bswap_32(counts));
+}
+
 /*******************************************************************************
  * PROM commands
  */
