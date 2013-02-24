@@ -18,6 +18,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <byteswap.h>
+#include <unistd.h>
 #include <iostream>
 #include <sstream>
 
