@@ -26,11 +26,12 @@ http://www.cisst.org/cisst/license.txt.
 class ostream;
 
 typedef uint32_t AmpIO_UInt32;
+typedef uint8_t AmpIO_UInt8;
 
 class AmpIO : public BoardIO
 {
 public:
-    AmpIO(unsigned char board_id, unsigned int numAxes = 4);
+    AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
     AmpIO_UInt32 GetFirmwareVersion(void) const;
@@ -44,23 +45,23 @@ public:
 
     AmpIO_UInt32 GetTimestamp(void) const;
 
-    unsigned char GetDigitalOutput(void) const;
+    AmpIO_UInt8 GetDigitalOutput(void) const;
 
     /*! Utility method, uses result of GetDigitalOutput but performs
       required shift and mask. */
-    unsigned char GetNegativeLimitSwitches(void) const;
+    AmpIO_UInt8 GetNegativeLimitSwitches(void) const;
 
     /*! Utility method, uses result of GetDigitalOutput but performs
       required shift and mask. */
-    unsigned char GetPositiveLimitSwitches(void) const;
+    AmpIO_UInt8 GetPositiveLimitSwitches(void) const;
 
     /*! Utility method, uses result of GetDigitalOutput but performs
       required shift and mask. */
-    unsigned char GetHomeSwitches(void) const;
+    AmpIO_UInt8 GetHomeSwitches(void) const;
 
     AmpIO_UInt32 GetDigitalInput(void) const;
 
-    unsigned char GetAmpTemperature(unsigned int index) const;
+    AmpIO_UInt8 GetAmpTemperature(unsigned int index) const;
 
     AmpIO_UInt32 GetMotorCurrent(unsigned int index) const;
 
@@ -106,13 +107,13 @@ public:
     bool WritePowerEnable(bool state);
 
     // Enable individual amplifiers
-    bool WriteAmpEnable(unsigned char mask, unsigned char state);
+    bool WriteAmpEnable(AmpIO_UInt8 mask, AmpIO_UInt8 state);
 
     bool WriteSafetyRelay(bool state);
 
     bool WriteEncoderPreload(unsigned int index, AmpIO_UInt32 enc);
 
-    bool WriteDigitalOutput(unsigned char mask, unsigned char bits);
+    bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
 
@@ -138,7 +139,7 @@ public:
     AmpIO_UInt32 PromGetResult(void);
 
     // Returns nbytes data read from the specified address
-    bool PromReadData(unsigned long addr, unsigned char *data,
+    bool PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
                       unsigned int nbytes);
 
     // Enable programming commands (erase and program page)
@@ -154,14 +155,14 @@ public:
     // This command calls PromWriteEnable.
     // If non-zero, the callback (cb) is called while the software is waiting
     // for the PROM to be erased, or if there is an error.
-    bool PromSectorErase(unsigned long addr, const ProgressCallback cb = 0);
+    bool PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb = 0);
 
     // Program a page (up to 256 bytes) at the specified address.
     // This command calls PromWriteEnable.
     // If non-zero, the callback (cb) is called while the software is waiting
     // for the PROM to be programmed, or if there is an error.
     // Returns the number of bytes programmed (-1 if error).
-    int PromProgramPage(unsigned long addr, const unsigned char *bytes,
+    int PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
                         unsigned int nbytes, const ProgressCallback cb = 0);
 
 protected:
