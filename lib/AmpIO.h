@@ -21,8 +21,11 @@ http://www.cisst.org/cisst/license.txt.
 #define __AMPIO_H__
 
 #include "BoardIO.h"
+#include <stdint.h> // for uint32_t
 
 class ostream;
+
+typedef uint32_t AmpIO_UInt32;
 
 class AmpIO : public BoardIO
 {
@@ -30,40 +33,52 @@ public:
     AmpIO(unsigned char board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    unsigned long GetFirmwareVersion() const;
+    AmpIO_UInt32 GetFirmwareVersion(void) const;
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
     // by FirewirePort::ReadAllBoards.
 
-    unsigned long GetStatus() const;
+    AmpIO_UInt32 GetStatus(void) const;
 
-    unsigned long GetTimestamp() const;
+    AmpIO_UInt32 GetTimestamp(void) const;
 
-    unsigned char GetDigitalOutput() const;
+    unsigned char GetDigitalOutput(void) const;
 
-    unsigned long GetDigitalInput() const;
+    /*! Utility method, uses result of GetDigitalOutput but performs
+      required shift and mask. */
+    unsigned char GetNegativeLimitSwitches(void) const;
+
+    /*! Utility method, uses result of GetDigitalOutput but performs
+      required shift and mask. */
+    unsigned char GetPositiveLimitSwitches(void) const;
+
+    /*! Utility method, uses result of GetDigitalOutput but performs
+      required shift and mask. */
+    unsigned char GetHomeSwitches(void) const;
+
+    AmpIO_UInt32 GetDigitalInput(void) const;
 
     unsigned char GetAmpTemperature(unsigned int index) const;
 
-    unsigned long GetMotorCurrent(unsigned int index) const;
+    AmpIO_UInt32 GetMotorCurrent(unsigned int index) const;
 
-    unsigned long GetAnalogInput(unsigned int index) const;
+    AmpIO_UInt32 GetAnalogInput(unsigned int index) const;
 
-    unsigned long GetEncoderPosition(unsigned int index) const;
+    AmpIO_UInt32 GetEncoderPosition(unsigned int index) const;
 
-    unsigned long GetEncoderVelocity(unsigned int index) const;
+    AmpIO_UInt32 GetEncoderVelocity(unsigned int index) const;
 
-    unsigned long GetEncoderFrequency(unsigned int index) const;
+    AmpIO_UInt32 GetEncoderFrequency(unsigned int index) const;
 
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.
-    bool GetPowerStatus() const;
+    bool GetPowerStatus(void) const;
 
     // GetSafetyRelayStatus: returns true if safety relay contacts are closed
-    bool GetSafetyRelayStatus() const;
+    bool GetSafetyRelayStatus(void) const;
 
     // GetAmpEnable: returns true if system is requesting amplifier to
     // be enabled (but, amplifier might be in fault state)
@@ -82,7 +97,7 @@ public:
     bool SetAmpEnable(unsigned int index, bool state);
     void SetSafetyRelay(bool state);
 
-    bool SetMotorCurrent(unsigned int index, unsigned long mcur);
+    bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
 
     // ********************** WRITE Methods **********************************
 
@@ -95,11 +110,11 @@ public:
 
     bool WriteSafetyRelay(bool state);
 
-    bool WriteEncoderPreload(unsigned int index, unsigned long enc);
+    bool WriteEncoderPreload(unsigned int index, AmpIO_UInt32 enc);
 
     bool WriteDigitalOutput(unsigned char mask, unsigned char bits);
 
-    bool WriteWatchdogPeriod(unsigned long counts);
+    bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
 
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming the FPGA configuration PROM (M25P16)
@@ -111,16 +126,16 @@ public:
     typedef bool (*ProgressCallback)(const char *msg);
 
     // Returns the PROM ID (should be 0x00202015 for the M25P16)
-    unsigned long PromGetId();
+    AmpIO_UInt32 PromGetId(void);
 
     // PromGetStatus returns the status register from the M25P16 PROM
     // (this is different than the interface status read from address offset 8)
     // The following masks are for the useful status register bits.
     enum { MASK_WIP = 1, MASK_WEL = 2 };   // status register bit masks
-    unsigned long PromGetStatus();
+    AmpIO_UInt32 PromGetStatus(void);
 
     // PromGetResult returns the result (if any) from the last command sent
-    unsigned long PromGetResult();
+    AmpIO_UInt32 PromGetResult(void);
 
     // Returns nbytes data read from the specified address
     bool PromReadData(unsigned long addr, unsigned char *data,
@@ -129,11 +144,11 @@ public:
     // Enable programming commands (erase and program page)
     // This sets the WEL bit in the status register.
     // This mode is automatically cleared after a programming command is executed.
-    bool PromWriteEnable();
+    bool PromWriteEnable(void);
 
     // Disable programming commands
-    // This clears the WEL bit in the status register.    
-    bool PromWriteDisable();
+    // This clears the WEL bit in the status register.
+    bool PromWriteDisable(void);
 
     // Erase a sector (64K) at the specified address.
     // This command calls PromWriteEnable.

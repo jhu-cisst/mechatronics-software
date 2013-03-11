@@ -83,7 +83,7 @@ AmpIO::~AmpIO()
     }
 }
 
-unsigned long AmpIO::GetFirmwareVersion() const
+AmpIO_UInt32 AmpIO::GetFirmwareVersion() const
 {
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
 }
@@ -109,24 +109,39 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     out << std::dec;
 }
 
-unsigned long AmpIO::GetStatus() const
+AmpIO_UInt32 AmpIO::GetStatus(void) const
 {
     return bswap_32(read_buffer[STATUS_OFFSET]);
 }
 
-unsigned long AmpIO::GetTimestamp() const
+AmpIO_UInt32 AmpIO::GetTimestamp(void) const
 {
     return bswap_32(read_buffer[TIMESTAMP_OFFSET]);
 }
 
-unsigned long AmpIO::GetDigitalInput() const
+AmpIO_UInt32 AmpIO::GetDigitalInput(void) const
 {
     return bswap_32(read_buffer[DIGIO_OFFSET])&0x00000fff;
 }
 
-unsigned char AmpIO::GetDigitalOutput() const
+unsigned char AmpIO::GetDigitalOutput(void) const
 {
     return static_cast<unsigned char>((bswap_32(read_buffer[DIGIO_OFFSET])>>12)&0x000f);
+}
+
+unsigned char AmpIO::GetNegativeLimitSwitches(void) const
+{
+    return (this->GetDigitalInput()&0x0f00)>>8;
+}
+
+unsigned char AmpIO::GetPositiveLimitSwitches(void) const
+{
+    return (this->GetDigitalInput()&0x00f0)>>4;
+}
+
+unsigned char AmpIO::GetHomeSwitches(void) const
+{
+    return (this->GetDigitalInput()&0x00f);
 }
 
 unsigned char AmpIO::GetAmpTemperature(unsigned int index) const
@@ -139,7 +154,7 @@ unsigned char AmpIO::GetAmpTemperature(unsigned int index) const
     return temp;
 }
 
-unsigned long AmpIO::GetMotorCurrent(unsigned int index) const
+AmpIO_UInt32 AmpIO::GetMotorCurrent(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -151,7 +166,7 @@ unsigned long AmpIO::GetMotorCurrent(unsigned int index) const
     return static_cast<unsigned long>(buff) & ADC_MASK;
 }
 
-unsigned long AmpIO::GetAnalogInput(unsigned int index) const
+AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -164,7 +179,7 @@ unsigned long AmpIO::GetAnalogInput(unsigned int index) const
     return static_cast<unsigned long>(buff) & ADC_MASK;
 }
 
-unsigned long AmpIO::GetEncoderPosition(unsigned int index) const
+AmpIO_UInt32 AmpIO::GetEncoderPosition(unsigned int index) const
 {
     if (index < NUM_CHANNELS)
         return bswap_32(read_buffer[index+ENC_POS_OFFSET]) & ENC_POS_MASK;
@@ -174,7 +189,7 @@ unsigned long AmpIO::GetEncoderPosition(unsigned int index) const
 
 // temp current the enc period velocity is unsigned 16 bits
 // for low level function the + MIDRANGE_VEL
-unsigned long AmpIO::GetEncoderVelocity(unsigned int index) const
+AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -187,7 +202,7 @@ unsigned long AmpIO::GetEncoderVelocity(unsigned int index) const
     return static_cast<unsigned long>(buff) & ENC_VEL_MASK;
 }
 
-unsigned long AmpIO::GetEncoderFrequency(unsigned int index) const
+AmpIO_UInt32 AmpIO::GetEncoderFrequency(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -200,13 +215,13 @@ unsigned long AmpIO::GetEncoderFrequency(unsigned int index) const
     return static_cast<unsigned long>(buff) & ENC_FRQ_MASK;
 }
 
-bool AmpIO::GetPowerStatus() const
+bool AmpIO::GetPowerStatus(void) const
 {
     return (GetStatus()&0x00080000);
- 
+
 }
 
-bool AmpIO::GetSafetyRelayStatus() const
+bool AmpIO::GetSafetyRelayStatus(void) const
 {
     return (GetStatus()&0x00020000);
 }
@@ -269,7 +284,7 @@ void AmpIO::SetSafetyRelay(bool state)
         write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
 }
 
-bool AmpIO::SetMotorCurrent(unsigned int index, unsigned long sdata)
+bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 {
     quadlet_t data = VALID_BIT | DAC_WR_A | (sdata & DAC_MASK);
 
@@ -303,7 +318,7 @@ bool AmpIO::WriteSafetyRelay(bool state)
     return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
 }
 
-bool AmpIO::WriteEncoderPreload(unsigned int index, unsigned long sdata)
+bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_UInt32 sdata)
 {
     unsigned int channel = (index+1) << 4;
 
@@ -319,7 +334,7 @@ bool AmpIO::WriteDigitalOutput(unsigned char mask, unsigned char bits)
     return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));
 }
 
-bool AmpIO::WriteWatchdogPeriod(unsigned long counts)
+bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     // period = counts(16 bits) * 5.208333 us (default = 0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, bswap_32(counts));
@@ -329,9 +344,9 @@ bool AmpIO::WriteWatchdogPeriod(unsigned long counts)
  * PROM commands
  */
 
-unsigned long AmpIO::PromGetId()
+AmpIO_UInt32 AmpIO::PromGetId(void)
 {
-    unsigned long id = 0;
+    AmpIO_UInt32 id = 0;
     quadlet_t data = 0x9f000000;
     if (port->WriteQuadlet(BoardId, 8, bswap_32(data))) {
         // Should be ready by now...
@@ -340,9 +355,9 @@ unsigned long AmpIO::PromGetId()
     return id;
 }
 
-unsigned long AmpIO::PromGetStatus()
+AmpIO_UInt32 AmpIO::PromGetStatus(void)
 {
-    unsigned long status = 0x80000000;
+    AmpIO_UInt32 status = 0x80000000;
     quadlet_t data = 0x05000000;
     if (port->WriteQuadlet(BoardId, 8, bswap_32(data))) {
         // Should be ready by now...
@@ -351,9 +366,9 @@ unsigned long AmpIO::PromGetStatus()
     return status;
 }
 
-unsigned long AmpIO::PromGetResult()
+AmpIO_UInt32 AmpIO::PromGetResult(void)
 {
-    unsigned long result = 0xffffffff;
+    AmpIO_UInt32 result = 0xffffffff;
     quadlet_t data;
     if (port->ReadQuadlet(BoardId, 9, data))
         result = static_cast<unsigned long>(bswap_32(data));
@@ -405,13 +420,13 @@ bool AmpIO::PromReadData(unsigned long addr, unsigned char *data,
     return true;
 }
 
-bool AmpIO::PromWriteEnable()
+bool AmpIO::PromWriteEnable(void)
 {
     quadlet_t write_data = 0x06000000;
     return port->WriteQuadlet(BoardId, 8, bswap_32(write_data));
 }
 
-bool AmpIO::PromWriteDisable()
+bool AmpIO::PromWriteDisable(void)
 {
     quadlet_t write_data = 0x04000000;
     return port->WriteQuadlet(BoardId, 8, bswap_32(write_data));
@@ -472,7 +487,7 @@ int AmpIO::PromProgramPage(unsigned long addr, const unsigned char *bytes,
         msg << "PromProgramPage: wrote " << nWritten << " of "
             << nbytes << "bytes";
         ERROR_CALLBACK(cb, msg);
-    }                      
+    }
     // Wait for "Write in Progress" bit to be cleared
     while (PromGetStatus()&MASK_WIP)
         PROGRESS_CALLBACK(cb, 0);

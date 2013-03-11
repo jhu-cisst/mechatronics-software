@@ -15,6 +15,18 @@ project(Mechatronics)
 
 cmake_minimum_required(VERSION 2.6)
 
+# Add some warnings
+include (CheckCXXCompilerFlag)
+check_cxx_compiler_flag ("-Wextra" CXX_SUPPORTS_WEXTRA)
+if (CXX_SUPPORTS_WEXTRA)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
+endif (CXX_SUPPORTS_WEXTRA)
+
+check_cxx_compiler_flag ("-Wall" CXX_SUPPORTS_WALL)
+if (CXX_SUPPORTS_WALL)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+endif (CXX_SUPPORTS_WALL)
+
 # To find Amp1394 library headers
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
 

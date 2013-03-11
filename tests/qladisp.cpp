@@ -43,7 +43,7 @@ void EncDown(AmpIO &bd)
 
 int main(int argc, char** argv)
 {
-    int i, j;
+    unsigned int i, j;
     int port = 0;
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
@@ -80,8 +80,8 @@ int main(int argc, char** argv)
     }
 
     // Currently hard-coded for up to 2 boards; initialize at mid-range
-    unsigned long MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
-                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
+    AmpIO_UInt32 MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
+                                         {0x8000, 0x8000, 0x8000, 0x8000 }};
 
 
     std::vector<AmpIO*> BoardList;
@@ -115,7 +115,7 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 2, 9, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
     mvwprintw(stdscr, 3, 9, "+/- to increase/decrease commanded current (DAC) by 0x100");
 
-    int numAxes = (BoardList.size() > 1)?8:4;
+    unsigned int numAxes = (BoardList.size() > 1)?8:4;
     for (i = 0; i < numAxes; i++)
         mvwprintw(stdscr, 5, 9+8+i*13, "Axis%d", i);
     mvwprintw(stdscr, 6, 9, "Enc:");
@@ -130,7 +130,7 @@ int main(int argc, char** argv)
 
     int loop_cnt = 0;
     const int DEBUG_START_LINE = 18;
-    int last_debug_line = DEBUG_START_LINE;
+    unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
     while ((c = getch()) != ESC_CHAR) {
@@ -206,7 +206,7 @@ int main(int argc, char** argv)
         }
 
         Port.ReadAllBoards();
-        int j = 0;
+        unsigned int j = 0;
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
@@ -220,9 +220,10 @@ int main(int argc, char** argv)
                 mvwprintw(stdscr, 13, 9+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X", 
                           BoardList[j]->GetStatus(), BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
-                unsigned long dig_in = BoardList[j]->GetDigitalInput();
                 mvwprintw(stdscr, 14, 9+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
-                          (dig_in&0x0f00)>>8, (dig_in&0x00f0)>>4, dig_in&0x000f);
+                          BoardList[j]->GetNegativeLimitSwitches(),
+                          BoardList[j]->GetPositiveLimitSwitches(),
+                          BoardList[j]->GetHomeSwitches());
                 mvwprintw(stdscr, 16, 9+58*j, "Node: %s", nodeStr[j]);
                 mvwprintw(stdscr, 16, 27+58*j, "Temp:  0x%02X    0x%02X", 
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),

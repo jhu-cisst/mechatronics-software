@@ -23,6 +23,7 @@ http://www.cisst.org/cisst/license.txt.
 // Base class for custom boards with IEEE-1394 (Firewire) interface.
 
 #include <string.h>  // for memset
+
 #include <libraw1394/raw1394.h>
 
 class FirewirePort;
