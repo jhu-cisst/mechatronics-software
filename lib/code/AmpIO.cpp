@@ -182,7 +182,7 @@ AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
 AmpIO_UInt32 AmpIO::GetEncoderPosition(unsigned int index) const
 {
     if (index < NUM_CHANNELS)
-        return bswap_32(read_buffer[index+ENC_POS_OFFSET]) & ENC_POS_MASK;
+        return bswap_32(read_buffer[index+ENC_POS_OFFSET]);
     else
         return 0;
 }
