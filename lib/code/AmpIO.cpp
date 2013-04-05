@@ -191,13 +191,17 @@ AmpIO_UInt32 AmpIO::GetEncoderPosition(unsigned int index) const
 // for low level function the + MIDRANGE_VEL
 AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
+    // buff is a signed 16 bits counter
+    // returns how many clock counts per encoder tick
+    // Clock = 768 kHz
+    // stored in a 32 bit unsiged int
+
     if (index >= NUM_CHANNELS)
         return 0L;
 
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
     buff &= ENC_VEL_MASK;          // mask for applicable bits
-    buff += MIDRANGE_VEL;          // convert to unsigned by recentering
 
     return static_cast<AmpIO_UInt32>(buff) & ENC_VEL_MASK;
 }
