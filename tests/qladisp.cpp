@@ -102,6 +102,8 @@ int main(int argc, char** argv)
         BoardList[j]->WriteAmpEnable(0x0f, 0);
     }
 
+    bool watchdog_on = false;
+
     initscr();
     cbreak();
     keypad(stdscr, TRUE);
@@ -149,6 +151,12 @@ int main(int argc, char** argv)
             for (j = 0; j < BoardList.size(); j++)
                 EncDown(*(BoardList[j]));
         }
+        else if (c == 'd'){
+            watchdog_on = !watchdog_on;
+            for (j = 0; j < BoardList.size(); j++)
+                // 50 CNTS = 0.25 ms
+                BoardList[j]->WriteWatchdogPeriod(watchdog_on?50:0);
+        }
         else if (c == 'p') {
             power_on = !power_on;
             for (j = 0; j < BoardList.size(); j++) {
@@ -156,7 +164,7 @@ int main(int argc, char** argv)
                 BoardList[j]->WriteAmpEnable(0x0f, power_on?0x0f:0);
             }
         }
-        else if (c == '+') {
+        else if (c == '=') {
             for (j = 0; j < BoardList.size(); j++) {
                 for (i = 0; i < 4; i++)
                     MotorCurrents[j][i] += 0x100;   // 0x100 is about 50 mA
