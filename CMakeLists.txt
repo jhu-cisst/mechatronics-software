@@ -27,6 +27,12 @@ if (CXX_SUPPORTS_WALL)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 endif (CXX_SUPPORTS_WALL)
 
+# ... for the build tree
+set(CONF_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lib")
+set(CONF_LIBRARY_DIR "${PROJECT_BINARY_DIR}/lib")
+configure_file(Amp1394Config.cmake.in
+  "${PROJECT_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
+
 # To find Amp1394 library headers
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
 

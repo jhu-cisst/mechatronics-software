@@ -24,6 +24,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <ostream>
 #include <libraw1394/raw1394.h>
 #include "BoardIO.h"
+#include <iostream>
 
 class FirewirePort {
 public:
