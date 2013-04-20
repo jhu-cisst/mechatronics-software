@@ -221,13 +221,20 @@ AmpIO_UInt32 AmpIO::GetEncoderFrequency(unsigned int index) const
 
 bool AmpIO::GetPowerStatus(void) const
 {
+    // Bit 19: MV_GOOD
     return (GetStatus()&0x00080000);
-
 }
 
 bool AmpIO::GetSafetyRelayStatus(void) const
 {
+    // Bit 17
     return (GetStatus()&0x00020000);
+}
+
+bool AmpIO::GetWatchdogTimeoutStatus(void) const
+{
+    // Bit 23
+    return (GetStatus()&0x00800000);
 }
 
 bool AmpIO::GetAmpEnable(unsigned int index) const

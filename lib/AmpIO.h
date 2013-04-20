@@ -81,6 +81,9 @@ public:
     // GetSafetyRelayStatus: returns true if safety relay contacts are closed
     bool GetSafetyRelayStatus(void) const;
 
+    // GetWatchdogTimeoutStatus: returns true if watchdog timeout
+    bool GetWatchdogTimeoutStatus(void) const;
+
     // GetAmpEnable: returns true if system is requesting amplifier to
     // be enabled (but, amplifier might be in fault state)
     bool GetAmpEnable(unsigned int index) const;
