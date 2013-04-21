@@ -150,7 +150,7 @@ bool PromDisplayPage(AmpIO &Board, unsigned long addr)
 
 int main(int argc, char** argv)
 {
-    int i, j;
+    int i;
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
     std::string mcsName("FPGA1394-QLA.mcs");

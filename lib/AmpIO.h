@@ -71,8 +71,6 @@ public:
 
     AmpIO_UInt32 GetEncoderVelocity(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderFrequency(unsigned int index) const;
-
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.
@@ -174,13 +172,13 @@ protected:
     // Number of channels in the node (4 for QLA)
     enum { NUM_CHANNELS = 4 };
 
-    enum { ReadBufSize = 4+4*NUM_CHANNELS,
+    enum { ReadBufSize = 4+3*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
     quadlet_t read_buffer[ReadBufSize];     // buffer for real-time reads
     quadlet_t write_buffer[WriteBufSize];   // buffer for real-time writes
 
-    // Offsets of real-time read buffer contents, 30 quadlets
+    // Offsets of real-time read buffer contents, 16 = 4 + 2 * 4 quadlets
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet
@@ -189,8 +187,7 @@ protected:
         MOTOR_CURR_OFFSET = 4,    // half quadlet per channel (lower half)
         ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
         ENC_POS_OFFSET    = 4+NUM_CHANNELS,    // one quadlet per channel
-        ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS,  // one quadlet per channel
-        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS   // one quadlet per channel
+        ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS   // one quadlet per channel
     };
 
     // offsets of real-time write buffer contents
@@ -210,8 +207,7 @@ protected:
         POT_DATA_OFFSET = 3,       // pot data register
         ENC_LOAD_OFFSET = 4,       // enc control register (preload)
         POS_DATA_OFFSET = 5,       // enc data register (position)
-        VEL_DATA_OFFSET = 6,       // enc data register (velocity)
-        FRQ_DATA_OFFSET = 7        // enc data register (frequency)
+        VEL_DATA_OFFSET = 6        // enc data register (velocity)
     };
 };
 

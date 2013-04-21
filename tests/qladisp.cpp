@@ -123,9 +123,8 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 6, 9, "Enc:");
     mvwprintw(stdscr, 7, 9, "Pot:");
     mvwprintw(stdscr, 8, 9, "Vel:");
-    mvwprintw(stdscr, 9, 9, "VelF:");
-    mvwprintw(stdscr, 10, 9, "Cur:");
-    mvwprintw(stdscr, 11, 9, "DAC:");
+    mvwprintw(stdscr, 9, 9, "Cur:");
+    mvwprintw(stdscr, 10, 9, "DAC:");
     wrefresh(stdscr);
 
     unsigned char dig_out = 0;
@@ -221,8 +220,7 @@ int main(int argc, char** argv)
                     mvwprintw(stdscr, 6, 9+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i));
                     mvwprintw(stdscr, 7, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogInput(i));
                     mvwprintw(stdscr, 8, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
-                    mvwprintw(stdscr, 9, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderFrequency(i));
-                    mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
+                    mvwprintw(stdscr, 9, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
                 mvwprintw(stdscr, 13, 9+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X", 
@@ -238,7 +236,7 @@ int main(int argc, char** argv)
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
             }
             for (i = 0; i < 4; i++) {
-                mvwprintw(stdscr, 11, 9+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
+                mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
         }

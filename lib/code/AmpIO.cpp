@@ -206,18 +206,6 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index) const
     return static_cast<AmpIO_UInt32>(buff) & ENC_VEL_MASK;
 }
 
-AmpIO_UInt32 AmpIO::GetEncoderFrequency(unsigned int index) const
-{
-    if (index >= NUM_CHANNELS)
-        return 0L;
-
-    quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-    buff &= ENC_FRQ_MASK;          // mask for applicable bits
-    buff += MIDRANGE_FRQ;          // convert to unsigned by recentering
-
-    return static_cast<AmpIO_UInt32>(buff) & ENC_FRQ_MASK;
-}
 
 bool AmpIO::GetPowerStatus(void) const
 {
