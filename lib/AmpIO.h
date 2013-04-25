@@ -39,7 +39,9 @@ public:
 
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
-    // by FirewirePort::ReadAllBoards.
+    // by FirewirePort::ReadAllBoards. To read data immediately from the boards,
+    // use the ReadXXX methods, but note that individual reads via IEEE-1394 are
+    // less efficient than block transfers.
 
     AmpIO_UInt32 GetStatus(void) const;
 
@@ -100,6 +102,16 @@ public:
     void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
+
+    // ********************** READ Methods ***********************************
+    // The ReadXXX methods below read data directly from the boards via IEEE-1394
+    // (Firewire) using quadlet reads. In most cases, it is better to use the
+    // GetXXX methods which read data from a buffer that is read from the board
+    // via the more efficient IEEE-1394 block transfer.
+
+    AmpIO_UInt32 ReadStatus(void) const;
+    bool ReadPowerStatus(void) const;
+    bool ReadSafetyRelayStatus(void) const;
 
     // ********************** WRITE Methods **********************************
 

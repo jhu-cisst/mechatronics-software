@@ -296,6 +296,28 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 }
 
 /*******************************************************************************
+ * Read commands
+ */
+
+AmpIO_UInt32 AmpIO::ReadStatus(void) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port) port->ReadQuadlet(BoardId, 0, read_data);
+    return bswap_32(read_data);
+}
+
+bool AmpIO::ReadPowerStatus(void) const
+{
+    return (ReadStatus()&0x00080000);
+
+}
+
+bool AmpIO::ReadSafetyRelayStatus(void) const
+{
+    return (ReadStatus()&0x00020000);
+}
+
+/*******************************************************************************
  * Write commands
  */
 
