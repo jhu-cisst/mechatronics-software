@@ -70,6 +70,9 @@ public:
     FirewirePort(int portNum, std::ostream &debugStream = std::cerr);
     ~FirewirePort();
 
+    // Call lsof to count the number of users, assumes /dev/fw<port-number>
+    int NumberOfUsers(void);
+
     void Reset(void);
 
     bool IsOK(void) { return (handle != NULL); }

@@ -18,6 +18,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <iostream>
+#include <stdio.h>
 #include <algorithm>
 #include <string.h>
 #include <byteswap.h>
@@ -84,6 +85,37 @@ bool FirewirePort::Init(void)
 FirewirePort::~FirewirePort()
 {
     Cleanup();
+}
+
+int FirewirePort::NumberOfUsers(void)
+{
+    // try to count of many users on the handle
+    char command[256];
+    sprintf(command, "lsof /dev/fw%d 2> /dev/null\0", PortNum);
+    FILE * fp;
+    int status;
+    char path[512];
+    fp = popen(command, "r");
+    if (fp == NULL) {
+        outStr << "FirewirePort: unable to start lsof to count number of users on port " << PortNum << std::endl;
+    }
+    std::string result;
+    int numberOfLines = 0;
+    while (fgets(path, 512, fp) != NULL) {
+        result.append(path);
+        numberOfLines++;
+    }
+    status = pclose(fp);
+    if (status == -1) {
+        outStr << "FirewirePort: error in pclose after lsof call" << std::endl;
+    }
+    int numberOfUsers = numberOfLines - 2; // info line from lsof and lsof itself
+    if (numberOfUsers > 1) {
+        outStr << "FirewirePort::NumberOfUsers: found " << numberOfUsers << " users" << std::endl
+               << "Full lsof result:" << std::endl
+               << result << std::endl;
+    }
+    return numberOfUsers;
 }
 
 void FirewirePort::Cleanup(void)
