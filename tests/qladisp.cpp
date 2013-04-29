@@ -160,6 +160,7 @@ int main(int argc, char** argv)
             power_on = !power_on;
             for (j = 0; j < BoardList.size(); j++) {
                 BoardList[j]->WritePowerEnable(power_on?true:false);
+                usleep(40000); // sleep 40 ms 
                 BoardList[j]->WriteAmpEnable(0x0f, power_on?0x0f:0);
             }
         }
