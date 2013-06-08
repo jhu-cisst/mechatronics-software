@@ -49,7 +49,7 @@ int main(int argc, char** argv)
     int board2 = BoardIO::MAX_BOARDS;
 
     int args_found = 0;
-    for (i = 1; i < argc; i++) {
+    for (i = 1; i < (unsigned int)argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
             port = atoi(argv[i]+2);
             std::cerr << "Selecting port " << port << std::endl;

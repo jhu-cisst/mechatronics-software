@@ -136,7 +136,7 @@ bool PromDisplayPage(AmpIO &Board, unsigned long addr)
     if (!Board.PromReadData(addr, bytes, sizeof(bytes)))
         return false;
     std::cout << std::hex << std::setfill('0');
-    for (int i = 0; i < sizeof(bytes); i += 16) {
+    for (unsigned int i = 0; i < sizeof(bytes); i += 16) {
         std::cout << std::setw(4) << addr+i << ": ";
         for (int j = 0; j < 16; j++)
             std::cout << std::setw(2) << (unsigned int) bytes[i+j] << "  ";

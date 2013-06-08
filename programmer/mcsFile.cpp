@@ -72,7 +72,7 @@ bool mcsFile::ProcessNextLine(RecInfo &rec)
 
 bool mcsFile::toHex(const char *p2, unsigned char &result) const
 {
-    const int NUM_DIGITS = 2;
+    const unsigned int NUM_DIGITS = 2;
     unsigned char digit[NUM_DIGITS];
     result = 0;
     for (unsigned int i = 0; i < NUM_DIGITS; i++) {
@@ -143,7 +143,7 @@ bool mcsFile::VerifySector(const unsigned char *data, unsigned long len) const
 {
     unsigned int lim = (len < sizeof(curSector)) ? len : sizeof(curSector);
     int num = 0;  // number of mismatches
-    int i;
+    unsigned int i;
     for (i = 0; i < lim; i++) {
         if (curSector[i] != data[i]) {
             std::cout << std::hex << "Mismatch at address " << startAddr+i
