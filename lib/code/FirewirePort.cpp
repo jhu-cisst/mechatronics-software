@@ -91,7 +91,7 @@ int FirewirePort::NumberOfUsers(void)
 {
     // try to count of many users on the handle
     char command[256];
-    sprintf(command, "lsof /dev/fw%d 2> /dev/null\0", PortNum);
+    sprintf(command, "lsof /dev/fw%d 2> /dev/null", PortNum);
     FILE * fp;
     int status;
     char path[512];
