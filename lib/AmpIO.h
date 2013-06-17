@@ -22,6 +22,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "BoardIO.h"
 #include <stdint.h> // for uint32_t
+#include <iostream>
 
 class ostream;
 
