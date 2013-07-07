@@ -93,6 +93,9 @@ public:
     // amplifier is in fault state.
     bool GetAmpStatus(unsigned int index) const;
 
+    // GetSafetyAmpDisable: returns true if current safety module in FPGA trip
+    AmpIO_UInt32 GetSafetyAmpDisable(void) const;
+
     // *********************** SET Methods ***********************************
     // The SetXXX methods below write data to local buffers that are sent over
     // IEEE-1394 via FirewirePort::WriteAllBoards. To immediately write to
@@ -113,6 +116,7 @@ public:
     AmpIO_UInt32 ReadStatus(void) const;
     bool ReadPowerStatus(void) const;
     bool ReadSafetyRelayStatus(void) const;
+    AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
 
     // ********************** WRITE Methods **********************************
 

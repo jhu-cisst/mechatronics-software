@@ -83,7 +83,7 @@ AmpIO::~AmpIO()
     }
 }
 
-AmpIO_UInt32 AmpIO::GetFirmwareVersion() const
+AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
 {
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
 }
@@ -241,6 +241,12 @@ bool AmpIO::GetAmpStatus(unsigned int index) const
     return GetStatus()&mask;
 }
 
+AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
+{
+    AmpIO_UInt32 mask = 0x000000F0;
+    return (GetStatus() & mask) >> 4;
+}
+
 
 /*******************************************************************************
  * Set commands
@@ -315,6 +321,14 @@ bool AmpIO::ReadPowerStatus(void) const
 bool AmpIO::ReadSafetyRelayStatus(void) const
 {
     return (ReadStatus()&0x00020000);
+}
+
+AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
+{
+    AmpIO_UInt32 read_data = 0;
+    // 11: quadlet read address for Safety Amp Disable
+    if (port) port->ReadQuadlet(BoardId, 11, read_data);
+    return bswap_32(read_data) & 0x0000000F;
 }
 
 /*******************************************************************************
