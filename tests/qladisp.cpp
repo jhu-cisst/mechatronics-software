@@ -48,6 +48,10 @@ int main(int argc, char** argv)
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
 
+    // measure time between reads
+    AmpIO_UInt32 maxTime = 0;
+    AmpIO_UInt32 lastTime = 0;
+
     int args_found = 0;
     for (i = 1; i < (unsigned int)argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
@@ -82,7 +86,6 @@ int main(int argc, char** argv)
     // Currently hard-coded for up to 2 boards; initialize at mid-range
     AmpIO_UInt32 MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
-
 
     std::vector<AmpIO*> BoardList;
     BoardList.push_back(new AmpIO(board1));
@@ -179,7 +182,6 @@ int main(int argc, char** argv)
             }
         }
 
-
         mvwprintw(stdscr, 16, 50, "%10d", loop_cnt++);
 
         if (!debugStream.str().empty()) {
@@ -196,7 +198,6 @@ int main(int argc, char** argv)
             debugStream.str("");
             last_debug_line = cur_line;
         }
-
 
         if (!Port.IsOK()) continue;
 
@@ -237,6 +238,12 @@ int main(int argc, char** argv)
                 mvwprintw(stdscr, 16, 27+58*j, "Temp:  0x%02X    0x%02X", 
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
+                if (loop_cnt > 500) {
+                    lastTime = BoardList[j]->GetTimestamp();
+                    if (lastTime > maxTime) {
+                        maxTime = lastTime;
+                    }
+                }
             }
             for (i = 0; i < 4; i++) {
                 mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
@@ -244,6 +251,8 @@ int main(int argc, char** argv)
             }
         }
         Port.WriteAllBoards();
+
+        mvwprintw(stdscr, 1, 50, "dt: %f",  (1.0 / 49125.0) * maxTime);
 
         wrefresh(stdscr);
         usleep(500);
