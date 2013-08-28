@@ -25,9 +25,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
-#include <string.h>
 #include <byteswap.h>
+#include <string.h>  // strerror
+#include <errno.h>   // errno message
+
+// libraw1394
 #include <libraw1394/raw1394.h>
+#include <libraw1394/csr.h>    //1394 CSR constants
 
 raw1394handle_t handle;
 
@@ -141,15 +145,19 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
-    /* get number of nodes connected to current port/handle */
-    int nnodes = raw1394_get_nodecount(handle);
+    // get local id and printf libraw1394 version & local_node_id for debugging
+    nodeid_t id = raw1394_get_local_id(handle);
+    printf("libraw1394_version = %s  local_node_id = %x\n", raw1394_get_libversion(), id);
 
-    if ((node < 0) || (node >= nnodes)) {
+    /* get number of nodes connected to current port/handle */
+    int nnodes = raw1394_get_nodecount(handle);    
+    if (node == 63) {
+        printf("**** Warning: Broadcasting message, address should be larger than CSR_CONFIG_ROM_END\n");
+    } else if ((node < 0) || (node >= nnodes)) {
         fprintf(stderr, "**** Error: node %d does not exist (num nodes = %d)\n", node, nnodes);
         exit(-1);
     }
-    int id = raw1394_get_local_id(handle);
-    int target_node = (id & 0xFFC0)+node;
+    nodeid_t target_node = (id & 0xFFC0)+node;
 
     /* determine whether to read or write based on args_found */
     if ((isQuad1394 && (args_found == 1)) ||
@@ -162,10 +170,20 @@ int main(int argc, char** argv)
         }
     } else {
         /* for write */
-        rc = raw1394_write(handle, target_node, addr, size*4, data);
+        if (target_node == 0xffff) {
+            // broadcast, no ack is expected
+            rc = raw1394_start_write(handle, target_node, addr, size*4, data, 11);
+        } else {
+            // asynchronous write
+            rc = raw1394_write(handle, target_node, addr, size*4, data);
+        }
     }
-    if (rc)
-        fprintf(stderr, "**** Error (0x%08X)\n", raw1394_get_errcode(handle));
+    if (rc) {
+        raw1394_errcode_t errcode;
+        errcode = raw1394_get_errcode(handle);
+        fprintf(stderr, "**** Error (0x%08X) errno = %d %s \n",
+                errcode, errno, strerror(errno));
+    }
 
     // Free memory if it was dynamically allocated
     if (data != &data1)
