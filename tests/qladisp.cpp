@@ -247,10 +247,11 @@ int main(int argc, char** argv)
             }
             for (i = 0; i < 4; i++) {
                 mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
-                BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
+                BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i], true);
             }
         }
-        Port.WriteAllBoards();
+//        Port.WriteAllBoards();
+        Port.WriteAllBoardsBroadcast();
 
         mvwprintw(stdscr, 1, 50, "dt: %f",  (1.0 / 49125.0) * maxTime);
 
