@@ -17,12 +17,17 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
+// system
 #include <iostream>
 #include <stdio.h>
 #include <algorithm>
 #include <string.h>
 #include <byteswap.h>
 #include <sys/select.h>
+#include <errno.h>   // errno
+#include <string.h>  // strerror(errno)
+
+// firewire
 #include "FirewirePort.h"
 
 const unsigned long QLA1_String = 0x514C4131;
@@ -41,7 +46,8 @@ bool FirewirePort::Init(void)
 {
     // create firewire port handle 
     handle = raw1394_new_handle();
-    if (!handle) {
+    handle_bc = raw1394_new_handle();
+    if (!handle || !handle_bc) {
         outStr << "FirewirePort: could not create handle" << std::endl;
         return false;
     }
@@ -71,10 +77,12 @@ bool FirewirePort::Init(void)
         return false;
     }
 
-    if (raw1394_set_port(handle, PortNum)) {
+    if (raw1394_set_port(handle, PortNum) || raw1394_set_port(handle_bc, PortNum)) {
         outStr << "FirewirePort: error setting port to " << PortNum << std::endl;
         raw1394_destroy_handle(handle);
+        raw1394_destroy_handle(handle_bc);
         handle = NULL;
+        handle_bc = NULL;
         return false;
     }
     outStr << "FirewirePort: successfully initialized port " << PortNum << std::endl;
@@ -126,7 +134,9 @@ void FirewirePort::Cleanup(void)
     else
         PortList.erase(it);
     raw1394_destroy_handle(handle);
+    raw1394_destroy_handle(handle_bc);
     handle = NULL;
+    handle_bc = NULL;
 }
 
 void FirewirePort::Reset(void)
@@ -349,6 +359,34 @@ bool FirewirePort::WriteAllBoards(void)
     return allOK;
 }
 
+bool FirewirePort::WriteAllBoardsBroadcast(void)
+{
+    // check hanle
+    if (!handle) {
+        outStr << "WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
+        return false;
+    }
+
+    // sanity check vars
+    bool allOK = true;
+    bool noneWritten = true;
+
+
+
+    // construct broadcast write buffer
+
+
+    // now broadcast out the huge packet
+
+
+    // pullEvents
+    if (noneWritten) {
+        PollEvents();
+    }
+
+    // return
+    return true;
+}
 
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
@@ -367,6 +405,14 @@ bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_
     else
         return false;
 }
+
+bool FirewirePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
+{
+    // special case of WriteBlockBroadcast
+    // nbytes = 4
+    return WriteBlockBroadcast(addr, &data, 4);
+}
+
 
 bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
                              unsigned int nbytes)
@@ -387,3 +433,38 @@ bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t 
     else
         return false;
 }
+
+
+bool FirewirePort::WriteBlockBroadcast(
+        nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
+{
+    // check handle
+    if (!handle_bc) {
+        outStr << "WriteQuadletBroadcast: invald firewire handle" << std::endl;
+        return false;
+    }
+
+    // check address
+    // ZC: maybe limit address to 8 bits reg_addr[7:0]
+    //     and cheat firewire driver
+    if (addr < CSR_REGISTER_BASE + CSR_CONFIG_ROM_END) {
+        outStr << "WriteQuadletBroadcast: address not allowed, \n"
+               << "addr should > CSR_REG_BASE + CSR_CONFIG_ROM_END" << std::endl;
+        return false;
+    }
+
+    // broadcast
+    int rc;    // return code
+    const nodeid_t broadcast_node_id = 0xffff;  // use node_id 0xffff to broadcast
+    const unsigned long tag = 11;  // tag is random picked, not used
+    // send broadcast request
+    rc = raw1394_start_write(handle_bc, broadcast_node_id, addr, nbytes, data, tag);
+    if (rc) {
+        outStr << "WriteQuadletBroadcast: errno = " << strerror(errno) << std::endl;
+        return false;
+    } else {
+        return true;
+    }
+}
+
+

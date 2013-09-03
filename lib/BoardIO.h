@@ -30,7 +30,7 @@ class FirewirePort;
 
 class BoardIO
 {
-protected:
+public:
     // Prevent copies
     BoardIO(const BoardIO &);
     BoardIO& operator=(const BoardIO&);

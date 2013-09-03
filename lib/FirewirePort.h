@@ -23,6 +23,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <vector>
 #include <ostream>
 #include <libraw1394/raw1394.h>
+#include <libraw1394/csr.h>
 #include "BoardIO.h"
 #include <iostream>
 
@@ -33,7 +34,8 @@ public:
 protected:
     int PortNum;
 
-    raw1394handle_t handle;
+    raw1394handle_t handle;   // normal read/write handle
+    raw1394handle_t handle_bc;  // broadcasting handle
     nodeid_t baseNodeId;
 
     unsigned char Node2Board[MAX_NODES];
@@ -79,7 +81,6 @@ public:
 
     // Adds board(s)
     bool AddBoard(BoardIO *board);
-    //bool AddBoardPair(BoardIO *board1, BoardIO *board2);
 
     // Removes board
     bool RemoveBoard(unsigned char boardId);
@@ -96,11 +97,24 @@ public:
     // Write to all boards
     bool WriteAllBoards(void);
 
+    // Write to all boards using broadcasting
+    bool WriteAllBoardsBroadcast(void);
+
     // Read a quadlet from the specified board
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
+
+    //
+    /*!
+     \brief Write a quadlet to all boards using broadcasting
+
+     \param addr  The register address, should larger than CSR_REG_BASE + CSR_CONFIG_END
+     \param data  The quadlet data to be broadcasted
+     \return bool  True on success or False on failure
+    */
+    bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
 
     // Read a block from the specified board
     bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
@@ -109,6 +123,16 @@ public:
     // Write a block to the specified board
     bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
                     unsigned int nbytes);
+
+    /*!
+     \brief Write a block of data using asynchronous broadcast
+
+     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
+     \param data  The pointer to write buffer data
+     \param nbytes  Number of bytes to be broadcasted
+     \return bool  True on success or False on failure
+    */
+    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
 };
 
 #endif // __FirewirePort_H__
