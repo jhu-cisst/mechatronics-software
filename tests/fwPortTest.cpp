@@ -105,14 +105,30 @@ int main(int argc, char** argv)
 
     AmpIO* board = BoardList[0];
     for (size_t i = 0; i < 4; i++) {
-        board->SetMotorCurrent(i, 0x8000 + 0x200 * i);
+        board->SetMotorCurrent(i, 0x8000 + 0x200 * i, true);
     }
     fwport.WriteBlockBroadcast(0xffffff000000,
                                board->GetWriteBuffer(),
                                board->GetWriteNumBytes() - 4);
 
-//    std::cout << "numBytes = " << board->GetWriteNumBytes() << std::endl;
-//    fwport.WriteAllBoards();
+    std::cout << "board id = " << (int) board->BoardId << std::endl
+              << std::hex << bswap_32(board->GetWriteBuffer()[0]) << std::endl;
+
+    std::cout << "numBytes = " << std::dec << board->GetWriteNumBytes() << std::endl;
+
+
+    // ----- ---------------------------------
+    // WriteAllBoardsBroadcast()
+    // ---------------------------------------
+    for (size_t i = 0; i < numBoards; i++) {
+        board = BoardList[i];
+        // set current for all boards
+        for (size_t j = 0; j < 4; j++) {
+            board->SetMotorCurrent(j, 0x8000 + 0x200 * j, true);
+        }
+    }
+
+    fwport.WriteAllBoardsBroadcast();
 
 
     // Shut down boards and remove from port

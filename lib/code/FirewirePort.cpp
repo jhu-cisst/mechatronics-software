@@ -66,6 +66,7 @@ bool FirewirePort::Init(void)
 
     // set the bus reset handler
     old_reset_handler = raw1394_set_bus_reset_handler(handle, reset_handler);
+    old_reset_handler = raw1394_set_bus_reset_handler(handle_bc, reset_handler);
 
     // get number of ports
     int nports = raw1394_get_port_info(handle, NULL, 0);
@@ -371,13 +372,51 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     bool allOK = true;
     bool noneWritten = true;
 
-
+    // loop 1: broadcast write block
 
     // construct broadcast write buffer
+    const int numOfChannel = 4;
+    quadlet_t bcBuffer[numOfChannel * MAX_NODES];
+    memset(bcBuffer, 0, sizeof(bcBuffer));
+    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer
+    int numOfBoards = 0;
 
+    for (int board = 0; board < max_board; board++) {
+        if (BoardList[board]) {
+            numOfBoards++;
+            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
+            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
+            unsigned int numQuads = numBytes/4;
+            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4);
+            // bcBufferOffset equals total numBytes to write, when the loop ends
+            bcBufferOffset = bcBufferOffset + numBytes - 4;
+        }
+    }
 
     // now broadcast out the huge packet
+    bool ret = true;
+    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
+                              bcBuffer,
+                              bcBufferOffset);
 
+
+    // loop 2: send out control quadlet if necessary
+    for (int board = 0; board < max_board; board++) {
+        if (BoardList[board]) {
+            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
+            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
+            unsigned int numQuads = numBytes/4;
+            quadlet_t ctrl = buf[numQuads-1];  // Get last quedlet
+            bool ret2 = true;
+            if (ctrl) {  // if anything non-zero, write it
+                ret2 = WriteQuadlet(board, 0, ctrl);
+                if (ret2) noneWritten = false;
+                else allOK = false;
+            }
+            // SetWriteValid clears the buffer if the write was valid
+            BoardList[board]->SetWriteValid(ret&&ret2);
+        }
+    }
 
     // pullEvents
     if (noneWritten) {
@@ -385,7 +424,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     }
 
     // return
-    return true;
+    return allOK;
 }
 
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
