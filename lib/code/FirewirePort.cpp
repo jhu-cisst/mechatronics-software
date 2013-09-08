@@ -19,6 +19,7 @@ http://www.cisst.org/cisst/license.txt.
 
 // system
 #include <iostream>
+#include <iomanip>
 #include <stdio.h>
 #include <algorithm>
 #include <string.h>
@@ -56,7 +57,7 @@ bool FirewirePort::Init(void)
     for (it = PortList.begin(); it != PortList.end(); it++) {
         if ((*it)->PortNum == PortNum)
             outStr << "WARNING: Firewire port " << PortNum
-                      << " is already used (be careful about thread safety)" << std::endl;
+                   << " is already used (be careful about thread safety)" << std::endl;
         if ((*it)->handle == handle) // should never happen
             outStr << "WARNING: Firewire handle is already used" << std::endl;
     }
@@ -228,7 +229,7 @@ bool FirewirePort::ScanNodes(void)
                << ", Firmware Version = " << fver << std::endl;
         if (Node2Board[node] < BoardIO::MAX_BOARDS)
             outStr << "    Duplicate entry, previous value = "
-                      << static_cast<int>(Node2Board[node]) << std::endl;
+                   << static_cast<int>(Node2Board[node]) << std::endl;
         Node2Board[node] = board;
         FirmwareVersion[board] = fver;
     }
@@ -258,6 +259,42 @@ bool FirewirePort::AddBoard(BoardIO *board)
     if (id >= max_board)
         max_board = id+1;
     board->port = this;
+
+    // start addr for the board
+    const nodeaddr_t arm_start_addr = 0xffffff000000 + (id << 20);
+    board->arm_addr = arm_start_addr;
+    const size_t arm_length = 30 * 4;  // max 30 quadlets data
+
+    std::cout << "arm_addr = " << std::hex << arm_start_addr << std::endl;
+
+    // arm initial buffer
+    byte_t arm_init_buffer[arm_length];
+    memset(arm_init_buffer, 0, arm_length);
+
+    // arm_handle
+    raw1394_arm_reqhandle arm_reqhandle;
+    char arm_callback_context[] = "FPGA QLA board";
+    arm_reqhandle.pcontext = arm_callback_context;
+    arm_reqhandle.arm_callback = NULL;
+    int access_mode = RAW1394_ARM_WRITE | RAW1394_ARM_READ;
+
+    // register
+    int rc = 0;
+    rc = raw1394_arm_register(handle,
+                              arm_start_addr,
+                              arm_length,
+                              arm_init_buffer,
+                              (octlet_t) &arm_reqhandle,
+                              access_mode,
+                              0,
+                              0);
+    if (rc) {
+        std::cerr << "**** Error: failed to setup arm register, error "
+                  << strerror(errno) << std::endl;
+    } else {
+        std::cout << "Board " << id << "  addr = " << arm_start_addr << " arm successful" << std::endl;
+    }
+
     return true;
 }
 
@@ -321,10 +358,54 @@ bool FirewirePort::ReadAllBoards(void)
             BoardList[board]->SetReadValid(ret);
         }
     }
-    if (noneRead)
+    if (noneRead) {
         PollEvents();
+    }
     return allOK;
 }
+
+bool FirewirePort::ReadAllBoardsBroadcast(void)
+{
+    if (!handle) {
+        outStr << "ReadAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
+        return false;
+    }
+
+    PollEvents();
+
+    bool allOK = true;
+    bool noneRead = true;
+    for (int board = 0; board < max_board; board++) {
+        if (BoardList[board]) {
+            int rc;
+//            rc = raw1394_arm_get_buf(handle,
+//                                     BoardList[board]->GetArmAddress(),
+//                                     BoardList[board]->GetReadNumBytes(),
+//                                     BoardList[board]->GetReadBuffer());
+
+            quadlet_t readBuff[12];
+            raw1394_arm_get_buf(handle,
+                                BoardList[board]->GetArmAddress(), 48, readBuff);
+
+            std::cout << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
+
+            for (int i = 0; i < 12; i++) {
+                std::cout.fill('0');
+                std::cout << " " << std::hex << std::setw(8) << bswap_32(readBuff[i]) << std::endl;
+            }
+            std::cout << std::endl;
+
+            if (!rc) noneRead = false;
+            else allOK = false;
+            BoardList[board]->SetReadValid(!rc);
+        }
+    }
+    if (noneRead) {
+        PollEvents();
+    }
+    return allOK;
+}
+
 
 bool FirewirePort::WriteAllBoards(void)
 {
@@ -386,7 +467,6 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
             numOfBoards++;
             quadlet_t *buf = BoardList[board]->GetWriteBuffer();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
             memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4);
             // bcBufferOffset equals total numBytes to write, when the loop ends
             bcBufferOffset = bcBufferOffset + numBytes - 4;
@@ -505,5 +585,4 @@ bool FirewirePort::WriteBlockBroadcast(
         return true;
     }
 }
-
 

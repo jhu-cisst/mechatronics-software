@@ -9,6 +9,7 @@
 #include <sstream>
 #include <getopt.h>
 #include <byteswap.h>
+#include <sys/time.h>
 
 #include "FirewirePort.h"
 #include "AmpIO.h"
@@ -74,7 +75,7 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < 2; i++) {
         BoardList.push_back(new AmpIO(board_id[i]));
         fwport.AddBoard(BoardList[i]);
-        std::cout << "new board with node_id = "
+        std::cout << "new board with node_id = " << std::dec
                   << fwport.GetNodeId(board_id[i]) << std::endl;
     }
 
@@ -83,7 +84,7 @@ int main(int argc, char** argv)
     // ---------------------------------------
     bool rc;
     nodeaddr_t nodeaddress_wd = 0xffffff000003;
-    rc = fwport.WriteQuadletBroadcast(nodeaddress_wd, bswap_32(0x3599));
+    rc = fwport.WriteQuadletBroadcast(nodeaddress_wd, bswap_32(0x3899));
 
     // now read back and verify
     quadlet_t dataQuadlet = 0x0000;
@@ -102,19 +103,20 @@ int main(int argc, char** argv)
     // set write buffer
     //     NOTE: here set 1 board's write buffer
     //           this buffer value will be broadcasted to all boards on the bus
+    //           NEED to hack BoardIO to be public to make it work
 
     AmpIO* board = BoardList[0];
-    for (size_t i = 0; i < 4; i++) {
-        board->SetMotorCurrent(i, 0x8000 + 0x200 * i, true);
-    }
-    fwport.WriteBlockBroadcast(0xffffff000000,
-                               board->GetWriteBuffer(),
-                               board->GetWriteNumBytes() - 4);
+//    for (size_t i = 0; i < 4; i++) {
+//        board->SetMotorCurrent(i, 0x8000 + 0x200 * i, true);
+//    }
+//    fwport.WriteBlockBroadcast(0xffffff000000,
+//                               board->GetWriteBuffer(),
+//                               board->GetWriteNumBytes() - 4);
 
-    std::cout << "board id = " << (int) board->BoardId << std::endl
-              << std::hex << bswap_32(board->GetWriteBuffer()[0]) << std::endl;
+//    std::cout << "board id = " << (int) board->BoardId << std::endl
+//              << std::hex << bswap_32(board->GetWriteBuffer()[0]) << std::endl;
 
-    std::cout << "numBytes = " << std::dec << board->GetWriteNumBytes() << std::endl;
+//    std::cout << "numBytes = " << std::dec << board->GetWriteNumBytes() << std::endl;
 
 
     // ----- ---------------------------------
@@ -128,7 +130,32 @@ int main(int argc, char** argv)
         }
     }
 
-    fwport.WriteAllBoardsBroadcast();
+	
+    // ----- ---------------------------------
+    // Broadcast Write/Read boards
+    // ---------------------------------------
+
+    int counter = 0;
+    int csize = 3;
+    timeval start;
+    timeval stop[csize];
+
+    gettimeofday(&start, NULL);
+    while(counter < csize){
+        counter++;
+        fwport.WriteAllBoardsBroadcast();
+//        usleep(40000); // sleep 40 ms
+        fwport.ReadAllBoardsBroadcast();
+        gettimeofday(&stop[counter-1], NULL);
+    }
+
+    for (int i = 0; i < csize; i++) {
+        double mtime;
+        mtime = (stop[i].tv_sec - start.tv_sec) * 1000000.0 +
+                (stop[i].tv_usec - start.tv_usec) + 0.5;
+
+        std::cout << "time " << i << " = " << std::dec << mtime << std::endl;
+    }
 
 
     // Shut down boards and remove from port
@@ -141,4 +168,3 @@ int main(int argc, char** argv)
 
     return EXIT_SUCCESS;
 }
-

@@ -94,6 +94,9 @@ public:
     // Read all boards
     bool ReadAllBoards(void);
 
+    // Read all boards broadcasting
+    bool ReadAllBoardsBroadcast(void);
+
     // Write to all boards
     bool WriteAllBoards(void);
 

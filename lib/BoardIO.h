@@ -30,12 +30,13 @@ class FirewirePort;
 
 class BoardIO
 {
-public:
+protected:
     // Prevent copies
     BoardIO(const BoardIO &);
     BoardIO& operator=(const BoardIO&);
 
     unsigned char BoardId;
+    nodeaddr_t arm_addr;
 
     FirewirePort *port;
     bool readValid;
@@ -49,6 +50,8 @@ public:
 
     friend class FirewirePort;
 
+    nodeaddr_t GetArmAddress() const {return arm_addr;}
+
     void SetReadValid(bool flag) { readValid = flag; }
     unsigned int GetReadNumBytes() const { return ReadBufferSize; }
     quadlet_t *GetReadBuffer() { return ReadBuffer; }
@@ -61,7 +64,7 @@ public:
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards
 
-    BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
+    BoardIO(unsigned char board_id) : BoardId(board_id), arm_addr(0xffffff000000), port(0), readValid(false), writeValid(false),
                                       ReadBufferSize(0), ReadBuffer(0), WriteBufferSize(0), WriteBuffer(0) {}
     virtual ~BoardIO() {}
 
