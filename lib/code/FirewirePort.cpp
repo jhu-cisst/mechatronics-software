@@ -399,8 +399,6 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    PollEvents();
-
     bool allOK = true;
     bool noneRead = true;
     for (int board = 0; board < max_board; board++) {
@@ -411,17 +409,21 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 //                                     BoardList[board]->GetReadNumBytes(),
 //                                     BoardList[board]->GetReadBuffer());
 
-            quadlet_t readBuff[12];
+            // pull events
+            PollEvents();
+
+            const int readSize = 13;  // 1 seq + 12 data, unit quadlet
+            quadlet_t readBuff[readSize];
             raw1394_arm_get_buf(handle,
-                                BoardList[board]->GetArmAddress(), 48, readBuff);
+                                BoardList[board]->GetArmAddress(), readSize * 4, readBuff);
 
-            std::cout << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
+            outStr << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
 
-            for (int i = 0; i < 12; i++) {
-                std::cout.fill('0');
-                std::cout << " " << std::hex << std::setw(8) << bswap_32(readBuff[i]) << std::endl;
+            for (int i = 0; i < readSize; i++) {
+                outStr.fill('0');
+                outStr << " " << std::hex << std::setw(8) << bswap_32(readBuff[i]) << std::endl;
             }
-            std::cout << std::endl;
+            outStr << std::endl;
 
             if (!rc) noneRead = false;
             else allOK = false;
