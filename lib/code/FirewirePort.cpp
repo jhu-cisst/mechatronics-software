@@ -497,8 +497,8 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     int numOfBoards = 0;
 
     // set the first quadlet
-//    bcBuffer[0] = bswap_32((WriteAllBoardsBroadcastSequence_ << 16) + BoardExistMask_);
-//    bcBufferOffset = bcBufferOffset + 4;   // 1 quadlet data
+    bcBuffer[0] = bswap_32((WriteAllBoardsBroadcastSequence_ << 16) + BoardExistMask_);
+    bcBufferOffset = bcBufferOffset + 4;   // 1 quadlet data
 
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
