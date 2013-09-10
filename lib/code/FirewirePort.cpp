@@ -37,7 +37,12 @@ const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
 
 FirewirePort::PortListType FirewirePort::PortList;
 
-FirewirePort::FirewirePort(int portNum, std::ostream &ostr) : PortNum(portNum), outStr(ostr), max_board(0)
+FirewirePort::FirewirePort(int portNum, std::ostream &ostr) :
+    PortNum(portNum),
+    outStr(ostr),
+    max_board(0),
+    WriteAllBoardsBroadcastSequence_(0),
+    BoardExistMask_(0)
 {
     memset(BoardList, 0, sizeof(BoardList));
     Init();
@@ -88,6 +93,22 @@ bool FirewirePort::Init(void)
         return false;
     }
     outStr << "FirewirePort: successfully initialized port " << PortNum << std::endl;
+
+#if 1
+    // IMPORTANT: Disable Cycle Start Packet, no isochronous
+    int rc = 0;  // return code
+    quadlet_t data_stop_cmc = bswap_32(0x100);
+    rc = raw1394_write(handle,
+                       raw1394_get_local_id(handle),
+                       CSR_REGISTER_BASE + CSR_STATE_CLEAR,
+                       4,
+                       &data_stop_cmc);
+    if (rc) {
+        outStr << "*****Error: can NOT disable cycle start packet" << std::endl;
+    } else {
+        outStr << "FirewirePort: successfully disabled cycle start packet" << std::endl;
+    }
+#endif
 
     return ScanNodes();
 }
@@ -260,6 +281,9 @@ bool FirewirePort::AddBoard(BoardIO *board)
         max_board = id+1;
     board->port = this;
 
+    // update BoardExistMask_
+    BoardExistMask_ = (BoardExistMask_ | (1 << id));
+
     // start addr for the board
     const nodeaddr_t arm_start_addr = 0xffffff000000 + (id << 20);
     board->arm_addr = arm_start_addr;
@@ -308,7 +332,11 @@ bool FirewirePort::RemoveBoard(unsigned char boardId)
     if (!board) {
         outStr << "RemoveBoard: board not found: " << boardId << std::endl;
         return false;
-    }    
+    }
+
+    // update BoardExistMask_
+    BoardExistMask_ = (BoardExistMask_ & (~(1 << boardId)));
+
     BoardList[boardId] = 0;
     if (boardId >= max_board-1) {
         // If max_board was just removed, find the new max_board
@@ -400,6 +428,10 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
             BoardList[board]->SetReadValid(!rc);
         }
     }
+
+    outStr << "===================  END ============================\n" << std::endl;
+
+
     if (noneRead) {
         PollEvents();
     }
@@ -457,10 +489,14 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
     // construct broadcast write buffer
     const int numOfChannel = 4;
-    quadlet_t bcBuffer[numOfChannel * MAX_NODES];
+    quadlet_t bcBuffer[numOfChannel * MAX_NODES + 1];  // 1 for sequence + fpga board status
     memset(bcBuffer, 0, sizeof(bcBuffer));
     int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer
     int numOfBoards = 0;
+
+    // set the first quadlet
+//    bcBuffer[0] = bswap_32((WriteAllBoardsBroadcastSequence_ << 16) + BoardExistMask_);
+//    bcBufferOffset = bcBufferOffset + 4;   // 1 quadlet data
 
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
@@ -501,6 +537,12 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     // pullEvents
     if (noneWritten) {
         PollEvents();
+    }
+
+    // sequence number from 16 bits 0 to 65535
+    WriteAllBoardsBroadcastSequence_++;
+    if (WriteAllBoardsBroadcastSequence_ == 65536) {
+        WriteAllBoardsBroadcastSequence_ = 0;
     }
 
     // return
@@ -585,4 +627,3 @@ bool FirewirePort::WriteBlockBroadcast(
         return true;
     }
 }
-
