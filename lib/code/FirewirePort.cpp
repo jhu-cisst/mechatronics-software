@@ -42,7 +42,8 @@ FirewirePort::FirewirePort(int portNum, std::ostream &ostr) :
     outStr(ostr),
     max_board(0),
     WriteAllBoardsBroadcastSequence_(0),
-    BoardExistMask_(0)
+    BoardExistMask_(0),
+    NumOfBoards_(0)
 {
     memset(BoardList, 0, sizeof(BoardList));
     Init();
@@ -319,6 +320,7 @@ bool FirewirePort::AddBoard(BoardIO *board)
         std::cout << "Board " << id << "  addr = " << arm_start_addr << " arm successful" << std::endl;
     }
 
+    NumOfBoards_++;   // increment board counts
     return true;
 }
 
@@ -345,6 +347,7 @@ bool FirewirePort::RemoveBoard(unsigned char boardId)
             if (BoardList[bd]) max_board = bd+1;
     }
     board->port = 0;
+    NumOfBoards_--;
     return true;
 }
 
@@ -401,6 +404,8 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
     bool allOK = true;
     bool noneRead = true;
+
+#if 0
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             int rc;
@@ -409,14 +414,31 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 //                                     BoardList[board]->GetReadNumBytes(),
 //                                     BoardList[board]->GetReadBuffer());
 
-            // pull events
-            PollEvents();
 
             const int readSize = 13;  // 1 seq + 12 data, unit quadlet
             quadlet_t readBuff[readSize];
+
+            // pull events
+//            PollEvents();
+
+            bool received = false;
+            while (!received) {
+                PollEvents();
+                raw1394_arm_get_buf(handle,
+                                    BoardList[board]->GetArmAddress(), 4, readBuff);
+
+                unsigned int seq = (bswap_32(readBuff[0]) >> 16);
+                std::cout << std::hex << seq << "  " << WriteAllBoardsBroadcastSequence_ << "  " << board << std::endl;
+                received = true;
+//                if (seq == WriteAllBoardsBroadcastSequence_) {
+//                    received = true;
+//                }
+            }
+
             raw1394_arm_get_buf(handle,
                                 BoardList[board]->GetArmAddress(), readSize * 4, readBuff);
 
+#if 1
             outStr << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
 
             for (int i = 0; i < readSize; i++) {
@@ -424,19 +446,73 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
                 outStr << " " << std::hex << std::setw(8) << bswap_32(readBuff[i]) << std::endl;
             }
             outStr << std::endl;
+#endif
 
             if (!rc) noneRead = false;
             else allOK = false;
             BoardList[board]->SetReadValid(!rc);
         }
     }
+#else
+    for (int node = 0; node < NumOfBoards_; node++) {
+        unsigned char board;
+        board = Node2Board[node];
+//        std::cout << "board = " << (int)board << std::endl;
 
-    outStr << "===================  END ============================\n" << std::endl;
+        if (BoardList[board]) {
+            int rc;
+            const int readSize = 13;  // 1 seq + 12 data, unit quadlet
+            quadlet_t readBuff[readSize];
 
+            // pull events
+            bool received = false;
+            while (!received) {
+                PollEvents();
+                raw1394_arm_get_buf(handle,
+                                    BoardList[board]->GetArmAddress(), 4, readBuff);
 
-    if (noneRead) {
-        PollEvents();
+                unsigned int seq = (bswap_32(readBuff[0]) >> 16);
+//                std::cout << std::hex << seq << "  " << WriteAllBoardsBroadcastSequence_ << "  " << (int)board << std::endl;
+                received = true;
+
+                static int errorcounter = 0;
+                if (WriteAllBoardsBroadcastSequence_ - seq > 0) {
+                    errorcounter++;
+                    outStr << "errorcounter = " << errorcounter << std::endl;
+                    outStr << std::hex << seq << "  " << WriteAllBoardsBroadcastSequence_ << "  " << (int)board << std::endl;
+                }
+
+            }
+
+            raw1394_arm_get_buf(handle,
+                                BoardList[board]->GetArmAddress(), readSize * 4, readBuff);
+
+#if 0
+            outStr << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
+
+            for (int i = 0; i < readSize; i++) {
+                outStr.fill('0');
+                outStr << " " << std::hex << std::setw(8) << bswap_32(readBuff[i]) << std::endl;
+            }
+            outStr << std::endl;
+#endif
+
+            if (!rc) noneRead = false;
+            else allOK = false;
+            BoardList[board]->SetReadValid(!rc);
+        }
     }
+#endif
+
+
+
+//    outStr << "===================  END ============================\n" << std::endl;
+
+
+//    if (noneRead) {
+//        PollEvents();
+//    }
+
     return allOK;
 }
 
@@ -489,6 +565,12 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
     // loop 1: broadcast write block
 
+    // sequence number from 16 bits 0 to 65535
+    WriteAllBoardsBroadcastSequence_++;
+    if (WriteAllBoardsBroadcastSequence_ == 65536) {
+        WriteAllBoardsBroadcastSequence_ = 1;
+    }
+
     // construct broadcast write buffer
     const int numOfChannel = 4;
     quadlet_t bcBuffer[numOfChannel * MAX_NODES + 1];  // 1 for sequence + fpga board status
@@ -539,12 +621,6 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     // pullEvents
     if (noneWritten) {
         PollEvents();
-    }
-
-    // sequence number from 16 bits 0 to 65535
-    WriteAllBoardsBroadcastSequence_++;
-    if (WriteAllBoardsBroadcastSequence_ == 65536) {
-        WriteAllBoardsBroadcastSequence_ = 0;
     }
 
     // return
