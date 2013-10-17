@@ -47,6 +47,8 @@ protected:
 
     int max_board;  // highest index of used (non-zero) entry in BoardList
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
+    BoardIO *HubBoard_;
+
     unsigned int WriteAllBoardsBroadcastSequence_;  // sequence number for WABB
     unsigned int BoardExistMask_;    // mask showing indicating whether board exists
     int NumOfBoards_;    // number of boards
@@ -81,6 +83,9 @@ public:
     void Reset(void);
 
     bool IsOK(void) { return (handle != NULL); }
+
+    // Set hub board
+    bool SetHubBoard(BoardIO *hubboard);
 
     // Adds board(s)
     bool AddBoard(BoardIO *board);
