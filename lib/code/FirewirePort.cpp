@@ -95,7 +95,14 @@ bool FirewirePort::Init(void)
     }
     outStr << "FirewirePort: successfully initialized port " << PortNum << std::endl;
 
-#if 1
+    // stop cycle start packet
+    StopCycleStartPacket();
+
+    return ScanNodes();
+}
+
+void FirewirePort::StopCycleStartPacket()
+{
     // IMPORTANT: Disable Cycle Start Packet, no isochronous
     int rc = 0;  // return code
     quadlet_t data_stop_cmc = bswap_32(0x100);
@@ -109,10 +116,8 @@ bool FirewirePort::Init(void)
     } else {
         outStr << "FirewirePort: successfully disabled cycle start packet" << std::endl;
     }
-#endif
-
-    return ScanNodes();
 }
+
 
 FirewirePort::~FirewirePort()
 {
@@ -396,11 +401,11 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
     int hub_node_id = GetNodeId(HubBoard_->BoardId);   //  ZC: NOT USE PLACEHOLDER
 
-    std::cout << "hub_node_id = " << hub_node_id << std::endl;
+//    std::cout << "hub_node_id = " << hub_node_id << std::endl;
 
     raw1394_read(handle,
                  baseNodeId + hub_node_id,
-                 0x00,
+                 0xffff00000000,
                  130 * 4,
                  hubReadBuffer);
 
@@ -421,7 +426,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
                 outStr << std::hex << seq << "  " << WriteAllBoardsBroadcastSequence_ << "  " << (int)board << std::endl;
             }
 
-#if 0
+#if 1
             outStr << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
 
             for (int i = 0; i < readSize; i++) {

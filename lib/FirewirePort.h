@@ -66,6 +66,9 @@ protected:
     // Initialize Firewire port
     bool Init(void);
 
+    // Stop Cycle Start Packets
+    void StopCycleStartPacket(void);
+
     // Cleanup Firewire port
     void Cleanup(void);
 
