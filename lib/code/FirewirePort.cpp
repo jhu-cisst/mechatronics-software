@@ -310,6 +310,7 @@ bool FirewirePort::AddBoard(BoardIO *board)
     std::cout << "arm_addr = " << std::hex << arm_start_addr << std::endl;
 
     NumOfBoards_++;   // increment board counts
+    SetHubBoard(board);  // last added board would be hub board
     return true;
 }
 
@@ -400,22 +401,19 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
 
     int hub_node_id = GetNodeId(HubBoard_->BoardId);   //  ZC: NOT USE PLACEHOLDER
-
-//    std::cout << "hub_node_id = " << hub_node_id << std::endl;
-
-    raw1394_read(handle,
-                 baseNodeId + hub_node_id,
-                 0xffff00000000,
-                 130 * 4,
-                 hubReadBuffer);
+    // raw1394_read 0 = SUCCESS, -1 = FAIL, flip return value
+    bool ret = !raw1394_read(handle,
+                             baseNodeId + hub_node_id,
+                             0xffff00000000,
+                             130 * 4,
+                             hubReadBuffer);
 
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            int rc;
             const int readSize = 13;  // 1 seq + 12 data, unit quadlet
             quadlet_t readBuff[readSize];
 
-            memcpy(readBuff, &(hubReadBuffer[13 * board + 1]), 13 * 4);
+            memcpy(readBuff, &(hubReadBuffer[13 * board + 0]), 13 * 4);
 
             unsigned int seq = (bswap_32(readBuff[0]) >> 16);
 
@@ -426,7 +424,8 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
                 outStr << std::hex << seq << "  " << WriteAllBoardsBroadcastSequence_ << "  " << (int)board << std::endl;
             }
 
-#if 1
+            memcpy(BoardList[board]->GetReadBuffer(), &(readBuff[1]), 12 * 4);
+#if 0
             outStr << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
 
             for (int i = 0; i < readSize; i++) {
@@ -435,20 +434,15 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
             }
             outStr << std::endl;
 #endif
-
-            if (!rc) noneRead = false;
+            if (ret) noneRead = false;
             else allOK = false;
-            BoardList[board]->SetReadValid(!rc);
+            BoardList[board]->SetReadValid(ret);
         }
     }
-
-//    outStr << "===================  END ============================\n" << std::endl;
-
 
     if (noneRead) {
         PollEvents();
     }
-
     return allOK;
 }
 

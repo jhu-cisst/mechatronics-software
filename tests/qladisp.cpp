@@ -138,6 +138,10 @@ int main(int argc, char** argv)
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
+
+    // control loop
+    Port.WriteAllBoardsBroadcast(); // dummy write to start the pipeline
+
     while ((c = getch()) != ESC_CHAR) {
         if (c == 'r') Port.Reset();
         else if ((c >= '0') && (c <= '3')) {
@@ -165,7 +169,7 @@ int main(int argc, char** argv)
             for (j = 0; j < BoardList.size(); j++) {
                 BoardList[j]->WriteSafetyRelay(power_on?true:false);
                 BoardList[j]->WritePowerEnable(power_on?true:false);
-                usleep(40000); // sleep 40 ms 
+                usleep(40000); // sleep 40 ms
                 BoardList[j]->WriteAmpEnable(0x0f, power_on?0x0f:0);
             }
         }
@@ -216,7 +220,7 @@ int main(int argc, char** argv)
                 strcpy(nodeStr[1], "none");
         }
 
-        Port.ReadAllBoards();
+        Port.ReadAllBoardsBroadcast();
         unsigned int j = 0;
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
@@ -250,7 +254,6 @@ int main(int argc, char** argv)
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i], true);
             }
         }
-//        Port.WriteAllBoards();
         Port.WriteAllBoardsBroadcast();
 
         mvwprintw(stdscr, 1, 50, "dt: %f",  (1.0 / 49125.0) * maxTime);
