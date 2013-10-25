@@ -126,7 +126,7 @@ int main(int argc, char** argv)
         board = BoardList[i];
         // set current for all boards
         for (size_t j = 0; j < 4; j++) {
-            board->SetMotorCurrent(j, 0x8000 + 0x200 * j, true);
+            board->SetMotorCurrent(j, 0x8000 + 0x200 * j);
         }
     }
 

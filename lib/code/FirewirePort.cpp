@@ -128,7 +128,7 @@ int FirewirePort::NumberOfUsers(void)
 {
     // try to count of many users on the handle
     char command[256];
-    sprintf(command, "lsof /dev/fw%d 2> /dev/null", PortNum);
+    sprintf(command, "lsof -t /dev/fw%d 2> /dev/null", PortNum);
     FILE * fp;
     int status;
     char path[512];
@@ -143,11 +143,23 @@ int FirewirePort::NumberOfUsers(void)
         numberOfLines++;
     }
     status = pclose(fp);
+
     if (status == -1) {
         outStr << "FirewirePort: error in pclose after lsof call" << std::endl;
     }
-    int numberOfUsers = numberOfLines - 2; // info line from lsof and lsof itself
+    int numberOfUsers = numberOfLines - 1; // lsof itself
     if (numberOfUsers > 1) {
+        sprintf(command, "lsof -R /dev/fw%d 2> /dev/null", PortNum);
+        fp = popen(command, "r");
+        if (fp == NULL) {
+            outStr << "FirewirePort: unable to start lsof to count number of users on port " << PortNum << std::endl;
+        }
+        result = "";   // clear result
+        while (fgets(path, 512, fp) != NULL) {
+            result.append(path);
+        }
+        status = pclose(fp);
+
         outStr << "FirewirePort::NumberOfUsers: found " << numberOfUsers << " users" << std::endl
                << "Full lsof result:" << std::endl
                << result << std::endl;
@@ -319,7 +331,7 @@ bool FirewirePort::AddBoard(BoardIO *board)
     // start addr for the board
     const nodeaddr_t arm_start_addr = 0xffffff000000 + (id << 20);
     board->arm_addr = arm_start_addr;
-    std::cout << "arm_addr = " << std::hex << arm_start_addr << std::endl;
+//    std::cout << "arm_addr = " << std::hex << arm_start_addr << std::endl;
 
     NumOfBoards_++;   // increment board counts
     SetHubBoard(board);  // last added board would be hub board

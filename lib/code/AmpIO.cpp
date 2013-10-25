@@ -289,14 +289,10 @@ void AmpIO::SetSafetyRelay(bool state)
         write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
 }
 
-bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata, const bool isbroadcast)
+bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 {
     quadlet_t data = 0x00;
-    if (isbroadcast) {
-        data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
-    } else {
-        data = VALID_BIT | DAC_WR_A | (sdata & DAC_MASK);
-    }
+    data = VALID_BIT | ((BoardId & 0x0F) << 24) | DAC_WR_A | (sdata & DAC_MASK);
 
     if (index < NUM_CHANNELS) {
         write_buffer[index+WB_CURR_OFFSET] = bswap_32(data);

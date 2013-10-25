@@ -105,7 +105,7 @@ public:
     bool SetAmpEnable(unsigned int index, bool state);
     void SetSafetyRelay(bool state);
 
-    bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur, const bool isbroadcast = false);
+    bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
 
     // ********************** READ Methods ***********************************
     // The ReadXXX methods below read data directly from the boards via IEEE-1394

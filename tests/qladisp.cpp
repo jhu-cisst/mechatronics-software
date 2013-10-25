@@ -251,7 +251,7 @@ int main(int argc, char** argv)
             }
             for (i = 0; i < 4; i++) {
                 mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
-                BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i], true);
+                BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
         }
         Port.WriteAllBoardsBroadcast();
