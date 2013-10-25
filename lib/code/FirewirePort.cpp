@@ -222,7 +222,7 @@ bool FirewirePort::ScanNodes(void)
     int numNodes = raw1394_get_nodecount(handle);
 
     outStr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
-    UseBroadcast_ = true;
+    IsAllBoradsBroadcastCapable_ = true;
     // Iterate through all connected nodes (except for last one, which is the PC).
     for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
@@ -263,7 +263,13 @@ bool FirewirePort::ScanNodes(void)
 
         // check firmware version
         // FirmwareVersion >= 4, broadcast capable
-        if (fver >= 4) UseBroadcast_ = false;
+        if (fver < 4) IsAllBoradsBroadcastCapable_ = false;
+    }
+
+    // Use broadcast by default if all firmware are bc capable
+    if (IsAllBoradsBroadcastCapable_) {
+        UseBroadcast_ = true;
+        outStr << "ScanNodes: all nodes broadcast capable, broadcast mode" << std::endl;
     }
 
     // update Board2Node
@@ -368,10 +374,22 @@ unsigned long FirewirePort::GetFirmwareVersion(unsigned char boardId) const
         return 0;
 }
 
-
+void FirewirePort::SetUseBroadcastFlag(bool bc)
+{
+    if (!IsAllBoradsBroadcastCapable_ && bc) {
+        outStr << "***Error: not all boards supports broadcasting, " << std::endl
+               << "          please upgrade your firmaware"  << std::endl;
+    } else {
+        UseBroadcast_ = bc;
+    }
+}
 
 bool FirewirePort::ReadAllBoards(void)
 {
+    if (UseBroadcast_) {
+        return ReadAllBoardsBroadcast();
+    }
+
     if (!handle) {
         outStr << "ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
@@ -392,6 +410,7 @@ bool FirewirePort::ReadAllBoards(void)
     }
     return allOK;
 }
+
 
 bool FirewirePort::ReadAllBoardsBroadcast(void)
 {
@@ -457,6 +476,10 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
 bool FirewirePort::WriteAllBoards(void)
 {
+    if (UseBroadcast_) {
+        return WriteAllBoardsBroadcast();
+    }
+
     if (!handle) {
         outStr << "WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
