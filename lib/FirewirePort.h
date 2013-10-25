@@ -48,10 +48,12 @@ protected:
     int max_board;  // highest index of used (non-zero) entry in BoardList
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
     BoardIO *HubBoard_;
-
-    unsigned int WriteAllBoardsBroadcastSequence_;  // sequence number for WABB
-    unsigned int BoardExistMask_;    // mask showing indicating whether board exists
     int NumOfBoards_;    // number of boards
+
+    // Broadcast Related
+    unsigned int WriteAllBoardsBroadcastSequence_;   // sequence number for WABB
+    unsigned int BoardExistMask_;   // mask showing indicating whether board exists
+    bool UseBroadcast_;   // Read/Write broadcast flag, turn TRUE if all nodes bc capable
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;

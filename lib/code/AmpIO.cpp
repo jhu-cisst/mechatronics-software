@@ -381,7 +381,9 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 }
 
 /*******************************************************************************
- * PROM commands
+ * PROM commands (M25P16)
+ *    data e.g. 0x9f000000 the higher 8-bit is M25P16 cmd
+ *    see DataSheet Table 5: Command Set Codes
  */
 
 AmpIO_UInt32 AmpIO::PromGetId(void)
@@ -421,7 +423,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
     AmpIO_UInt32 addr24 = addr&0x00ffffff;
     if (addr24+nbytes > 0x00ffffff)
         return false;
-    quadlet_t write_data = 0x03000000|addr24;
+    quadlet_t write_data = 0x03000000|addr24;  // 03h = Read Data Bytes
     AmpIO_UInt32 page = 0;
     while (page < nbytes) {
         unsigned int bytesToRead = std::min(nbytes - page, 256u);

@@ -222,6 +222,7 @@ bool FirewirePort::ScanNodes(void)
     int numNodes = raw1394_get_nodecount(handle);
 
     outStr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
+    UseBroadcast_ = true;
     // Iterate through all connected nodes (except for last one, which is the PC).
     for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
@@ -259,8 +260,13 @@ bool FirewirePort::ScanNodes(void)
                    << static_cast<int>(Node2Board[node]) << std::endl;
         Node2Board[node] = board;
         FirmwareVersion[board] = fver;
+
+        // check firmware version
+        // FirmwareVersion >= 4, broadcast capable
+        if (fver >= 4) UseBroadcast_ = false;
     }
 
+    // update Board2Node
     for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
         Board2Node[board] = MAX_NODES;
         for (node = 0; node < numNodes-1; node++) {
@@ -361,6 +367,8 @@ unsigned long FirewirePort::GetFirmwareVersion(unsigned char boardId) const
     else
         return 0;
 }
+
+
 
 bool FirewirePort::ReadAllBoards(void)
 {
