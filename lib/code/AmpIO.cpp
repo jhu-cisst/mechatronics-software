@@ -386,7 +386,7 @@ AmpIO_UInt32 AmpIO::PromGetId(void)
 {
     AmpIO_UInt32 id = 0;
     quadlet_t data = 0x9f000000;
-    if (port->WriteQuadlet(BoardId, 8, bswap_32(data))) {
+    if (port->WriteQuadlet(BoardId, 0x08, bswap_32(data))) {
         // Should be ready by now...
         id = PromGetResult();
     }
@@ -397,7 +397,7 @@ AmpIO_UInt32 AmpIO::PromGetStatus(void)
 {
     AmpIO_UInt32 status = 0x80000000;
     quadlet_t data = 0x05000000;
-    if (port->WriteQuadlet(BoardId, 8, bswap_32(data))) {
+    if (port->WriteQuadlet(BoardId, 0x08, bswap_32(data))) {
         // Should be ready by now...
         status = PromGetResult();
     }
@@ -408,7 +408,7 @@ AmpIO_UInt32 AmpIO::PromGetResult(void)
 {
     AmpIO_UInt32 result = 0xffffffff;
     quadlet_t data;
-    if (port->ReadQuadlet(BoardId, 9, data))
+    if (port->ReadQuadlet(BoardId, 0x09, data))
         result = static_cast<AmpIO_UInt32>(bswap_32(data));
     return result;
 }
@@ -423,7 +423,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
     AmpIO_UInt32 page = 0;
     while (page < nbytes) {
         unsigned int bytesToRead = std::min(nbytes - page, 256u);
-        if (!port->WriteQuadlet(BoardId, 8, bswap_32(write_data)))
+        if (!port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data)))
             return false;
         // Read FPGA status register; if 4 LSB are 0, command has finished.
         // The IEEE-1394 clock is 24.576 MHz, so it should take
@@ -435,7 +435,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
         const int MAX_LOOP_CNT = 8;
         for (i = 0; (i < MAX_LOOP_CNT) && read_data; i++) {
             usleep(10);
-            if (!port->ReadQuadlet(BoardId, 8, read_data)) return false;
+            if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
             read_data = bswap_32(read_data)&0x000f;
         }
         if (i == MAX_LOOP_CNT) {
@@ -450,7 +450,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
                       << nRead << std::endl;
             return false;
         }
-        if (!port->ReadBlock(BoardId, 0xc0, (quadlet_t *)(data+page), bytesToRead))
+        if (!port->ReadBlock(BoardId, 0x2000, (quadlet_t *)(data+page), bytesToRead))
             return false;
         write_data += bytesToRead;
         page += bytesToRead;
@@ -461,20 +461,20 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
 bool AmpIO::PromWriteEnable(void)
 {
     quadlet_t write_data = 0x06000000;
-    return port->WriteQuadlet(BoardId, 8, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data));
 }
 
 bool AmpIO::PromWriteDisable(void)
 {
     quadlet_t write_data = 0x04000000;
-    return port->WriteQuadlet(BoardId, 8, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data));
 }
 
 bool AmpIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
 {
     PromWriteEnable();
     quadlet_t write_data = 0xd8000000 | (addr&0x00ffffff);
-    if (!port->WriteQuadlet(BoardId, 8, bswap_32(write_data)))
+    if (!port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data)))
         return false;
     // Wait for erase to finish
     while (PromGetStatus())
@@ -485,7 +485,7 @@ bool AmpIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
 int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
                            unsigned int nbytes, const ProgressCallback cb)
 {
-    const unsigned int MAX_PAGE = 256;
+    const unsigned int MAX_PAGE = 256;  // 64 quadlets
     if (nbytes > MAX_PAGE) {
         std::ostringstream msg;
         msg << "PromProgramPage: error, nbytes = " << nbytes
@@ -494,7 +494,7 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         return -1;
     }
     PromWriteEnable();
-    // Block write of the data
+    // Block write of the data (+1 quad for command)
     AmpIO_UInt8 page_data[MAX_PAGE+sizeof(quadlet_t)];
     quadlet_t *data_ptr = reinterpret_cast<quadlet_t *>(page_data);
     // First quadlet is the "page program" instruction (0x02)
@@ -502,15 +502,15 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     // Remaining quadlets are the data to be programmed. These do not
     // need to be byte-swapped.
     memcpy(page_data+sizeof(quadlet_t), bytes, nbytes);
-    if (!port->WriteBlock(BoardId, 0xc0, data_ptr, nbytes+sizeof(quadlet_t)))
+    if (!port->WriteBlock(BoardId, 0x2000, data_ptr, nbytes+sizeof(quadlet_t)))
         return -1;
     // Read FPGA status register; if 4 LSB are 0, command has finished
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 8, read_data)) return -1;
+    if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
     read_data = bswap_32(read_data);
     while (read_data&0x000f) {
         PROGRESS_CALLBACK(cb, -1);
-        if (!port->ReadQuadlet(BoardId, 8, read_data)) return false;
+        if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
         read_data = bswap_32(read_data);
     }
     if (read_data & 0xff000000) { // shouldn't happen

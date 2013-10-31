@@ -140,7 +140,7 @@ int main(int argc, char** argv)
     int c;
 
     // control loop
-    Port.WriteAllBoardsBroadcast(); // dummy write to start the pipeline
+//    Port.WriteAllBoardsBroadcast(); // dummy write to start the pipeline
 
     while ((c = getch()) != ESC_CHAR) {
         if (c == 'r') Port.Reset();
@@ -220,7 +220,8 @@ int main(int argc, char** argv)
                 strcpy(nodeStr[1], "none");
         }
 
-        Port.ReadAllBoardsBroadcast();
+//        Port.ReadAllBoardsBroadcast();
+        Port.ReadAllBoards();
         unsigned int j = 0;
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
@@ -254,7 +255,8 @@ int main(int argc, char** argv)
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
         }
-        Port.WriteAllBoardsBroadcast();
+//        Port.WriteAllBoardsBroadcast();
+        Port.WriteAllBoards();
 
         mvwprintw(stdscr, 1, 50, "dt: %f",  (1.0 / 49125.0) * maxTime);
 

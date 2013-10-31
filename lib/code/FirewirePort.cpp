@@ -41,7 +41,7 @@ FirewirePort::FirewirePort(int portNum, std::ostream &ostr) :
     PortNum(portNum),
     outStr(ostr),
     max_board(0),
-    WriteAllBoardsBroadcastSequence_(0),
+    ReadSequence_(0),
     BoardExistMask_(0),
     NumOfBoards_(0)
 {
@@ -296,6 +296,8 @@ bool FirewirePort::ScanNodes(void)
         }
     }
 
+    SetUseBroadcastFlag(false);
+
     return true;
 }
 
@@ -434,8 +436,19 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     bool allOK = true;
     bool noneRead = true;
 
+    //--- send out broadcast read request -----
+
+    // sequence number from 16 bits 0 to 65535
+    ReadSequence_++;
+    if (ReadSequence_ == 65536) {
+        ReadSequence_ = 1;
+    }
+    quadlet_t bcReqData = bswap_32((ReadSequence_ << 16) + BoardExistMask_);
+    nodeaddr_t bcReqAddr = 0xffffffff0000;
+    WriteQuadletBroadcast(bcReqAddr, bcReqData);
+
     // initialize max buffer
-    const int hubReadSize = 256;     // 16 * 16 = 256 max
+    const int hubReadSize = 272;     // 16 * 17 = 272 max
     quadlet_t hubReadBuffer[hubReadSize];
     memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
 
@@ -443,27 +456,27 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     // raw1394_read 0 = SUCCESS, -1 = FAIL, flip return value
     bool ret = !raw1394_read(handle,
                              baseNodeId + hub_node_id,
-                             0xffff00000000,
-                             130 * 4,
+                             0x1000,           // read from hub addr
+                             272 * 4,          // read all 16 boards
                              hubReadBuffer);
 
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            const int readSize = 13;  // 1 seq + 12 data, unit quadlet
-            quadlet_t readBuff[readSize];
+            const int readSize = 17;  // 1 seq + 16 data, unit quadlet
+            quadlet_t readBuffer[readSize];
 
-            memcpy(readBuff, &(hubReadBuffer[13 * board + 0]), 13 * 4);
+            memcpy(readBuffer, &(hubReadBuffer[readSize * board + 0]), readSize * 4);
 
-            unsigned int seq = (bswap_32(readBuff[0]) >> 16);
+            unsigned int seq = (bswap_32(readBuffer[0]) >> 16);
 
             static int errorcounter = 0;
-            if (WriteAllBoardsBroadcastSequence_ != seq) {
+            if (ReadSequence_ != seq) {
                 errorcounter++;
                 outStr << "errorcounter = " << errorcounter << std::endl;
-                outStr << std::hex << seq << "  " << WriteAllBoardsBroadcastSequence_ << "  " << (int)board << std::endl;
+                outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
             }
 
-            memcpy(BoardList[board]->GetReadBuffer(), &(readBuff[1]), 12 * 4);
+            memcpy(BoardList[board]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * 4);
 #if 0
             outStr << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
 
@@ -539,28 +552,28 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     // loop 1: broadcast write block
 
     // sequence number from 16 bits 0 to 65535
-    WriteAllBoardsBroadcastSequence_++;
-    if (WriteAllBoardsBroadcastSequence_ == 65536) {
-        WriteAllBoardsBroadcastSequence_ = 1;
-    }
+//    WriteAllBoardsBroadcastSequence_++;
+//    if (WriteAllBoardsBroadcastSequence_ == 65536) {
+//        WriteAllBoardsBroadcastSequence_ = 1;
+//    }
 
     // construct broadcast write buffer
     const int numOfChannel = 4;
-    quadlet_t bcBuffer[numOfChannel * MAX_NODES + 1];  // 1 for sequence + fpga board status
+    quadlet_t bcBuffer[numOfChannel * MAX_NODES];
     memset(bcBuffer, 0, sizeof(bcBuffer));
-    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer
+    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
     int numOfBoards = 0;
 
     // set the first quadlet
-    bcBuffer[0] = bswap_32((WriteAllBoardsBroadcastSequence_ << 16) + BoardExistMask_);
-    bcBufferOffset = bcBufferOffset + 4;   // 1 quadlet data
+//    bcBuffer[0] = bswap_32((WriteAllBoardsBroadcastSequence_ << 16) + BoardExistMask_);
+//    bcBufferOffset = bcBufferOffset + 4;   // 1 quadlet data
 
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             numOfBoards++;
             quadlet_t *buf = BoardList[board]->GetWriteBuffer();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4);
+            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
             // bcBufferOffset equals total numBytes to write, when the loop ends
             bcBufferOffset = bcBufferOffset + numBytes - 4;
         }
@@ -582,7 +595,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
             quadlet_t ctrl = buf[numQuads-1];  // Get last quedlet
             bool ret2 = true;
             if (ctrl) {  // if anything non-zero, write it
-                ret2 = WriteQuadlet(board, 0, ctrl);
+                ret2 = WriteQuadlet(board, 0x00, ctrl);
                 if (ret2) noneWritten = false;
                 else allOK = false;
             }

@@ -51,7 +51,7 @@ protected:
     int NumOfBoards_;    // number of boards
 
     // Broadcast Related
-    unsigned int WriteAllBoardsBroadcastSequence_;   // sequence number for WABB
+    unsigned int ReadSequence_;   // sequence number for WABB
     unsigned int BoardExistMask_;   // mask showing indicating whether board exists
     bool UseBroadcast_;   // Read/Write broadcast flag
     bool IsAllBoradsBroadcastCapable_;   // TRUE if all nodes bc capable
