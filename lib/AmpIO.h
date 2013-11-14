@@ -17,6 +17,12 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
+
+
+// ZC: TODO
+//   - how to trunk the last 8 bits data
+
+
 #ifndef __AMPIO_H__
 #define __AMPIO_H__
 
@@ -27,6 +33,7 @@ http://www.cisst.org/cisst/license.txt.
 class ostream;
 
 typedef uint32_t AmpIO_UInt32;
+typedef uint16_t AmpIO_UInt16;
 typedef uint8_t AmpIO_UInt8;
 
 class AmpIO : public BoardIO
@@ -136,7 +143,28 @@ public:
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
 
     // ********************** PROM Methods ***********************************
-    // Methods for reading or programming the FPGA configuration PROM (M25P16)
+    // Methods for reading or programming
+    //   1 - the FPGA configuration PROM (M25P16)
+    //   2 - QLA PROM (25AA128)
+    // NOTE:
+    //   - M25P16 & 25AA128 Have exact same command table, except M25P16 has
+    //     a few extra commands (e.g. ReadID, DeepSleep)
+    //   - address length
+    //     - M25P16: 24-bit
+    //     - 25AA128: 16-bit (2 MSB are ignored)
+    enum PromType{
+        PROM_M25P16 = 1,
+        PROM_25AA128 = 2
+    };
+
+    /*!
+     \brief Get PROM read/write address (1394 space) based on prom type
+
+     \param type   PROM type e.g. M25P16/25AA128
+     \param isWrite  write address or read address
+     \return nodeaddr_t  return address in FPGA 1394 address space
+    */
+    nodeaddr_t GetPromAddress(PromType type = PROM_M25P16, bool isWrite = true);
 
     // User-supplied callback, called when software needs to wait for an
     // action, or when an error occurs. In the latter case, the error message
@@ -144,32 +172,35 @@ public:
     // false, the current wait operation is aborted.
     typedef bool (*ProgressCallback)(const char *msg);
 
-    // Returns the PROM ID (should be 0x00202015 for the M25P16)
+    // Returns the PROM ID (M25P15 ONLY)
+    // should be 0x00202015 for the M25P16
     AmpIO_UInt32 PromGetId(void);
 
-    // PromGetStatus returns the status register from the M25P16 PROM
+    // PromGetStatus (General)
+    // returns the status register from the M25P16 PROM
     // (this is different than the interface status read from address offset 8)
     // The following masks are for the useful status register bits.
     enum { MASK_WIP = 1, MASK_WEL = 2 };   // status register bit masks
-    AmpIO_UInt32 PromGetStatus(void);
+    AmpIO_UInt32 PromGetStatus(PromType type = PROM_M25P16);
 
-    // PromGetResult returns the result (if any) from the last command sent
-    AmpIO_UInt32 PromGetResult(void);
+    // PromGetResult (General)
+    // returns the result (if any) from the last command sent
+    AmpIO_UInt32 PromGetResult(PromType type = PROM_M25P16);
 
     // Returns nbytes data read from the specified address
     bool PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
                       unsigned int nbytes);
 
-    // Enable programming commands (erase and program page)
+    // Enable programming commands (erase and program page) (General)
     // This sets the WEL bit in the status register.
     // This mode is automatically cleared after a programming command is executed.
-    bool PromWriteEnable(void);
+    bool PromWriteEnable(PromType type = PROM_M25P16);
 
-    // Disable programming commands
+    // Disable programming commands (General)
     // This clears the WEL bit in the status register.
-    bool PromWriteDisable(void);
+    bool PromWriteDisable(PromType type = PROM_M25P16);
 
-    // Erase a sector (64K) at the specified address.
+    // Erase a sector (64K) at the specified address. (M25P16 ONLY)
     // This command calls PromWriteEnable.
     // If non-zero, the callback (cb) is called while the software is waiting
     // for the PROM to be erased, or if there is an error.
@@ -182,6 +213,12 @@ public:
     // Returns the number of bytes programmed (-1 if error).
     int PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
                         unsigned int nbytes, const ProgressCallback cb = 0);
+
+
+    // ********************** QLA PROM ONLY Methods ***********************************
+    // ZC: meta data only, so don't care speed that much
+    bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
+    bool PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
 
 protected:
     unsigned int NumAxes;   // not currently used

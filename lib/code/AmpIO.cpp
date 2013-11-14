@@ -393,22 +393,26 @@ AmpIO_UInt32 AmpIO::PromGetId(void)
     return id;
 }
 
-AmpIO_UInt32 AmpIO::PromGetStatus(void)
+AmpIO_UInt32 AmpIO::PromGetStatus(PromType type)
 {
     AmpIO_UInt32 status = 0x80000000;
     quadlet_t data = 0x05000000;
-    if (port->WriteQuadlet(BoardId, 0x08, bswap_32(data))) {
+    nodeaddr_t address = GetPromAddress(type, true);
+
+    if (port->WriteQuadlet(BoardId, address, bswap_32(data))) {
         // Should be ready by now...
-        status = PromGetResult();
+        status = PromGetResult(type);
     }
     return status;
 }
 
-AmpIO_UInt32 AmpIO::PromGetResult(void)
+AmpIO_UInt32 AmpIO::PromGetResult(PromType type)
 {
     AmpIO_UInt32 result = 0xffffffff;
     quadlet_t data;
-    if (port->ReadQuadlet(BoardId, 0x09, data))
+    nodeaddr_t address = GetPromAddress(type, false);
+
+    if (port->ReadQuadlet(BoardId, address, data))
         result = static_cast<AmpIO_UInt32>(bswap_32(data));
     return result;
 }
@@ -458,16 +462,18 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
     return true;
 }
 
-bool AmpIO::PromWriteEnable(void)
+bool AmpIO::PromWriteEnable(PromType type)
 {
     quadlet_t write_data = 0x06000000;
-    return port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data));
+    nodeaddr_t address = GetPromAddress(type, true);
+    return port->WriteQuadlet(BoardId, address, bswap_32(write_data));
 }
 
-bool AmpIO::PromWriteDisable(void)
+bool AmpIO::PromWriteDisable(PromType type)
 {
     quadlet_t write_data = 0x04000000;
-    return port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data));
+    nodeaddr_t address = GetPromAddress(type, true);
+    return port->WriteQuadlet(BoardId, address, bswap_32(write_data));
 }
 
 bool AmpIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
@@ -531,3 +537,57 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         PROGRESS_CALLBACK(cb, 0);
     return nWritten;
 }
+
+
+nodeaddr_t AmpIO::GetPromAddress(PromType type, bool isWrite)
+{
+    if (type == PROM_M25P16 && isWrite)
+        return 0x08;
+    else if (type == PROM_M25P16 && !isWrite)
+        return 0x09;
+    else if (type == PROM_25AA128 && isWrite)
+        return 0x0A;
+    else if (type == PROM_25AA128 && !isWrite)
+        return 0x0B;
+    else
+        std::cerr << "Error: unsupported PROM type" << std::endl;
+
+    return 0x00;
+}
+
+
+// ********************** QLA PROM ONLY Methods ***********************************
+bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
+{
+    // 8-bit cmd + 16-bit addr (2 MSBs ignored)
+    AmpIO_UInt32 result = 0x00000000;
+    quadlet_t write_data = 0x03000000|(addr << 8);
+    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
+        // Should be ready by now...
+        result = PromGetResult(PROM_25AA128);
+
+        // TODO get the last 8-bit of result
+        data = result;
+        return true;
+    } else {
+        data = 0x00;
+        return false;
+    }
+}
+
+bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
+{
+    // enable write
+    PromWriteEnable(PROM_25AA128);
+
+    // 8-bit cmd + 16-bit addr + 8-bit data
+    quadlet_t write_data = 0x02000000|(addr << 8)|data;
+    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
+        return true;
+    else
+        return false;
+}
+
+
