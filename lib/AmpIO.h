@@ -219,6 +219,8 @@ public:
     // ZC: meta data only, so don't care speed that much
     bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
     bool PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
+    bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
+    bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
 
 protected:
     unsigned int NumAxes;   // not currently used

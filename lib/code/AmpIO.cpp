@@ -542,13 +542,13 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
 nodeaddr_t AmpIO::GetPromAddress(PromType type, bool isWrite)
 {
     if (type == PROM_M25P16 && isWrite)
-        return 0x08;
+        return 0x0008;
     else if (type == PROM_M25P16 && !isWrite)
-        return 0x09;
+        return 0x0009;
     else if (type == PROM_25AA128 && isWrite)
-        return 0x0A;
+        return 0x3000;
     else if (type == PROM_25AA128 && !isWrite)
-        return 0x0B;
+        return 0x3002;
     else
         std::cerr << "Error: unsupported PROM type" << std::endl;
 
@@ -589,5 +589,56 @@ bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     else
         return false;
 }
+
+
+// Read block data (quadlet)
+bool AmpIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
+{
+    // nquads sanity check
+    if (nquads == 0 || nquads > 16) {
+        std::cout << "invalid number of quadlets" << std::endl;
+        return false;
+    }
+
+    // trigger read
+    quadlet_t write_data = 0xFE000000|(addr << 8)|(nquads-1);
+    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+    if (!port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
+        return false;
+
+    // get result
+    if (!port->ReadBlock(BoardId, address, data, nquads * 4))
+        return false;
+    else
+        return true;
+}
+
+
+// Write block data (quadlet)
+bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
+{
+    // address sanity check
+    if (nquads == 0 || nquads > 16) {
+        std::cout << "invalid number of quadlets" << std::endl;
+        return false;
+    }
+
+    // block write data to buffer
+    if (!port->WriteBlock(BoardId, 0x3100, data, nquads*4))
+        return false;
+
+    // enable write
+    PromWriteEnable(PROM_25AA128);
+
+    // trigger write
+    quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
+    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+    if (!port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
+        return false;
+    else
+        return true;
+
+}
+
 
 
