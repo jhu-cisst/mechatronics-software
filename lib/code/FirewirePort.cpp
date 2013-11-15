@@ -27,6 +27,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <sys/select.h>
 #include <errno.h>   // errno
 #include <string.h>  // strerror(errno)
+#include <sys/time.h>
 
 // firewire
 #include "FirewirePort.h"
@@ -444,8 +445,18 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
         ReadSequence_ = 1;
     }
     quadlet_t bcReqData = bswap_32((ReadSequence_ << 16) + BoardExistMask_);
-    nodeaddr_t bcReqAddr = 0xffffffff0000;
+    nodeaddr_t bcReqAddr = 0xffffffff0000;    // special address to trigger broadcast read
     WriteQuadletBroadcast(bcReqAddr, bcReqData);
+
+    // Manual sleep 50 us
+    timeval start, check;
+    gettimeofday(&start, NULL);
+    while(true) {
+        gettimeofday(&check, NULL);
+        if (((check.tv_sec - start.tv_sec) * 10000000 + check.tv_usec - start.tv_usec) > 50.0) {
+            break;
+        }
+    }
 
     // initialize max buffer
     const int hubReadSize = 272;     // 16 * 17 = 272 max
@@ -482,7 +493,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
             for (int i = 0; i < readSize; i++) {
                 outStr.fill('0');
-                outStr << " " << std::hex << std::setw(8) << bswap_32(readBuff[i]) << std::endl;
+                outStr << " " << std::hex << std::setw(8) << bswap_32(readBuffer[i]) << std::endl;
             }
             outStr << std::endl;
 #endif

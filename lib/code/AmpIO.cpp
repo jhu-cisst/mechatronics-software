@@ -454,7 +454,12 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
                       << nRead << std::endl;
             return false;
         }
-        if (!port->ReadBlock(BoardId, 0x2000, (quadlet_t *)(data+page), bytesToRead))
+
+        AmpIO_UInt32 fver = GetFirmwareVersion();
+        nodeaddr_t address;
+        if (fver >= 4) {address = 0x2000;}
+        else {address = 0xc0;}
+        if (!port->ReadBlock(BoardId, address, (quadlet_t *)(data+page), bytesToRead))
             return false;
         write_data += bytesToRead;
         page += bytesToRead;
@@ -508,7 +513,13 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     // Remaining quadlets are the data to be programmed. These do not
     // need to be byte-swapped.
     memcpy(page_data+sizeof(quadlet_t), bytes, nbytes);
-    if (!port->WriteBlock(BoardId, 0x2000, data_ptr, nbytes+sizeof(quadlet_t)))
+
+    // select address based on firmware version number
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    nodeaddr_t address;
+    if (fver >= 4) {address = 0x2000;}
+    else {address = 0xc0;}
+    if (!port->WriteBlock(BoardId, address, data_ptr, nbytes+sizeof(quadlet_t)))
         return -1;
     // Read FPGA status register; if 4 LSB are 0, command has finished
     quadlet_t read_data;
