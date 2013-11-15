@@ -67,6 +67,8 @@ int main(int argc, char** argv)
     signal(SIGINT, signal_handler);
 
     int isQuad1394 = (strstr(argv[0], "quad1394") != 0);
+    int isBroadcast = 0;
+    int isDebug = 0;
 
     port = 0;
     node = 0;
@@ -75,15 +77,17 @@ int main(int argc, char** argv)
     args_found = 0;
     for (i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
-          if (argv[i][1] == 'p') {
+            if (argv[i][1] == 'p') {
                 port = atoi(argv[i]+2);
                 printf("Selecting port %d\n", port);
-          }
-          else if (argv[i][1] == 'n') {
+            }
+            else if (argv[i][1] == 'n') {
                 node = atoi(argv[i]+2);
                 printf("Selecting node %d\n", node);
-          }
-
+            }
+            else if (argv[i][1] == 'd') {
+                isDebug = 1;
+            }
         }
         else {
             if (args_found == 0)
@@ -147,12 +151,17 @@ int main(int argc, char** argv)
 
     // get local id and printf libraw1394 version & local_node_id for debugging
     nodeid_t id = raw1394_get_local_id(handle);
-    printf("libraw1394_version = %s  local_node_id = %x\n", raw1394_get_libversion(), id);
+    if (isDebug) {
+        printf("libraw1394_version = %s  local_node_id = %x\n", raw1394_get_libversion(), id);
+    }
 
     /* get number of nodes connected to current port/handle */
-    int nnodes = raw1394_get_nodecount(handle);    
+    int nnodes = raw1394_get_nodecount(handle);
+    //    bool
     if (node == 63) {
-        printf("**** Warning: Broadcasting message, address should be larger than CSR_CONFIG_ROM_END\n");
+        isBroadcast = 1;
+        printf("**** Warning: Broadcasting message \n");
+        printf("     Address should be larger than CSR_CONFIG_ROM_END(0x%llx)\n", CSR_CONFIG_ROM_END + CSR_REGISTER_BASE);
     } else if ((node < 0) || (node >= nnodes)) {
         fprintf(stderr, "**** Error: node %d does not exist (num nodes = %d)\n", node, nnodes);
         exit(-1);
@@ -161,7 +170,12 @@ int main(int argc, char** argv)
 
     /* determine whether to read or write based on args_found */
     if ((isQuad1394 && (args_found == 1)) ||
-        (!isQuad1394 && (args_found <= 2))) {
+            (!isQuad1394 && (args_found <= 2)))
+    {
+        if (isBroadcast) {
+            fprintf(stderr, "**** Error: broadcast read ONT supported\n", node, nnodes);
+        }
+
         /* read the data block and print out the values */
         rc = raw1394_read(handle, target_node, addr, size*4, data);
         if (!rc) {
@@ -170,7 +184,7 @@ int main(int argc, char** argv)
         }
     } else {
         /* for write */
-        if (target_node == 0xffff) {
+        if (isBroadcast) {
             // broadcast, no ack is expected
             rc = raw1394_start_write(handle, target_node, addr, size*4, data, 11);
         } else {
@@ -181,13 +195,13 @@ int main(int argc, char** argv)
     if (rc) {
         raw1394_errcode_t errcode;
         errcode = raw1394_get_errcode(handle);
-        fprintf(stderr, "**** Error (0x%08X) errno = %d %s \n",
+        fprintf(stderr, "**** Error: (0x%08X) errno = %d %s \n",
                 errcode, errno, strerror(errno));
     }
 
     // Free memory if it was dynamically allocated
     if (data != &data1)
-         free(data);
+        free(data);
 
     raw1394_destroy_handle(handle);
     return 0;

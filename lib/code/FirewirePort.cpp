@@ -43,8 +43,9 @@ FirewirePort::FirewirePort(int portNum, std::ostream &ostr) :
     outStr(ostr),
     max_board(0),
     ReadSequence_(0),
-    BoardExistMask_(0),
-    NumOfBoards_(0)
+    NumOfBoards_(0),
+    BoardExistMask_(0)
+
 {
     memset(BoardList, 0, sizeof(BoardList));
     Init();
@@ -297,7 +298,7 @@ bool FirewirePort::ScanNodes(void)
         }
     }
 
-    SetUseBroadcastFlag(false);
+//    SetUseBroadcastFlag(false);
 
     return true;
 }
