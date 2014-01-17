@@ -114,9 +114,6 @@ public:
     // Read all boards broadcasting
     bool ReadAllBoardsBroadcast(void);
 
-    // Read all boards individually
-    bool ReadAllBoardsOld(void);
-
     // Write to all boards
     bool WriteAllBoards(void);
 

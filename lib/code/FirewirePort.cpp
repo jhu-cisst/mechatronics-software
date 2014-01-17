@@ -103,7 +103,7 @@ bool FirewirePort::Init(void)
     return ScanNodes();
 }
 
-void FirewirePort::StopCycleStartPacket()
+void FirewirePort::StopCycleStartPacket(void)
 {
     // IMPORTANT: Disable Cycle Start Packet, no isochronous
     int rc = 0;  // return code
@@ -331,11 +331,6 @@ bool FirewirePort::AddBoard(BoardIO *board)
 
     // update BoardExistMask_
     BoardExistMask_ = (BoardExistMask_ | (1 << id));
-
-    // start addr for the board
-    const nodeaddr_t arm_start_addr = 0xffffff000000 + (id << 20);
-    board->arm_addr = arm_start_addr;
-//    std::cout << "arm_addr = " << std::hex << arm_start_addr << std::endl;
 
     NumOfBoards_++;   // increment board counts
     SetHubBoard(board);  // last added board would be hub board
