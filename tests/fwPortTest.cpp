@@ -31,12 +31,15 @@ int main(int argc, char** argv)
 {
     // declare variables and default values
     int port = 0;
-    const size_t numBoards = 2;
+    const size_t numBoards = 4;
     int board_id[numBoards] = {BoardIO::MAX_BOARDS, BoardIO::MAX_BOARDS};
     std::vector<AmpIO*> BoardList;
+
+    // set board id
     board_id[0] = 2;
     board_id[1] = 3;
-
+    board_id[2] = 6;
+    board_id[3] = 7;
 
     // command line option setup
     const char short_options[] = "hp:";
@@ -60,8 +63,10 @@ int main(int argc, char** argv)
     }
     while (next_option != -1);
 
+    // ---------------------------------------------------
     // Firewire port
     // ZC: really this port number should be interactive
+    // ---------------------------------------------------
     std::stringstream debugStrem(std::stringstream::out|std::stringstream::in);
     FirewirePort fwport(port, std::cout);
     if (!fwport.IsOK()) {
@@ -72,7 +77,7 @@ int main(int argc, char** argv)
     }
 
     // Create AmpIO board 1 and 2
-    for (size_t i = 0; i < 2; i++) {
+    for (size_t i = 0; i < numBoards; i++) {
         BoardList.push_back(new AmpIO(board_id[i]));
         fwport.AddBoard(BoardList[i]);
         std::cout << "new board with node_id = " << std::dec
@@ -84,7 +89,7 @@ int main(int argc, char** argv)
     // ---------------------------------------
     bool rc;
     nodeaddr_t nodeaddress_wd = 0xffffff000003;
-    rc = fwport.WriteQuadletBroadcast(nodeaddress_wd, bswap_32(0x3899));
+    rc = fwport.WriteQuadletBroadcast(nodeaddress_wd, bswap_32(0x3888));
 
     // now read back and verify
     quadlet_t dataQuadlet = 0x0000;
@@ -98,30 +103,15 @@ int main(int argc, char** argv)
 
     // ----- ---------------------------------
     // Block broadcast
-    // ---------------------------------------
+    // --------------------------------------
+    for (size_t i = 0; i < BoardList.size(); i++) {
+        BoardList[i]->WriteSafetyRelay(true);
+        BoardList[i]->WritePowerEnable(true);
+        usleep(40000); // sleep 40 ms
+        BoardList[i]->WriteAmpEnable(0x0f, 0x0f);
+    }
 
-    // set write buffer
-    //     NOTE: here set 1 board's write buffer
-    //           this buffer value will be broadcasted to all boards on the bus
-    //           NEED to hack BoardIO to be public to make it work
-
-    AmpIO* board = BoardList[0];
-//    for (size_t i = 0; i < 4; i++) {
-//        board->SetMotorCurrent(i, 0x8000 + 0x200 * i, true);
-//    }
-//    fwport.WriteBlockBroadcast(0xffffff000000,
-//                               board->GetWriteBuffer(),
-//                               board->GetWriteNumBytes() - 4);
-
-//    std::cout << "board id = " << (int) board->BoardId << std::endl
-//              << std::hex << bswap_32(board->GetWriteBuffer()[0]) << std::endl;
-
-//    std::cout << "numBytes = " << std::dec << board->GetWriteNumBytes() << std::endl;
-
-
-    // ----- ---------------------------------
-    // WriteAllBoardsBroadcast()
-    // ---------------------------------------
+    AmpIO* board;
     for (size_t i = 0; i < numBoards; i++) {
         board = BoardList[i];
         // set current for all boards
@@ -136,23 +126,24 @@ int main(int argc, char** argv)
     // ---------------------------------------
 
     int counter = 0;
-    int csize = 3;
-    timeval start;
+    int csize = 100;
+    timeval start, prev;
     timeval stop[csize];
 
     gettimeofday(&start, NULL);
     while(counter < csize){
         counter++;
-        fwport.WriteAllBoardsBroadcast();
-//        usleep(40000); // sleep 40 ms
         fwport.ReadAllBoardsBroadcast();
+        fwport.WriteAllBoardsBroadcast();
         gettimeofday(&stop[counter-1], NULL);
     }
 
+    prev = start;
     for (int i = 0; i < csize; i++) {
         double mtime;
-        mtime = (stop[i].tv_sec - start.tv_sec) * 1000000.0 +
-                (stop[i].tv_usec - start.tv_usec) + 0.5;
+        mtime = (stop[i].tv_sec - prev.tv_sec) * 1000000.0 +
+                (stop[i].tv_usec - prev.tv_usec) + 0.5;
+        prev = stop[i];
 
         std::cout << "time " << i << " = " << std::dec << mtime << std::endl;
     }
