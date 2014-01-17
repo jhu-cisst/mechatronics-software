@@ -167,10 +167,17 @@ int main(int argc, char** argv)
         else if (c == 'p') {
             power_on = !power_on;
             for (j = 0; j < BoardList.size(); j++) {
-                BoardList[j]->WriteSafetyRelay(power_on?true:false);
-                BoardList[j]->WritePowerEnable(power_on?true:false);
-                usleep(40000); // sleep 40 ms
-                BoardList[j]->WriteAmpEnable(0x0f, power_on?0x0f:0);
+                if (power_on) {
+                    BoardList[j]->WriteSafetyRelay(true);
+                    BoardList[j]->WritePowerEnable(true);
+                    usleep(40000); // sleep 40 ms
+                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
+                }
+                else {
+                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
+                    BoardList[j]->WritePowerEnable(false);
+                    BoardList[j]->WriteSafetyRelay(false);
+                }
             }
         }
         else if (c == '=') {
@@ -265,9 +272,9 @@ int main(int argc, char** argv)
     }
 
     for (j= 0; j < BoardList.size(); j++) {
+        BoardList[j]->WritePowerEnable(false);      // Turn power off
+        BoardList[j]->WriteAmpEnable(0x0f, 0x00);   // Turn power off
         BoardList[j]->WriteSafetyRelay(false);
-        BoardList[j]->WritePowerEnable(false);   // Turn power off
-        BoardList[j]->WriteAmpEnable(0x0f, 0);   // Turn power off
         Port.RemoveBoard(BoardList[j]->GetBoardId());
     }
 
