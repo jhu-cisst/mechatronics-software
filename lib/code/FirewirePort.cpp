@@ -493,7 +493,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     gettimeofday(&start, NULL);
     while(true) {
         gettimeofday(&check, NULL);
-        if (((check.tv_sec - start.tv_sec) * 10000000 + check.tv_usec - start.tv_usec) > 35.0) {
+        if (((check.tv_sec - start.tv_sec) * 1000000 + check.tv_usec - start.tv_usec) > 35.0) {
             break;
         }
     }
@@ -706,7 +706,6 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
-    std::cerr << "----- read quadlet called --------" << std::endl;
     int node = GetNodeId(boardId);
     if (node < MAX_NODES)
         return !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
