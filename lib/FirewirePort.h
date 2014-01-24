@@ -54,7 +54,7 @@ protected:
     unsigned int ReadSequence_;   // sequence number for WABB
     unsigned int BoardExistMask_;   // mask showing indicating whether board exists
     bool UseBroadcast_;   // Read/Write broadcast flag
-    bool IsAllBoradsBroadcastCapable_;   // TRUE if all nodes bc capable
+    bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;

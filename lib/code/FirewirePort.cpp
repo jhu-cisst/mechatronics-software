@@ -36,21 +36,22 @@ http://www.cisst.org/cisst/license.txt.
 
 
 #define DEBUG 0
+#define FAKEBC 0    // fake broadcast mode
+
 
 const unsigned long QLA1_String = 0x514C4131;
-
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
 
 FirewirePort::PortListType FirewirePort::PortList;
 
-FirewirePort::FirewirePort(int portNum, std::ostream &ostr) :
+FirewirePort::FirewirePort(int portNum, std::ostream &ostr):
     PortNum(portNum),
     outStr(ostr),
     max_board(0),
     NumOfBoards_(0),
     ReadSequence_(0),
-    BoardExistMask_(0)
-
+    BoardExistMask_(0),
+    UseBroadcast_(false)
 {
     memset(BoardList, 0, sizeof(BoardList));
     Init();
@@ -241,7 +242,7 @@ bool FirewirePort::ScanNodes(void)
     int numNodes = raw1394_get_nodecount(handle);
 
     outStr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
-    IsAllBoradsBroadcastCapable_ = true;
+    IsAllBoardsBroadcastCapable_ = true;
     // Iterate through all connected nodes (except for last one, which is the PC).
     for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
@@ -282,11 +283,11 @@ bool FirewirePort::ScanNodes(void)
 
         // check firmware version
         // FirmwareVersion >= 4, broadcast capable
-        if (fver < 4) IsAllBoradsBroadcastCapable_ = false;
+        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
     }
 
     // Use broadcast by default if all firmware are bc capable
-    if (IsAllBoradsBroadcastCapable_) {
+    if (IsAllBoardsBroadcastCapable_) {
         UseBroadcast_ = true;
         outStr << "ScanNodes: all nodes broadcast capable, broadcast mode" << std::endl;
     }
@@ -316,11 +317,8 @@ bool FirewirePort::SetHubBoard(BoardIO *hubboard)
         outStr << "SetHubBoard: board number out of range: " << id << std::endl;
         return false;
     }
-//    if (hubboard->GetBoardId() == 2) {
     HubBoard_ = hubboard;
     hubboard->port = this;
-    std::cerr << "hubboard = " <<  (int) HubBoard_->GetBoardId() << std::endl;
-//    }
     return true;
 }
 
@@ -395,7 +393,7 @@ unsigned long FirewirePort::GetFirmwareVersion(unsigned char boardId) const
 
 void FirewirePort::SetUseBroadcastFlag(bool bc)
 {
-    if (!IsAllBoradsBroadcastCapable_ && bc) {
+    if (!IsAllBoardsBroadcastCapable_ && bc) {
         outStr << "***Error: not all boards supports broadcasting, " << std::endl
                << "          please upgrade your firmaware"  << std::endl;
     } else {
@@ -410,13 +408,9 @@ void FirewirePort::SetUseBroadcastFlag(bool bc)
 
 bool FirewirePort::ReadAllBoards(void)
 {
-
-#if 1
     if (UseBroadcast_) {
-//        std::cerr << "read all boards" << std::endl;
         return ReadAllBoardsBroadcast();
     }
-#endif
 
     if (!handle) {
         outStr << "ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
@@ -457,6 +451,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     gettimeofday(&start, NULL);
 #endif
 
+    bool ret;
     bool allOK = true;
     bool noneRead = true;
     int hub_node_id = GetNodeId(HubBoard_->BoardId);   //  ZC: NOT USE PLACEHOLDER
@@ -485,19 +480,32 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
         ReadSequence_ = 1;
     }
     quadlet_t bcReqData = bswap_32((ReadSequence_ << 16) + BoardExistMask_);
-    nodeaddr_t bcReqAddr = 0xffffffff0000;    // special address to trigger broadcast read
+    nodeaddr_t bcReqAddr = 0xffffffff000F;    // special address to trigger broadcast read
+
+#if FAKEBC
+    ret = !raw1394_write(handle,
+                              baseNodeId,
+                              bcReqAddr,
+                              4,
+                              &bcReqData);
+    if (!ret) {
+        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
+        std::cerr << "bbbbbbb fake ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
+                  << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
+    }
+#else
     WriteQuadletBroadcast(bcReqAddr, bcReqData);
+#endif
 
 //    // Manual sleep 50 us
     timeval start, check;
     gettimeofday(&start, NULL);
     while(true) {
         gettimeofday(&check, NULL);
-        if (((check.tv_sec - start.tv_sec) * 1000000 + check.tv_usec - start.tv_usec) > 35.0) {
+        if (((check.tv_sec - start.tv_sec) * 1000000 + check.tv_usec - start.tv_usec) > 50.0) {
             break;
         }
     }
-//    usleep(40);   // sleep for 80 us
 
     // initialize max buffer
     const int hubReadSize = 272;     // 16 * 17 = 272 max
@@ -505,11 +513,13 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
 
     // raw1394_read 0 = SUCCESS, -1 = FAIL, flip return value
-    bool ret = !raw1394_read(handle,
-                             baseNodeId + hub_node_id,
-                             0x1000,           // read from hub addr
-                             272 * 4,          // read all 16 boards
-                             hubReadBuffer);
+    ret = !raw1394_read(handle,
+                        baseNodeId + hub_node_id,
+                        0x1000,           // read from hub addr
+                        272 * 4,          // read all 16 boards
+                        hubReadBuffer);
+
+
     // ----- DEBUG -----------
     static int raw1394readCounter = 0;
     if (!ret) {
@@ -518,7 +528,6 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
         std::cerr << "ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
                   << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
         std::cerr << "raw1394_read failed " << raw1394readCounter << ": " << strerror(errno) << std::endl;
-//        abort();
     }
     // -----------------------
 
@@ -534,20 +543,12 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
             static int errorcounter = 0;
             if (ReadSequence_ != seq) {
                 errorcounter++;
-//                outStr << "errorcounter = " << errorcounter << std::endl;
-//                outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
+                outStr << "errorcounter = " << errorcounter << std::endl;
+                outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
             }
 
             memcpy(BoardList[board]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * 4);
-#if 0
-            outStr << "Arm_addr = " << std::hex << BoardList[board]->GetArmAddress() << std::endl;
 
-            for (int i = 0; i < readSize; i++) {
-                outStr.fill('0');
-                outStr << " " << std::hex << std::setw(8) << bswap_32(readBuffer[i]) << std::endl;
-            }
-            outStr << std::endl;
-#endif
             if (ret) noneRead = false;
             else allOK = false;
             BoardList[board]->SetReadValid(ret);
@@ -614,8 +615,6 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     if (!handle) {
         outStr << "WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
-    } else {
-//        outStr << "yes using WriteAllBoardsBroadcast" << std::endl;
     }
 
     // sanity check vars
@@ -624,22 +623,12 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
     // loop 1: broadcast write block
 
-    // sequence number from 16 bits 0 to 65535
-//    WriteAllBoardsBroadcastSequence_++;
-//    if (WriteAllBoardsBroadcastSequence_ == 65536) {
-//        WriteAllBoardsBroadcastSequence_ = 1;
-//    }
-
     // construct broadcast write buffer
     const int numOfChannel = 4;
     quadlet_t bcBuffer[numOfChannel * MAX_NODES];
     memset(bcBuffer, 0, sizeof(bcBuffer));
     int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
     int numOfBoards = 0;
-
-    // set the first quadlet
-//    bcBuffer[0] = bswap_32((WriteAllBoardsBroadcastSequence_ << 16) + BoardExistMask_);
-//    bcBufferOffset = bcBufferOffset + 4;   // 1 quadlet data
 
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
@@ -654,10 +643,18 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
     // now broadcast out the huge packet
     bool ret = true;
+
+#if FAKEBC
+    ret = !raw1394_write(handle,
+                         baseNodeId,
+                         0xffffffff0000,
+                         bcBufferOffset,
+                         bcBuffer);
+#else
     ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
                               bcBuffer,
                               bcBufferOffset);
-
+#endif
 
     // loop 2: send out control quadlet if necessary
     for (int board = 0; board < max_board; board++) {
@@ -681,24 +678,6 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     if (noneWritten) {
         PollEvents();
     }
-
-
-#if 0
-    quadlet_t debugData;
-    nodeaddr_t debugAddr = 0x03;
-    int hub_node_id = GetNodeId(HubBoard_->BoardId);   //  ZC: NOT USE PLACEHOLDER
-    bool retdebug = !raw1394_read(handle,
-                                  baseNodeId + hub_node_id,    // boardid 7
-                                  debugAddr,           // read from hub addr
-                                  4,          // read all 16 boards
-                                  &debugData);
-    if (!retdebug) {
-        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        std::cerr << "debug read ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-                  << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
-    }
-#endif
-
 
     // return
     return allOK;
