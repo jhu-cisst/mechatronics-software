@@ -90,6 +90,9 @@ int main(int argc, char** argv)
     bool rc;
     nodeaddr_t nodeaddress_wd = 0xffffff000003;
     rc = fwport.WriteQuadletBroadcast(nodeaddress_wd, bswap_32(0x3888));
+    if (!rc) {
+        std::cerr << "Quadlet broadcast error" << std::endl;
+    }
 
     // now read back and verify
     quadlet_t dataQuadlet = 0x0000;

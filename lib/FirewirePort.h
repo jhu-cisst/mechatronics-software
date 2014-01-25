@@ -49,6 +49,7 @@ protected:
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
     BoardIO *HubBoard_;
     int NumOfBoards_;    // number of boards
+    int NumOfNodes_;     // number of nodes on the bus (exclude PC node)
 
     // Broadcast Related
     unsigned int ReadSequence_;   // sequence number for WABB

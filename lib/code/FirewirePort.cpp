@@ -35,9 +35,7 @@ http://www.cisst.org/cisst/license.txt.
 #include "FirewirePort.h"
 
 
-#define DEBUG 0
-#define FAKEBC 0    // fake broadcast mode
-
+#define FAKEBC 1    // fake broadcast mode
 
 const unsigned long QLA1_String = 0x514C4131;
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
@@ -49,6 +47,7 @@ FirewirePort::FirewirePort(int portNum, std::ostream &ostr):
     outStr(ostr),
     max_board(0),
     NumOfBoards_(0),
+    NumOfNodes_(0),
     ReadSequence_(0),
     BoardExistMask_(0),
     UseBroadcast_(false)
@@ -240,6 +239,7 @@ bool FirewirePort::ScanNodes(void)
 
     // iterate through all the nodes and find out their boardId
     int numNodes = raw1394_get_nodecount(handle);
+    NumOfNodes_ = numNodes - 1;
 
     outStr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
     IsAllBoardsBroadcastCapable_ = true;
@@ -445,12 +445,6 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-#if DEBUG
-    timeval start, stop;
-    double mtime;
-    gettimeofday(&start, NULL);
-#endif
-
     bool ret;
     bool allOK = true;
     bool noneRead = true;
@@ -502,7 +496,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     gettimeofday(&start, NULL);
     while(true) {
         gettimeofday(&check, NULL);
-        if (((check.tv_sec - start.tv_sec) * 1000000 + check.tv_usec - start.tv_usec) > 50.0) {
+        if (((check.tv_sec-start.tv_sec)*1000000 + check.tv_usec-start.tv_usec) > (5.0*NumOfNodes_+10.0)) {
             break;
         }
     }
@@ -558,14 +552,6 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     if (noneRead) {
         PollEvents();
     }
-
-#if DEBUG
-    gettimeofday(&stop, NULL);
-    mtime = (stop.tv_sec - start.tv_sec) * 1000000.0 + (stop.tv_usec - start.tv_usec) + 0.5;
-    if (!ret) {
-        std::cerr << "read all boards broadcast time = " << mtime << std::endl;
-    }
-#endif
 
     return allOK;
 }
