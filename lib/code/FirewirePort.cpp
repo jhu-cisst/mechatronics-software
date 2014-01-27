@@ -304,7 +304,7 @@ bool FirewirePort::ScanNodes(void)
         }
     }
 
-    SetUseBroadcastFlag(true);
+    SetUseBroadcastFlag(false);
 
     return true;
 }
