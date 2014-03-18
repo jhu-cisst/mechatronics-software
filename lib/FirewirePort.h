@@ -87,6 +87,10 @@ public:
     // Call lsof to count the number of users, assumes /dev/fw<port-number>
     int NumberOfUsers(void);
 
+    // Getter
+    int GetNumOfNodes(void){return NumOfNodes_;}
+    unsigned char* GetNode2Board(void){return Node2Board;}
+
     void Reset(void);
 
     bool IsOK(void) { return (handle != NULL); }

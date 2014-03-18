@@ -189,10 +189,12 @@ AmpIO_UInt32 AmpIO::GetEncoderPosition(unsigned int index) const
 
 // temp current the enc period velocity is unsigned 16 bits
 // for low level function the + MIDRANGE_VEL
-AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index) const
+AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) const
 {
-    // buff is a signed 16 bits counter
-    // returns how many clock counts per encoder tick
+    // buff = [cnter_now, cnter_latch]
+    // cnter_latch: tick latched velcotity data
+    // cnter_now  : ongoing counting cnter data
+    // both are signed 16-bit data
     // Clock = 768 kHz
     // stored in a 32 bit unsiged int
 
@@ -201,9 +203,13 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index) const
 
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    buff &= ENC_VEL_MASK;          // mask for applicable bits
 
-    return static_cast<AmpIO_UInt32>(buff) & ENC_VEL_MASK;
+    AmpIO_UInt32 cnter, cnter_latch;
+    cnter_latch = buff & ENC_VEL_MASK;
+    cnter = ((buff & 0xFFFF0000) >> 16);
+
+    if (islatch) return cnter_latch;
+    else return cnter;
 }
 
 

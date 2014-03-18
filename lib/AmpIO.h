@@ -19,10 +19,6 @@ http://www.cisst.org/cisst/license.txt.
 
 
 
-// ZC: TODO
-//   - how to trunk the last 8 bits data
-
-
 #ifndef __AMPIO_H__
 #define __AMPIO_H__
 
@@ -79,7 +75,7 @@ public:
 
     AmpIO_UInt32 GetEncoderPosition(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderVelocity(unsigned int index) const;
+    AmpIO_UInt32 GetEncoderVelocity(unsigned int index, const bool islatch = true) const;
 
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
