@@ -58,7 +58,8 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
 
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT1 and all digital inputs");
-    Board.WriteDigitalOutput(0x01, 0x01);  // DOUT is active low
+    Board.WriteDigitalOutput(0x01, 0x01);  // DOUT is active high
+    usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
     if (!data)
@@ -69,6 +70,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
     }
     mvprintw(curLine++, 9, buf);
     Board.WriteDigitalOutput(0x01, 0x00);  // DOUT is active low
+    usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
     if (data == 0x0fff)
