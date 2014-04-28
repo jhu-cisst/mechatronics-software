@@ -378,6 +378,9 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
     int i;
     bool pass = true;
 
+    // Disable watchdog
+    Board.WriteWatchdogPeriod(0x0000);  
+
     mvprintw(curLine, 9, "Temperature sensors - ");
     refresh();
 
@@ -438,12 +441,12 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
         if (dac > 0x8000) dac = 0x8000 - (dac - 0x8000);
         else dac = 0x8000 + (0x8000 - dac) + 0x0200;
 
-        if (dac > 0x9000) break;
+        if (dac > 0x8600) break;
 
         for (i = 0; i < 4; i++)
             Board.SetMotorCurrent(i, dac);
         Port.WriteAllBoards();
-        sleep(3);
+        sleep(1);
         Port.ReadAllBoards();
     }
 
@@ -452,6 +455,9 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
     Port.WriteAllBoards();
     Board.WriteAmpEnable(0x0f, 0);
     Board.WritePowerEnable(false);
+
+    // Reenable watchdog
+    Board.WriteWatchdogPeriod(0xFFFF); 
     return pass;
 }
 
