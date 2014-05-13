@@ -24,21 +24,20 @@
 
 void EncUp(AmpIO &bd)
 {
-
-    bd.WriteDigitalOutput(0x0C, 0x00);
-    bd.WriteDigitalOutput(0x0C, 0x08);
-    bd.WriteDigitalOutput(0x0C, 0x0C);
-    bd.WriteDigitalOutput(0x0C, 0x04);
-    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x03);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x00);
 }
 
 void EncDown(AmpIO &bd)
 {
-    bd.WriteDigitalOutput(0x0C, 0x00);
-    bd.WriteDigitalOutput(0x0C, 0x04);
-    bd.WriteDigitalOutput(0x0C, 0x0C);
-    bd.WriteDigitalOutput(0x0C, 0x08);
-    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x03);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x00);
 }
 
 void ClearLines(int start, int end)
@@ -58,7 +57,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
 
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT1 and all digital inputs");
-    Board.WriteDigitalOutput(0x01, 0x01);  // DOUT is active high
+    Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
     usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
@@ -69,7 +68,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
-    Board.WriteDigitalOutput(0x01, 0x00);  // DOUT is active low
+    Board.WriteDigitalOutput(0x08, 0x00);  // DOUT is active low
     usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
