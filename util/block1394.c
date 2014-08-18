@@ -173,7 +173,7 @@ int main(int argc, char** argv)
             (!isQuad1394 && (args_found <= 2)))
     {
         if (isBroadcast) {
-            fprintf(stderr, "**** Error: broadcast read ONT supported\n", node, nnodes);
+            fprintf(stderr, "**** Error: broadcast read ONT supported on node %d (num nodes = %d)\n", node, nnodes);
         }
 
         /* read the data block and print out the values */
