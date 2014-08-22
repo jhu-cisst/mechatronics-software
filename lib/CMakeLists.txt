@@ -16,11 +16,13 @@ project(Amp1394)
 set (HEADERS
      BoardIO.h
      AmpIO.h
-     FirewirePort.h)
+     FirewirePort.h
+     Eth1394Port.h)
 
 set (SOURCE_FILES
      code/AmpIO.cpp
-     code/FirewirePort.cpp)
+     code/FirewirePort.cpp
+     code/Eth1394Port.cpp)
               
 # Create Amp1394 library
 add_library(Amp1394 STATIC
