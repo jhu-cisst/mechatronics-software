@@ -16,6 +16,7 @@ project(Amp1394)
 set (HEADERS
      BoardIO.h
      AmpIO.h
+     BasePort.h
      FirewirePort.h
      Eth1394Port.h)
 

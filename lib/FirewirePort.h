@@ -25,9 +25,10 @@ http://www.cisst.org/cisst/license.txt.
 #include <libraw1394/raw1394.h>
 #include <libraw1394/csr.h>
 #include "BoardIO.h"
+#include "BasePort.h"
 #include <iostream>
 
-class FirewirePort {
+class FirewirePort : public BasePort {
 public:
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
 

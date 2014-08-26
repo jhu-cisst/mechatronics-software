@@ -23,10 +23,18 @@ http://www.cisst.org/cisst/license.txt.
 // Base class for custom boards with IEEE-1394 (Firewire) interface.
 
 #include <string.h>  // for memset
+#include <stdint.h>
 
-#include <libraw1394/raw1394.h>
+typedef uint32_t quadlet_t;
+typedef uint64_t nodeaddr_t;
 
+
+//#include <libraw1394/raw1394.h>
+
+//class FirewirePort;
+class BasePort;
 class FirewirePort;
+class Eth1394Port;
 
 class BoardIO
 {
@@ -36,7 +44,9 @@ protected:
     BoardIO& operator=(const BoardIO&);
 
     unsigned char BoardId;
-    FirewirePort *port;
+//    FirewirePort *port;
+    BasePort *port;
+
     bool readValid;
     bool writeValid;
 
@@ -46,7 +56,11 @@ protected:
     unsigned int WriteBufferSize;
     quadlet_t *WriteBuffer;    // buffer for real-time writes
 
+//    friend class FirewirePort;
+    friend class BasePort;
     friend class FirewirePort;
+    friend class Eth1394Port;
+
 
     void SetReadValid(bool flag) { readValid = flag; }
     unsigned int GetReadNumBytes() const { return ReadBufferSize; }
