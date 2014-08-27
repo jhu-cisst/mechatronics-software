@@ -1,3 +1,8 @@
 *~
 *.txt.user
 *.html
+html
+build
+Doxyfile
+authors.txt
+

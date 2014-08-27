@@ -33,7 +33,6 @@ public:
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
 
 protected:
-    int PortNum;
 
     raw1394handle_t handle;   // normal read/write handle
     raw1394handle_t handle_bc;  // broadcasting handle
@@ -43,11 +42,9 @@ protected:
     unsigned char Board2Node[BoardIO::MAX_BOARDS];
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
-    // Stream for debugging output (default is std::cerr)
-    std::ostream &outStr;
+
 
     int max_board;  // highest index of used (non-zero) entry in BoardList
-    BoardIO *BoardList[BoardIO::MAX_BOARDS];
     BoardIO *HubBoard_;
     int NumOfBoards_;    // number of boards
     int NumOfNodes_;     // number of nodes on the bus (exclude PC node)

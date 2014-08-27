@@ -27,6 +27,7 @@ http://www.cisst.org/cisst/license.txt.
 
 typedef uint32_t quadlet_t;
 typedef uint64_t nodeaddr_t;
+typedef uint16_t nodeid_t;
 
 
 //#include <libraw1394/raw1394.h>

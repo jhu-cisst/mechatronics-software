@@ -29,7 +29,7 @@ set (SOURCE_FILES
 add_library(Amp1394 STATIC
             ${HEADERS} ${SOURCE_FILES})
 
-target_link_libraries(Amp1394 raw1394)
+target_link_libraries(Amp1394 raw1394 pcap)
 
 # Install files
 install (TARGETS Amp1394 COMPONENT Amp1394

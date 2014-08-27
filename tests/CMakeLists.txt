@@ -24,6 +24,9 @@ target_link_libraries(qlatest Amp1394 raw1394 ${CURSES_LIBRARIES})
 add_executable(fwPortTest fwPortTest.cpp)
 target_link_libraries(fwPortTest Amp1394 raw1394)
 
+add_executable(eth1394Test mainEth1394.cpp)
+target_link_libraries(eth1394Test Amp1394 pcap)
+
 install (TARGETS qladisp qlatest fwPortTest
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)

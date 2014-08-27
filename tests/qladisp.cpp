@@ -17,8 +17,11 @@
 #include <curses.h>
 #include <iostream>
 #include <sstream>
+#include <vector>
 
-#include "FirewirePort.h"
+//#include "FirewirePort.h"
+
+#include "Eth1394Port.h"
 #include "AmpIO.h"
 
 void EncUp(AmpIO &bd)
@@ -76,7 +79,10 @@ int main(int argc, char** argv)
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    FirewirePort Port(port, debugStream);
+
+//    FirewirePort Port(port, debugStream);
+    Eth1394Port Port(port, debugStream);
+
     if (!Port.IsOK()) {
         std::cerr << "Failed to initialize firewire port " << port << std::endl;
         return -1;
@@ -213,14 +219,14 @@ int main(int argc, char** argv)
 
         char nodeStr[2][5];
         int node = Port.GetNodeId(board1);
-        if (node < FirewirePort::MAX_NODES)
+        if (node < BoardIO::MAX_BOARDS)
             sprintf(nodeStr[0], "%4d", node);
         else
             strcpy(nodeStr[0], "none");
 
         if (BoardList.size() > 1) {
             node = Port.GetNodeId(board2);
-            if (node < FirewirePort::MAX_NODES)        
+            if (node < BoardIO::MAX_BOARDS)
                 sprintf(nodeStr[1], "%4d", node);
             else
                 strcpy(nodeStr[1], "none");

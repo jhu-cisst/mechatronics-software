@@ -42,9 +42,8 @@ const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
 
 FirewirePort::PortListType FirewirePort::PortList;
 
-FirewirePort::FirewirePort(int portNum, std::ostream &ostr):
-    PortNum(portNum),
-    outStr(ostr),
+FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
+    BasePort(portNum, debugStream),
     max_board(0),
     NumOfBoards_(0),
     NumOfNodes_(0),
@@ -52,7 +51,6 @@ FirewirePort::FirewirePort(int portNum, std::ostream &ostr):
     BoardExistMask_(0),
     UseBroadcast_(false)
 {
-    memset(BoardList, 0, sizeof(BoardList));
     Init();
 }
 

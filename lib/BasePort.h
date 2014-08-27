@@ -20,14 +20,33 @@ http://www.cisst.org/cisst/license.txt.
 #ifndef __BasePort_H__
 #define __BasePort_H__
 
+#include <iostream>
 #include "BoardIO.h"
 
 class BasePort
 {
 protected:
+    // Stream for debugging output (default is std::cerr)
+    std::ostream &outStr;
+
+    unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
+
     virtual bool ScanNodes(void) = 0;
 
+    // Port Index, e.g. eth0 -> PortNum = 0
+    int PortNum;
+    BoardIO *BoardList[BoardIO::MAX_BOARDS];
+
 public:
+
+    // Constructor
+    BasePort(int portNum, std::ostream &ostr = std::cerr):
+        outStr(ostr),
+        PortNum(portNum)
+    {
+        memset(BoardList, 0, sizeof(BoardList));
+    }
+
     virtual bool IsOK(void) = 0;
 
     virtual void Reset(void) = 0;
@@ -41,10 +60,13 @@ public:
     // Removes board
     virtual bool RemoveBoard(unsigned char boardId) = 0;
     inline bool RemoveBoard(BoardIO *board) { return RemoveBoard(board->BoardId); }
+
     // Read all boards
     virtual bool ReadAllBoards(void) = 0;
+
     // Write to all boards
     virtual bool WriteAllBoards(void) = 0;
+
     // Read a quadlet from the specified board
     virtual bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data) = 0;
 
@@ -53,11 +75,11 @@ public:
 
     // Read a block from the specified board
     virtual bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
-                   unsigned int nbytes) = 0;
+                           unsigned int nbytes) = 0;
 
     // Write a block to the specified board
     virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
-                    unsigned int nbytes) = 0;
+                            unsigned int nbytes) = 0;
 
 
 };
