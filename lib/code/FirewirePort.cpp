@@ -47,9 +47,7 @@ FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
     max_board(0),
     NumOfBoards_(0),
     NumOfNodes_(0),
-    ReadSequence_(0),
-    BoardExistMask_(0),
-    UseBroadcast_(false)
+    BoardExistMask_(0)
 {
     Init();
 }

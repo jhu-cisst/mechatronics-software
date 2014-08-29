@@ -21,6 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <stdint.h>
 #include <byteswap.h>
 #include <iomanip>
+#include <stdint.h>
 
 const unsigned long QLA1_String = 0x514C4131;
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
@@ -51,6 +52,18 @@ Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream):
     if (!Init()) {
         outStr << "Initialization failed" << std::endl;
     }
+    eth1394_write_nodeidmode(1);
+}
+
+void Eth1394Port::BoardInUseIntegerUpdate(void)
+{
+    uint32_t tempBoardInUse = 0;
+    for (int i = 0; i < 16; i++)
+    {
+        if(BoardInUseMask_[i])
+            tempBoardInUse = tempBoardInUse | (0x1 << i);
+    }
+    BoardInUseInteger_ = tempBoardInUse;
 }
 
 bool Eth1394Port::Init()
@@ -74,7 +87,7 @@ bool Eth1394Port::Init()
     }
 
     dev = alldevs;
-    for (size_t i = 0; i < PortNum; i++) {
+    for (int i = 0; i < PortNum; i++) {
         dev = dev->next;
         if (dev == NULL) break;
     }
@@ -121,30 +134,12 @@ bool Eth1394Port::Init()
 
 bool Eth1394Port::ScanNodes(void)
 {
-    // get number of boards
-
-#if 0
-    EthPcapNode node;
-    quadlet_t readBuffer[32];
-    node.ethpcap_write(3, 0x03, 4, readBuffer);
-
-    int num_node = 0;//1~15
-    for(int i=0;i<15;i++)
-    {
-        if(node.ethpcap_read(i, 0x00, 4, readBuffer) == 1)
-        {
-            num_node ++;
-        }
-    }
-    std::cout<<"Num of nodes: "<<num_node<<std::endl;
-    node.ethpcap_write_nodenum(num_node);
-#endif
-
     // read each boards
     //  - read firmware version
     //  - set boardid (list or something)
 
 //    eth1394_write_nodeidmode(0);
+    IsAllBoardsBroadcastCapable_ = true;
 
     NumOfNodes_ = 0;
     for (size_t bid = 0; bid < BoardIO::MAX_BOARDS; bid++)
@@ -192,12 +187,22 @@ bool Eth1394Port::ScanNodes(void)
 
         BoardExistMask_[bid] = true;
         FirmwareVersion[bid] = fver;
-        NumOfNodes_++;
+        NumOfNodes_++;        
+
+        // check firmware version
+        // FirmwareVersion >= 4, broadcast capable
+        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
     }
 
     if (NumOfNodes_ == 0) {
         outStr << "No FPGA boards connected" << std::endl;
         return false;
+    }
+
+    // Use broadcast by default if all firmware are bc capable
+    if (IsAllBoardsBroadcastCapable_) {
+        UseBroadcast_ = true;
+        outStr << "ScanNodes: all nodes broadcast capable, broadcast mode" << std::endl;
     }
 
     // wirte num of nodes to eth1394 FPGA
@@ -232,17 +237,23 @@ unsigned long Eth1394Port::GetFirmwareVersion(unsigned char boardId) const
         return 0;
 }
 
+void Eth1394Port::SetUseBroadcastFlag(bool bc)
+{
+    if (!IsAllBoardsBroadcastCapable_ && bc) {
+        outStr << "***Error: not all boards supports broadcasting, " << std::endl
+               << "          please upgrade your firmaware"  << std::endl;
+    } else {
+        UseBroadcast_ = bc;
+        if (bc) {
+            outStr << "System running in broadcast mode " << std::endl;
+        } else {
+            outStr << "System running in NON broadcast mode " << std::endl;
+        }
+    }
+}
+
 bool Eth1394Port::AddBoard(BoardIO *board)
 {
-#if 0
-    std::cerr << "BID = " << (int) board->BoardId << std::endl;
-    std::cerr << "Board Exist Mask = ";
-    for (int i = 0; i < BoardIO::MAX_BOARDS; i++) {
-        std::cerr << BoardExistMask_[i] << " ";
-    }
-    std::cerr << std::endl;
-#endif
-
     if(board->BoardId >= BoardIO::MAX_BOARDS)
         return false;
 
@@ -253,10 +264,13 @@ bool Eth1394Port::AddBoard(BoardIO *board)
         BoardInUseMask_[board->BoardId] = true;
         NumOfNodesInUse_++;
         BoardList[board->BoardId] = board;
+        BoardInUseIntegerUpdate();
+        eth1394_write_nodenum();
+        // write the GLOBAL_BOARD register
+        WriteQuadletBroadcast(0xC,bswap_32(BoardInUseInteger_));
         board->port = this;
     }
 
-//    eth1394_write_nodenum();
     return true;
 }
 
@@ -268,15 +282,20 @@ bool Eth1394Port::RemoveBoard(unsigned char boardId)
         BoardInUseMask_[boardId] = false;
         NumOfNodesInUse_--;
         BoardList[boardId]->port = 0;
-        BoardList[boardId] = 0;
+        BoardList[boardId] = 0;        
+        BoardInUseIntegerUpdate();
+        eth1394_write_nodenum();
+        // write the GLOBAL_BOARD register
+        WriteQuadletBroadcast(0xC,bswap_32(BoardInUseInteger_));
     }
-
-//    eth1394_write_nodenum();
     return true;
 }
 
 bool Eth1394Port::ReadAllBoards(void)
-{   
+{       
+    if (UseBroadcast_) {
+        return ReadAllBoardsBroadcast();
+    }
     if(!handle){
         outStr << "ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
@@ -309,8 +328,100 @@ bool Eth1394Port::ReadAllBoards(void)
     return allOK;
 }
 
+bool Eth1394Port::ReadAllBoardsBroadcast(void)
+{
+    if (!handle) {
+        outStr << "ReadAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
+        return false;
+    }
+
+    bool ret;
+    bool allOK = true;
+
+    // sequence number from 16 bits 0 to 65535
+    ReadSequence_++;
+    if (ReadSequence_ == 65536) {
+        ReadSequence_ = 1;
+    }
+    quadlet_t bcReqData = (ReadSequence_ << 16) | BoardInUseInteger_;
+
+    //--- send out broadcast read request -----
+    size_t length_fw = 5;
+    quadlet_t packet_FW[length_fw];
+    frame_hdr[5] = bswap_16(length_fw * 4);
+
+    packet_FW[0] = bswap_32(0xFFC00000);
+    packet_FW[1] = bswap_32(0xFFCFFFFF);
+    packet_FW[2] = bswap_32(0xFFFF000F);
+    packet_FW[3] = bswap_32(bcReqData);
+    packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
+
+    // Ethernet frame
+    int ethlength = length_fw * 4 + 14;
+    unsigned char frame[ethlength];
+    memcpy(frame, frame_hdr, 14);
+    memcpy(frame + 14, packet_FW, length_fw * 4);
+
+    if (pcap_sendpacket(handle, frame, ethlength) != 0)
+    {
+        outStr << "ERROR: send packet failed" << std::endl;
+        return false;
+    }
+
+    // Grab a packet
+    packet = pcap_next(handle, &header);
+
+    if (packet == NULL) {
+        outStr << "Error: Broadcast Read Received failed" << std::endl;
+        return false;
+    }
+
+    ret = true;
+
+    // check the packet length, in bytes
+    if (header.len - 14 - NumOfNodesInUse_ * 4 * 17 != 0)
+    {
+        outStr << "ERROR: Broadcast read packet length error" << std::endl;
+        return false;
+    }
+
+    // record the number of cycle
+    int loopSeq = 0;
+    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
+        if (BoardList[bid]) {
+            const int readSize = 17;  // 1 seq + 16 data, unit quadlet
+            quadlet_t readBuffer[readSize];
+
+            memcpy(readBuffer, packet + 14 + loopSeq * readSize * 4, readSize * 4);
+
+            unsigned int seq = (bswap_32(readBuffer[0]) >> 16);
+
+            //! check boardID
+
+            static int errorcounter = 0;
+            if (ReadSequence_ != seq) {
+                errorcounter++;
+                outStr << "errorcounter = " << errorcounter << std::endl;
+                outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)bid << std::endl;
+            }
+
+            memcpy(BoardList[bid]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * 4);
+
+            if (!ret) allOK = false;
+            BoardList[bid]->SetReadValid(ret);
+            loopSeq++;
+        }
+    }
+
+    return allOK;
+}
+
 bool Eth1394Port::WriteAllBoards()
 {
+    if (UseBroadcast_) {
+        //return WriteAllBoardsBroadcast();
+    }
+
     if (!handle) {
         outStr << "WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
@@ -344,7 +455,64 @@ bool Eth1394Port::WriteAllBoards()
     return allOK;
 }
 
+bool Eth1394Port::WriteAllBoardsBroadcast(void)
+{
+    // check hanle
+    if (!handle) {
+        outStr << "WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
+        return false;
+    }
 
+    // sanity check vars
+    bool allOK = true;
+
+    // loop 1: broadcast write block
+
+    // construct broadcast write buffer
+    const int numOfChannel = 4;
+    quadlet_t bcBuffer[numOfChannel * BoardIO::MAX_BOARDS];
+    memset(bcBuffer, 0, sizeof(bcBuffer));
+    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
+    int numOfBoards = 0;
+
+    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
+        if (BoardList[bid]) {
+            numOfBoards++;
+            quadlet_t *buf = BoardList[bid]->GetWriteBuffer();
+            unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
+            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
+            // bcBufferOffset equals total numBytes to write, when the loop ends
+            bcBufferOffset = bcBufferOffset + numBytes - 4;
+        }
+    }
+
+    // now broadcast out the huge packet
+    bool ret = true;
+
+    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
+                              bcBuffer,
+                              bcBufferOffset);
+
+    // loop 2: send out control quadlet if necessary
+    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
+        if (BoardList[bid]) {
+            quadlet_t *buf = BoardList[bid]->GetWriteBuffer();
+            unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
+            unsigned int numQuads = numBytes/4;
+            quadlet_t ctrl = buf[numQuads-1];  // Get last quedlet
+            bool ret2 = true;
+            if (ctrl) {  // if anything non-zero, write it
+                ret2 = WriteQuadlet(bid, 0x00, ctrl);
+                if (!ret2) allOK = false;
+            }
+            // SetWriteValid clears the buffer if the write was valid
+            BoardList[bid]->SetWriteValid(ret&&ret2);
+        }
+    }
+
+    // return
+    return allOK;
+}
 
 bool Eth1394Port::ReadQuadlet(unsigned char boardId,
                               nodeaddr_t addr, quadlet_t &data)
@@ -368,6 +536,13 @@ bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
         return false;    
 
     return !eth1394_write(boardId, addr, 4, &data);
+}
+
+bool Eth1394Port::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
+{
+    // special case of WriteBlockBroadcast
+    // nbytes = 4
+    return WriteBlockBroadcast(addr, &data, 4);
 }
 
 bool Eth1394Port::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
@@ -394,6 +569,12 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     if (!BoardInUseMask_[boardId])
         return false;
     return !eth1394_write(boardId, addr, nbytes, data);
+}
+
+bool Eth1394Port::WriteBlockBroadcast(
+        nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
+{
+    return !eth1394_write(0xffff, addr, nbytes, data);;
 }
 
 
@@ -626,7 +807,7 @@ int Eth1394Port::eth1394_write_nodenum(void)
     return 0;
 }
 
-int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 0: board_id, 1: fw_node_id
+int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_node_id
 {
     if( mode == 0 || mode == 1)
     {
@@ -638,7 +819,10 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 0: board_id, 1: fw_n
         packet_FW[0] = bswap_32(0xFFFF0000);
         packet_FW[1] = bswap_32(0xFFFF0000);
         packet_FW[2] = bswap_32(0x00000000);
-        packet_FW[3] = bswap_32(0x00C00000);
+        if  (mode == 1)
+            packet_FW[3] = bswap_32(0x00C00000);
+        else
+            packet_FW[3] = bswap_32(0x00800000);
         packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
 
         // Ethernet frame

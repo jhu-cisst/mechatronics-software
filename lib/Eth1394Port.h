@@ -54,6 +54,7 @@ protected:
     int NumOfNodesInUse_;   //number of nodes under control
     bool BoardExistMask_[BoardIO::MAX_BOARDS];  // Boards connected in the network
     bool BoardInUseMask_[BoardIO::MAX_BOARDS];  // Boards under control of PC
+    uint32_t BoardInUseInteger_;
 
     // read FPGA node
 
@@ -106,6 +107,8 @@ protected:
 public:
     Eth1394Port(int portNum, std::ostream &debugStream = std::cerr);
 
+    void BoardInUseIntegerUpdate(void);
+
     bool IsOK(void);
 
     void Reset(void);
@@ -133,17 +136,34 @@ public:
     */
     bool RemoveBoard(unsigned char boardId);
 
+    // Set UseBroadcast_
+    void SetUseBroadcastFlag(bool bc = false);
+
     // Read all boards
     bool ReadAllBoards(void);
+    // Read all boards broadcasting
+    virtual bool ReadAllBoardsBroadcast(void);
 
     // Write to all boards
     bool WriteAllBoards(void);
+    // Write to all boards using broadcasting
+    virtual bool WriteAllBoardsBroadcast(void);
 
     // Read a quadlet from the specified board
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
+
+    //
+    /*!
+     \brief Write a quadlet to all boards using broadcasting
+
+     \param addr  The register address, should larger than CSR_REG_BASE + CSR_CONFIG_END
+     \param data  The quadlet data to be broadcasted
+     \return bool  True on success or False on failure
+    */
+    bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
 
     // Read a block from the specified board
     bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
@@ -152,6 +172,16 @@ public:
     // Write a block to the specified board
     bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
                     unsigned int nbytes);
+
+    /*!
+     \brief Write a block of data using asynchronous broadcast
+
+     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
+     \param data  The pointer to write buffer data
+     \param nbytes  Number of bytes to be broadcasted
+     \return bool  True on success or False on failure
+    */
+    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
 };
 
 #endif  // __Eth1394Port_H__

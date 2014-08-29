@@ -28,20 +28,25 @@ class BasePort
 protected:
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
-
-    unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
-
-    virtual bool ScanNodes(void) = 0;
+    bool UseBroadcast_;   // Read/Write broadcast flag
+    bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
+    unsigned int ReadSequence_;   // sequence number for WABB
 
     // Port Index, e.g. eth0 -> PortNum = 0
     int PortNum;
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
 
+    unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
+
+    virtual bool ScanNodes(void) = 0;
+
 public:
 
     // Constructor
-    BasePort(int portNum, std::ostream &ostr = std::cerr):
+    BasePort(int portNum, bool UseBroadcast = false, std::ostream &ostr = std::cerr):
         outStr(ostr),
+        UseBroadcast_(UseBroadcast),
+        ReadSequence_(0),
         PortNum(portNum)
     {
         memset(BoardList, 0, sizeof(BoardList));
@@ -61,17 +66,34 @@ public:
     virtual bool RemoveBoard(unsigned char boardId) = 0;
     inline bool RemoveBoard(BoardIO *board) { return RemoveBoard(board->BoardId); }
 
+    // Set UseBroadcast Flag
+    virtual void SetUseBroadcastFlag(bool bc = false) = 0;
+
     // Read all boards
     virtual bool ReadAllBoards(void) = 0;
+    // Read all boards broadcasting
+    virtual bool ReadAllBoardsBroadcast(void) = 0;
 
     // Write to all boards
     virtual bool WriteAllBoards(void) = 0;
+    // Write to all boards using broadcasting
+    virtual bool WriteAllBoardsBroadcast(void) = 0;
 
     // Read a quadlet from the specified board
     virtual bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data) = 0;
 
     // Write a quadlet to the specified board
     virtual bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data) = 0;
+
+    //
+    /*!
+     \brief Write a quadlet to all boards using broadcasting
+
+     \param addr  The register address, should larger than CSR_REG_BASE + CSR_CONFIG_END
+     \param data  The quadlet data to be broadcasted
+     \return bool  True on success or False on failure
+    */
+    virtual bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data) = 0;
 
     // Read a block from the specified board
     virtual bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
@@ -81,7 +103,15 @@ public:
     virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
                             unsigned int nbytes) = 0;
 
+    /*!
+     \brief Write a block of data using asynchronous broadcast
 
+     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
+     \param data  The pointer to write buffer data
+     \param nbytes  Number of bytes to be broadcasted
+     \return bool  True on success or False on failure
+    */
+    virtual bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes) = 0;
 };
 
 

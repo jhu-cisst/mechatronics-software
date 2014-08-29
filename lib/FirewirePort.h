@@ -50,10 +50,7 @@ protected:
     int NumOfNodes_;     // number of nodes on the bus (exclude PC node)
 
     // Broadcast Related
-    unsigned int ReadSequence_;   // sequence number for WABB
     unsigned int BoardExistMask_;   // mask showing indicating whether board exists
-    bool UseBroadcast_;   // Read/Write broadcast flag
-    bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
@@ -96,6 +93,9 @@ public:
     // Set hub board
     bool SetHubBoard(BoardIO *hubboard);
 
+    // Set UseBroadcast_
+    void SetUseBroadcastFlag(bool bc);
+
     // Adds board(s)
     bool AddBoard(BoardIO *board);
 
@@ -108,18 +108,13 @@ public:
     int GetNodeId(unsigned char boardId) const;
     unsigned long GetFirmwareVersion(unsigned char boardId) const;
 
-    // Set UseBroadcast Flag
-    void SetUseBroadcastFlag(bool bc = false);
-
     // Read all boards
     bool ReadAllBoards(void);
-
     // Read all boards broadcasting
     bool ReadAllBoardsBroadcast(void);
 
     // Write to all boards
     bool WriteAllBoards(void);
-
     // Write to all boards using broadcasting
     bool WriteAllBoardsBroadcast(void);
 
