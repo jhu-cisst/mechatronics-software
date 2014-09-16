@@ -422,12 +422,15 @@ bool FirewirePort::ReadAllBoards(void)
         if (BoardList[board]) {
             bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(),
                                  BoardList[board]->GetReadNumBytes());
-            if (ret) noneRead = false;
-            else allOK = false;
+            if (ret) {
+                noneRead = false;
+            } else {
+                allOK = false;
+            }
             BoardList[board]->SetReadValid(ret);
 
             if (!ret) {
-                std::cerr << "------- Oops failed --------" << std::endl;
+                outStr << "ReadAllBoards: read failed on port " << PortNum << ", board " << board << std::endl;
             }
         }
     }
