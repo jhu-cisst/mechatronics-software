@@ -65,6 +65,14 @@ public:
       required shift and mask. */
     AmpIO_UInt8 GetHomeSwitches(void) const;
 
+    /*! Utility methods, uses result of GetDigitalOutput but performs
+      required shift and mask. */
+    //@{
+    AmpIO_UInt8 GetEncoderChannelA(void) const;
+    AmpIO_UInt8 GetEncoderChannelB(void) const;
+    AmpIO_UInt8 GetEncoderIndex(void) const;
+    //@}
+
     AmpIO_UInt32 GetDigitalInput(void) const;
 
     AmpIO_UInt8 GetAmpTemperature(unsigned int index) const;

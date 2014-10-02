@@ -43,6 +43,7 @@ void EncDown(AmpIO &bd)
 
 int main(int argc, char** argv)
 {
+    const unsigned int lm = 5; // left margin
     unsigned int i, j;
     int port = 0;
     int board1 = BoardIO::MAX_BOARDS;
@@ -114,27 +115,30 @@ int main(int argc, char** argv)
     noecho();
     nodelay(stdscr, TRUE);
 
-    if (BoardList.size() > 1)
-        mvwprintw(stdscr, 1, 9, "Sensor Feedback for Boards %d, %d", board1, board2);
-    else
-        mvwprintw(stdscr, 1, 9, "Sensor Feedback for Board %d", board1);
-    mvwprintw(stdscr, 2, 9, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
-    mvwprintw(stdscr, 3, 9, "+/- to increase/decrease commanded current (DAC) by 0x100");
+    if (BoardList.size() > 1) {
+        mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+    } else {
+        mvwprintw(stdscr, 1, lm, "Sensor Feedback for Board %d", board1);
+    }
+    mvwprintw(stdscr, 2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
+    mvwprintw(stdscr, 3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
 
     unsigned int numAxes = (BoardList.size() > 1)?8:4;
-    for (i = 0; i < numAxes; i++)
-        mvwprintw(stdscr, 5, 9+8+i*13, "Axis%d", i);
-    mvwprintw(stdscr, 6, 9, "Enc:");
-    mvwprintw(stdscr, 7, 9, "Pot:");
-    mvwprintw(stdscr, 8, 9, "Vel:");
-    mvwprintw(stdscr, 9, 9, "Cur:");
-    mvwprintw(stdscr, 10, 9, "DAC:");
+    for (i = 0; i < numAxes; i++) {
+        mvwprintw(stdscr, 5, lm+8+i*13, "Axis %d", i);
+    }
+    mvwprintw(stdscr, 6, lm, "Enc:");
+    mvwprintw(stdscr, 7, lm, "Pot:");
+    mvwprintw(stdscr, 8, lm, "Vel:");
+    mvwprintw(stdscr, 9, lm, "Cur:");
+    mvwprintw(stdscr, 10, lm, "DAC:");
+
     wrefresh(stdscr);
 
     unsigned char dig_out = 0;
 
     int loop_cnt = 0;
-    const int DEBUG_START_LINE = 18;
+    const int DEBUG_START_LINE = 19;
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
@@ -193,17 +197,15 @@ int main(int argc, char** argv)
             }
         }
 
-        mvwprintw(stdscr, 16, 50, "%10d", loop_cnt++);
-
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
             char line[80];
             memset(line, ' ', sizeof(line));
             for (i = cur_line; i < last_debug_line; i++)
-                mvwprintw(stdscr, i, 9, line);
+                mvwprintw(stdscr, i, lm, line);
             while (!debugStream.eof()) {
                 debugStream.getline(line, sizeof(line));
-                mvwprintw(stdscr,cur_line++, 9, line);
+                mvwprintw(stdscr, cur_line++, lm, line);
             }
             debugStream.clear();
             debugStream.str("");
@@ -233,23 +235,29 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
-                    mvwprintw(stdscr, 6, 9+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i));
-                    mvwprintw(stdscr, 7, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogInput(i));
-                    mvwprintw(stdscr, 8, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
-                    mvwprintw(stdscr, 9, 9+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
+                    mvwprintw(stdscr, 6, lm+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i));
+                    mvwprintw(stdscr, 7, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogInput(i));
+                    mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
+                    mvwprintw(stdscr, 9, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
-                mvwprintw(stdscr, 13, 9+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X", 
+                mvwprintw(stdscr, 13, lm+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X",
                           BoardList[j]->GetStatus(), BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
-                mvwprintw(stdscr, 14, 9+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
+                mvwprintw(stdscr, 14, lm+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
                           BoardList[j]->GetNegativeLimitSwitches(),
                           BoardList[j]->GetPositiveLimitSwitches(),
                           BoardList[j]->GetHomeSwitches());
-                mvwprintw(stdscr, 16, 9+58*j, "Node: %s", nodeStr[j]);
-                mvwprintw(stdscr, 16, 27+58*j, "Temp:  0x%02X    0x%02X", 
+                mvwprintw(stdscr, 15, lm+58*j, "EncA: 0x%01X            EncB: 0x%01X            EncInd: 0x%01X",
+                          BoardList[j]->GetEncoderChannelA(),
+                          BoardList[j]->GetEncoderChannelB(),
+                          BoardList[j]->GetEncoderIndex());
+
+                mvwprintw(stdscr, 17, lm+58*j, "Node: %s", nodeStr[j]);
+                mvwprintw(stdscr, 17, lm+18+58*j, "Temp:  0x%02X    0x%02X",
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
+                mvwprintw(stdscr, 17, lm+40, "Ct: %8d", loop_cnt++);
                 if (loop_cnt > 500) {
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
@@ -258,14 +266,14 @@ int main(int argc, char** argv)
                 }
             }
             for (i = 0; i < 4; i++) {
-                mvwprintw(stdscr, 10, 9+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
+                mvwprintw(stdscr, 10, lm+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
         }
 //        Port.WriteAllBoardsBroadcast();
         Port.WriteAllBoards();
 
-        mvwprintw(stdscr, 1, 50, "dt: %f",  (1.0 / 49125.0) * maxTime);
+        mvwprintw(stdscr, 1, lm+41, "dt: %f",  (1.0 / 49125.0) * maxTime);
 
         wrefresh(stdscr);
         usleep(500);
