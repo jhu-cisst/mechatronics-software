@@ -341,12 +341,12 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
     Board.WriteSafetyRelay(true);
     usleep(10000);  // 10 ms 
     if (!Board.ReadSafetyRelayStatus()) {
-        sprintf(buf, "Enable safety relay - FAIL (%08lx) - is +12V connected to relay?",
+        sprintf(buf, "Enable safety relay - FAIL (%08x) - is +12V connected to relay?",
                 Board.ReadStatus());
         pass = false;
     }
     else
-        sprintf(buf, "Enable safety relay - PASS (%08lx)", Board.ReadStatus());
+        sprintf(buf, "Enable safety relay - PASS (%08x)", Board.ReadStatus());
     mvprintw(curLine++, 9, buf);
 
     refresh();
@@ -463,7 +463,7 @@ int main(int argc, char** argv)
 {
     int i;
     int port = 0;
-    int board;
+    int board = 0;
 
     int args_found = 0;
     for (i = 1; i < argc; i++) {
