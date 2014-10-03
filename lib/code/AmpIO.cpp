@@ -144,7 +144,7 @@ AmpIO_UInt8 AmpIO::GetHomeSwitches(void) const
 
 AmpIO_UInt8 AmpIO::GetEncoderChannelA(void) const
 {
-    return (this->GetDigitalInput()&0x00f000000)>>24;
+    return (this->GetDigitalInput()&0x0f000000)>>24;
 }
 
 AmpIO_UInt8 AmpIO::GetEncoderChannelB(void) const
@@ -154,7 +154,7 @@ AmpIO_UInt8 AmpIO::GetEncoderChannelB(void) const
 
 AmpIO_UInt8 AmpIO::GetEncoderIndex(void) const
 {
-    return (this->GetDigitalInput()&0x00f0000)>>16;
+    return (this->GetDigitalInput()&0x000f0000)>>16;
 }
 
 AmpIO_UInt8 AmpIO::GetAmpTemperature(unsigned int index) const
