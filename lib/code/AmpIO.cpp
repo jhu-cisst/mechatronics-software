@@ -147,6 +147,12 @@ AmpIO_UInt8 AmpIO::GetEncoderChannelA(void) const
     return (this->GetDigitalInput()&0x0f000000)>>24;
 }
 
+bool AmpIO::GetEncoderChannelA(unsigned int index) const
+{
+    const AmpIO_UInt8 mask = (0x0001 << index);
+    return GetEncoderChannelA()&mask;
+}
+
 AmpIO_UInt8 AmpIO::GetEncoderChannelB(void) const
 {
     return (this->GetDigitalInput()&0x00f00000)>>20;

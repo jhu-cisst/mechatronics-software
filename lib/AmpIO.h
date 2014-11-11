@@ -66,6 +66,7 @@ public:
       required shift and mask. */
     //@{
     AmpIO_UInt8 GetEncoderChannelA(void) const;
+    bool GetEncoderChannelA(unsigned int index) const;
     AmpIO_UInt8 GetEncoderChannelB(void) const;
     AmpIO_UInt8 GetEncoderIndex(void) const;
     //@}
