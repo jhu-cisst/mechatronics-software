@@ -1,7 +1,5 @@
 #
-# $Id$
-#
-# (C) Copyright 2011-2012 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -11,9 +9,15 @@
 #
 # --- end cisst license ---
 
-project(Mechatronics)
+project (Mechatronics)
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required (VERSION 2.6)
+
+# Set the version number
+set (Amp1394_VERSION_MAJOR "1")
+set (Amp1394_VERSION_MINOR "1")
+set (Amp1394_VERSION_PATCH "0")
+set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
 # Add some warnings
 include (CheckCXXCompilerFlag)
@@ -28,22 +32,27 @@ if (CXX_SUPPORTS_WALL)
 endif (CXX_SUPPORTS_WALL)
 
 # ... for the build tree
-set(CONF_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lib")
-set(CONF_LIBRARY_DIR "${PROJECT_BINARY_DIR}/lib")
-configure_file(Amp1394Config.cmake.in
-  "${PROJECT_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
+set (CONF_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lib" "${CMAKE_CURRENT_BINARY_DIR}")
+set (CONF_LIBRARY_DIR "${PROJECT_BINARY_DIR}/lib")
+configure_file (Amp1394Config.cmake.in
+                "${PROJECT_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
+
+# revision file
+configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/lib/AmpIORevision.h.in"
+                "${CMAKE_CURRENT_BINARY_DIR}/Amp1394/AmpIORevision.h")
 
 # To find Amp1394 library headers
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
+include_directories (${CMAKE_CURRENT_SOURCE_DIR}/lib
+                     ${CMAKE_CURRENT_BINARY_DIR})
 
 # To link with build libraries
-link_directories(${CMAKE_CURRENT_BINARY_DIR})
+link_directories (${CMAKE_CURRENT_BINARY_DIR})
 
 # Utilities to test libraw1394
-add_subdirectory(util)
+add_subdirectory (util)
 
 # Code for library Amp1394
-add_subdirectory(lib)
+add_subdirectory (lib)
 
 # Test program using curse for text based display
 find_package (Curses)
@@ -54,4 +63,4 @@ else (CURSES_FOUND)
 endif (CURSES_FOUND)
 
 # Utility to flash/test board
-add_subdirectory(programmer)
+add_subdirectory (programmer)

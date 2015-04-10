@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen
 
-  (C) Copyright 2011-2014 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -19,12 +19,16 @@ http://www.cisst.org/cisst/license.txt.
 #ifndef __AMPIO_H__
 #define __AMPIO_H__
 
+#include <Amp1394/AmpIORevision.h>
+
 #include "BoardIO.h"
 #include <stdint.h> // for uint32_t
 #include <iostream>
 
 class ostream;
 
+
+typedef int32_t  AmpIO_Int32;
 typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
 typedef uint8_t AmpIO_UInt8;
@@ -67,7 +71,12 @@ public:
     //@{
     AmpIO_UInt8 GetEncoderChannelA(void) const;
     bool GetEncoderChannelA(unsigned int index) const;
+
     AmpIO_UInt8 GetEncoderChannelB(void) const;
+    bool GetEncoderChannelB(unsigned int index) const;
+
+    bool GetEncoderOverflow(unsigned int index) const;
+
     AmpIO_UInt8 GetEncoderIndex(void) const;
     //@}
 
@@ -79,9 +88,11 @@ public:
 
     AmpIO_UInt32 GetAnalogInput(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderPosition(unsigned int index) const;
+    AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
     AmpIO_UInt32 GetEncoderVelocity(unsigned int index, const bool islatch = true) const;
+
+    AmpIO_Int32 GetEncoderMidRange(void) const;
 
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
@@ -138,7 +149,7 @@ public:
 
     bool WriteSafetyRelay(bool state);
 
-    bool WriteEncoderPreload(unsigned int index, AmpIO_UInt32 enc);
+    bool WriteEncoderPreload(unsigned int index, AmpIO_Int32 enc);
 
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 

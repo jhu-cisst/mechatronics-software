@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2014 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -29,6 +29,7 @@ const AmpIO_UInt32 MIDRANGE_VEL     = 0x00008000;  /*!< Midrange value of encode
 const AmpIO_UInt32 MIDRANGE_FRQ     = 0x00008000;  /*!< Midrange value of encoder frequency */
 const AmpIO_UInt32 MIDRANGE_ACC     = 0x00008000;  /*!< Midrange value of encoder acc */
 const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder preload value */
+const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;
 
 const AmpIO_UInt32 PWR_ENABLE       = 0x000c0000;  /*!< Turn pwr_en on             */
 const AmpIO_UInt32 PWR_DISABLE      = 0x00080000;  /*!< Turn pwr_en off            */
@@ -39,7 +40,8 @@ const AmpIO_UInt32 MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current a
 const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
-const AmpIO_UInt32 ENC_POS_MASK     = 0x01ffffff;  /*!< Mask for quad encoder bits */
+const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask */
+const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK     = 0x0000ffff;  /*!< Mask for encoder velocity bits */
 const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder frequency bits */
 
@@ -158,9 +160,26 @@ AmpIO_UInt8 AmpIO::GetEncoderChannelB(void) const
     return (this->GetDigitalInput()&0x00f00000)>>20;
 }
 
+bool AmpIO::GetEncoderChannelB(unsigned int index) const
+{
+    const AmpIO_UInt8 mask = (0x0001 << index);
+    return GetEncoderChannelB()&mask;
+}
+
 AmpIO_UInt8 AmpIO::GetEncoderIndex(void) const
 {
     return (this->GetDigitalInput()&0x000f0000)>>16;
+}
+
+bool AmpIO::GetEncoderOverflow(unsigned int index) const
+{
+    if (index < NUM_CHANNELS) {
+        return bswap_32(read_buffer[index+ENC_POS_OFFSET]) & ENC_OVER_MASK;
+    }
+    else {
+        std::cerr << "Warning: GetEncoderOverflow, index out of range " << index << std::endl;
+    }
+    return true; // send error "code"
 }
 
 AmpIO_UInt8 AmpIO::GetAmpTemperature(unsigned int index) const
@@ -198,12 +217,12 @@ AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
     return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
 }
 
-AmpIO_UInt32 AmpIO::GetEncoderPosition(unsigned int index) const
+AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 {
-    if (index < NUM_CHANNELS)
-        return bswap_32(read_buffer[index+ENC_POS_OFFSET]);
-    else
-        return 0;
+    if (index < NUM_CHANNELS) {
+        return static_cast<AmpIO_Int32>(bswap_32(read_buffer[index + ENC_POS_OFFSET]) & ENC_POS_MASK) - ENC_MIDRANGE;
+    }
+    return 0;
 }
 
 // temp current the enc period velocity is unsigned 16 bits
@@ -231,6 +250,10 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) c
     else return cnter;
 }
 
+AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
+{
+    return ENC_MIDRANGE;
+}
 
 bool AmpIO::GetPowerStatus(void) const
 {
@@ -379,14 +402,20 @@ bool AmpIO::WriteSafetyRelay(bool state)
     return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
 }
 
-bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_UInt32 sdata)
+bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
 {
     unsigned int channel = (index+1) << 4;
 
-    if (port && (index < NUM_CHANNELS))
-        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, bswap_32(sdata));
-    else
+    if ((sdata >= ENC_MIDRANGE)
+            || (sdata < -ENC_MIDRANGE)) {
+        std::cerr << "Error: WriteEncoderPreload, preload out of range" << std::endl;
         return false;
+    }
+    if (port && (index < NUM_CHANNELS)) {
+        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, bswap_32(static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE)));
+    } else {
+        return false;
+    }
 }
 
 bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
