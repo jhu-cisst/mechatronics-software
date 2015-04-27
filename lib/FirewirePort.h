@@ -6,7 +6,7 @@
 
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2012 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -31,6 +31,12 @@ class FirewirePort {
 public:
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
 
+    // Protocol types:
+    //   PROTOCOL_SEQ_RW      sequential (individual) read and write to each board
+    //   PROTOCOL_SEQ_R_BC_W  sequential read from each board, broadcast write to all boards
+    //   PROTOCOL_BC_QRW      broadcast query, read, and write to/from all boards
+    enum ProtocolType { PROTOCOL_SEQ_RW, PROTOCOL_SEQ_R_BC_W, PROTOCOL_BC_QRW };
+
 protected:
     int PortNum;
 
@@ -54,7 +60,7 @@ protected:
     // Broadcast Related
     unsigned int ReadSequence_;   // sequence number for WABB
     unsigned int BoardExistMask_;   // mask showing indicating whether board exists
-    bool UseBroadcast_;   // Read/Write broadcast flag
+    ProtocolType Protocol_;         // protocol type in use
     bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
 
     // List of all ports instantiated (for use by reset_handler)
@@ -110,8 +116,8 @@ public:
     int GetNodeId(unsigned char boardId) const;
     unsigned long GetFirmwareVersion(unsigned char boardId) const;
 
-    // Set UseBroadcast Flag
-    void SetUseBroadcastFlag(bool bc = false);
+    // Set protocol type
+    void SetProtocol(ProtocolType prot);
 
     // Read all boards
     bool ReadAllBoards(void);
