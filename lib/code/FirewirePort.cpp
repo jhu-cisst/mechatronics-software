@@ -2,8 +2,6 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Zihan Chen, Peter Kazanzides
 
   (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
@@ -58,7 +56,7 @@ FirewirePort::FirewirePort(int portNum, std::ostream &ostr):
 
 bool FirewirePort::Init(void)
 {
-    // create firewire port handle 
+    // create firewire port handle
     handle = raw1394_new_handle();
     handle_bc = raw1394_new_handle();
     if (!handle || !handle_bc) {
@@ -273,7 +271,7 @@ bool FirewirePort::ScanNodes(void)
         data = bswap_32(data);
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
         board = (data & BOARD_ID_MASK) >> 24;
-        outStr << "  Node " << node << ", BoardId = " << board 
+        outStr << "  Node " << node << ", BoardId = " << board
                << ", Firmware Version = " << fver << std::endl;
         if (Node2Board[node] < BoardIO::MAX_BOARDS)
             outStr << "    Duplicate entry, previous value = "
@@ -303,9 +301,6 @@ bool FirewirePort::ScanNodes(void)
             }
         }
     }
-
-    // Temporarily disable broadcast mode
-    SetProtocol(FirewirePort::PROTOCOL_SEQ_RW);
 
     return true;
 }
