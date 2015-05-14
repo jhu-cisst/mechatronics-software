@@ -16,9 +16,6 @@ cmake_minimum_required(VERSION 2.6)
 
 project(util1394)
 
-# Set the ouptut path for the libraries and executables
-set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})
-
 set(PROGRAMS block1394 info1394 time1394)
 
 foreach(program ${PROGRAMS})
