@@ -26,6 +26,6 @@ endforeach(program)
 # Add post-build command to copy block1394 to quad1394
 add_custom_command(TARGET block1394 POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy
-                      ${CMAKE_CURRENT_BINARY_DIR}/block1394
-                      ${CMAKE_CURRENT_BINARY_DIR}/quad1394
+                      ${EXECUTABLE_OUTPUT_PATH}/block1394
+                      ${EXECUTABLE_OUTPUT_PATH}/quad1394
                    COMMENT "Generating quad1394")
