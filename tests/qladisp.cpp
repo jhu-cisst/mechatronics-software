@@ -21,38 +21,55 @@
 #include "FirewirePort.h"
 #include "AmpIO.h"
 
-void EncUp(AmpIO &bd)
+
+/*!
+ \brief Increment encoder counts
+ \param[in] bd FPGA Board
+ \param[in] fver Board Firmware Version
+*/
+void EncUp(AmpIO &bd, const AmpIO_UInt32 fver)
 {
-#if 0   // New firmware (>4.0)
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x01);
-    bd.WriteDigitalOutput(0x03, 0x03);
-    bd.WriteDigitalOutput(0x03, 0x02);
-    bd.WriteDigitalOutput(0x03, 0x00);
-#else
-    bd.WriteDigitalOutput(0x0C, 0x00);
-    bd.WriteDigitalOutput(0x0C, 0x08);
-    bd.WriteDigitalOutput(0x0C, 0x0C);
-    bd.WriteDigitalOutput(0x0C, 0x04);
-    bd.WriteDigitalOutput(0x0C, 0x00);
-#endif
+    // Firmware <= 4, DOUT order is reversed
+    // Fixed in Firmware > 4
+    if (fver > 4) {
+        bd.WriteDigitalOutput(0x03, 0x00);
+        bd.WriteDigitalOutput(0x03, 0x01);
+        bd.WriteDigitalOutput(0x03, 0x03);
+        bd.WriteDigitalOutput(0x03, 0x02);
+        bd.WriteDigitalOutput(0x03, 0x00);
+    }
+    else {
+        bd.WriteDigitalOutput(0x0C, 0x00);
+        bd.WriteDigitalOutput(0x0C, 0x08);
+        bd.WriteDigitalOutput(0x0C, 0x0C);
+        bd.WriteDigitalOutput(0x0C, 0x04);
+        bd.WriteDigitalOutput(0x0C, 0x00);
+    }
 }
 
-void EncDown(AmpIO &bd)
+/*!
+ \brief Decrement encoder counts
+ \param[in] bd FPGA Board
+ \param[in] fver Board Firmware Version
+*/
+void EncDown(AmpIO &bd, const AmpIO_UInt32 fver)
 {
-#if 0   // New firmware (>4.0)
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x02);
-    bd.WriteDigitalOutput(0x03, 0x03);
-    bd.WriteDigitalOutput(0x03, 0x01);
-    bd.WriteDigitalOutput(0x03, 0x00);
-#else
-    bd.WriteDigitalOutput(0x0C, 0x00);
-    bd.WriteDigitalOutput(0x0C, 0x04);
-    bd.WriteDigitalOutput(0x0C, 0x0C);
-    bd.WriteDigitalOutput(0x0C, 0x08);
-    bd.WriteDigitalOutput(0x0C, 0x00);
-#endif
+    // Firmware <= 4, DOUT order is reversed
+    // Fixed in Firmware > 4
+    if (fver > 4) {
+        bd.WriteDigitalOutput(0x03, 0x00);
+        bd.WriteDigitalOutput(0x03, 0x02);
+        bd.WriteDigitalOutput(0x03, 0x03);
+        bd.WriteDigitalOutput(0x03, 0x01);
+        bd.WriteDigitalOutput(0x03, 0x00);
+    }
+    else {
+        bd.WriteDigitalOutput(0x0C, 0x00);
+        bd.WriteDigitalOutput(0x0C, 0x04);
+        bd.WriteDigitalOutput(0x0C, 0x0C);
+        bd.WriteDigitalOutput(0x0C, 0x08);
+        bd.WriteDigitalOutput(0x0C, 0x00);
+    }
 }
 
 
@@ -104,11 +121,17 @@ int main(int argc, char** argv)
                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
 
     std::vector<AmpIO*> BoardList;
+    std::vector<AmpIO_UInt32> FirmwareVersionList;
     BoardList.push_back(new AmpIO(board1));
     Port.AddBoard(BoardList[0]);
     if (board2 < BoardIO::MAX_BOARDS) {
         BoardList.push_back(new AmpIO(board2));
         Port.AddBoard(BoardList[1]);
+    }
+
+    FirmwareVersionList.clear();
+    for (j = 0; j < BoardList.size(); j++) {
+        FirmwareVersionList.push_back(BoardList[j]->GetFirmwareVersion());
     }
 
     for (i = 0; i < 4; i++) {
@@ -171,11 +194,11 @@ int main(int argc, char** argv)
         }
         else if (c == 'w') {
             for (j = 0; j < BoardList.size(); j++)
-                EncUp(*(BoardList[j]));
+                EncUp(*(BoardList[j]), FirmwareVersionList[j]);
         }
         else if (c == 's') {
             for (j = 0; j < BoardList.size(); j++)
-                EncDown(*(BoardList[j]));
+                EncDown(*(BoardList[j]), FirmwareVersionList[j]);
         }
         else if (c == 'd'){
             watchdog_on = !watchdog_on;

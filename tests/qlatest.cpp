@@ -22,38 +22,54 @@
 #include "FirewirePort.h"
 #include "AmpIO.h"
 
-void EncUp(AmpIO &bd)
+/*!
+ \brief Increment encoder counts
+ \param[in] bd FPGA Board
+ \param[in] fver Board Firmware Version
+*/
+void EncUp(AmpIO &bd, const AmpIO_UInt32 fver)
 {
-#if 0   // New firmware (>4.0)
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x01);
-    bd.WriteDigitalOutput(0x03, 0x03);
-    bd.WriteDigitalOutput(0x03, 0x02);
-    bd.WriteDigitalOutput(0x03, 0x00);
-#else
-    bd.WriteDigitalOutput(0x0C, 0x00);
-    bd.WriteDigitalOutput(0x0C, 0x08);
-    bd.WriteDigitalOutput(0x0C, 0x0C);
-    bd.WriteDigitalOutput(0x0C, 0x04);
-    bd.WriteDigitalOutput(0x0C, 0x00);
-#endif
+    // Firmware <= 4, DOUT order is reversed
+    // Fixed in Firmware > 4
+    if (fver > 4) {
+        bd.WriteDigitalOutput(0x03, 0x00);
+        bd.WriteDigitalOutput(0x03, 0x01);
+        bd.WriteDigitalOutput(0x03, 0x03);
+        bd.WriteDigitalOutput(0x03, 0x02);
+        bd.WriteDigitalOutput(0x03, 0x00);
+    }
+    else {
+        bd.WriteDigitalOutput(0x0C, 0x00);
+        bd.WriteDigitalOutput(0x0C, 0x08);
+        bd.WriteDigitalOutput(0x0C, 0x0C);
+        bd.WriteDigitalOutput(0x0C, 0x04);
+        bd.WriteDigitalOutput(0x0C, 0x00);
+    }
 }
 
-void EncDown(AmpIO &bd)
+/*!
+ \brief Decrement encoder counts
+ \param[in] bd FPGA Board
+ \param[in] fver Board Firmware Version
+*/
+void EncDown(AmpIO &bd, const AmpIO_UInt32 fver)
 {
-#if 0   // New firmware (>4.0)
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x02);
-    bd.WriteDigitalOutput(0x03, 0x03);
-    bd.WriteDigitalOutput(0x03, 0x01);
-    bd.WriteDigitalOutput(0x03, 0x00);
-#else
-    bd.WriteDigitalOutput(0x0C, 0x00);
-    bd.WriteDigitalOutput(0x0C, 0x04);
-    bd.WriteDigitalOutput(0x0C, 0x0C);
-    bd.WriteDigitalOutput(0x0C, 0x08);
-    bd.WriteDigitalOutput(0x0C, 0x00);
-#endif
+    // Firmware <= 4, DOUT order is reversed
+    // Fixed in Firmware > 4
+    if (fver > 4) {
+        bd.WriteDigitalOutput(0x03, 0x00);
+        bd.WriteDigitalOutput(0x03, 0x02);
+        bd.WriteDigitalOutput(0x03, 0x03);
+        bd.WriteDigitalOutput(0x03, 0x01);
+        bd.WriteDigitalOutput(0x03, 0x00);
+    }
+    else {
+        bd.WriteDigitalOutput(0x0C, 0x00);
+        bd.WriteDigitalOutput(0x0C, 0x04);
+        bd.WriteDigitalOutput(0x0C, 0x0C);
+        bd.WriteDigitalOutput(0x0C, 0x08);
+        bd.WriteDigitalOutput(0x0C, 0x00);
+    }
 }
 
 void ClearLines(int start, int end)
@@ -109,6 +125,9 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     bool pass = true;
     bool tmpFix;
 
+    AmpIO_UInt32 fver;  // firmware version
+    fver = Board.GetFirmwareVersion();
+
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
     Board.WriteDigitalOutput(0x0f, 0x00);
@@ -134,7 +153,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
         for (j = 0; j < 4; j++)
             testValue[j] = 0x800000;
         for (i = 0; (i < (0x100/4)) && pass; i++) {
-            EncUp(Board);
+            EncUp(Board, fver);
             usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
@@ -197,7 +216,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
         for (j = 0; j < 4; j++)
             testValue[j] = 0x800000;
         for (i = (0x100/4)-1; (i >= 0) && tmp_pass; i--) {
-            EncDown(Board);
+            EncDown(Board, fver);
             usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
