@@ -23,20 +23,36 @@
 
 void EncUp(AmpIO &bd)
 {
+#if 0   // New firmware (>4.0)
     bd.WriteDigitalOutput(0x03, 0x00);
     bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x00);
+#else
+    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x08);
+    bd.WriteDigitalOutput(0x0C, 0x0C);
+    bd.WriteDigitalOutput(0x0C, 0x04);
+    bd.WriteDigitalOutput(0x0C, 0x00);
+#endif
 }
 
 void EncDown(AmpIO &bd)
 {
+#if 0   // New firmware (>4.0)
     bd.WriteDigitalOutput(0x03, 0x00);
     bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x00);
+#else
+    bd.WriteDigitalOutput(0x0C, 0x00);
+    bd.WriteDigitalOutput(0x0C, 0x04);
+    bd.WriteDigitalOutput(0x0C, 0x0C);
+    bd.WriteDigitalOutput(0x0C, 0x08);
+    bd.WriteDigitalOutput(0x0C, 0x00);
+#endif
 }
 
 
