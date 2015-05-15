@@ -18,6 +18,7 @@
 #include <math.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 
 #include "FirewirePort.h"
 #include "AmpIO.h"
@@ -81,16 +82,15 @@ void ClearLines(int start, int end)
         mvprintw(start++, 9, blank);
 }
 
-bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
+bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
 {
     bool pass = true;
     unsigned long data;
     char buf[80];
 
+    logFile << std::endl << "=== DIGITAL INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT1 and all digital inputs");
-
-    // get firmware version
     AmpIO_UInt32 fver = Board.GetFirmwareVersion();
     if (fver > 4) Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
     else Board.WriteDigitalOutput(0x01, 0x01);  // DOUT is active high
@@ -98,10 +98,14 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
     usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
-    if (!data)
+    logFile << "   All inputs low: " << std::hex << data;
+    if (!data) {
         sprintf(buf, "Setting all inputs low - PASS (%03lx)", data);
+        logFile << " PASS" << std::endl;
+    }
     else {
         sprintf(buf, "Setting all inputs low - FAIL (%03lx)", data);
+        logFile << " FAIL" << std::endl;
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
@@ -111,10 +115,14 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
     usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
-    if (data == 0x0fff)
+    logFile << "   All inputs high: " << std::hex << data;
+    if (data == 0x0fff) {
         sprintf(buf, "Setting all inputs high - PASS (%03lx)", data);
+        logFile << " PASS" << std::endl;
+    }
     else {
         sprintf(buf, "Setting all inputs high - FAIL (%03lx)", data);
+        logFile << " FAIL" << std::endl;
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
@@ -122,7 +130,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
 }
 
 
-bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
+bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
 {
     int i, j;
     unsigned long darray[4];
@@ -135,36 +143,37 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     AmpIO_UInt32 fver;  // firmware version
     fver = Board.GetFirmwareVersion();
 
+    logFile << std::endl << "=== ENCODER INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
     Board.WriteDigitalOutput(0x0f, 0x00);
     // First, test setting of encoder preload
     for (i = 0; i < 4; i++)
-        Board.WriteEncoderPreload(i, 0x800000 - 0x800000);
+        Board.WriteEncoderPreload(i, 0);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
-        darray[i] = Board.GetEncoderPosition(i) + 0x800000;
-        if (darray[i] != 0x800000)
+        darray[i] = Board.GetEncoderPosition(i);
+        if (darray[i] != 0)
             pass = false;
     }
     if (pass)
-        sprintf(buf, "Set encoder preload to 0x800000 - PASS");
+        sprintf(buf, "Set encoder preload to 0 - PASS");
     else
-        sprintf(buf, "Set encoder preload to 0x800000 - FAIL (%06lx %06lx %06lx %06lx)",
+        sprintf(buf, "Set encoder preload to 0 - FAIL (%06lx %06lx %06lx %06lx)",
                      darray[0], darray[1], darray[2], darray[3]);
     mvprintw(curLine++, 9, buf);
     refresh();
     if (pass) {
-        mvprintw(curLine, 9, "Testing encoder increment to 0x800100 -");
+        mvprintw(curLine, 9, "Testing encoder increment to 0x000100 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
-            testValue[j] = 0x800000;
+            testValue[j] = 0;
         for (i = 0; (i < (0x100/4)) && pass; i++) {
             EncUp(Board, fver);
             usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
-                darray[j] = Board.GetEncoderPosition(j) + 0x800000;
+                darray[j] = Board.GetEncoderPosition(j);
                 unsigned long expected = testValue[j]+4*(i+1);
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
@@ -200,17 +209,17 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     }
     bool tmp_pass = true;
     for (i = 0; i < 4; i++)
-        Board.WriteEncoderPreload(i, 0x800100 - 0x800000);
+        Board.WriteEncoderPreload(i, 0x000100);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
-        darray[i] = Board.GetEncoderPosition(i) + 0x800000;
-        if (darray[i] != 0x800100)
+        darray[i] = Board.GetEncoderPosition(i);
+        if (darray[i] != 0x000100)
             tmp_pass = false;
     }
     if (tmp_pass)
-        sprintf(buf, "Set encoder preload to 0x800100 - PASS");
+        sprintf(buf, "Set encoder preload to 0x000100 - PASS");
     else {
-        sprintf(buf, "Set encoder preload to 0x800100 - FAIL (%06lx %06lx %06lx %06lx)",
+        sprintf(buf, "Set encoder preload to 0x000100 - FAIL (%06lx %06lx %06lx %06lx)",
                       darray[0], darray[1], darray[2], darray[3]);
         pass = false;
     }
@@ -218,16 +227,16 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     refresh();
 
     if (tmp_pass) {
-        mvprintw(curLine, 9, "Testing encoder decrement to 0x800000 -");
+        mvprintw(curLine, 9, "Testing encoder decrement to 0x000000 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
-            testValue[j] = 0x800000;
+            testValue[j] = 0;
         for (i = (0x100/4)-1; (i >= 0) && tmp_pass; i--) {
             EncDown(Board, fver);
             usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
-                darray[j] = Board.GetEncoderPosition(j) + 0x800000;
+                darray[j] = Board.GetEncoderPosition(j);
                 unsigned long expected = testValue[j] + 4*i;
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
@@ -248,7 +257,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
             if (tmpFix) {
                 strcat(buf, " (adjusted");
                 for (j = 0; j < 4; j++) {
-                    if (testValue[j] != 0x800000)
+                    if (testValue[j] != 0)
                         strcat(buf, numStr[j]);
                 }
                 strcat(buf, ")");
@@ -257,7 +266,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
         else {
             pass = false;
             // Following message could be improved to take testValue into account.
-            sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x800000UL+4*(i+1),
+            sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x000000UL+4*(i+1),
                          darray[0], darray[1], darray[2], darray[3]);
         }
         mvprintw(curLine++, 49, buf);
@@ -266,7 +275,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     return pass;
 }
 
-bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port)
+bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
 {
     int i, j;
     char buf[80];
@@ -307,7 +316,7 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port)
     return pass;
 }
 
-bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
+bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
 {
     char buf[100];
     unsigned long status;
@@ -410,7 +419,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port)
     return pass;
 }
 
-bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port)
+bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
 {
     char buf[100];
     unsigned long status;
@@ -506,23 +515,35 @@ int main(int argc, char** argv)
     int i;
     int port = 0;
     int board = 0;
+    bool requireQLA_SN = true;
 
-    int args_found = 0;
-    for (i = 1; i < argc; i++) {
-        if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            port = atoi(argv[i]+2);
-            std::cerr << "Selecting port " << port << std::endl;
-        }
-        else {
-            if (args_found == 0)
-                board = atoi(argv[i]);
-            args_found++;
-        }
-    }
-    if (args_found < 1) {
-        std::cerr << "Usage: qlatest <board-num> [-pP]" << std::endl
-                  << "       where P = port number (default 0)" << std::endl;
-        return 0;
+    if (argc > 1) {
+        int args_found = 0;
+        for (i = 1; i < argc; i++) {
+            if (argv[i][0] == '-') {
+                if (argv[i][1] == 'p') {
+                    port = atoi(argv[i]+2);
+                    std::cerr << "Selecting port " << port << std::endl;
+                }
+                else if (argv[i][1] == 'k')  {
+                    requireQLA_SN = false;
+                }
+                else {
+                    std::cerr << "Usage: qlatest [<board-num>] [-pP] [-k]" << std::endl
+                    << "       where <board-num> = rotary switch setting (0-15, default 0)" << std::endl
+                    << "             P = port number (default 0)" << std::endl
+                    << "             -k option means to continue test even if QLA serial number not found" << std::endl;
+                    return 0;
+                }
+            }
+            else {
+                if (args_found == 0) {
+                    board = atoi(argv[i]);
+                    std::cerr << "Selecting board " << board << std::endl;
+                }
+                args_found++;
+            }
+       }
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
@@ -534,11 +555,38 @@ int main(int argc, char** argv)
     AmpIO Board(board);
     Port.AddBoard(&Board);
 
+    std::string logFilename("QLA_");
+    //std::string QLA_SN = Board.GetQLASerialNumber();
+    std::string QLA_SN("4265-01");
+    if (QLA_SN.empty()) {
+        if (requireQLA_SN) {
+            std::cerr << "Failed to get QLA serial number (specify -k command line option to continue test)" << std::endl;
+            return 0;
+        }
+        QLA_SN.assign("Unknown");
+    }
+    logFilename.append(QLA_SN);
+    logFilename.append(".log");
+    std::ofstream logFile(logFilename.c_str());
+    if (!logFile.good()) {
+        std::cerr << "Failed to open log file " << logFilename << std::endl;
+        return 0;
+    }
+    logFile << "QLA S/N: " << QLA_SN << std::endl;
+
+    //std::string FPGA_SN = Board.GetFPGASerialNumber();
+    std::string FPGA_SN;
+    if (FPGA_SN.empty())
+        FPGA_SN.assign("Unknown");
+    logFile << "FPGA S/N: " << FPGA_SN << std::endl;
+
+    logFile << "FPGA Firmware Version: " << Board.GetFirmwareVersion() << std::endl;
+
     initscr();
     cbreak();
     keypad(stdscr, TRUE);
 
-    mvprintw(1, 9, "QLA Test for Board %d", board);
+    mvprintw(1, 9, "QLA Test for Board %d, S/N %s", board, QLA_SN.c_str());
 
     mvprintw(3, 9, "0) Quit");
     mvprintw(4, 9, "1) Test digital input:");
@@ -580,7 +628,7 @@ int main(int argc, char** argv)
                 break;
             case '1':   // Test digital input
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestDigitalInputs(TEST_START_LINE, Board, Port))
+                if (TestDigitalInputs(TEST_START_LINE, Board, Port, logFile))
                     mvprintw(4, 46, "PASS");
                 else
                     mvprintw(4, 46, "FAIL");
@@ -588,7 +636,7 @@ int main(int argc, char** argv)
 
             case '2':    // Test encoder feedback
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestEncoders(TEST_START_LINE, Board, Port))
+                if (TestEncoders(TEST_START_LINE, Board, Port, logFile))
                     mvprintw(5, 46, "PASS");
                 else
                     mvprintw(5, 46, "FAIL");
@@ -596,7 +644,7 @@ int main(int argc, char** argv)
 
             case '3':    // Test analog feedback
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestAnalogInputs(TEST_START_LINE, Board, Port))
+                if (TestAnalogInputs(TEST_START_LINE, Board, Port, logFile))
                     mvprintw(6, 46, "PASS");
                 else
                     mvprintw(6, 46, "FAIL");
@@ -604,7 +652,7 @@ int main(int argc, char** argv)
 
             case '4': 
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestMotorPowerControl(TEST_START_LINE, Board, Port))
+                if (TestMotorPowerControl(TEST_START_LINE, Board, Port, logFile))
                     mvprintw(7, 46, "PASS");
                 else
                     mvprintw(7, 46, "FAIL");
@@ -612,7 +660,7 @@ int main(int argc, char** argv)
 
             case '5': 
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestPowerAmplifier(TEST_START_LINE, Board, Port))
+                if (TestPowerAmplifier(TEST_START_LINE, Board, Port, logFile))
                     mvprintw(8, 46, "PASS");
                 else
                     mvprintw(8, 46, "FAIL");
