@@ -543,6 +543,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
                 mvprintw(curLine+2, 15+7*i, "PASS");
             }
         }
+        logFile << std::endl;
         sprintf(buf, "%04lx   %04lx   %04lx   %04lx", cur[0], cur[1], cur[2], cur[3]);
         mvprintw(curLine+1, 15, buf);
 
@@ -648,6 +649,7 @@ int main(int argc, char** argv)
         std::cerr << "Failed to open log file " << logFilename << std::endl;
         return 0;
     }
+    logFile << "====== TEST REPORT ======" << std::endl << std::endl;
     logFile << "QLA S/N: " << QLA_SN << std::endl;
 
 #if 0
