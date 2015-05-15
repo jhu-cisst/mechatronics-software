@@ -89,7 +89,12 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
 
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT1 and all digital inputs");
-    Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
+
+    // get firmware version
+    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    if (fver > 4) Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
+    else Board.WriteDigitalOutput(0x01, 0x01);  // DOUT is active high
+
     usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
@@ -100,7 +105,9 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port)
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
-    Board.WriteDigitalOutput(0x08, 0x00);  // DOUT is active low
+    if (fver > 4) Board.WriteDigitalOutput(0x08, 0x00);  // DOUT is active low
+    else Board.WriteDigitalOutput(0x01, 0x00);  // DOUT is active low
+
     usleep(1000);
     Port.ReadAllBoards();
     data = Board.GetDigitalInput();
@@ -133,10 +140,10 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     Board.WriteDigitalOutput(0x0f, 0x00);
     // First, test setting of encoder preload
     for (i = 0; i < 4; i++)
-        Board.WriteEncoderPreload(i, 0x800000);
+        Board.WriteEncoderPreload(i, 0x800000 - 0x800000);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
-        darray[i] = Board.GetEncoderPosition(i);
+        darray[i] = Board.GetEncoderPosition(i) + 0x800000;
         if (darray[i] != 0x800000)
             pass = false;
     }
@@ -157,7 +164,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
             usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
-                darray[j] = Board.GetEncoderPosition(j);
+                darray[j] = Board.GetEncoderPosition(j) + 0x800000;
                 unsigned long expected = testValue[j]+4*(i+1);
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
@@ -193,10 +200,10 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
     }
     bool tmp_pass = true;
     for (i = 0; i < 4; i++)
-        Board.WriteEncoderPreload(i, 0x800100);
+        Board.WriteEncoderPreload(i, 0x800100 - 0x800000);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
-        darray[i] = Board.GetEncoderPosition(i);
+        darray[i] = Board.GetEncoderPosition(i) + 0x800000;
         if (darray[i] != 0x800100)
             tmp_pass = false;
     }
@@ -220,7 +227,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port)
             usleep(100);
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
-                darray[j] = Board.GetEncoderPosition(j);
+                darray[j] = Board.GetEncoderPosition(j) + 0x800000;
                 unsigned long expected = testValue[j] + 4*i;
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
