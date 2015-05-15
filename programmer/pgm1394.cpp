@@ -158,7 +158,6 @@ bool PromDisplayPage(AmpIO &Board, unsigned long addr)
 */
 bool PromFPGASerialNumberProgram(AmpIO &Board)
 {
-#if 0
     std::stringstream ss;
     std::string BoardType;
     std::string str;
@@ -183,23 +182,23 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     std::cin.ignore(20,'\n');
     ss << BoardType << " " << FPGASN;
     str = ss.str();
-    char buffer[20] = "1111-22";
-//    for (size_t i = 0; i < str.length(); i++) {
-//        buffer[i] = str.at(i);
-//    }
+    char buffer[20];
+    for (size_t i = 0; i < str.length(); i++) {
+        buffer[i] = str.at(i);
+    }
 
-    std::cout << "FPGA SN = " << buffer << "  length = " << str.length() << std::endl;
     int ret;
+    Callback_StartTime = get_time();
+    Board.PromSectorErase(0x1F0000, PromProgramCallback);
     ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, str.length());
     if (ret < 0) {std::cerr << "Can't program FPGA Serial Number";}
     else usleep(5000);
 
     BoardSNRead.clear();
     BoardSNRead = Board.GetFPGASerialNumber();
-    std::cout << "Read FPGA SN = " << BoardSNRead << std::endl;
 
     if (FPGASN == BoardSNRead) {
-        std::cout << "FPGA " << FPGASN << " Programmed" << std::endl;
+        std::cout << "Programmed " << FPGASN << " Serial Number" << std::endl;
     } else {
         std::cerr << "Failed to program" << std::endl;
         std::cerr << "Board SN = " << FPGASN << "\n"
@@ -207,30 +206,6 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
         success = false;
     }
     return success;
-#endif
-
-#if 1
-    // ==== FPGA Serial ===
-    char FPGASN[100] = "FPGA 9876-54";
-    std::cout << "FPGA SN = " << FPGASN << "  length = " << strlen(FPGASN) << std::endl;
-    int ret;
-    Board.PromWriteEnable();
-    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&FPGASN, strlen(FPGASN));
-    if (ret < 0) {std::cerr << "Can't proram FPGA Serial Number";}
-    else usleep(5000);
-
-    std::cout << "WRITE = 0x ";
-    for (size_t i = 0; i < strlen(FPGASN); i++) {
-        std::cout << std::hex << (int)FPGASN[i] << " ";
-    }
-    std::cout << std::endl;
-#endif
-
-    Board.GetFPGASerialNumber();
-//    std::cout << "Read SN 2 = " << Board.GetFPGASerialNumber() << std::endl;
-
-
-
 }
 
 
