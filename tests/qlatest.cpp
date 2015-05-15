@@ -170,7 +170,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     mvprintw(curLine++, 9, buf);
     refresh();
     if (pass) {
-        logFile << "   Increment to 0x000100: ";
+        logFile << "   Increment to 0x000100:" << std::endl;
         mvprintw(curLine, 9, "Testing encoder increment to 0x000100 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
@@ -178,10 +178,11 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
         for (i = 0; (i < (0x100/4)) && pass; i++) {
             EncUp(Board, fver);
             usleep(100);
+            logFile << "      ";
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
-                logFile << darray[j] << " ";
+                logFile << darray[j];
                 unsigned long expected = testValue[j]+4*(i+1);
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
@@ -189,16 +190,22 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
                     // we allow this discrepancy and adjust testValue
                     // so that we can continue the test.
                     if (i == 0) {
+                        logFile << "  ";
                         testValue[j] = darray[j]-4;
                         tmpFix = true;
                     }
-                    else
+                    else {
+                        logFile << "* ";
                         pass = false;
+                    }
                 }
+                else
+                    logFile << "  ";
             }
+            logFile << std::endl;
         }
         if (pass) {
-            logFile << " - PASS" << std::endl;
+            logFile << "   Increment result - PASS" << std::endl;
             sprintf(buf, "PASS");
             if (tmpFix) {
                 strcat(buf, " (adjusted");
@@ -209,11 +216,12 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
                 strcat(buf, ")");
             }
         }
-        else
-            logFile << " - FAIL" << std::endl;
+        else {
+            logFile << "   Increment result - FAIL" << std::endl;
             // Following message could be improved to take testValue into account.
             sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x800000UL+4*i,
                          darray[0], darray[1], darray[2], darray[3]);
+        }
         mvprintw(curLine++, 49, buf);
         refresh();
     }
@@ -242,7 +250,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     refresh();
 
     if (tmp_pass) {
-        logFile << "   Decrement to 0x000000: ";
+        logFile << "   Decrement to 0x000000:" << std::endl;
         mvprintw(curLine, 9, "Testing encoder decrement to 0x000000 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
@@ -250,10 +258,11 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
         for (i = (0x100/4)-1; (i >= 0) && tmp_pass; i--) {
             EncDown(Board, fver);
             usleep(100);
+            logFile << "      ";
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
-                logFile << std::hex << darray[j] << " ";
+                logFile << std::hex << darray[j];
                 unsigned long expected = testValue[j] + 4*i;
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
@@ -261,16 +270,22 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
                     // we allow this discrepancy and adjust testValue
                     // so that we can continue the test.
                     if (i == (0x100/4)-1) {
+                        logFile << "  ";
                         testValue[j] = darray[j]-0x100+4;
                         tmpFix = true;
                     }
-                    else
+                    else {
+                        logFile << "* ";
                         tmp_pass = false;
+                    }
                 }
+                else
+                    logFile << "  ";
             }
+            logFile << std::endl;
         }
         if (tmp_pass) {
-            logFile << "- PASS" << std::endl;
+            logFile << "   Decrement result - PASS" << std::endl;
             sprintf(buf, "PASS");
             if (tmpFix) {
                 strcat(buf, " (adjusted");
@@ -282,7 +297,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             }
         }
         else {
-            logFile << "- FAIL" << std::endl;
+            logFile << "   Decrement result - FAIL" << std::endl;
             pass = false;
             // Following message could be improved to take testValue into account.
             sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x000000UL+4*(i+1),
@@ -508,7 +523,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     // Read temperature in Celsius
     unsigned short temp1 = Board.GetAmpTemperature(0)/2;
     unsigned short temp2 = Board.GetAmpTemperature(1)/2;
-    logFile << "   Motor temperatures: " << temp1 << ", " << temp2 << " degC (expected range is 20-40) ";
+    logFile << "   Motor temperatures: " << std::dec << temp1 << ", " << temp2 << " degC (expected range is 20-40) ";
     if ((temp1 < 20) || (temp1 > 40) || (temp2 < 20) || (temp2 > 40)) {
         logFile << "- FAIL" << std::endl;
         sprintf(buf, "FAIL (%d, %d degC)", temp1, temp2);
@@ -549,7 +564,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
 
         unsigned short newTemp1 = Board.GetAmpTemperature(0)/2;
         unsigned short newTemp2 = Board.GetAmpTemperature(1)/2;        
-        logFile << "   Motor temperatures: " << newTemp1 << ", " << newTemp2 << " degC (expected to be increasing)";
+        logFile << "   Motor temperatures: " << std::dec  << newTemp1 << ", " << newTemp2 << " degC (expected to be increasing)";
         if ((newTemp1 >= temp1) && (newTemp2 >= temp2))
             logFile << " - PASS" << std::endl;
         else
