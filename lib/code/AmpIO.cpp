@@ -96,10 +96,22 @@ std::string AmpIO::GetFPGASerialNumber(void)
     std::string sn; sn.clear();
     const size_t FPGASNSize = 12;
 
+    std::cout << "FPGA SN = 0x ";
     PromReadData(address, data, FPGASNSize);
     for (size_t i = 0; i < FPGASNSize; i++) {
-        sn.push_back(data[i]);
+//        sn.push_back(data[i]);
+        std::cout << std::hex << (int)data[i] << " ";
     }
+    std::cout << std::endl;
+
+//    std::cout << "sn = " << sn << std::endl;
+
+//    if (sn.substr(0,5) == "FPGA")
+//        sn.erase(0,5);
+//    else {
+//        std::cerr << "Invalid FPGA Serial Number: " << sn << std::endl;
+//        sn.clear();
+//    }
     return sn;
 }
 
