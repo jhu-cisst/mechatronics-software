@@ -1,7 +1,7 @@
 #
 # $Id$
 #
-# (C) Copyright 2012 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2012-2015 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -15,6 +15,10 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(util1394)
+
+if(NOT EXECUTABLE_OUTPUT_PATH)
+   set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})
+endif(NOT EXECUTABLE_OUTPUT_PATH)
 
 set(PROGRAMS block1394 info1394 time1394)
 

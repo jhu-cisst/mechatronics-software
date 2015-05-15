@@ -39,10 +39,12 @@ public:
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    AmpIO_UInt32 GetFirmwareVersion(void) const;    
-    // Return FPGA serial number (empty string if not found)
+    AmpIO_UInt32 GetFirmwareVersion(void) const;
+<<<<<<< HEAD
     std::string GetFPGASerialNumber(void);
+=======
     // Return QLA serial number (empty string if not found)
+>>>>>>> devel
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
