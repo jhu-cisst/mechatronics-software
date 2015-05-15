@@ -94,9 +94,10 @@ std::string AmpIO::GetFPGASerialNumber(void)
     AmpIO_UInt32 address = 0x001FFF00;
     AmpIO_UInt8 data[20];
     std::string sn; sn.clear();
+    const size_t FPGASNSize = 12;
 
-    PromReadData(address, data, 12);
-    for (size_t i = 0; i < 12; i++) {
+    PromReadData(address, data, FPGASNSize);
+    for (size_t i = 0; i < FPGASNSize; i++) {
         sn.push_back(data[i]);
     }
     return sn;
@@ -108,7 +109,8 @@ std::string AmpIO::GetQLASerialNumber(void)
     std::string sn; sn.clear();
     AmpIO_UInt16 address = 0x0000;
     AmpIO_UInt8 data;
-    for (size_t i = 0; i < 11; i++) {
+    const size_t QLASNSize = 11;
+    for (size_t i = 0; i < QLASNSize; i++) {
         if (!PromReadByte25AA128(address, data))
             std::cerr << "Failed to get QLA Serial Nubmer" << std::endl;
         else {

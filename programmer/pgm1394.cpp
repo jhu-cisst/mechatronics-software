@@ -154,10 +154,16 @@ bool PromDisplayPage(AmpIO &Board, unsigned long addr)
  \brief Prom QLA serial and Revision Number
 
  \param[in] Board FPGA Board
- \return bool
+ \return[out] bool true on success, false otherwise
 */
 bool PromQLAProgram(AmpIO &Board)
 {
+    std::stringstream ss;
+    std::string BoardType;
+    std::string str;
+    std::string BoardSNRead;
+    bool success = true;
+
     AmpIO_UInt32 fver = Board.GetFirmwareVersion();
     if (fver < 4) {
         std::cout << "Firmware not supported, current version = " << fver << "\n"
@@ -166,35 +172,47 @@ bool PromQLAProgram(AmpIO &Board)
     }
 
     // ==== FPGA Serial ===
-    char FPGASN[100] = "FPGA 9876-54";
-    std::cout << "FPGA SN = " << FPGASN << "  length = " << strlen(FPGASN) << std::endl;
+    // FPGA 1234-56
+    // - FPGA: board type
+    // - 1234-56: serial number
+    BoardType = "FPGA";
+    std::string FPGASN = "0000-00";
+    std::cout << "Please Enter FPGA Serial Number: " << std::endl;
+    std::cin >> FPGASN;
+    std::cin.ignore(20,'\n');
+    ss << BoardType << " " << FPGASN << std::endl;
+    str = ss.str();
+    str = str.substr(0, str.length()-1);  // ZC: hack, might have better way
+    char buffer[20];
+    strcpy(buffer, str.c_str());
+
+//    char FPGASN[100];
+//    std::cin.get(FPGASN, 12, '\n');
+
+    std::cout << "FPGA SN = " << str << "  length = " << str.length() << std::endl;
     int ret;
-    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&FPGASN, strlen(FPGASN));
-    if (ret < 0) {std::cerr << "Can't proram FPGA Serial Number";}
+    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, str.length());
+    if (ret < 0) {std::cerr << "Can't program FPGA Serial Number";}
     else usleep(5000);
 
-    std::cout << "Read SN 2 = " << Board.GetFPGASerialNumber() << std::endl;
+    BoardSNRead.clear();
+    BoardSNRead = Board.GetFPGASerialNumber();
+    std::cout << "Read FPGA SN = " << BoardSNRead << std::endl;
 
-#if 0
-    // Address
-    AmpIO_UInt16 addr = 0x0000;
+    if (str == BoardSNRead) {
+        std::cout << "FPGA " << FPGASN << " Programmed" << std::endl;
+    } else {
+        std::cerr << "Failed to program" << std::endl;
+        success = false;
+    }
 
-    // Write Test data
-    AmpIO_UInt8 wdata = 0xA3;  // test
-    Board.PromWriteByte25AA128(addr,wdata);
 
-    // Read Back
-    AmpIO_UInt8 rdata;
-    Board.PromReadByte25AA128(addr, rdata);
-#endif
-
-    // QLA 3792-65
+    // ==== QLA Serial ===
+    // QLA 9876-54
     // - QLA: board type
-    // - 3792-65: serial number
-    std::stringstream ss;
-    std::string BoardType = "QLA";
+    // - 9876-54: serial number
+    BoardType = "QLA";
     std::string BoardSN = "0000-00";
-    std::string str;
     AmpIO_UInt8 wbyte;
     AmpIO_UInt16 address;
 
@@ -217,17 +235,19 @@ bool PromQLAProgram(AmpIO &Board)
     }
 
     // S2: read back and verify
-    std::string BoardSNRead = Board.GetQLASerialNumber();
+    BoardSNRead.clear();
+    BoardSNRead = Board.GetQLASerialNumber();
 //    std::cout << "SN = " << BoardSNRead << " length = " << BoardSNRead.length() << std::endl;
 //    std::cout << "st = " << str << " length = " << str.length() << std::endl;
 
     if (str == BoardSNRead) {
         std::cout << "Board " << BoardSN << " Programmed" << std::endl;
-        return true;
     } else {
         std::cerr << "Failed to program" << std::endl;
-        return false;
+        success = false;
     }
+
+    return success;
 }
 
 int main(int argc, char** argv)
