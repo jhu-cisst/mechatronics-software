@@ -101,11 +101,11 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
     logFile << "   All inputs low: " << std::hex << data;
     if (!data) {
         sprintf(buf, "Setting all inputs low - PASS (%03lx)", data);
-        logFile << " PASS" << std::endl;
+        logFile << " - PASS" << std::endl;
     }
     else {
         sprintf(buf, "Setting all inputs low - FAIL (%03lx)", data);
-        logFile << " FAIL" << std::endl;
+        logFile << " - FAIL" << std::endl;
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
@@ -118,11 +118,11 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
     logFile << "   All inputs high: " << std::hex << data;
     if (data == 0x0fff) {
         sprintf(buf, "Setting all inputs high - PASS (%03lx)", data);
-        logFile << " PASS" << std::endl;
+        logFile << " - PASS" << std::endl;
     }
     else {
         sprintf(buf, "Setting all inputs high - FAIL (%03lx)", data);
-        logFile << " FAIL" << std::endl;
+        logFile << " - FAIL" << std::endl;
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
@@ -148,22 +148,29 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
                            " generate a known number of quadrature encoder signals");
     Board.WriteDigitalOutput(0x0f, 0x00);
     // First, test setting of encoder preload
+    logFile << "   Preload to 0x000000: ";
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
+        logFile << std::hex << darray[i] << " ";
         if (darray[i] != 0)
             pass = false;
     }
-    if (pass)
+    if (pass) {
+        logFile << "- PASS" << std::endl;
         sprintf(buf, "Set encoder preload to 0 - PASS");
-    else
+    }
+    else {
+        logFile << "- FAIL" << std::endl;
         sprintf(buf, "Set encoder preload to 0 - FAIL (%06lx %06lx %06lx %06lx)",
                      darray[0], darray[1], darray[2], darray[3]);
+    }
     mvprintw(curLine++, 9, buf);
     refresh();
     if (pass) {
+        logFile << "   Increment to 0x000100: ";
         mvprintw(curLine, 9, "Testing encoder increment to 0x000100 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
@@ -174,6 +181,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
+                logFile << darray[j] << " ";
                 unsigned long expected = testValue[j]+4*(i+1);
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
@@ -190,6 +198,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             }
         }
         if (pass) {
+            logFile << " - PASS" << std::endl;
             sprintf(buf, "PASS");
             if (tmpFix) {
                 strcat(buf, " (adjusted");
@@ -201,6 +210,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             }
         }
         else
+            logFile << " - FAIL" << std::endl;
             // Following message could be improved to take testValue into account.
             sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x800000UL+4*i,
                          darray[0], darray[1], darray[2], darray[3]);
@@ -208,17 +218,22 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
         refresh();
     }
     bool tmp_pass = true;
+    logFile << "   Preload to 0x000100: ";
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0x000100);
     Port.ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
+        logFile << std::hex << darray[i] << " ";
         if (darray[i] != 0x000100)
             tmp_pass = false;
     }
-    if (tmp_pass)
+    if (tmp_pass) {
+        logFile << "- PASS" << std::endl;
         sprintf(buf, "Set encoder preload to 0x000100 - PASS");
+    }
     else {
+        logFile << "- FAIL" << std::endl;
         sprintf(buf, "Set encoder preload to 0x000100 - FAIL (%06lx %06lx %06lx %06lx)",
                       darray[0], darray[1], darray[2], darray[3]);
         pass = false;
@@ -227,6 +242,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     refresh();
 
     if (tmp_pass) {
+        logFile << "   Decrement to 0x000000: ";
         mvprintw(curLine, 9, "Testing encoder decrement to 0x000000 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
@@ -237,6 +253,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             Port.ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
+                logFile << std::hex << darray[j] << " ";
                 unsigned long expected = testValue[j] + 4*i;
                 if (darray[j] != expected) {
                     // There appears to be a problem, where the count
@@ -253,6 +270,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             }
         }
         if (tmp_pass) {
+            logFile << "- PASS" << std::endl;
             sprintf(buf, "PASS");
             if (tmpFix) {
                 strcat(buf, " (adjusted");
@@ -264,6 +282,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             }
         }
         else {
+            logFile << "- FAIL" << std::endl;
             pass = false;
             // Following message could be improved to take testValue into account.
             sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x000000UL+4*(i+1),
@@ -272,6 +291,10 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
         mvprintw(curLine++, 49, buf);
         refresh();
     }
+    if (pass)
+        logFile << "   Overall result: PASS" << std::endl;
+    else
+        logFile << "   Overall result: FAIL" << std::endl;
     return pass;
 }
 
@@ -282,6 +305,7 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstre
     double measured;
     bool pass = true;
 
+    logFile << std::endl << "=== Analog Inputs ===" << std::endl;
     mvprintw(curLine++, 9, "This test uses the pot on the test board to set a voltage (+/-0.25V)");
     bool tmp_pass = false;
     while (!tmp_pass) {
@@ -289,6 +313,7 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstre
         getstr(buf);
         if (sscanf(buf, "%lf", &measured) == 1) tmp_pass = true;
     }
+    logFile << "   Input voltage: " << measured << std::endl;
     curLine++;
     // Average 16 readings to reduce noise
     unsigned long pot[4] = { 0, 0, 0, 0};
@@ -298,19 +323,25 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstre
         for (j = 0; j < 4; j++)
             pot[j] += Board.GetAnalogInput(j);
     }
+    logFile << "   Readings: ";
     for (j = 0; j < 4; j++) {
         pot[j] /= 16;
         // Convert to voltage (16-bit converter, Vref = 4.5V)
         potV[j] = pot[j]*4.5/65535;
+        logFile << potV[j] << " ";
         if (fabs(potV[j] - measured) > 0.25)
             pass = false;
     }
-    if (pass)
+    if (pass) {
+        logFile << "- PASS" << std::endl;
         sprintf(buf, "Analog Input - PASS (%4.2lf %4.2lf %4.2lf %4.2lf)",
                 potV[0], potV[1], potV[2], potV[3]);
-    else
+    }
+    else {
+        logFile << "- FAIL" << std::endl;
         sprintf(buf, "Analog Input - FAIL (%4.2lf %4.2lf %4.2lf %4.2lf)",
                 potV[0], potV[1], potV[2], potV[3]);
+    }
 
     mvprintw(curLine, 9, buf);
     return pass;
@@ -324,6 +355,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     bool ignoreMV = false;     // ignore "motor voltage good" feedback
     unsigned long mask;
 
+    logFile << std::endl << "=== Motor Power Control ===" << std::endl;
     // Enabling motor power supply
     Board.WritePowerEnable(true);
     mvprintw(curLine, 9, "Enable motor power -");
@@ -331,15 +363,20 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     sleep(1);
     Port.ReadAllBoards();
     status = Board.GetStatus();
+    logFile << "   Enable motor power: " << std::hex << status;
     if ((status&0x000cffff) != 0x000c0000) {
+        logFile << " - FAIL" << std::endl;
         sprintf(buf, "FAIL (%08lx) - is motor power connected?", status);
         pass = false;
     }
-    else
+    else {
+        logFile << " - PASS" << std::endl;
         sprintf(buf, "PASS (%08lx)", status);
+    }
     mvprintw(curLine++, 30, buf);
 
     if (!pass && (status & 0x0004ffff) == 0x00040000) {
+        logFile << "   Continuing test, ignoring 'motor voltage good' feedback" << std::endl;
         mvprintw(curLine++, 9, "Continuing test, ignoring 'motor voltage good' feedback");
         ignoreMV = true;
     }
@@ -349,13 +386,17 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     usleep(1000);
     Port.ReadAllBoards();
     status = Board.GetStatus();
+    logFile << "   Amplifier enable: " << std::hex << status;
     mask = ignoreMV ? 0x0004ffff : 0x000cffff;
     if ((status&mask) != (0x000c0f0f&mask)) {
+        logFile << " - FAIL" << std::endl;
         sprintf(buf, "Enable power amplifiers - FAIL (%08lx)", status);
         pass = false;
     }
-    else
+    else {
+        logFile << " - PASS" << std::endl;
         sprintf(buf, "Enable power amplifiers - PASS (%08lx)", status);
+    }
     mvprintw(curLine++, 9, buf);
 
     refresh();
@@ -366,12 +407,16 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     usleep(1000);
     Port.ReadAllBoards();
     status = Board.GetStatus();
+    logFile << "   Amplifier disable: " << std::hex << status;
     if ((status&mask) != (0x000c0000&mask)) {
+        logFile << " - FAIL" << std::endl;
         sprintf(buf, "Disable power amplifiers - FAIL (%08lx)", status);
         pass = false;
     }
-    else
+    else {
+        logFile << " - PASS" << std::endl;
         sprintf(buf, "Disable power amplifiers - PASS (%08lx)", status);
+    }
     mvprintw(curLine++, 9, buf);
 
     Board.WritePowerEnable(false);
@@ -380,24 +425,32 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     sleep(1);
     Port.ReadAllBoards();
     status = Board.GetStatus();
+    logFile << "   Disable motor power: " << std::hex << status;
     if ((status&0x000cffff) != 0) {
+        logFile << " - FAIL" << std::endl;
         sprintf(buf, "FAIL (%08lx)", status);
         pass = false;
     }
-    else
+    else {
+        logFile << " - PASS" << std::endl;
         sprintf(buf, "PASS (%08lx)", status);
+    }
     mvprintw(curLine++, 31, buf);
 
     // Turn on safety relay
     Board.WriteSafetyRelay(true);
     usleep(10000);  // 10 ms 
+    logFile << "   Enable safety relay: " << std::hex << Board.ReadStatus();
     if (!Board.ReadSafetyRelayStatus()) {
-        sprintf(buf, "Enable safety relay - FAIL (%08x) - is +12V connected to relay?",
-                Board.ReadStatus());
+        logFile << " - FAIL" << std::endl;
+        // Old QLA boards (before Rev 1.3) require +12V to be connected to relay
+        sprintf(buf, "Enable safety relay - FAIL (%08x)", Board.ReadStatus());
         pass = false;
     }
-    else
+    else {
+        logFile << " - PASS" << std::endl;
         sprintf(buf, "Enable safety relay - PASS (%08x)", Board.ReadStatus());
+    }
     mvprintw(curLine++, 9, buf);
 
     refresh();
@@ -408,12 +461,16 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     usleep(1000);
     Port.ReadAllBoards();
     status = Board.GetStatus();
+    logFile << "   Disable safety relay: " << std::hex << status;
     if ((status&0x00030000) != 0) {
+        logFile << " - FAIL" << std::endl;
         sprintf(buf, "Disable safety relay - FAIL (%08lx)", status);
         pass = false;
     }
-    else
+    else {
+        logFile << " - PASS" << std::endl;
         sprintf(buf, "Disable safety relay - PASS (%08lx)", status);
+    }
     mvprintw(curLine++, 9, buf);
 
     return pass;
@@ -430,6 +487,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     // Disable watchdog
     Board.WriteWatchdogPeriod(0x0000);  
 
+    logFile << std::endl << "=== Power Amplifier Test ===" << std::endl;
     mvprintw(curLine, 9, "Temperature sensors - ");
     refresh();
 
@@ -450,10 +508,15 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     // Read temperature in Celsius
     unsigned short temp1 = Board.GetAmpTemperature(0)/2;
     unsigned short temp2 = Board.GetAmpTemperature(1)/2;
-    if ((temp1 < 20) || (temp1 > 40) || (temp2 < 20) || (temp2 > 40))
+    logFile << "   Motor temperatures: " << temp1 << ", " << temp2 << " degC (expected range is 20-40) ";
+    if ((temp1 < 20) || (temp1 > 40) || (temp2 < 20) || (temp2 > 40)) {
+        logFile << "- FAIL" << std::endl;
         sprintf(buf, "FAIL (%d, %d degC)", temp1, temp2);
-    else
+    }
+    else {
+        logFile << "- PASS" << std::endl;
         sprintf(buf, "PASS (%d, %d degC)", temp1, temp2);
+    }
     mvprintw(curLine++, 31, buf);
 
     mvprintw(curLine, 9, "DAC:");
@@ -466,20 +529,30 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     while (1) {
         sprintf(buf, "%04lx   %04lx   %04lx   %04lx", dac, dac, dac, dac);
         mvprintw(curLine, 15, buf);
+        logFile << "   Commanded current: " << std::hex << dac << ", Measured currents: ";
         for (i = 0; i < 4; i++) {
             cur[i] = Board.GetMotorCurrent(i);
+            logFile << std::hex << cur[i];
             if (abs(cur[i]-dac) > 0x0100) {
+                logFile << "* ";
                 mvprintw(curLine+2, 15+7*i, "FAIL");
                 pass = false;
             }
-            else
+            else {
+                logFile << "  ";
                 mvprintw(curLine+2, 15+7*i, "PASS");
+            }
         }
         sprintf(buf, "%04lx   %04lx   %04lx   %04lx", cur[0], cur[1], cur[2], cur[3]);
         mvprintw(curLine+1, 15, buf);
 
         unsigned short newTemp1 = Board.GetAmpTemperature(0)/2;
         unsigned short newTemp2 = Board.GetAmpTemperature(1)/2;        
+        logFile << "   Motor temperatures: " << newTemp1 << ", " << newTemp2 << " degC (expected to be increasing)";
+        if ((newTemp1 >= temp1) && (newTemp2 >= temp2))
+            logFile << " - PASS" << std::endl;
+        else
+            logFile << " - FAIL" << std::endl;
         sprintf(buf, "%4d (%s)    %4d (%s)", newTemp1, ((newTemp1 >= temp1) ? "PASS" : "FAIL"),
                 newTemp2, ((newTemp2 >= temp2) ? "PASS" : "FAIL"));
         mvprintw(curLine+3, 15, buf);
@@ -506,7 +579,11 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     Board.WritePowerEnable(false);
 
     // Reenable watchdog
-    Board.WriteWatchdogPeriod(0xFFFF); 
+    Board.WriteWatchdogPeriod(0xFFFF);
+    if (pass)
+        logFile << "   Overall result: PASS" << std::endl;
+    else
+        logFile << "   Overall result: FAIL" << std::endl;
     return pass;
 }
 
@@ -556,8 +633,7 @@ int main(int argc, char** argv)
     Port.AddBoard(&Board);
 
     std::string logFilename("QLA_");
-    //std::string QLA_SN = Board.GetQLASerialNumber();
-    std::string QLA_SN("4265-01");
+    std::string QLA_SN = Board.GetQLASerialNumber();
     if (QLA_SN.empty()) {
         if (requireQLA_SN) {
             std::cerr << "Failed to get QLA serial number (specify -k command line option to continue test)" << std::endl;
@@ -574,11 +650,12 @@ int main(int argc, char** argv)
     }
     logFile << "QLA S/N: " << QLA_SN << std::endl;
 
-    //std::string FPGA_SN = Board.GetFPGASerialNumber();
-    std::string FPGA_SN;
+#if 0
+    std::string FPGA_SN = Board.GetFPGASerialNumber();
     if (FPGA_SN.empty())
         FPGA_SN.assign("Unknown");
     logFile << "FPGA S/N: " << FPGA_SN << std::endl;
+#endif
 
     logFile << "FPGA Firmware Version: " << Board.GetFirmwareVersion() << std::endl;
 
