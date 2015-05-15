@@ -165,6 +165,16 @@ bool PromQLAProgram(AmpIO &Board)
         return false;
     }
 
+    // ==== FPGA Serial ===
+    char FPGASN[100] = "FPGA 9876-54";
+    std::cout << "FPGA SN = " << FPGASN << "  length = " << strlen(FPGASN) << std::endl;
+    int ret;
+    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&FPGASN, strlen(FPGASN));
+    if (ret < 0) {std::cerr << "Can't proram FPGA Serial Number";}
+    else usleep(5000);
+
+    std::cout << "Read SN 2 = " << Board.GetFPGASerialNumber() << std::endl;
+
 #if 0
     // Address
     AmpIO_UInt16 addr = 0x0000;
@@ -178,14 +188,12 @@ bool PromQLAProgram(AmpIO &Board)
     Board.PromReadByte25AA128(addr, rdata);
 #endif
 
-    // Data
-    // QLA 1.3 3792-65
-    // QLA: board type
-    // 1.3: hardware revision number
-    // 3792-65: serial number
+    // QLA 3792-65
+    // - QLA: board type
+    // - 3792-65: serial number
     std::stringstream ss;
     std::string BoardType = "QLA";
-    std::string BoardSN = "1234-56";
+    std::string BoardSN = "0000-00";
     std::string str;
     AmpIO_UInt8 wbyte;
     AmpIO_UInt16 address;
@@ -209,23 +217,9 @@ bool PromQLAProgram(AmpIO &Board)
     }
 
     // S2: read back and verify
-//    bool fail = false;
-//    std::cout << std::hex;
-//    address = 0x0000;
-//    for (size_t i = 0; i < str.length(); i++) {
-//        Board.PromReadByte25AA128(address, rbyte);
-//        address += 1;  // inc to next byte
-//        if (rbyte != str.at(i)) {
-//            fail = true;
-////            std::cout << "rdata = 0x" << rbyte
-////                      << " str = 0x" << str.at(i) << std::endl;
-//        }
-//    }
-
-    // Verify
     std::string BoardSNRead = Board.GetQLASerialNumber();
-    std::cout << "SN = " << BoardSNRead << " length = " << BoardSNRead.length() << std::endl;
-    std::cout << "st = " << str << " length = " << str.length() << std::endl;
+//    std::cout << "SN = " << BoardSNRead << " length = " << BoardSNRead.length() << std::endl;
+//    std::cout << "st = " << str << " length = " << str.length() << std::endl;
 
     if (str == BoardSNRead) {
         std::cout << "Board " << BoardSN << " Programmed" << std::endl;

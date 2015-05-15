@@ -88,6 +88,20 @@ AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
 }
 
+std::string AmpIO::GetFPGASerialNumber(void)
+{
+    // Format: FPGA 1234-56 (12 bytes)
+    AmpIO_UInt32 address = 0x001FFF00;
+    AmpIO_UInt8 data[20];
+    std::string sn; sn.clear();
+
+    PromReadData(address, data, 12);
+    for (size_t i = 0; i < 12; i++) {
+        sn.push_back(data[i]);
+    }
+    return sn;
+}
+
 std::string AmpIO::GetQLASerialNumber(void)
 {
     // Formart: QLA 1234-56
