@@ -97,7 +97,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
 
     usleep(1000);
     Port.ReadAllBoards();
-    data = Board.GetDigitalInput();
+    data = (Board.GetDigitalInput() & 0x0fff);
     logFile << "   All inputs low: " << std::hex << data;
     if (!data) {
         sprintf(buf, "Setting all inputs low - PASS (%03lx)", data);
@@ -114,7 +114,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
 
     usleep(1000);
     Port.ReadAllBoards();
-    data = Board.GetDigitalInput();
+    data = (Board.GetDigitalInput() & 0x0fff);
     logFile << "   All inputs high: " << std::hex << data;
     if (data == 0x0fff) {
         sprintf(buf, "Setting all inputs high - PASS (%03lx)", data);
@@ -667,12 +667,10 @@ int main(int argc, char** argv)
     logFile << "====== TEST REPORT ======" << std::endl << std::endl;
     logFile << "QLA S/N: " << QLA_SN << std::endl;
 
-#if 0
     std::string FPGA_SN = Board.GetFPGASerialNumber();
     if (FPGA_SN.empty())
         FPGA_SN.assign("Unknown");
     logFile << "FPGA S/N: " << FPGA_SN << std::endl;
-#endif
 
     logFile << "FPGA Firmware Version: " << Board.GetFirmwareVersion() << std::endl;
 

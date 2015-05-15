@@ -58,19 +58,19 @@ public:
 
     AmpIO_UInt8 GetDigitalOutput(void) const;
 
-    /*! Utility method, uses result of GetDigitalOutput but performs
+    /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
     AmpIO_UInt8 GetNegativeLimitSwitches(void) const;
 
-    /*! Utility method, uses result of GetDigitalOutput but performs
+    /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
     AmpIO_UInt8 GetPositiveLimitSwitches(void) const;
 
-    /*! Utility method, uses result of GetDigitalOutput but performs
+    /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
     AmpIO_UInt8 GetHomeSwitches(void) const;
 
-    /*! Utility methods, uses result of GetDigitalOutput but performs
+    /*! Utility methods, use result of GetDigitalInput but perform
       required shift and mask. */
     //@{
     AmpIO_UInt8 GetEncoderChannelA(void) const;
