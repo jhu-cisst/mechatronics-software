@@ -40,6 +40,7 @@ public:
     ~AmpIO();
 
     AmpIO_UInt32 GetFirmwareVersion(void) const;
+    std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
     // *********************** GET Methods ***********************************

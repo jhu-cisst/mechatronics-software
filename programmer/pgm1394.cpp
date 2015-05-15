@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <termios.h>
 #include <iostream>
+#include <sstream>
 #include <iomanip>
 #include <unistd.h>
 #include <sys/time.h>
@@ -21,7 +22,7 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     tcsetattr(STDIN_FILENO, TCSANOW, &newTerm);  // change terminal settings
 
     int c = 0;
-    while ((c < '0') || (c > '3')) {
+    while ((c < '0') || (c > '4')) {
         if (c)
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
         std::cout << std::endl
@@ -33,7 +34,8 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
         std::cout << "0) Exit programmer" << std::endl
                   << "1) Program PROM" << std::endl
                   << "2) Verify PROM" << std::endl
-                  << "3) Read PROM data" << std::endl << std::endl;
+                  << "3) Read PROM data" << std::endl
+                  << "4) Program QLA SN" << std::endl << std::endl;
 
         std::cout << "Select option: ";
         c = getchar();
@@ -148,6 +150,92 @@ bool PromDisplayPage(AmpIO &Board, unsigned long addr)
 }
 
 
+/*!
+ \brief Prom QLA serial and Revision Number
+
+ \param[in] Board FPGA Board
+ \return bool
+*/
+bool PromQLAProgram(AmpIO &Board)
+{
+    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    if (fver < 4) {
+        std::cout << "Firmware not supported, current version = " << fver << "\n"
+                  << "Please upgrade your firmware" << std::endl;
+        return false;
+    }
+
+#if 0
+    // Address
+    AmpIO_UInt16 addr = 0x0000;
+
+    // Write Test data
+    AmpIO_UInt8 wdata = 0xA3;  // test
+    Board.PromWriteByte25AA128(addr,wdata);
+
+    // Read Back
+    AmpIO_UInt8 rdata;
+    Board.PromReadByte25AA128(addr, rdata);
+#endif
+
+    // Data
+    // QLA 1.3 3792-65
+    // QLA: board type
+    // 1.3: hardware revision number
+    // 3792-65: serial number
+    std::stringstream ss;
+    std::string BoardType = "QLA";
+    std::string BoardSN = "1234-56";
+    std::string str;
+    AmpIO_UInt8 wbyte;
+    AmpIO_UInt16 address;
+
+    // get s/n from user
+    std::cout << "Please Enter QLA Serial Number: " << std::endl;
+    std::cin >> BoardSN;
+    std::cin.ignore(20,'\n');
+    ss << BoardType << " " << BoardSN << std::endl;
+    str = ss.str();
+    str = str.substr(0, str.length()-1);  // ZC: hack, might have better way
+
+//    std::cout << "DATA = " << ss.str().c_str() << std::endl;
+
+    // S1: program to QLA PROM
+    address = 0x0000;
+    for (size_t i = 0; i < str.length(); i++) {
+        wbyte = str.at(i);
+        Board.PromWriteByte25AA128(address, wbyte);
+        address += 1;  // inc to next byte
+    }
+
+    // S2: read back and verify
+//    bool fail = false;
+//    std::cout << std::hex;
+//    address = 0x0000;
+//    for (size_t i = 0; i < str.length(); i++) {
+//        Board.PromReadByte25AA128(address, rbyte);
+//        address += 1;  // inc to next byte
+//        if (rbyte != str.at(i)) {
+//            fail = true;
+////            std::cout << "rdata = 0x" << rbyte
+////                      << " str = 0x" << str.at(i) << std::endl;
+//        }
+//    }
+
+    // Verify
+    std::string BoardSNRead = Board.GetQLASerialNumber();
+    std::cout << "SN = " << BoardSNRead << " length = " << BoardSNRead.length() << std::endl;
+    std::cout << "st = " << str << " length = " << str.length() << std::endl;
+
+    if (str == BoardSNRead) {
+        std::cout << "Board " << BoardSN << " Programmed" << std::endl;
+        return true;
+    } else {
+        std::cerr << "Failed to program" << std::endl;
+        return false;
+    }
+}
+
 int main(int argc, char** argv)
 {
     int i;
@@ -205,6 +293,9 @@ int main(int argc, char** argv)
             std::cin.ignore(10,'\n');
             PromDisplayPage(Board, addr);
             break;
+        case 4:
+            PromQLAProgram(Board);
+            break;
         default:
             std::cout << "Not yet implemented" << std::endl;
         }
@@ -213,3 +304,4 @@ int main(int argc, char** argv)
     promFile.CloseFile();
     Port.RemoveBoard(board);
 }
+

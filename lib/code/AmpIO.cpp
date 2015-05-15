@@ -88,6 +88,23 @@ AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
 }
 
+std::string AmpIO::GetQLASerialNumber(void)
+{
+    // Formart: QLA 1234-56
+    std::string sn; sn.clear();
+    AmpIO_UInt16 address = 0x0000;
+    AmpIO_UInt8 data;
+    for (size_t i = 0; i < 11; i++) {
+        if (!PromReadByte25AA128(address, data))
+            std::cerr << "Failed to get QLA Serial Nubmer" << std::endl;
+        else {
+            sn.push_back(data);
+            address += 1;
+        }
+    }
+    return sn;
+}
+
 void AmpIO::DisplayReadBuffer(std::ostream &out) const
 {
     // first two quadlets are timestamp and status, resp.
@@ -628,12 +645,13 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     AmpIO_UInt32 result = 0x00000000;
     quadlet_t write_data = 0x03000000|(addr << 8);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+
     if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
         // Should be ready by now...
         result = PromGetResult(PROM_25AA128);
 
-        // TODO get the last 8-bit of result
-        data = result;
+        // Get the last 8-bit of result
+        data = result & 0xFF;
         return true;
     } else {
         data = 0x00;
@@ -644,13 +662,17 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
 bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
 {
     // enable write
-    PromWriteEnable(PROM_25AA128);
+    PromWriteEnable(PROM_25AA128);    
+    usleep(100);
 
     // 8-bit cmd + 16-bit addr + 8-bit data
     quadlet_t write_data = 0x02000000|(addr << 8)|data;
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
+    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
+        // wait 5ms for the PROM to be ready to take new commands
+        usleep(5000);
         return true;
+    }
     else
         return false;
 }
@@ -702,7 +724,6 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
         return false;
     else
         return true;
-
 }
 
 
