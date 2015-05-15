@@ -90,17 +90,23 @@ AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
 
 std::string AmpIO::GetQLASerialNumber(void)
 {
-    // Formart: QLA 1234-56
+    // Format: QLA 1234-56
     std::string sn; sn.clear();
     AmpIO_UInt16 address = 0x0000;
     AmpIO_UInt8 data;
     for (size_t i = 0; i < 11; i++) {
         if (!PromReadByte25AA128(address, data))
-            std::cerr << "Failed to get QLA Serial Nubmer" << std::endl;
+            std::cerr << "Failed to get QLA Serial Number" << std::endl;
         else {
             sn.push_back(data);
             address += 1;
         }
+    }
+    if (sn.substr(0,4) == "QLA ")
+        sn.erase(0,4);
+    else {
+        std::cerr << "Invalid QLA Serial Number: " << sn << std::endl;
+        sn.clear();
     }
     return sn;
 }
