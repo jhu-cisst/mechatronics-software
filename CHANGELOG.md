@@ -1,6 +1,12 @@
 Change log
 ==========
 
+1.2.0 
+==================
+* API changes: 
+* New features: 
+  * Added GetFPGASerialNumber and GetQLASerialNumber function 
+
 1.1.0 (2015-04-28)
 ==================
 
