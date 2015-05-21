@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * This is a minimial Linux command line program that displays timing information
+ * This is a minimal Linux command line program that displays timing information
  * for reading/writing blocks of data over IEEE-1394.
  *
  * Compile: gcc -Wall -lraw1394 <name of this file> -o <name of executable>
