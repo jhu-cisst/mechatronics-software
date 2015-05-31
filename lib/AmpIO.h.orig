@@ -39,10 +39,12 @@ public:
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    AmpIO_UInt32 GetFirmwareVersion(void) const;    
-    // Return FPGA serial number (empty string if not found)
+    AmpIO_UInt32 GetFirmwareVersion(void) const;
+<<<<<<< HEAD
     std::string GetFPGASerialNumber(void);
+=======
     // Return QLA serial number (empty string if not found)
+>>>>>>> devel
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
@@ -58,19 +60,19 @@ public:
 
     AmpIO_UInt8 GetDigitalOutput(void) const;
 
-    /*! Utility method, uses result of GetDigitalInput but performs
+    /*! Utility method, uses result of GetDigitalOutput but performs
       required shift and mask. */
     AmpIO_UInt8 GetNegativeLimitSwitches(void) const;
 
-    /*! Utility method, uses result of GetDigitalInput but performs
+    /*! Utility method, uses result of GetDigitalOutput but performs
       required shift and mask. */
     AmpIO_UInt8 GetPositiveLimitSwitches(void) const;
 
-    /*! Utility method, uses result of GetDigitalInput but performs
+    /*! Utility method, uses result of GetDigitalOutput but performs
       required shift and mask. */
     AmpIO_UInt8 GetHomeSwitches(void) const;
 
-    /*! Utility methods, use result of GetDigitalInput but perform
+    /*! Utility methods, uses result of GetDigitalOutput but performs
       required shift and mask. */
     //@{
     AmpIO_UInt8 GetEncoderChannelA(void) const;
