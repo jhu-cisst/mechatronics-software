@@ -1,6 +1,21 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
+/*
+  Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
+  Created on: 2012
+
+  (C) Copyright 2012-2015 Johns Hopkins University (JHU), All Rights Reserved.
+
+--- begin cisst license - do not edit ---
+
+This software is provided "as is" under an open source license, with
+no warranty.  The complete license can be found in license.txt and
+http://www.cisst.org/cisst/license.txt.
+
+--- end cisst license ---
+*/
+
 /******************************************************************************
  *
  * This program continuously displays the sensor feedback from the selected
@@ -70,9 +85,19 @@ int main(int argc, char** argv)
             args_found++;
         }
     }
+
     if (args_found < 1) {
+        // usage
         std::cerr << "Usage: sensors <board-num> [<board-num>] [-pP]" << std::endl
-                  << "       where P = port number (default 0)" << std::endl;
+                  << "       where P = port number (default 0)" << std::endl
+                  << std::endl
+                  << "Trying to detect board on default port:" << std::endl;
+
+        // try to locate all boards available on default port
+        FirewirePort Port(port, std::cerr);
+        if (!Port.IsOK()) {
+            std::cerr << "Failed to initialize firewire port " << port << std::endl;
+        }
         return 0;
     }
 
@@ -222,7 +247,7 @@ int main(int argc, char** argv)
 
         if (BoardList.size() > 1) {
             node = Port.GetNodeId(board2);
-            if (node < FirewirePort::MAX_NODES)        
+            if (node < FirewirePort::MAX_NODES)
                 sprintf(nodeStr[1], "%4d", node);
             else
                 strcpy(nodeStr[1], "none");
