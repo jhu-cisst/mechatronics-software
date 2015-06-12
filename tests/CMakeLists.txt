@@ -21,6 +21,9 @@ target_link_libraries(qladisp Amp1394 raw1394 ${CURSES_LIBRARIES})
 add_executable(qlatest qlatest.cpp)
 target_link_libraries(qlatest Amp1394 raw1394 ${CURSES_LIBRARIES})
 
+add_executable(qlacloserelays qlacloserelays.cpp)
+target_link_libraries(qlacloserelays Amp1394 raw1394 ${CURSES_LIBRARIES})
+
 add_executable(fwPortTest fwPortTest.cpp)
 target_link_libraries(fwPortTest Amp1394 raw1394)
 
