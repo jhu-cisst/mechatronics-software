@@ -426,6 +426,21 @@ AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
     return bswap_32(read_data) & 0x0000000F;
 }
 
+bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow)
+{
+    AmpIO_UInt32 read_data;
+    unsigned int channel = (index+1) << 4;
+    if (port && (index < NUM_CHANNELS)) {
+        if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, read_data)) {
+            read_data = bswap_32(read_data);
+            countsHigh = static_cast<AmpIO_UInt16>(read_data >> 16);
+            countsLow  = static_cast<AmpIO_UInt16>(read_data);
+            return true;
+        }
+    }
+    return false;
+}
+
 /*******************************************************************************
  * Write commands
  */
@@ -474,6 +489,20 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     // period = counts(16 bits) * 5.208333 us (default = 0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, bswap_32(counts));
+}
+
+bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
+{
+    // Counter frequency = 49.152 MHz --> 1 count is about 0.02 uS
+    //    Max high/low time = (2^16-1)/49.152 usec = 1333.3 usec = 1.33 msec
+    //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec
+    unsigned int channel = (index+1) << 4;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsHigh) << 16) | countsLow;
+        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, bswap_32(counts));
+    } else {
+        return false;
+    }
 }
 
 /*******************************************************************************

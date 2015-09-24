@@ -141,6 +141,7 @@ public:
     bool ReadPowerStatus(void) const;
     bool ReadSafetyRelayStatus(void) const;
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
+    bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
 
     // ********************** WRITE Methods **********************************
 
@@ -158,6 +159,43 @@ public:
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
+
+    /*! \brief Write DOUT control register to set digital output mode (e.g., PWM, one-shot (pulse), general out).
+
+        The modes are as follows:
+          General DOUT:       high_time = low_time = 0
+          Pulse high for DT:  high_time = DT, low_time = 0
+          Pulse low for DT:   high_time = 0, low_time = DT
+          PWM mode:           high_time = DTH, low_time = DTL (period = DTH+DTL)
+
+        This is a low level-interface that specifies counts relative to the FPGA sysclk, which is 49.152 MHz.
+        Thus, 1 count is approximately 20 nsec. The maximum 16-bit unsigned value, 65535, corresponds to
+        about 1.33 msec.
+
+        Note that regardless of the mode, writing to the digital output (e.g., using WriteDigitalOutput)
+        will cause it to change to the new value. It will also reset the timer. For example, if we set
+        the control register to pulse high for 100 clocks, but then set DOUT to 1 after 50 clocks, it will
+        stay high for a total of 150 clocks. Writing to the control register also resets the time, so the
+        same behavior would occur if we write to the control register after 50 clocks (assuming we do not
+        also change the high_time).
+
+        For the one-shot modes, the effect of calling WriteDoutControl is that the digital output will
+        transition to the inactive state. For example, WriteDoutControl(0, 1000, 0) will have no effect
+        on the digital output if it is already low. If the digital output is high, then the above call
+        will cause the digital output to remain high for 1000 counts and then transition low and remain low.
+        Subsequently, any call WriteDigitalOutput(0x01, 0x01) will cause the digital output to transition
+        high, remain there for 1000 counts, and then transition low (i.e., a positive pulse of 1000 counts
+        duration).
+
+        For the PWM mode (high time and low time both non-zero), the effect of calling WriteDoutControl
+        is to start PWM mode immediately.
+
+        \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
+        \param countsHigh counter value for high part of pulse (0 --> indefinite)
+        \param countsLow counter value for low part of waveform (0 --> indefinite)
+        \returns true if successful
+    */
+    bool WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow);
 
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming
@@ -280,7 +318,9 @@ protected:
         POT_DATA_OFFSET = 3,       // pot data register
         ENC_LOAD_OFFSET = 4,       // enc control register (preload)
         POS_DATA_OFFSET = 5,       // enc data register (position)
-        VEL_DATA_OFFSET = 6        // enc data register (velocity)
+        VEL_DATA_OFFSET = 6,       // enc data register (velocity, 4/DT method)
+        VEL_DP_DATA_OFFSET = 7,    // enc data register (velocity, DP/1 method)
+        DOUT_CTRL_OFFSET = 8       // digital output control (PWM, one-shot)
     };
 };
 
