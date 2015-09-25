@@ -531,6 +531,8 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
 {
     // Check for valid frequency (also avoid divide by 0)
     if (freq <= 375.0) return false;
+    // Check for valid duty cycle (0-1)
+    if ((duty < 0.0) || (duty > 1.0)) return false;
     // Compute high time and low time (in counts). Note that we return false
     // if either time is greater than 16 bits, rather than attempting to adjust.
     AmpIO_UInt32 highTime = GetDoutCounts(duty/freq);
