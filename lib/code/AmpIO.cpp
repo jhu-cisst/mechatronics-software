@@ -63,6 +63,11 @@ const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC cha
     else { std::cout << MSG.str() << std::endl; }
 
 
+AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 0011
+                                0x2, 0xA, 0x6, 0xE,         // 0100, 0101, 0110, 0111
+                                0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
+                                0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
+
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes)
 {
     memset(read_buffer, 0, sizeof(read_buffer));
@@ -172,7 +177,11 @@ AmpIO_UInt32 AmpIO::GetDigitalInput(void) const
 
 AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
 {
-    return static_cast<AmpIO_UInt8>((bswap_32(read_buffer[DIGIO_OFFSET])>>12)&0x000f);
+    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((bswap_32(read_buffer[DIGIO_OFFSET])>>12)&0x000f);
+    // Firmware versions < 5 have bits in reverse order with respect to schematic
+    if (GetFirmwareVersion() < 5)
+        dout = BitReverse4[dout];
+    return dout;
 }
 
 AmpIO_UInt8 AmpIO::GetNegativeLimitSwitches(void) const
@@ -428,6 +437,10 @@ AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
 
 bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow)
 {
+    countsHigh = 0;
+    countsLow = 0;
+    if (GetFirmwareVersion() < 5) return false;
+
     AmpIO_UInt32 read_data;
     unsigned int channel = (index+1) << 4;
     if (port && (index < NUM_CHANNELS)) {
@@ -481,6 +494,11 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
 
 bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
 {
+    // Firmware versions < 5 have bits in reverse order with respect to schematic
+    if (GetFirmwareVersion() < 5) {
+        mask = BitReverse4[mask&0x0f];
+        bits = BitReverse4[bits&0x0f];
+    }
     quadlet_t write_data = (mask << 8) | bits;
     return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));
 }
@@ -493,6 +511,8 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 
 bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
 {
+    if (GetFirmwareVersion() < 5) return false;
+
     // Counter frequency = 49.152 MHz --> 1 count is about 0.02 uS
     //    Max high/low time = (2^16-1)/49.152 usec = 1333.3 usec = 1.33 msec
     //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec

@@ -26,51 +26,27 @@
 /*!
  \brief Increment encoder counts
  \param[in] bd FPGA Board
- \param[in] fver Board Firmware Version
 */
-void EncUp(AmpIO &bd, const AmpIO_UInt32 fver)
+void EncUp(AmpIO &bd)
 {
-    // Firmware <= 4, DOUT order is reversed
-    // Fixed in Firmware > 4
-    if (fver > 4) {
-        bd.WriteDigitalOutput(0x03, 0x00);
-        bd.WriteDigitalOutput(0x03, 0x01);
-        bd.WriteDigitalOutput(0x03, 0x03);
-        bd.WriteDigitalOutput(0x03, 0x02);
-        bd.WriteDigitalOutput(0x03, 0x00);
-    }
-    else {
-        bd.WriteDigitalOutput(0x0C, 0x00);
-        bd.WriteDigitalOutput(0x0C, 0x08);
-        bd.WriteDigitalOutput(0x0C, 0x0C);
-        bd.WriteDigitalOutput(0x0C, 0x04);
-        bd.WriteDigitalOutput(0x0C, 0x00);
-    }
+    bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x03);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x00);
 }
 
 /*!
  \brief Decrement encoder counts
  \param[in] bd FPGA Board
- \param[in] fver Board Firmware Version
 */
-void EncDown(AmpIO &bd, const AmpIO_UInt32 fver)
+void EncDown(AmpIO &bd)
 {
-    // Firmware <= 4, DOUT order is reversed
-    // Fixed in Firmware > 4
-    if (fver > 4) {
-        bd.WriteDigitalOutput(0x03, 0x00);
-        bd.WriteDigitalOutput(0x03, 0x02);
-        bd.WriteDigitalOutput(0x03, 0x03);
-        bd.WriteDigitalOutput(0x03, 0x01);
-        bd.WriteDigitalOutput(0x03, 0x00);
-    }
-    else {
-        bd.WriteDigitalOutput(0x0C, 0x00);
-        bd.WriteDigitalOutput(0x0C, 0x04);
-        bd.WriteDigitalOutput(0x0C, 0x0C);
-        bd.WriteDigitalOutput(0x0C, 0x08);
-        bd.WriteDigitalOutput(0x0C, 0x00);
-    }
+    bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x03);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x00);
 }
 
 void ClearLines(int start, int end)
@@ -90,10 +66,8 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
 
     logFile << std::endl << "=== DIGITAL INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
-                           " between DOUT1 and all digital inputs");
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
-    if (fver > 4) Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
-    else Board.WriteDigitalOutput(0x01, 0x01);  // DOUT is active high
+                           " between DOUT4 and all digital inputs");
+    Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
 
     usleep(1000);
     Port.ReadAllBoards();
@@ -109,8 +83,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
-    if (fver > 4) Board.WriteDigitalOutput(0x08, 0x00);  // DOUT is active low
-    else Board.WriteDigitalOutput(0x01, 0x00);  // DOUT is active low
+    Board.WriteDigitalOutput(0x08, 0x00);  // DOUT is active low
 
     usleep(1000);
     Port.ReadAllBoards();
@@ -139,9 +112,6 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     char buf[80];
     bool pass = true;
     bool tmpFix;
-
-    AmpIO_UInt32 fver;  // firmware version
-    fver = Board.GetFirmwareVersion();
 
     logFile << std::endl << "=== ENCODER INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
@@ -176,7 +146,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
         for (j = 0; j < 4; j++)
             testValue[j] = 0;
         for (i = 0; (i < (0x100/4)) && pass; i++) {
-            EncUp(Board, fver);
+            EncUp(Board);
             usleep(100);
             logFile << "      ";
             Port.ReadAllBoards(); 
@@ -256,7 +226,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
         for (j = 0; j < 4; j++)
             testValue[j] = 0;
         for (i = (0x100/4)-1; (i >= 0) && tmp_pass; i--) {
-            EncDown(Board, fver);
+            EncDown(Board);
             usleep(100);
             logFile << "      ";
             Port.ReadAllBoards(); 

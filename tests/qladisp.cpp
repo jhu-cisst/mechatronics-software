@@ -40,51 +40,27 @@ http://www.cisst.org/cisst/license.txt.
 /*!
  \brief Increment encoder counts
  \param[in] bd FPGA Board
- \param[in] fver Board Firmware Version
 */
-void EncUp(AmpIO &bd, const AmpIO_UInt32 fver)
+void EncUp(AmpIO &bd)
 {
-    // Firmware <= 4, DOUT order is reversed
-    // Fixed in Firmware > 4
-    if (fver > 4) {
-        bd.WriteDigitalOutput(0x03, 0x00);
-        bd.WriteDigitalOutput(0x03, 0x01);
-        bd.WriteDigitalOutput(0x03, 0x03);
-        bd.WriteDigitalOutput(0x03, 0x02);
-        bd.WriteDigitalOutput(0x03, 0x00);
-    }
-    else {
-        bd.WriteDigitalOutput(0x0C, 0x00);
-        bd.WriteDigitalOutput(0x0C, 0x08);
-        bd.WriteDigitalOutput(0x0C, 0x0C);
-        bd.WriteDigitalOutput(0x0C, 0x04);
-        bd.WriteDigitalOutput(0x0C, 0x00);
-    }
+    bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x03);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x00);
 }
 
 /*!
  \brief Decrement encoder counts
  \param[in] bd FPGA Board
- \param[in] fver Board Firmware Version
 */
-void EncDown(AmpIO &bd, const AmpIO_UInt32 fver)
+void EncDown(AmpIO &bd)
 {
-    // Firmware <= 4, DOUT order is reversed
-    // Fixed in Firmware > 4
-    if (fver > 4) {
-        bd.WriteDigitalOutput(0x03, 0x00);
-        bd.WriteDigitalOutput(0x03, 0x02);
-        bd.WriteDigitalOutput(0x03, 0x03);
-        bd.WriteDigitalOutput(0x03, 0x01);
-        bd.WriteDigitalOutput(0x03, 0x00);
-    }
-    else {
-        bd.WriteDigitalOutput(0x0C, 0x00);
-        bd.WriteDigitalOutput(0x0C, 0x04);
-        bd.WriteDigitalOutput(0x0C, 0x0C);
-        bd.WriteDigitalOutput(0x0C, 0x08);
-        bd.WriteDigitalOutput(0x0C, 0x00);
-    }
+    bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x03);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x00);
 }
 
 
@@ -219,11 +195,11 @@ int main(int argc, char** argv)
         }
         else if (c == 'w') {
             for (j = 0; j < BoardList.size(); j++)
-                EncUp(*(BoardList[j]), FirmwareVersionList[j]);
+                EncUp(*(BoardList[j]));
         }
         else if (c == 's') {
             for (j = 0; j < BoardList.size(); j++)
-                EncDown(*(BoardList[j]), FirmwareVersionList[j]);
+                EncDown(*(BoardList[j]));
         }
         else if (c == 'd'){
             watchdog_on = !watchdog_on;

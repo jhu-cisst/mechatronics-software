@@ -141,6 +141,17 @@ public:
     bool ReadPowerStatus(void) const;
     bool ReadSafetyRelayStatus(void) const;
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
+
+    /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
+
+        \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
+        \param countsHigh counter value for high part of pulse (0 --> indefinite)
+        \param countsLow counter value for low part of waveform (0 --> indefinite)
+        \returns true if successful (results in countsHigh and countsLow)
+
+        \sa WriteDoutControl
+        \note Firmware Version 5+
+     */
     bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
 
     // ********************** WRITE Methods **********************************
@@ -194,6 +205,8 @@ public:
         \param countsHigh counter value for high part of pulse (0 --> indefinite)
         \param countsLow counter value for low part of waveform (0 --> indefinite)
         \returns true if successful
+
+        \note Firmware Version 5+
     */
     bool WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow);
 
