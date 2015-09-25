@@ -47,6 +47,8 @@ const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder frequen
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
+const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
+
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
 //                    the parameter is NULL, but the function returns an error if
@@ -523,6 +525,34 @@ bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_
     } else {
         return false;
     }
+}
+
+bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
+{
+    // Compute high time and low time (in counts). Note that we return false
+    // if either time is greater than 16 bits, rather than attempting to adjust.
+    AmpIO_UInt32 highTime = GetDoutCounts(duty/freq);
+    if (highTime > 65535L) return false;
+    AmpIO_UInt32 lowTime = GetDoutCounts((1.0-duty)/freq);
+    if (lowTime > 65535L) return false;
+    // Following code adjusts lowTime and highTime so that both are non-zero if possible.
+    // Note that if both are 0, we return false (this can happen if the specified frequency
+    // is too high).
+    if (highTime < 1)  {
+        if (lowTime < 1) return false;
+        highTime = 1;
+        lowTime--;
+    }
+    else if (lowTime < 1) {
+        lowTime = 1;
+        highTime--;
+    }
+    return WriteDoutControl(index, static_cast<AmpIO_UInt16>(highTime), static_cast<AmpIO_UInt16>(lowTime));
+}
+
+AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
+{
+    return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
 }
 
 /*******************************************************************************

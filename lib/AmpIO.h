@@ -210,6 +210,26 @@ public:
     */
     bool WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow);
 
+    /*! \brief Write PWM parameters. This is a convenience function that calls WriteDoutControl.
+               Note that the function can fail (and return false) if the input parameters are
+               not feasible. PWM duty cycles of 0.0 or 1.0 are not allowed. The actual duty
+               cycle will be as close as possible to the desired duty cycle.
+
+        \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
+        \param freq PWM frequency, in Hz (375.08 Hz - 24.56 MHz)
+        \param duty PWM duty cycle (0.0 - 1.0); 0.75 means PWM signal should be high 75% of time
+        \returns true if successful; possible failures include firmware version < 5, failure to write
+                 over FireWire, or specified frequency or duty cycle not possible.
+    */
+    bool WritePWM(unsigned int index, double freq, double duty);
+
+    /*! \brief Get digital output time (in counts) corresponding to specified time in seconds.
+
+        \param time Time, in seconds
+        \returns Time, in counts
+    */
+    AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
+
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming
     //   1 - the FPGA configuration PROM (M25P16)
