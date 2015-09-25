@@ -529,25 +529,30 @@ bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_
 
 bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
 {
+    // Check for valid frequency (also avoid divide by 0)
+    if (freq <= 375.0) return false;
     // Compute high time and low time (in counts). Note that we return false
     // if either time is greater than 16 bits, rather than attempting to adjust.
     AmpIO_UInt32 highTime = GetDoutCounts(duty/freq);
     if (highTime > 65535L) return false;
     AmpIO_UInt32 lowTime = GetDoutCounts((1.0-duty)/freq);
     if (lowTime > 65535L) return false;
-    // Following code adjusts lowTime and highTime so that both are non-zero if possible.
-    // Note that if both are 0, we return false (this can happen if the specified frequency
-    // is too high).
-    if (highTime < 1)  {
-        if (lowTime < 1) return false;
-        highTime = 1;
-        lowTime--;
+    // Following can occur if frequency is too high
+    if ((highTime == 0) && (lowTime == 0)) return false;
+    bool ret;
+    // If highTime is 0, then turn off PWM at low value
+    if (highTime == 0) {
+        ret = WriteDoutControl(index, 0, 0);
+        ret &= WriteDigitalOutput((1<<index), 0);
     }
-    else if (lowTime < 1) {
-        lowTime = 1;
-        highTime--;
+    // If lowTime is 0, then turn off PWM at high value
+    else if (lowTime == 0) {
+        ret = WriteDoutControl(index, 0, 0);
+        ret &= WriteDigitalOutput((1<<index), 1);
     }
-    return WriteDoutControl(index, static_cast<AmpIO_UInt16>(highTime), static_cast<AmpIO_UInt16>(lowTime));
+    else
+        ret = WriteDoutControl(index, static_cast<AmpIO_UInt16>(highTime), static_cast<AmpIO_UInt16>(lowTime));
+    return ret;
 }
 
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const

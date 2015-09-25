@@ -212,8 +212,7 @@ public:
 
     /*! \brief Write PWM parameters. This is a convenience function that calls WriteDoutControl.
                Note that the function can fail (and return false) if the input parameters are
-               not feasible. PWM duty cycles of 0.0 or 1.0 are not allowed. The actual duty
-               cycle will be as close as possible to the desired duty cycle.
+               not feasible. The actual duty cycle will be as close as possible to the desired duty cycle.
 
         \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
         \param freq PWM frequency, in Hz (375.08 Hz - 24.56 MHz)
