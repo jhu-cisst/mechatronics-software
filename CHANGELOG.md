@@ -1,11 +1,17 @@
 Change log
 ==========
 
-1.2.0 
+1.2.0 (2015-10-18)
 ==================
-* API changes: 
-* New features: 
+* API changes:
+* New features:
+  * Added utility qlacloserelays to close all safety relays on controllers connected
+  * When qladisp is started w/o board numbers, display results of port query
   * Added GetFPGASerialNumber and GetQLASerialNumber methods
+  * Added code to read/write digital outputs
+  * Added code to support PWM (requires firmware 5+)
+* Bug fixes:
+ * Reversed order of digital outputs (fixed in firmware 5+)
 
 1.1.0 (2015-04-28)
 ==================

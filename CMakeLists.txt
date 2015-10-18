@@ -15,7 +15,7 @@ cmake_minimum_required (VERSION 2.6)
 
 # Set the version number
 set (Amp1394_VERSION_MAJOR "1")
-set (Amp1394_VERSION_MINOR "1")
+set (Amp1394_VERSION_MINOR "2")
 set (Amp1394_VERSION_PATCH "0")
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
