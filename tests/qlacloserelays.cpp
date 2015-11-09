@@ -17,6 +17,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <stdlib.h> // for atoi
+#include <unistd.h> // for usleep
 #include <iostream>
 
 #include <FirewirePort.h>
