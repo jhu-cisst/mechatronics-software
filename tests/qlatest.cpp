@@ -573,6 +573,56 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     return pass;
 }
 
+bool TestEthernet(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
+{
+    logFile << std::endl << "=== Ethernet (KSZ8851) Test ===" << std::endl;
+    if (Board.GetFirmwareVersion() < 5) {
+        logFile << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
+        return false;
+    }
+    AmpIO_UInt16 status = Board.ReadKSZ8851Status();
+    if (!(status&0x8000)) {
+        logFile << "   No Ethernet controller, status = " << std::hex << status << std::endl;
+        return false;
+    }
+    logFile << "   Ethernet controller status = " << std::hex << status << std::endl;
+    // Reset the board
+    Board.ResetKSZ8851();
+    // Wait 100 msec
+    usleep(100000L);
+    // Read the status
+    status = Board.ReadKSZ8851Status();
+    logFile << "   After reset, status = " << std::hex << status << std::endl;
+    // Read the Chip ID (16-bit read)
+    AmpIO_UInt16 chipID = Board.ReadKSZ8851ChipID();
+    logFile << "   Chip ID = " << std::hex << chipID << std::endl;
+    if ((chipID&0xfff0) != 0x8870)
+        return false;
+#if 0
+    // Read Chip ID using 8-bit read
+    // TODO: Reading from 0xC0 works (get 0x72), but not from 0xC1 (get 0xC1 instead of 0x88)
+    AmpIO_UInt8 chipIDHigh;
+    Board.ReadKSZ8851Reg(0xC1, chipIDHigh);
+    logFile << "   Chip ID high (8-bit read) = " << std::hex << static_cast<int>(chipIDHigh) << std::endl;
+    if (chipIDHigh != 0x88)
+        return false;
+#endif
+    // Walking bit pattern on MAC address register (R/W)
+    AmpIO_UInt16 MacAddrOut, MacAddrIn;
+    bool ret = true;
+    for (MacAddrOut = 0x0001; MacAddrOut != 0; MacAddrOut <<= 1) {
+        logFile << "   MAC address: " << std::hex;
+        if (Board.WriteKSZ8851Reg(0x10, MacAddrOut))
+            logFile << "write = " << MacAddrOut;
+        MacAddrIn = 0;
+        if (Board.ReadKSZ8851Reg(0x10, MacAddrIn))
+            logFile << ", read = " << MacAddrIn;
+        logFile << std::endl;
+        if (MacAddrOut != MacAddrIn) ret = false;
+    }
+    return ret;
+}
+
 int main(int argc, char** argv)
 {
     int i;
@@ -656,6 +706,7 @@ int main(int argc, char** argv)
     mvprintw(6, 9, "3) Test analog feedback:");
     mvprintw(7, 9, "4) Test motor power control:");
     mvprintw(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
+    mvprintw(9, 9, "6) Test Ethernet controller:");
 
     refresh();
 
@@ -681,7 +732,7 @@ int main(int argc, char** argv)
             last_debug_line = cur_line;
         }
 
-        mvprintw(10, 9, "Select option: ");
+        mvprintw(10, 10, "Select option: ");
         int c = getch();
 
         switch (c) {
@@ -726,6 +777,14 @@ int main(int argc, char** argv)
                     mvprintw(8, 46, "PASS");
                 else
                     mvprintw(8, 46, "FAIL");
+                break;
+
+            case '6':
+                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
+                if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
+                    mvprintw(9, 46, "PASS");
+                else
+                    mvprintw(9, 46, "FAIL");
                 break;
         }
 

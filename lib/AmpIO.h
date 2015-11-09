@@ -305,9 +305,29 @@ public:
     // ********************** QLA PROM ONLY Methods ***********************************
     // ZC: meta data only, so don't care speed that much
     bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
-    bool PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
+    bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data);
     bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
     bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
+
+    // ************************ Ethernet Methods *************************************
+    // Following functions enable access to the KSZ8851 Ethernet controller on the
+    // FPGA V2 board via FireWire. They are provided for testing/debugging.
+    // Note that both 8-bit and 16-bit transactions are supported.
+    bool ResetKSZ8851();   // Reset the chip (requires ~60 msec)
+    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data);
+    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data);
+    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data);
+    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data);
+    // Read Chip ID from register 0xC0
+    AmpIO_UInt16 ReadKSZ8851ChipID();
+    // Get KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
+    //    VALID=1 indicates that Ethernet is present
+    //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
+    //    PME is the state of the Power Management Event pin
+    //    IRQ is the state of the Interrupt Request pin (active low)
+    //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
+    // Returns 0 on error (i.e., if Ethernet not present, or read fails)
+    AmpIO_UInt16 ReadKSZ8851Status();
 
 protected:
     unsigned int NumAxes;   // not currently used

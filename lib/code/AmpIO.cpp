@@ -514,7 +514,7 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
 {
     if (GetFirmwareVersion() < 5) return false;
-
+ 
     // Counter frequency = 49.152 MHz --> 1 count is about 0.02 uS
     //    Max high/low time = (2^16-1)/49.152 usec = 1333.3 usec = 1.33 msec
     //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec
@@ -774,7 +774,7 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     }
 }
 
-bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
+bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
 {
     // enable write
     PromWriteEnable(PROM_25AA128);    
@@ -835,11 +835,83 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     // trigger write
     quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (!port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
-        return false;
-    else
-        return true;
+    return port->WriteQuadlet(BoardId, address, bswap_32(write_data));
 }
 
+// ********************** KSZ8851 Ethernet Controller Methods ***********************************
 
+bool AmpIO::ResetKSZ8851()
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x04000000;
+    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+}
 
+bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
+    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+}
+
+bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
+    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+}
+
+bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | data;
+    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+        return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return false;
+    read_data = bswap_32(read_data);
+    // Bit 31 indicates whether Ethernet is present
+    if (!(read_data&0x80000000)) return false;
+    // Bit 30 indicates whether last command had an error
+    if (read_data&0x40000000) return false;
+    data = static_cast<AmpIO_UInt8>(read_data);
+    return true;
+}
+
+bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | data;
+    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+        return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return false;
+    read_data = bswap_32(read_data);
+    // Bit 31 indicates whether Ethernet is present
+    if (!(read_data&0x80000000)) return false;
+    // Bit 30 indicates whether last command had an error
+    if (read_data&0x40000000) return false;
+    data = static_cast<AmpIO_UInt16>(read_data);
+    return true;
+}
+
+AmpIO_UInt16 AmpIO::ReadKSZ8851ChipID()
+{
+    AmpIO_UInt16 data;
+    if (ReadKSZ8851Reg(0xC0, data))
+        return data;
+    else
+        return 0;
+}
+
+AmpIO_UInt16 AmpIO::ReadKSZ8851Status()
+{
+    if (GetFirmwareVersion() < 5) return 0;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return 0;
+    read_data = bswap_32(read_data);
+    return static_cast<AmpIO_UInt16>(read_data>>16);
+}
