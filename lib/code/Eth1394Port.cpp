@@ -71,24 +71,24 @@ bool Eth1394Port::Init()
         BoardInUseMask_[i] = false;
     }
 
-    // Put Ethernet initialization here
-    pcap_if_t* alldevs;
-    pcap_if_t* dev;
-    if ((pcap_findalldevs(&alldevs, errbuf)) == -1) {
-        outStr << "ERROR: " << errbuf <<std::endl;
-        return false;
-    }
-
     if (PortNum < 0) {
         outStr << "Invalid Port Number" << std::endl;
         return false;
     }
 
-    dev = alldevs;
-    if (dev == NULL) {
-        outStr << "No devices" << std::endl;
+    // Put Ethernet initialization here
+    pcap_if_t* alldevs;
+    char errbuf[PCAP_ERRBUF_SIZE];
+    if ((pcap_findalldevs(&alldevs, errbuf)) == -1) {
+        outStr << "ERROR: " << errbuf <<std::endl;
         return false;
     }
+    if (alldevs == NULL) {
+        outStr << "No devices -- perhaps need root privileges?" << std::endl;
+        return false;
+    }
+
+    pcap_if_t* dev = alldevs;
     for (int i = 0; i < PortNum; i++) {
         dev = dev->next;
         if (dev == NULL) break;
@@ -198,6 +198,8 @@ bool Eth1394Port::ScanNodes(void)
 
     if (NumOfNodes_ == 0) {
         outStr << "No FPGA boards connected" << std::endl;
+        pcap_close(handle);
+        handle = 0;
         return false;
     }
 
@@ -209,8 +211,6 @@ bool Eth1394Port::ScanNodes(void)
 
     // write num of nodes to eth1394 FPGA
     outStr <<"Num of nodes: "<< NumOfNodes_ <<std::endl;
-
-//    std::cerr << "End Scannodes" << std::endl;
 
     return true;
 }

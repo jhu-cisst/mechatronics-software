@@ -41,8 +41,6 @@ protected:
         BRESPONSE = 7
     };
 
-
-    char errbuf[PCAP_ERRBUF_SIZE];
     const u_char *packet;		/* The actual packet */
     struct pcap_pkthdr header;	/* The header that pcap gives us */
     pcap_t *handle;

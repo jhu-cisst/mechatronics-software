@@ -66,6 +66,16 @@ void EncDown(AmpIO &bd)
     bd.WriteDigitalOutput(0x03, 0x00);
 }
 
+void PrintDebugStream(std::stringstream &debugStream)
+{
+    char line[80];
+    while (!debugStream.eof()) {
+        debugStream.getline(line, sizeof(line));
+        std::cerr << line << std::endl;
+    }
+    debugStream.clear();
+    debugStream.str("");
+}
 
 int main(int argc, char** argv)
 {
@@ -135,6 +145,7 @@ int main(int argc, char** argv)
     if (useFireWire) {
         Port = new FirewirePort(port, debugStream);
         if (!Port->IsOK()) {
+            PrintDebugStream(debugStream);
             std::cerr << "Failed to initialize firewire port " << port << std::endl;
             return -1;
         }
@@ -142,6 +153,7 @@ int main(int argc, char** argv)
     else {
         Port = new Eth1394Port(port, debugStream);
         if (!Port->IsOK()) {
+            PrintDebugStream(debugStream);
             std::cerr << "Failed to initialize ethernet port " << port << std::endl;
             return -1;
         }
