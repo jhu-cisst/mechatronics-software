@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * This is a minimial Linux command line program that displays information
+ * This is a minimal Linux command line program that displays information
  * about the connected IEEE 1394 (Firewire) devices.
  *
  * Compile: gcc -Wall -lraw1394 <name of this file> -o <name of executable>

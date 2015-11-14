@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * This is a minimial Linux command line program that reads/writes blocks of
+ * This is a minimal Linux command line program that reads/writes blocks of
  * data from/to the 1394-based controller. As a special case, if the program
  * name (argv[0]) contains quad1394, it reads/write one quadlet (32-bit value).
  *

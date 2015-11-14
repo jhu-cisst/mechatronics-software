@@ -2,11 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2012 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -31,6 +29,7 @@ const AmpIO_UInt32 MIDRANGE_VEL     = 0x00008000;  /*!< Midrange value of encode
 const AmpIO_UInt32 MIDRANGE_FRQ     = 0x00008000;  /*!< Midrange value of encoder frequency */
 const AmpIO_UInt32 MIDRANGE_ACC     = 0x00008000;  /*!< Midrange value of encoder acc */
 const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder preload value */
+const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;
 
 const AmpIO_UInt32 PWR_ENABLE       = 0x000c0000;  /*!< Turn pwr_en on             */
 const AmpIO_UInt32 PWR_DISABLE      = 0x00080000;  /*!< Turn pwr_en off            */
@@ -41,11 +40,14 @@ const AmpIO_UInt32 MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current a
 const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
-const AmpIO_UInt32 ENC_POS_MASK     = 0x01ffffff;  /*!< Mask for quad encoder bits */
+const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask */
+const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK     = 0x0000ffff;  /*!< Mask for encoder velocity bits */
 const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder frequency bits */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
+
+const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
 
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
@@ -62,6 +64,11 @@ const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC cha
     if (CB) (*CB)(MSG.str().c_str());   \
     else { std::cout << MSG.str() << std::endl; }
 
+
+AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 0011
+                                0x2, 0xA, 0x6, 0xE,         // 0100, 0101, 0110, 0111
+                                0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
+                                0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes)
 {
@@ -86,6 +93,52 @@ AmpIO::~AmpIO()
 AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
 {
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
+}
+
+std::string AmpIO::GetFPGASerialNumber(void)
+{
+    // Format: FPGA 1234-56 (12 bytes)
+    AmpIO_UInt32 address = 0x001FFF00;
+    AmpIO_UInt8 data[20];
+    std::string sn; sn.clear();
+    const size_t FPGASNSize = 12;
+
+    PromReadData(address, data, FPGASNSize);
+    for (size_t i = 0; i < FPGASNSize; i++) {
+        sn.push_back(data[i]);
+    }
+
+    if (sn.substr(0,5) == "FPGA ")
+        sn.erase(0,5);
+    else {
+        std::cerr << "Invalid FPGA Serial Number: " << sn << std::endl;
+        sn.clear();
+    }
+    return sn;
+}
+
+std::string AmpIO::GetQLASerialNumber(void)
+{
+    // Format: QLA 1234-56
+    std::string sn; sn.clear();
+    AmpIO_UInt16 address = 0x0000;
+    AmpIO_UInt8 data;
+    const size_t QLASNSize = 11;
+    for (size_t i = 0; i < QLASNSize; i++) {
+        if (!PromReadByte25AA128(address, data))
+            std::cerr << "Failed to get QLA Serial Number" << std::endl;
+        else {
+            sn.push_back(data);
+            address += 1;
+        }
+    }
+    if (sn.substr(0,4) == "QLA ")
+        sn.erase(0,4);
+    else {
+        std::cerr << "Invalid QLA Serial Number: " << sn << std::endl;
+        sn.clear();
+    }
+    return sn;
 }
 
 void AmpIO::DisplayReadBuffer(std::ostream &out) const
@@ -121,12 +174,16 @@ AmpIO_UInt32 AmpIO::GetTimestamp(void) const
 
 AmpIO_UInt32 AmpIO::GetDigitalInput(void) const
 {
-    return bswap_32(read_buffer[DIGIO_OFFSET])&0x00000fff;
+    return bswap_32(read_buffer[DIGIO_OFFSET]);
 }
 
 AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
 {
-    return static_cast<AmpIO_UInt8>((bswap_32(read_buffer[DIGIO_OFFSET])>>12)&0x000f);
+    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((bswap_32(read_buffer[DIGIO_OFFSET])>>12)&0x000f);
+    // Firmware versions < 5 have bits in reverse order with respect to schematic
+    if (GetFirmwareVersion() < 5)
+        dout = BitReverse4[dout];
+    return dout;
 }
 
 AmpIO_UInt8 AmpIO::GetNegativeLimitSwitches(void) const
@@ -142,6 +199,44 @@ AmpIO_UInt8 AmpIO::GetPositiveLimitSwitches(void) const
 AmpIO_UInt8 AmpIO::GetHomeSwitches(void) const
 {
     return (this->GetDigitalInput()&0x00f);
+}
+
+AmpIO_UInt8 AmpIO::GetEncoderChannelA(void) const
+{
+    return (this->GetDigitalInput()&0x0f000000)>>24;
+}
+
+bool AmpIO::GetEncoderChannelA(unsigned int index) const
+{
+    const AmpIO_UInt8 mask = (0x0001 << index);
+    return GetEncoderChannelA()&mask;
+}
+
+AmpIO_UInt8 AmpIO::GetEncoderChannelB(void) const
+{
+    return (this->GetDigitalInput()&0x00f00000)>>20;
+}
+
+bool AmpIO::GetEncoderChannelB(unsigned int index) const
+{
+    const AmpIO_UInt8 mask = (0x0001 << index);
+    return GetEncoderChannelB()&mask;
+}
+
+AmpIO_UInt8 AmpIO::GetEncoderIndex(void) const
+{
+    return (this->GetDigitalInput()&0x000f0000)>>16;
+}
+
+bool AmpIO::GetEncoderOverflow(unsigned int index) const
+{
+    if (index < NUM_CHANNELS) {
+        return bswap_32(read_buffer[index+ENC_POS_OFFSET]) & ENC_OVER_MASK;
+    }
+    else {
+        std::cerr << "Warning: GetEncoderOverflow, index out of range " << index << std::endl;
+    }
+    return true; // send error "code"
 }
 
 AmpIO_UInt8 AmpIO::GetAmpTemperature(unsigned int index) const
@@ -179,12 +274,12 @@ AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
     return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
 }
 
-AmpIO_UInt32 AmpIO::GetEncoderPosition(unsigned int index) const
+AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 {
-    if (index < NUM_CHANNELS)
-        return bswap_32(read_buffer[index+ENC_POS_OFFSET]);
-    else
-        return 0;
+    if (index < NUM_CHANNELS) {
+        return static_cast<AmpIO_Int32>(bswap_32(read_buffer[index + ENC_POS_OFFSET]) & ENC_POS_MASK) - ENC_MIDRANGE;
+    }
+    return 0;
 }
 
 // temp current the enc period velocity is unsigned 16 bits
@@ -212,6 +307,10 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) c
     else return cnter;
 }
 
+AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
+{
+    return ENC_MIDRANGE;
+}
 
 bool AmpIO::GetPowerStatus(void) const
 {
@@ -338,6 +437,25 @@ AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
     return bswap_32(read_data) & 0x0000000F;
 }
 
+bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow)
+{
+    countsHigh = 0;
+    countsLow = 0;
+    if (GetFirmwareVersion() < 5) return false;
+
+    AmpIO_UInt32 read_data;
+    unsigned int channel = (index+1) << 4;
+    if (port && (index < NUM_CHANNELS)) {
+        if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, read_data)) {
+            read_data = bswap_32(read_data);
+            countsHigh = static_cast<AmpIO_UInt16>(read_data >> 16);
+            countsLow  = static_cast<AmpIO_UInt16>(read_data);
+            return true;
+        }
+    }
+    return false;
+}
+
 /*******************************************************************************
  * Write commands
  */
@@ -360,18 +478,29 @@ bool AmpIO::WriteSafetyRelay(bool state)
     return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
 }
 
-bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_UInt32 sdata)
+bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
 {
     unsigned int channel = (index+1) << 4;
 
-    if (port && (index < NUM_CHANNELS))
-        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, bswap_32(sdata));
-    else
+    if ((sdata >= ENC_MIDRANGE)
+            || (sdata < -ENC_MIDRANGE)) {
+        std::cerr << "Error: WriteEncoderPreload, preload out of range" << std::endl;
         return false;
+    }
+    if (port && (index < NUM_CHANNELS)) {
+        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, bswap_32(static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE)));
+    } else {
+        return false;
+    }
 }
 
 bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
 {
+    // Firmware versions < 5 have bits in reverse order with respect to schematic
+    if (GetFirmwareVersion() < 5) {
+        mask = BitReverse4[mask&0x0f];
+        bits = BitReverse4[bits&0x0f];
+    }
     quadlet_t write_data = (mask << 8) | bits;
     return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));
 }
@@ -380,6 +509,57 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     // period = counts(16 bits) * 5.208333 us (default = 0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, bswap_32(counts));
+}
+
+bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
+{
+    if (GetFirmwareVersion() < 5) return false;
+ 
+    // Counter frequency = 49.152 MHz --> 1 count is about 0.02 uS
+    //    Max high/low time = (2^16-1)/49.152 usec = 1333.3 usec = 1.33 msec
+    //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec
+    unsigned int channel = (index+1) << 4;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsHigh) << 16) | countsLow;
+        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, bswap_32(counts));
+    } else {
+        return false;
+    }
+}
+
+bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
+{
+    // Check for valid frequency (also avoid divide by 0)
+    if (freq <= 375.0) return false;
+    // Check for valid duty cycle (0-1)
+    if ((duty < 0.0) || (duty > 1.0)) return false;
+    // Compute high time and low time (in counts). Note that we return false
+    // if either time is greater than 16 bits, rather than attempting to adjust.
+    AmpIO_UInt32 highTime = GetDoutCounts(duty/freq);
+    if (highTime > 65535L) return false;
+    AmpIO_UInt32 lowTime = GetDoutCounts((1.0-duty)/freq);
+    if (lowTime > 65535L) return false;
+    // Following can occur if frequency is too high
+    if ((highTime == 0) && (lowTime == 0)) return false;
+    bool ret;
+    // If highTime is 0, then turn off PWM at low value
+    if (highTime == 0) {
+        ret = WriteDoutControl(index, 0, 0);
+        ret &= WriteDigitalOutput((1<<index), 0);
+    }
+    // If lowTime is 0, then turn off PWM at high value
+    else if (lowTime == 0) {
+        ret = WriteDoutControl(index, 0, 0);
+        ret &= WriteDigitalOutput((1<<index), 1);
+    }
+    else
+        ret = WriteDoutControl(index, static_cast<AmpIO_UInt16>(highTime), static_cast<AmpIO_UInt16>(lowTime));
+    return ret;
+}
+
+AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
+{
+    return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
 }
 
 /*******************************************************************************
@@ -580,12 +760,13 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     AmpIO_UInt32 result = 0x00000000;
     quadlet_t write_data = 0x03000000|(addr << 8);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+
     if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
         // Should be ready by now...
         result = PromGetResult(PROM_25AA128);
 
-        // TODO get the last 8-bit of result
-        data = result;
+        // Get the last 8-bit of result
+        data = result & 0xFF;
         return true;
     } else {
         data = 0x00;
@@ -593,16 +774,20 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     }
 }
 
-bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
+bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
 {
     // enable write
-    PromWriteEnable(PROM_25AA128);
+    PromWriteEnable(PROM_25AA128);    
+    usleep(100);
 
     // 8-bit cmd + 16-bit addr + 8-bit data
     quadlet_t write_data = 0x02000000|(addr << 8)|data;
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
+    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
+        // wait 5ms for the PROM to be ready to take new commands
+        usleep(5000);
         return true;
+    }
     else
         return false;
 }
@@ -650,12 +835,83 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     // trigger write
     quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (!port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
-        return false;
-    else
-        return true;
-
+    return port->WriteQuadlet(BoardId, address, bswap_32(write_data));
 }
 
+// ********************** KSZ8851 Ethernet Controller Methods ***********************************
 
+bool AmpIO::ResetKSZ8851()
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x04000000;
+    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+}
 
+bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
+    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+}
+
+bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
+    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+}
+
+bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | data;
+    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+        return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return false;
+    read_data = bswap_32(read_data);
+    // Bit 31 indicates whether Ethernet is present
+    if (!(read_data&0x80000000)) return false;
+    // Bit 30 indicates whether last command had an error
+    if (read_data&0x40000000) return false;
+    data = static_cast<AmpIO_UInt8>(read_data);
+    return true;
+}
+
+bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | data;
+    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+        return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return false;
+    read_data = bswap_32(read_data);
+    // Bit 31 indicates whether Ethernet is present
+    if (!(read_data&0x80000000)) return false;
+    // Bit 30 indicates whether last command had an error
+    if (read_data&0x40000000) return false;
+    data = static_cast<AmpIO_UInt16>(read_data);
+    return true;
+}
+
+AmpIO_UInt16 AmpIO::ReadKSZ8851ChipID()
+{
+    AmpIO_UInt16 data;
+    if (ReadKSZ8851Reg(0xC0, data))
+        return data;
+    else
+        return 0;
+}
+
+AmpIO_UInt16 AmpIO::ReadKSZ8851Status()
+{
+    if (GetFirmwareVersion() < 5) return 0;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return 0;
+    read_data = bswap_32(read_data);
+    return static_cast<AmpIO_UInt16>(read_data>>16);
+}

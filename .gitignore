@@ -1,8 +1,4 @@
+cisstLog.txt
+**/cisstLog.txt
 *~
-*.txt.user
-*.html
-html
-build
-Doxyfile
-authors.txt
-
+CMakeLists.txt.user

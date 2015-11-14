@@ -3,10 +3,16 @@
 #  Amp1394_INCLUDE_DIR  - include directories for Amp1394
 #  Amp1394_LIBRARY_DIR  - link library directories for Amp1394
 #  Amp1394_LIBRARIES    - libraries to link against
+
+# Version
+set (Amp1394_VERSION_MAJOR "@Amp1394_VERSION_MAJOR@")
+set (Amp1394_VERSION_MINOR "@Amp1394_VERSION_MINOR@")
+set (Amp1394_VERSION_PATCH "@Amp1394_VERSION_PATCH@")
+set (Amp1394_VERSION "@Amp1394_VERSION")
  
 # Compute paths
-set(Amp1394_INCLUDE_DIR "@CONF_INCLUDE_DIR@")
-set(Amp1394_LIBRARY_DIR "@CONF_LIBRARY_DIR@")
+set (Amp1394_INCLUDE_DIR "@CONF_INCLUDE_DIR@")
+set (Amp1394_LIBRARY_DIR "@CONF_LIBRARY_DIR@")
  
 # These are IMPORTED targets created by Amp1394Targets.cmake
-set(Amp1394_LIBRARIES Amp1394)
+set (Amp1394_LIBRARIES Amp1394)

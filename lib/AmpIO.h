@@ -2,11 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Zihan Chen
 
-  (C) Copyright 2011-2012 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -18,9 +16,10 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 
-
 #ifndef __AMPIO_H__
 #define __AMPIO_H__
+
+#include <Amp1394/AmpIORevision.h>
 
 #include "BoardIO.h"
 #include <stdint.h> // for uint32_t
@@ -28,6 +27,8 @@ http://www.cisst.org/cisst/license.txt.
 
 class ostream;
 
+
+typedef int32_t  AmpIO_Int32;
 typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
 typedef uint8_t AmpIO_UInt8;
@@ -38,7 +39,11 @@ public:
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    AmpIO_UInt32 GetFirmwareVersion(void) const;
+    AmpIO_UInt32 GetFirmwareVersion(void) const;    
+    // Return FPGA serial number (empty string if not found)
+    std::string GetFPGASerialNumber(void);
+    // Return QLA serial number (empty string if not found)
+    std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
     // *********************** GET Methods ***********************************
@@ -53,17 +58,31 @@ public:
 
     AmpIO_UInt8 GetDigitalOutput(void) const;
 
-    /*! Utility method, uses result of GetDigitalOutput but performs
+    /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
     AmpIO_UInt8 GetNegativeLimitSwitches(void) const;
 
-    /*! Utility method, uses result of GetDigitalOutput but performs
+    /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
     AmpIO_UInt8 GetPositiveLimitSwitches(void) const;
 
-    /*! Utility method, uses result of GetDigitalOutput but performs
+    /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
     AmpIO_UInt8 GetHomeSwitches(void) const;
+
+    /*! Utility methods, use result of GetDigitalInput but perform
+      required shift and mask. */
+    //@{
+    AmpIO_UInt8 GetEncoderChannelA(void) const;
+    bool GetEncoderChannelA(unsigned int index) const;
+
+    AmpIO_UInt8 GetEncoderChannelB(void) const;
+    bool GetEncoderChannelB(unsigned int index) const;
+
+    bool GetEncoderOverflow(unsigned int index) const;
+
+    AmpIO_UInt8 GetEncoderIndex(void) const;
+    //@}
 
     AmpIO_UInt32 GetDigitalInput(void) const;
 
@@ -73,9 +92,11 @@ public:
 
     AmpIO_UInt32 GetAnalogInput(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderPosition(unsigned int index) const;
+    AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
     AmpIO_UInt32 GetEncoderVelocity(unsigned int index, const bool islatch = true) const;
+
+    AmpIO_Int32 GetEncoderMidRange(void) const;
 
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
@@ -121,6 +142,18 @@ public:
     bool ReadSafetyRelayStatus(void) const;
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
 
+    /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
+
+        \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
+        \param countsHigh counter value for high part of pulse (0 --> indefinite)
+        \param countsLow counter value for low part of waveform (0 --> indefinite)
+        \returns true if successful (results in countsHigh and countsLow)
+
+        \sa WriteDoutControl
+        \note Firmware Version 5+
+     */
+    bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
+
     // ********************** WRITE Methods **********************************
 
     // Enable motor power to the entire board (it is still necessary
@@ -132,11 +165,69 @@ public:
 
     bool WriteSafetyRelay(bool state);
 
-    bool WriteEncoderPreload(unsigned int index, AmpIO_UInt32 enc);
+    bool WriteEncoderPreload(unsigned int index, AmpIO_Int32 enc);
 
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
+
+    /*! \brief Write DOUT control register to set digital output mode (e.g., PWM, one-shot (pulse), general out).
+
+        The modes are as follows:
+          General DOUT:       high_time = low_time = 0
+          Pulse high for DT:  high_time = DT, low_time = 0
+          Pulse low for DT:   high_time = 0, low_time = DT
+          PWM mode:           high_time = DTH, low_time = DTL (period = DTH+DTL)
+
+        This is a low level-interface that specifies counts relative to the FPGA sysclk, which is 49.152 MHz.
+        Thus, 1 count is approximately 20 nsec. The maximum 16-bit unsigned value, 65535, corresponds to
+        about 1.33 msec.
+
+        Note that regardless of the mode, writing to the digital output (e.g., using WriteDigitalOutput)
+        will cause it to change to the new value. It will also reset the timer. For example, if we set
+        the control register to pulse high for 100 clocks, but then set DOUT to 1 after 50 clocks, it will
+        stay high for a total of 150 clocks. Writing to the control register also resets the time, so the
+        same behavior would occur if we write to the control register after 50 clocks (assuming we do not
+        also change the high_time).
+
+        For the one-shot modes, the effect of calling WriteDoutControl is that the digital output will
+        transition to the inactive state. For example, WriteDoutControl(0, 1000, 0) will have no effect
+        on the digital output if it is already low. If the digital output is high, then the above call
+        will cause the digital output to remain high for 1000 counts and then transition low and remain low.
+        Subsequently, any call WriteDigitalOutput(0x01, 0x01) will cause the digital output to transition
+        high, remain there for 1000 counts, and then transition low (i.e., a positive pulse of 1000 counts
+        duration).
+
+        For the PWM mode (high time and low time both non-zero), the effect of calling WriteDoutControl
+        is to start PWM mode immediately.
+
+        \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
+        \param countsHigh counter value for high part of pulse (0 --> indefinite)
+        \param countsLow counter value for low part of waveform (0 --> indefinite)
+        \returns true if successful
+
+        \note Firmware Version 5+
+    */
+    bool WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow);
+
+    /*! \brief Write PWM parameters. This is a convenience function that calls WriteDoutControl.
+               Note that the function can fail (and return false) if the input parameters are
+               not feasible. The actual duty cycle will be as close as possible to the desired duty cycle.
+
+        \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
+        \param freq PWM frequency, in Hz (375.08 Hz - 24.56 MHz)
+        \param duty PWM duty cycle (0.0 - 1.0); 0.75 means PWM signal should be high 75% of time
+        \returns true if successful; possible failures include firmware version < 5, failure to write
+                 over FireWire, or specified frequency or duty cycle not possible.
+    */
+    bool WritePWM(unsigned int index, double freq, double duty);
+
+    /*! \brief Get digital output time (in counts) corresponding to specified time in seconds.
+
+        \param time Time, in seconds
+        \returns Time, in counts
+    */
+    AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
 
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming
@@ -214,9 +305,29 @@ public:
     // ********************** QLA PROM ONLY Methods ***********************************
     // ZC: meta data only, so don't care speed that much
     bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
-    bool PromWriteByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
+    bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data);
     bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
     bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
+
+    // ************************ Ethernet Methods *************************************
+    // Following functions enable access to the KSZ8851 Ethernet controller on the
+    // FPGA V2 board via FireWire. They are provided for testing/debugging.
+    // Note that both 8-bit and 16-bit transactions are supported.
+    bool ResetKSZ8851();   // Reset the chip (requires ~60 msec)
+    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data);
+    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data);
+    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data);
+    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data);
+    // Read Chip ID from register 0xC0
+    AmpIO_UInt16 ReadKSZ8851ChipID();
+    // Get KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
+    //    VALID=1 indicates that Ethernet is present
+    //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
+    //    PME is the state of the Power Management Event pin
+    //    IRQ is the state of the Interrupt Request pin (active low)
+    //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
+    // Returns 0 on error (i.e., if Ethernet not present, or read fails)
+    AmpIO_UInt16 ReadKSZ8851Status();
 
 protected:
     unsigned int NumAxes;   // not currently used
@@ -259,7 +370,9 @@ protected:
         POT_DATA_OFFSET = 3,       // pot data register
         ENC_LOAD_OFFSET = 4,       // enc control register (preload)
         POS_DATA_OFFSET = 5,       // enc data register (position)
-        VEL_DATA_OFFSET = 6        // enc data register (velocity)
+        VEL_DATA_OFFSET = 6,       // enc data register (velocity, 4/DT method)
+        VEL_DP_DATA_OFFSET = 7,    // enc data register (velocity, DP/1 method)
+        DOUT_CTRL_OFFSET = 8       // digital output control (PWM, one-shot)
     };
 };
 

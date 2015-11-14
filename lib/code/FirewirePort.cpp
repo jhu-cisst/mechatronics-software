@@ -2,11 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2012 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -47,14 +45,16 @@ FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
     max_board(0),
     NumOfBoards_(0),
     NumOfNodes_(0),
-    BoardExistMask_(0)
+    ReadSequence_(0),
+    BoardExistMask_(0),
+    Protocol_(FirewirePort::PROTOCOL_SEQ_RW)
 {
     Init();
 }
 
 bool FirewirePort::Init(void)
 {
-    // create firewire port handle 
+    // create firewire port handle
     handle = raw1394_new_handle();
     handle_bc = raw1394_new_handle();
     if (!handle || !handle_bc) {
@@ -269,7 +269,7 @@ bool FirewirePort::ScanNodes(void)
         data = bswap_32(data);
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
         board = (data & BOARD_ID_MASK) >> 24;
-        outStr << "  Node " << node << ", BoardId = " << board 
+        outStr << "  Node " << node << ", BoardId = " << board
                << ", Firmware Version = " << fver << std::endl;
         if (Node2Board[node] < BoardIO::MAX_BOARDS)
             outStr << "    Duplicate entry, previous value = "
@@ -284,8 +284,8 @@ bool FirewirePort::ScanNodes(void)
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
-        UseBroadcast_ = true;
-        outStr << "ScanNodes: all nodes broadcast capable, broadcast mode" << std::endl;
+        Protocol_ = FirewirePort::PROTOCOL_SEQ_R_BC_W;
+        outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
     }
 
     // update Board2Node
@@ -299,8 +299,6 @@ bool FirewirePort::ScanNodes(void)
             }
         }
     }
-
-    SetUseBroadcastFlag(false);
 
     return true;
 }
@@ -387,24 +385,35 @@ unsigned long FirewirePort::GetFirmwareVersion(unsigned char boardId) const
         return 0;
 }
 
-void FirewirePort::SetUseBroadcastFlag(bool bc)
+void FirewirePort::SetProtocol(FirewirePort::ProtocolType prot)
 {
-    if (!IsAllBoardsBroadcastCapable_ && bc) {
-        outStr << "***Error: not all boards supports broadcasting, " << std::endl
-               << "          please upgrade your firmaware"  << std::endl;
+    if (!IsAllBoardsBroadcastCapable_ && (prot != FirewirePort::PROTOCOL_SEQ_RW)) {
+        outStr << "***Error: not all boards support broadcasting, " << std::endl
+               << "          please upgrade your firmware"  << std::endl;
     } else {
-        UseBroadcast_ = bc;
-        if (bc) {
-            outStr << "System running in broadcast mode " << std::endl;
-        } else {
-            outStr << "System running in NON broadcast mode " << std::endl;
+        switch (prot) {
+        case FirewirePort::PROTOCOL_SEQ_RW:
+            outStr << "System running in NON broadcast mode" << std::endl;
+            Protocol_ = prot;
+            break;
+        case FirewirePort::PROTOCOL_SEQ_R_BC_W:
+            outStr << "System running with broadcast write" << std::endl;
+            Protocol_ = prot;
+            break;
+        case FirewirePort::PROTOCOL_BC_QRW:
+            outStr << "System running with broadcast query, read, and write" << std::endl;
+            Protocol_ = prot;
+            break;
+        default:
+            outStr << "Unknown protocol (ignored): " << prot << std::endl;
+            break;
         }
     }
 }
 
 bool FirewirePort::ReadAllBoards(void)
 {
-    if (UseBroadcast_) {
+    if (Protocol_ == FirewirePort::PROTOCOL_BC_QRW) {
         return ReadAllBoardsBroadcast();
     }
 
@@ -418,12 +427,15 @@ bool FirewirePort::ReadAllBoards(void)
         if (BoardList[board]) {
             bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(),
                                  BoardList[board]->GetReadNumBytes());
-            if (ret) noneRead = false;
-            else allOK = false;
+            if (ret) {
+                noneRead = false;
+            } else {
+                allOK = false;
+            }
             BoardList[board]->SetReadValid(ret);
 
             if (!ret) {
-                std::cerr << "------- Oops failed --------" << std::endl;
+                outStr << "ReadAllBoards: read failed on port " << PortNum << ", board " << board << std::endl;
             }
         }
     }
@@ -555,7 +567,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
 bool FirewirePort::WriteAllBoards(void)
 {
-    if (UseBroadcast_) {
+    if ((Protocol_ == FirewirePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == FirewirePort::PROTOCOL_BC_QRW)) {
         return WriteAllBoardsBroadcast();
     }
 

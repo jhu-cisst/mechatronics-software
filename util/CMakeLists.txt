@@ -1,7 +1,7 @@
 #
 # $Id$
 #
-# (C) Copyright 2012 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2012-2015 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -16,8 +16,9 @@ cmake_minimum_required(VERSION 2.6)
 
 project(util1394)
 
-# Set the ouptut path for the libraries and executables
-set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})
+if(NOT EXECUTABLE_OUTPUT_PATH)
+   set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})
+endif(NOT EXECUTABLE_OUTPUT_PATH)
 
 set(PROGRAMS block1394 info1394 time1394)
 
@@ -29,6 +30,6 @@ endforeach(program)
 # Add post-build command to copy block1394 to quad1394
 add_custom_command(TARGET block1394 POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy
-                      ${CMAKE_CURRENT_BINARY_DIR}/block1394
-                      ${CMAKE_CURRENT_BINARY_DIR}/quad1394
+                      ${EXECUTABLE_OUTPUT_PATH}/block1394
+                      ${EXECUTABLE_OUTPUT_PATH}/quad1394
                    COMMENT "Generating quad1394")
