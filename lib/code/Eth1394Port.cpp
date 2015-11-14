@@ -16,6 +16,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "Eth1394Port.h"
+#include <pcap.h>
 #include <stdint.h>
 #include <byteswap.h>
 #include <iomanip>
@@ -357,6 +358,8 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     }
 
     // Grab a packet
+    struct pcap_pkthdr header;	/* The header that pcap gives us */
+    const u_char *packet;		/* The actual packet */
     packet = pcap_next(handle, &header);
 
     if (packet == NULL) {
@@ -624,6 +627,8 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 //    ethpcap_recv_nonblocking();
 
     // Grab a packet
+    struct pcap_pkthdr header;	/* The header that pcap gives us */
+    const u_char *packet;		/* The actual packet */
     packet = pcap_next(handle, &header);
 
     if (packet == NULL) {

@@ -16,3 +16,7 @@ set (Amp1394_LIBRARY_DIR "@CONF_LIBRARY_DIR@")
  
 # These are IMPORTED targets created by Amp1394Targets.cmake
 set (Amp1394_LIBRARIES Amp1394)
+
+# FireWire/Ethernet support
+set (Amp1394_HAS_RAW1394 "@Amp1394_HAS_RAW1394@")
+set (Amp1394_HAS_PCAP    "@Amp1394_HAS_PCAP@")

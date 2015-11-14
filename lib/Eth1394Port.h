@@ -19,10 +19,11 @@ http://www.cisst.org/cisst/license.txt.
 #ifndef __Eth1394Port_H__
 #define __Eth1394Port_H__
 
-#include <pcap.h>
 #include <iostream>
 #include "BasePort.h"
 
+// Forward declaration
+struct pcap_t;
 
 class Eth1394Port : public BasePort
 {
@@ -41,10 +42,8 @@ protected:
         BRESPONSE = 7
     };
 
-    const u_char *packet;		/* The actual packet */
-    struct pcap_pkthdr header;	/* The header that pcap gives us */
     pcap_t *handle;
-    u_int16_t frame_hdr[7];
+    uint16_t frame_hdr[7];
 
     int NumOfNodes_;    // number of nodes exist
     int NumOfNodesInUse_;   //number of nodes under control
