@@ -2,8 +2,6 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Zihan Chen, Peter Kazanzides
 
   (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
@@ -32,12 +30,6 @@ class FirewirePort : public BasePort {
 public:
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
 
-    // Protocol types:
-    //   PROTOCOL_SEQ_RW      sequential (individual) read and write to each board
-    //   PROTOCOL_SEQ_R_BC_W  sequential read from each board, broadcast write to all boards
-    //   PROTOCOL_BC_QRW      broadcast query, read, and write to/from all boards
-    enum ProtocolType { PROTOCOL_SEQ_RW, PROTOCOL_SEQ_R_BC_W, PROTOCOL_BC_QRW };
-
 protected:
 
     raw1394handle_t handle;   // normal read/write handle
@@ -48,8 +40,6 @@ protected:
     unsigned char Board2Node[BoardIO::MAX_BOARDS];
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
-
-
     int max_board;  // highest index of used (non-zero) entry in BoardList
     BoardIO *HubBoard_;
     int NumOfBoards_;    // number of boards
@@ -57,8 +47,6 @@ protected:
 
     // Broadcast Related
     unsigned int BoardExistMask_;   // mask showing indicating whether board exists
-    ProtocolType Protocol_;         // protocol type in use
-    bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
@@ -116,16 +104,15 @@ public:
     int GetNodeId(unsigned char boardId) const;
     unsigned long GetFirmwareVersion(unsigned char boardId) const;
 
-    // Set protocol type
-    void SetProtocol(ProtocolType prot);
-
     // Read all boards
     bool ReadAllBoards(void);
+
     // Read all boards broadcasting
     bool ReadAllBoardsBroadcast(void);
 
     // Write to all boards
     bool WriteAllBoards(void);
+
     // Write to all boards using broadcasting
     bool WriteAllBoardsBroadcast(void);
 

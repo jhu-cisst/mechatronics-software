@@ -2,11 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Zihan Chen
 
-  (C) Copyright 2014 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -49,10 +47,10 @@ Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream):
     NumOfNodes_(0),
     NumOfNodesInUse_(0)
 {
-    if (!Init()) {
+    if (Init())
+        eth1394_write_nodeidmode(1);
+    else
         outStr << "Initialization failed" << std::endl;
-    }
-    eth1394_write_nodeidmode(1);
 }
 
 void Eth1394Port::BoardInUseIntegerUpdate(void)
@@ -87,6 +85,10 @@ bool Eth1394Port::Init()
     }
 
     dev = alldevs;
+    if (dev == NULL) {
+        outStr << "No devices" << std::endl;
+        return false;
+    }
     for (int i = 0; i < PortNum; i++) {
         dev = dev->next;
         if (dev == NULL) break;
@@ -201,11 +203,11 @@ bool Eth1394Port::ScanNodes(void)
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
-        UseBroadcast_ = true;
-        outStr << "ScanNodes: all nodes broadcast capable, broadcast mode" << std::endl;
+        Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
+        outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
     }
 
-    // wirte num of nodes to eth1394 FPGA
+    // write num of nodes to eth1394 FPGA
     outStr <<"Num of nodes: "<< NumOfNodes_ <<std::endl;
 
 //    std::cerr << "End Scannodes" << std::endl;
@@ -235,21 +237,6 @@ unsigned long Eth1394Port::GetFirmwareVersion(unsigned char boardId) const
         return FirmwareVersion[boardId];
     else
         return 0;
-}
-
-void Eth1394Port::SetUseBroadcastFlag(bool bc)
-{
-    if (!IsAllBoardsBroadcastCapable_ && bc) {
-        outStr << "***Error: not all boards supports broadcasting, " << std::endl
-               << "          please upgrade your firmaware"  << std::endl;
-    } else {
-        UseBroadcast_ = bc;
-        if (bc) {
-            outStr << "System running in broadcast mode " << std::endl;
-        } else {
-            outStr << "System running in NON broadcast mode " << std::endl;
-        }
-    }
 }
 
 bool Eth1394Port::AddBoard(BoardIO *board)
@@ -293,10 +280,11 @@ bool Eth1394Port::RemoveBoard(unsigned char boardId)
 
 bool Eth1394Port::ReadAllBoards(void)
 {       
-    if (UseBroadcast_) {
+    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
         return ReadAllBoardsBroadcast();
     }
-    if(!handle){
+
+    if (!handle) {
         outStr << "ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
     }
@@ -418,8 +406,8 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
 
 bool Eth1394Port::WriteAllBoards()
 {
-    if (UseBroadcast_) {
-        //return WriteAllBoardsBroadcast();
+    if ((Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == BasePort::PROTOCOL_BC_QRW)) {
+        return WriteAllBoardsBroadcast();
     }
 
     if (!handle) {

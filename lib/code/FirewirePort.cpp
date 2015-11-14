@@ -45,9 +45,7 @@ FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
     max_board(0),
     NumOfBoards_(0),
     NumOfNodes_(0),
-    ReadSequence_(0),
-    BoardExistMask_(0),
-    Protocol_(FirewirePort::PROTOCOL_SEQ_RW)
+    BoardExistMask_(0)
 {
     Init();
 }
@@ -284,7 +282,7 @@ bool FirewirePort::ScanNodes(void)
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
-        Protocol_ = FirewirePort::PROTOCOL_SEQ_R_BC_W;
+        Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
         outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
     }
 
@@ -385,35 +383,9 @@ unsigned long FirewirePort::GetFirmwareVersion(unsigned char boardId) const
         return 0;
 }
 
-void FirewirePort::SetProtocol(FirewirePort::ProtocolType prot)
-{
-    if (!IsAllBoardsBroadcastCapable_ && (prot != FirewirePort::PROTOCOL_SEQ_RW)) {
-        outStr << "***Error: not all boards support broadcasting, " << std::endl
-               << "          please upgrade your firmware"  << std::endl;
-    } else {
-        switch (prot) {
-        case FirewirePort::PROTOCOL_SEQ_RW:
-            outStr << "System running in NON broadcast mode" << std::endl;
-            Protocol_ = prot;
-            break;
-        case FirewirePort::PROTOCOL_SEQ_R_BC_W:
-            outStr << "System running with broadcast write" << std::endl;
-            Protocol_ = prot;
-            break;
-        case FirewirePort::PROTOCOL_BC_QRW:
-            outStr << "System running with broadcast query, read, and write" << std::endl;
-            Protocol_ = prot;
-            break;
-        default:
-            outStr << "Unknown protocol (ignored): " << prot << std::endl;
-            break;
-        }
-    }
-}
-
 bool FirewirePort::ReadAllBoards(void)
 {
-    if (Protocol_ == FirewirePort::PROTOCOL_BC_QRW) {
+    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
         return ReadAllBoardsBroadcast();
     }
 
@@ -567,7 +539,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
 bool FirewirePort::WriteAllBoards(void)
 {
-    if ((Protocol_ == FirewirePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == FirewirePort::PROTOCOL_BC_QRW)) {
+    if ((Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == BasePort::PROTOCOL_BC_QRW)) {
         return WriteAllBoardsBroadcast();
     }
 

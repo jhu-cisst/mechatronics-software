@@ -2,11 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Zihan Chen
 
-  (C) Copyright 2014 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -141,11 +139,13 @@ public:
 
     // Read all boards
     bool ReadAllBoards(void);
+
     // Read all boards broadcasting
     virtual bool ReadAllBoardsBroadcast(void);
 
     // Write to all boards
     bool WriteAllBoards(void);
+
     // Write to all boards using broadcasting
     virtual bool WriteAllBoardsBroadcast(void);
 
@@ -185,4 +185,3 @@ public:
 };
 
 #endif  // __Eth1394Port_H__
-

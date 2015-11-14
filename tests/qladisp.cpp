@@ -34,9 +34,9 @@ http://www.cisst.org/cisst/license.txt.
 #include <sstream>
 #include <vector>
 
-//#include "FirewirePort.h"
-
+#include "FirewirePort.h"
 #include "Eth1394Port.h"
+
 #include "AmpIO.h"
 
 
@@ -71,6 +71,7 @@ int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
     unsigned int i, j;
+    bool useFireWire = true;
     int port = 0;
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
@@ -82,8 +83,21 @@ int main(int argc, char** argv)
     int args_found = 0;
     for (i = 1; i < (unsigned int)argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            port = atoi(argv[i]+2);
-            std::cerr << "Selecting port " << port << std::endl;
+            // -p option can be -pN, -pfwN, or -pethN, where N
+            // is the port number. -pN is equivalent to -pfwN
+            // for backward compatibility.
+            if (strncmp(argv[i]+2, "fw", 2) == 0)
+                port = atoi(argv[i]+4);
+            else if (strncmp(argv[i]+2, "eth", 3) == 0) {
+                useFireWire = false;
+                port = atoi(argv[i]+5);
+            }
+            else
+                port = atoi(argv[i]+2);
+            if (useFireWire)
+                std::cerr << "Selecting FireWire port " << port << std::endl;
+            else
+                std::cerr << "Selecting Ethernet port " << port << std::endl;
         }
         else {
             if (args_found == 0) {
@@ -100,27 +114,37 @@ int main(int argc, char** argv)
 
     if (args_found < 1) {
         // usage
-        std::cerr << "Usage: sensors <board-num> [<board-num>] [-pP]" << std::endl
+        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
                   << std::endl
                   << "Trying to detect board on default port:" << std::endl;
 
-        // try to locate all boards available on default port
-        FirewirePort Port(port, std::cerr);
-        if (!Port.IsOK()) {
-            std::cerr << "Failed to initialize firewire port " << port << std::endl;
+        if (useFireWire) {
+            // try to locate all boards available on default port
+            FirewirePort Port(port, std::cerr);
+            if (!Port.IsOK()) {
+                std::cerr << "Failed to initialize firewire port " << port << std::endl;
+            }
+            return 0;
         }
-        return 0;
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
-//    FirewirePort Port(port, debugStream);
-    Eth1394Port Port(port, debugStream);
-
-    if (!Port.IsOK()) {
-        std::cerr << "Failed to initialize firewire port " << port << std::endl;
-        return -1;
+    BasePort *Port;
+    if (useFireWire) {
+        Port = new FirewirePort(port, debugStream);
+        if (!Port->IsOK()) {
+            std::cerr << "Failed to initialize firewire port " << port << std::endl;
+            return -1;
+        }
+    }
+    else {
+        Port = new Eth1394Port(port, debugStream);
+        if (!Port->IsOK()) {
+            std::cerr << "Failed to initialize ethernet port " << port << std::endl;
+            return -1;
+        }
     }
 
     // Currently hard-coded for up to 2 boards; initialize at mid-range
@@ -130,10 +154,10 @@ int main(int argc, char** argv)
     std::vector<AmpIO*> BoardList;
     std::vector<AmpIO_UInt32> FirmwareVersionList;
     BoardList.push_back(new AmpIO(board1));
-    Port.AddBoard(BoardList[0]);
+    Port->AddBoard(BoardList[0]);
     if (board2 < BoardIO::MAX_BOARDS) {
         BoardList.push_back(new AmpIO(board2));
-        Port.AddBoard(BoardList[1]);
+        Port->AddBoard(BoardList[1]);
     }
 
     FirmwareVersionList.clear();
@@ -189,10 +213,10 @@ int main(int argc, char** argv)
     int c;
 
     // control loop
-//    Port.WriteAllBoardsBroadcast(); // dummy write to start the pipeline
+//    Port->WriteAllBoardsBroadcast(); // dummy write to start the pipeline
 
     while ((c = getch()) != ESC_CHAR) {
-        if (c == 'r') Port.Reset();
+        if (c == 'r') Port->Reset();
         else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));
@@ -257,25 +281,25 @@ int main(int argc, char** argv)
             last_debug_line = cur_line;
         }
 
-        if (!Port.IsOK()) continue;
+        if (!Port->IsOK()) continue;
 
         char nodeStr[2][5];
-        int node = Port.GetNodeId(board1);
+        int node = Port->GetNodeId(board1);
         if (node < BoardIO::MAX_BOARDS)
             sprintf(nodeStr[0], "%4d", node);
         else
             strcpy(nodeStr[0], "none");
 
         if (BoardList.size() > 1) {
-            node = Port.GetNodeId(board2);
+            node = Port->GetNodeId(board2);
             if (node < FirewirePort::MAX_NODES)
                 sprintf(nodeStr[1], "%4d", node);
             else
                 strcpy(nodeStr[1], "none");
         }
 
-//        Port.ReadAllBoardsBroadcast();
-        Port.ReadAllBoards();
+//        Port->ReadAllBoardsBroadcast();
+        Port->ReadAllBoards();
         unsigned int j = 0;
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
@@ -315,8 +339,8 @@ int main(int argc, char** argv)
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
         }
-//        Port.WriteAllBoardsBroadcast();
-        Port.WriteAllBoards();
+//        Port->WriteAllBoardsBroadcast();
+        Port->WriteAllBoards();
 
         mvwprintw(stdscr, 1, lm+41, "dt: %f",  (1.0 / 49125.0) * maxTime);
 
@@ -328,9 +352,10 @@ int main(int argc, char** argv)
         BoardList[j]->WritePowerEnable(false);      // Turn power off
         BoardList[j]->WriteAmpEnable(0x0f, 0x00);   // Turn power off
         BoardList[j]->WriteSafetyRelay(false);
-        Port.RemoveBoard(BoardList[j]->GetBoardId());
+        Port->RemoveBoard(BoardList[j]->GetBoardId());
     }
 
     endwin();
+    delete Port;
     return 0;
 }

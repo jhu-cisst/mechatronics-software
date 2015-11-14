@@ -2,11 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -25,10 +23,18 @@ http://www.cisst.org/cisst/license.txt.
 
 class BasePort
 {
+public:
+
+    // Protocol types:
+    //   PROTOCOL_SEQ_RW      sequential (individual) read and write to each board
+    //   PROTOCOL_SEQ_R_BC_W  sequential read from each board, broadcast write to all boards
+    //   PROTOCOL_BC_QRW      broadcast query, read, and write to/from all boards
+    enum ProtocolType { PROTOCOL_SEQ_RW, PROTOCOL_SEQ_R_BC_W, PROTOCOL_BC_QRW };
+
 protected:
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
-    bool UseBroadcast_;   // Read/Write broadcast flag
+    ProtocolType Protocol_;         // protocol type in use
     bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
     unsigned int ReadSequence_;   // sequence number for WABB
 
@@ -43,9 +49,9 @@ protected:
 public:
 
     // Constructor
-    BasePort(int portNum, bool UseBroadcast = false, std::ostream &ostr = std::cerr):
+    BasePort(int portNum, std::ostream &ostr = std::cerr):
         outStr(ostr),
-        UseBroadcast_(UseBroadcast),
+        Protocol_(BasePort::PROTOCOL_SEQ_RW),
         ReadSequence_(0),
         PortNum(portNum)
     {
@@ -66,16 +72,41 @@ public:
     virtual bool RemoveBoard(unsigned char boardId) = 0;
     inline bool RemoveBoard(BoardIO *board) { return RemoveBoard(board->BoardId); }
 
-    // Set UseBroadcast Flag
-    virtual void SetUseBroadcastFlag(bool bc = false) = 0;
+    // Set protocol type
+    void SetProtocol(ProtocolType prot) {
+        if (!IsAllBoardsBroadcastCapable_ && (prot != BasePort::PROTOCOL_SEQ_RW)) {
+            outStr << "***Error: not all boards support broadcasting, " << std::endl
+                   << "          please upgrade your firmware"  << std::endl;
+        } else {
+            switch (prot) {
+            case BasePort::PROTOCOL_SEQ_RW:
+                outStr << "System running in NON broadcast mode" << std::endl;
+                Protocol_ = prot;
+                break;
+            case BasePort::PROTOCOL_SEQ_R_BC_W:
+                outStr << "System running with broadcast write" << std::endl;
+                Protocol_ = prot;
+                break;
+            case BasePort::PROTOCOL_BC_QRW:
+                outStr << "System running with broadcast query, read, and write" << std::endl;
+                Protocol_ = prot;
+                break;
+            default:
+                outStr << "Unknown protocol (ignored): " << prot << std::endl;
+                break;
+            }
+        }
+    }
 
     // Read all boards
     virtual bool ReadAllBoards(void) = 0;
+
     // Read all boards broadcasting
     virtual bool ReadAllBoardsBroadcast(void) = 0;
 
     // Write to all boards
     virtual bool WriteAllBoards(void) = 0;
+
     // Write to all boards using broadcasting
     virtual bool WriteAllBoardsBroadcast(void) = 0;
 
@@ -113,10 +144,5 @@ public:
     */
     virtual bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes) = 0;
 };
-
-
-
-
-
 
 #endif
