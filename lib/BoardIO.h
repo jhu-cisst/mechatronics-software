@@ -2,11 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  $Id$
-
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2012 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -20,19 +18,22 @@ http://www.cisst.org/cisst/license.txt.
 #ifndef __BOARDIO_H__
 #define __BOARDIO_H__
 
-// Base class for custom boards with IEEE-1394 (Firewire) interface.
+// Base class for custom boards with IEEE-1394 (Firewire) and Ethernet interface.
 
 #include <string.h>  // for memset
+#ifdef _MSC_VER
+typedef unsigned __int16 uint16_t;
+typedef unsigned __int32 uint32_t;
+typedef unsigned __int64 uint64_t;
+#else
 #include <stdint.h>
+#endif
 
 typedef uint32_t quadlet_t;
 typedef uint64_t nodeaddr_t;
 typedef uint16_t nodeid_t;
 
 
-//#include <libraw1394/raw1394.h>
-
-//class FirewirePort;
 class BasePort;
 class FirewirePort;
 class Eth1394Port;
@@ -45,7 +46,6 @@ protected:
     BoardIO& operator=(const BoardIO&);
 
     unsigned char BoardId;
-//    FirewirePort *port;
     BasePort *port;
 
     bool readValid;
@@ -57,11 +57,9 @@ protected:
     unsigned int WriteBufferSize;
     quadlet_t *WriteBuffer;    // buffer for real-time writes
 
-//    friend class FirewirePort;
     friend class BasePort;
     friend class FirewirePort;
     friend class Eth1394Port;
-
 
     void SetReadValid(bool flag) { readValid = flag; }
     unsigned int GetReadNumBytes() const { return ReadBufferSize; }

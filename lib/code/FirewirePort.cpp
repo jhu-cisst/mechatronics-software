@@ -31,7 +31,8 @@ http://www.cisst.org/cisst/license.txt.
 
 // firewire
 #include "FirewirePort.h"
-
+#include <libraw1394/raw1394.h>
+#include <libraw1394/csr.h>
 
 #define FAKEBC 1    // fake broadcast mode
 
@@ -72,9 +73,9 @@ bool FirewirePort::Init(void)
 
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
-    // set the bus reset handler
+    // set the bus reset handlers
     old_reset_handler = raw1394_set_bus_reset_handler(handle, reset_handler);
-    old_reset_handler = raw1394_set_bus_reset_handler(handle_bc, reset_handler);
+    old_reset_handler_bc = raw1394_set_bus_reset_handler(handle_bc, reset_handler);
 
     // get number of ports
     int nports = raw1394_get_port_info(handle, NULL, 0);
@@ -198,7 +199,14 @@ int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
             (*it)->outStr << "Firewire bus reset: scanning port " << (*it)->PortNum << std::endl;
             (*it)->ScanNodes();
             break;
-      }
+        }
+        else if ((*it)->handle_bc == hdl) {
+            (*it)->outStr << "Firewire bus reset bc: generation = " << gen << std::endl;
+            ret = (*it)->old_reset_handler_bc(hdl, gen);
+            (*it)->outStr << "Firewire bus reset bc: scanning port " << (*it)->PortNum << std::endl;
+            (*it)->ScanNodes();
+            break;
+        }
     }
     if (it == PortList.end())
         std::cerr << "Firewire bus reset: could not find port" << std::endl;

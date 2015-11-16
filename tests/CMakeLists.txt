@@ -40,15 +40,19 @@ else (WIN32)
   endif (CURSES_FOUND)
 endif (WIN32)
 
-add_executable(qlacloserelays qlacloserelays.cpp)
-target_link_libraries(qlacloserelays Amp1394)
-
-add_executable(fwPortTest fwPortTest.cpp)
-target_link_libraries(fwPortTest Amp1394)
-
 if (Amp1394_HAS_RAW1394)
+  add_executable(qlacloserelays qlacloserelays.cpp)
+  target_link_libraries(qlacloserelays Amp1394)
+
+  add_executable(fwPortTest fwPortTest.cpp)
+  target_link_libraries(fwPortTest Amp1394)
+
   target_link_libraries(qlacloserelays raw1394)
   target_link_libraries(fwPortTest raw1394)
+
+  install (TARGETS qlacloserelays fwPortTest
+           COMPONENT Amp1394-utils
+           RUNTIME DESTINATION bin)
 endif (Amp1394_HAS_RAW1394)
 
 if (Amp1394_HAS_PCAP)
@@ -58,7 +62,3 @@ if (Amp1394_HAS_PCAP)
            COMPONENT Amp1394-utils
            RUNTIME DESTINATION bin)
 endif (Amp1394_HAS_PCAP)
-
-install (TARGETS qlacloserelays fwPortTest
-         COMPONENT Amp1394-utils
-         RUNTIME DESTINATION bin)

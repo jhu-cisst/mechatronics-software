@@ -3,8 +3,6 @@
 
 
 #include <stdlib.h>
-#include <unistd.h>
-#include <curses.h>
 #include <iostream>
 #include <sstream>
 #include <getopt.h>
@@ -67,7 +65,7 @@ int main(int argc, char** argv)
     // Firewire port
     // ZC: really this port number should be interactive
     // ---------------------------------------------------
-    std::stringstream debugStrem(std::stringstream::out|std::stringstream::in);
+    std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
     FirewirePort fwport(port, std::cout);
     if (!fwport.IsOK()) {
         std::cerr << "Failed to initialize firewire port" << std::endl;

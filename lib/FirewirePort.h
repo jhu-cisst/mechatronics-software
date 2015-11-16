@@ -20,11 +20,13 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <vector>
 #include <ostream>
-#include <libraw1394/raw1394.h>
-#include <libraw1394/csr.h>
 #include "BoardIO.h"
 #include "BasePort.h"
-#include <iostream>
+
+// Forward declarations
+struct raw1394_handle;
+typedef struct raw1394_handle *raw1394handle_t;
+typedef int (*bus_reset_handler_t)(raw1394handle_t, unsigned int generation);
 
 class FirewirePort : public BasePort {
 public:
@@ -46,14 +48,15 @@ protected:
     int NumOfNodes_;     // number of nodes on the bus (exclude PC node)
 
     // Broadcast Related
-    unsigned int BoardExistMask_;   // mask showing indicating whether board exists
+    unsigned int BoardExistMask_;   // mask indicating whether board exists
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
     static PortListType PortList;
     bus_reset_handler_t old_reset_handler;
+    bus_reset_handler_t old_reset_handler_bc;
     // callback for 1394 bus reset event
-    static int reset_handler(raw1394handle_t hdl, uint gen);
+    static int reset_handler(raw1394handle_t hdl, unsigned int gen);
 
     // Poll for IEEE 1394 events, such as bus reset.
     void PollEvents(void);

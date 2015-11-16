@@ -87,4 +87,7 @@ add_subdirectory (lib)
 add_subdirectory(tests)
 
 # Utility to flash/test board
-add_subdirectory (programmer)
+if (Amp1394_HAS_RAW1394)
+  # For now, requires FireWire interface.
+  add_subdirectory (programmer)
+endif (Amp1394_HAS_RAW1394)

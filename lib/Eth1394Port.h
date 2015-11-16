@@ -23,7 +23,8 @@ http://www.cisst.org/cisst/license.txt.
 #include "BasePort.h"
 
 // Forward declaration
-struct pcap_t;
+struct pcap;
+typedef struct pcap pcap_t;
 
 class Eth1394Port : public BasePort
 {
