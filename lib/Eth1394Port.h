@@ -103,6 +103,9 @@ protected:
 public:
     Eth1394Port(int portNum, std::ostream &debugStream = std::cerr);
 
+    // For now, always returns 1
+    int NumberOfUsers(void) { return 1; }
+
     void BoardInUseIntegerUpdate(void);
 
     bool IsOK(void);

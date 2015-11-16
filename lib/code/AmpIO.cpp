@@ -15,13 +15,19 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
-#include <byteswap.h>
-#include <unistd.h>
 #include <iostream>
 #include <sstream>
 
 #include "AmpIO.h"
 #include "FirewirePort.h"
+
+#ifdef _MSC_VER
+#include <windows.h>  // for Sleep
+#include <stdlib.h>
+inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
+#else
+#include <byteswap.h>
+#endif
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
@@ -624,7 +630,11 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
         int i;
         const int MAX_LOOP_CNT = 8;
         for (i = 0; (i < MAX_LOOP_CNT) && read_data; i++) {
-            usleep(10);
+#ifdef _WIN32
+            Sleep(1);    // 1 msec
+#else
+            usleep(10);  // 10 usec
+#endif
             if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
             read_data = bswap_32(read_data)&0x000f;
         }
@@ -777,15 +787,23 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
 bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
 {
     // enable write
-    PromWriteEnable(PROM_25AA128);    
-    usleep(100);
+    PromWriteEnable(PROM_25AA128);
+#ifdef _WIN32
+    Sleep(1);    // 1 msec
+#else
+    usleep(100); // 100 usec
+#endif
 
     // 8-bit cmd + 16-bit addr + 8-bit data
     quadlet_t write_data = 0x02000000|(addr << 8)|data;
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
     if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
         // wait 5ms for the PROM to be ready to take new commands
+#ifdef _WIN32
+        Sleep(5);
+#else
         usleep(5000);
+#endif
         return true;
     }
     else

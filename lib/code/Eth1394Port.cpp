@@ -17,10 +17,16 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "Eth1394Port.h"
 #include <pcap.h>
-#include <stdint.h>
-#include <byteswap.h>
 #include <iomanip>
-#include <stdint.h>
+
+#ifdef _MSC_VER
+#include <windows.h>  // for Sleep
+#include <stdlib.h>   // for byteswap functions
+inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
+inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
+#else
+#include <byteswap.h>
+#endif
 
 const unsigned long QLA1_String = 0x514C4131;
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
@@ -335,7 +341,7 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     quadlet_t bcReqData = (ReadSequence_ << 16) | BoardInUseInteger_;
 
     //--- send out broadcast read request -----
-    size_t length_fw = 5;
+    const size_t length_fw = 5;
     quadlet_t packet_FW[length_fw];
     frame_hdr[5] = bswap_16(length_fw * 4);
 
@@ -346,7 +352,7 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
 
     // Ethernet frame
-    int ethlength = length_fw * 4 + 14;
+    const int ethlength = length_fw * 4 + 14;
     unsigned char frame[ethlength];
     memcpy(frame, frame_hdr, 14);
     memcpy(frame + 14, packet_FW, length_fw * 4);
@@ -578,7 +584,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                               size_t length, quadlet_t *buffer)
 {
     // sanity check
-    uint tcode;  // fw tcode
+    unsigned int tcode;  // fw tcode
     size_t length_fw;   // fw length in quadlet
     if (length == 4) {
         tcode = Eth1394Port::QREAD;
@@ -593,7 +599,8 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         return -1;
     }
 
-    quadlet_t packet_FW[length_fw];
+    //quadlet_t packet_FW[length_fw];
+    quadlet_t packet_FW[5];
 
     packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tcode & 0xF) << 4);
     packet_FW[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
@@ -603,19 +610,20 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     packet_FW[length_fw-1] =
     bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, length_fw * 4 - 4)));
 
-    if (DEBUG) print_frame((unsigned char*)packet_FW, sizeof(packet_FW));
+    if (DEBUG) print_frame((unsigned char*)packet_FW, length_fw*sizeof(quadlet_t));
 
     // Ethernet frame
-    int ethlength = length_fw * 4 + 14;  // eth frame length in byte
+    const int ethlength = length_fw * 4 + 14;  // eth frame length in byte
     frame_hdr[5] = bswap_16(length_fw * 4);
 
-    uint8_t frame[ethlength];
+    //uint8_t frame[ethlength];
+    uint8_t frame[5*4+14];
     memcpy(frame, frame_hdr, 14);
     memcpy(frame + 14, packet_FW, length_fw * 4);
 
     if (DEBUG) {
         std::cout << "-------- frame ---------" << std::endl;
-        print_frame((unsigned char*)frame, sizeof(frame));
+        print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
     }
 
     if (pcap_sendpacket(handle, frame, ethlength) != 0)
@@ -704,7 +712,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
 //    std::cerr << "data = " << std::hex << buffer[0] << std::endl;
 
     size_t length_fw;  // in quadlet
-    uint tcode;
+    unsigned int tcode;
 
     if (length == 4) {
         tcode = Eth1394Port::QWRITE;
@@ -719,7 +727,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     }
 
     // sanity check
-    quadlet_t packet_FW[length_fw];
+    quadlet_t *packet_FW = new quadlet_t[length_fw];
     if (length == 4) tcode = Eth1394Port::QWRITE;
     else tcode = Eth1394Port::BWRITE;
 
@@ -746,7 +754,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     // print
     if (DEBUG) {
         std::cout << "------ FW Packet ------" << std::endl;
-        print_frame((unsigned char*)packet_FW, sizeof(packet_FW));
+        print_frame((unsigned char*)packet_FW, length_fw*sizeof(quadlet_t));
         std::cout << std::endl;
     }
 
@@ -754,14 +762,14 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     int ethlength = length_fw * 4 + 14;
     frame_hdr[5] = bswap_16(length_fw * 4);
 
-    uint8_t frame[ethlength];
+    uint8_t *frame = new uint8_t[ethlength];
     memcpy(frame, frame_hdr, 14);
     memcpy(frame + 14, packet_FW, length_fw * 4);
 
     // print
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
-        print_frame((unsigned char*)frame, sizeof(frame));
+        print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
     }
 
     if (pcap_sendpacket(handle, frame, ethlength) != 0)
@@ -769,6 +777,8 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
         outStr << "ERROR: send packet failed" << std::endl;
         return -1;
     }
+    delete [] packet_FW;
+    delete [] frame;
     return 0;
 }
 
@@ -778,10 +788,10 @@ int Eth1394Port::eth1394_write_nodenum(void)
     syn_frame = ((NumOfNodesInUse_ - 1) << 12) | 0x0800;
     frame_hdr[5] = bswap_16(syn_frame);
     unsigned char MSG[] = "This is a num_node synchronizing frame.";
-    int length_MSG = sizeof(MSG);
+    const int length_MSG = sizeof(MSG);
 
     // Ethernet frame
-    int ethlength = length_MSG + 14;
+    const int ethlength = length_MSG + 14;
     uint8_t frame[ethlength];
     memcpy(frame, frame_hdr, 14);
     memcpy(frame + 14, MSG, length_MSG);
@@ -805,7 +815,7 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
     if( mode == 0 || mode == 1)
     {
         // actually a modified qwrite
-        size_t length_fw = 5;
+        const size_t length_fw = 5;
         quadlet_t packet_FW[length_fw];
         frame_hdr[5] = bswap_16(length_fw * 4);
 
@@ -819,7 +829,7 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
         packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
 
         // Ethernet frame
-        int ethlength = length_fw * 4 + 14;
+        const int ethlength = length_fw * 4 + 14;
         u_int8_t frame[ethlength];
         memcpy(frame, frame_hdr, 14);
         memcpy(frame + 14, packet_FW, length_fw * 4);

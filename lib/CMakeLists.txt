@@ -28,7 +28,7 @@ if (Amp1394_HAS_PCAP)
   set (HEADERS ${HEADERS} Eth1394Port.h)
   set (SOURCE_FILES ${SOURCE_FILES} code/Eth1394Port.cpp)
   if (WIN32)
-    include_directories(${WINPCAP_INCLUDE_DIR})
+    include_directories(${PCAP_INCLUDE_DIR})
   endif (WIN32)
 endif (Amp1394_HAS_PCAP)
 

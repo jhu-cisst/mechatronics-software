@@ -58,6 +58,10 @@ public:
         memset(BoardList, 0, sizeof(BoardList));
     }
 
+    virtual ~BasePort() {}
+
+    virtual int NumberOfUsers(void) = 0;
+
     virtual bool IsOK(void) = 0;
 
     virtual void Reset(void) = 0;
