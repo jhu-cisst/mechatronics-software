@@ -27,4 +27,7 @@ http://www.cisst.org/cisst/license.txt.
 #define Amp1394_VERSION_PATCH ${Amp1394_VERSION_PATCH}
 #define Amp1394_VERSION ${Amp1394_VERSION}
 
+#cmakedefine01 Amp1394_HAS_RAW1394
+#cmakedefine01 Amp1394_HAS_PCAP
+
 #endif // _AmpIORevision_h

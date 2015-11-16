@@ -58,16 +58,6 @@ if (UNIX)
   endif (CXX_SUPPORTS_WALL)
 endif (UNIX)
 
-# ... for the build tree
-set (CONF_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lib" "${CMAKE_CURRENT_BINARY_DIR}")
-set (CONF_LIBRARY_DIR "${PROJECT_BINARY_DIR}/lib")
-configure_file (Amp1394Config.cmake.in
-                "${PROJECT_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
-
-# revision file
-configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/lib/AmpIORevision.h.in"
-                "${CMAKE_CURRENT_BINARY_DIR}/Amp1394/AmpIORevision.h")
-
 # To find Amp1394 library headers
 include_directories (${CMAKE_CURRENT_SOURCE_DIR}/lib
                      ${CMAKE_CURRENT_BINARY_DIR})
