@@ -100,7 +100,6 @@ public:
 
     // Removes board
     bool RemoveBoard(unsigned char boardId);
-    inline bool RemoveBoard(BoardIO *board) { return RemoveBoard(board->BoardId); }
 
     BoardIO *GetBoard(unsigned char boardId) const;
 
