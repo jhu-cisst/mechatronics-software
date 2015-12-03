@@ -915,6 +915,35 @@ bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
     return true;
 }
 
+// DMA access (no address specified)
+// This assumes that the chip has already been placed in DMA mode
+// (e.g., by writing to register 0x82).
+
+bool AmpIO::WriteKSZ8851DMA(const AmpIO_UInt16 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x0B000000 | data;
+    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+}
+
+bool AmpIO::ReadKSZ8851DMA(AmpIO_UInt16 &data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t write_data = 0x09000000 | data;
+    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+        return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return false;
+    read_data = bswap_32(read_data);
+    // Bit 31 indicates whether Ethernet is present
+    if (!(read_data&0x80000000)) return false;
+    // Bit 30 indicates whether last command had an error
+    if (read_data&0x40000000) return false;
+    data = static_cast<AmpIO_UInt16>(read_data);
+    return true;
+}
+
 AmpIO_UInt16 AmpIO::ReadKSZ8851ChipID()
 {
     AmpIO_UInt16 data;

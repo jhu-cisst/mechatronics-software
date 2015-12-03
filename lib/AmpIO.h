@@ -325,6 +325,9 @@ public:
     bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data);
     bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data);
     bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data);
+    // Following are for DMA access (assumes chip has been placed in DMA mode)
+    bool WriteKSZ8851DMA(const AmpIO_UInt16 &data);
+    bool ReadKSZ8851DMA(AmpIO_UInt16 &data);
     // Read Chip ID from register 0xC0
     AmpIO_UInt16 ReadKSZ8851ChipID();
     // Get KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
