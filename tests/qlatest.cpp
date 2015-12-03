@@ -607,18 +607,27 @@ bool TestEthernet(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     if (chipIDHigh != 0x88)
         return false;
 #endif
-    // Walking bit pattern on MAC address register (R/W)
-    AmpIO_UInt16 MacAddrOut, MacAddrIn;
+    // Walking bit pattern on MAC address registers (R/W)
+    // 0x10 is MARL (MAC Address Register Low)
+    // 0x12 is MARM (MAC Address Register Middle)
+    AmpIO_UInt16 MacAddrOutLow, MacAddrOutMid, MacAddrIn;
     bool ret = true;
-    for (MacAddrOut = 0x0001; MacAddrOut != 0; MacAddrOut <<= 1) {
+    for (MacAddrOutLow = 0x0001, MacAddrOutMid = 0x8000;
+         (MacAddrOutLow != 0) && (MacAddrOutMid != 0);
+         MacAddrOutLow <<= 1, MacAddrOutMid >>= 1) {
         logFile << "   MAC address: " << std::hex;
-        if (Board.WriteKSZ8851Reg(0x10, MacAddrOut))
-            logFile << "write = " << MacAddrOut;
+        if (Board.WriteKSZ8851Reg(0x10, MacAddrOutLow))
+            logFile << "write low = " << MacAddrOutLow;
+        if (Board.WriteKSZ8851Reg(0x12, MacAddrOutMid))
+            logFile << ", write mid = " << MacAddrOutMid;
         MacAddrIn = 0;
         if (Board.ReadKSZ8851Reg(0x10, MacAddrIn))
-            logFile << ", read = " << MacAddrIn;
+            logFile << ", read low = " << MacAddrIn;
+        if (MacAddrOutLow != MacAddrIn) ret = false;
+        if (Board.ReadKSZ8851Reg(0x12, MacAddrIn))
+            logFile << ", read mid = " << MacAddrIn;
+        if (MacAddrOutMid != MacAddrIn) ret = false;
         logFile << std::endl;
-        if (MacAddrOut != MacAddrIn) ret = false;
     }
     return ret;
 }
