@@ -52,7 +52,8 @@ void print_frame(unsigned char* buffer, int length);
 Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream):
     BasePort(portNum, debugStream),
     NumOfNodes_(0),
-    NumOfNodesInUse_(0)
+    NumOfNodesInUse_(0),
+    eth1394_read_callback(0)
 {
     if (Init())
         eth1394_write_nodeidmode(1);
@@ -135,8 +136,6 @@ bool Eth1394Port::Init()
     memcpy(frame_hdr, eth_dst, 6);
     memcpy(&frame_hdr[3], eth_src, 6);
     frame_hdr[6] = bswap_16(0x0801);
-
-//    std::cerr << "Before Scannodes" << std::endl;
 
     return this->ScanNodes();
 }
@@ -632,6 +631,16 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         return -1;
     }
 
+    // Invoke callback (if defined) between sending read request
+    // and checking for read response. If callback returns false, we
+    // skip checking for a received packet.
+    if (eth1394_read_callback) {
+        if (!(*eth1394_read_callback)(*this, node, outStr)) {
+            outStr << "eth1394_read_callback: aborting (not reading packet)" << std::endl;
+            return -1;
+        }
+    }
+
 //    ethpcap_recv_nonblocking();
 
     // Grab a packet
@@ -640,7 +649,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     packet = pcap_next(handle, &header);
 
     if (packet == NULL) {
-//        outStr << "Error: Received failed" << std::endl;
+        outStr << "Error: Receive failed" << std::endl;
         return -1;
     }
 
@@ -694,7 +703,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
     }
     else {
-        outStr << "ERROR: unknown response tcode" << std::endl;
+        outStr << "ERROR: unknown response tcode: " << tcode_recv << std::endl;
         return -1;
     }
 

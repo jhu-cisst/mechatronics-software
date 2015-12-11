@@ -30,6 +30,7 @@ class Eth1394Port : public BasePort
 {
 public:
     //enum { MAX_NODES = 15 };  // max number of boards, limited by rotary switch
+    typedef bool (*Eth1394CallbackType)(Eth1394Port &port, unsigned char boardId, std::ostream &debugStream);
 
 protected:
 
@@ -51,6 +52,8 @@ protected:
     bool BoardExistMask_[BoardIO::MAX_BOARDS];  // Boards connected in the network
     bool BoardInUseMask_[BoardIO::MAX_BOARDS];  // Boards under control of PC
     uint32_t BoardInUseInteger_;
+
+    Eth1394CallbackType eth1394_read_callback;
 
     // read FPGA node
 
@@ -107,6 +110,9 @@ public:
     int NumberOfUsers(void) { return 1; }
 
     void BoardInUseIntegerUpdate(void);
+
+    void SetEth1394Callback(Eth1394CallbackType callback)
+    { eth1394_read_callback = callback; }
 
     bool IsOK(void);
 
