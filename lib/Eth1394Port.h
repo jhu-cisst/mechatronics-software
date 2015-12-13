@@ -55,8 +55,6 @@ protected:
 
     Eth1394CallbackType eth1394_read_callback;
 
-    // read FPGA node
-
     /**
      * @brief
      *
@@ -189,6 +187,9 @@ public:
      \return bool  True on success or False on failure
     */
     bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
+
+    // helper function -- public for now
+    static void make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode);
 };
 
 #endif  // __Eth1394Port_H__

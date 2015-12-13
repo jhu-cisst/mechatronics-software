@@ -579,6 +579,13 @@ bool Eth1394Port::WriteBlockBroadcast(
 // Protected
 // ---------------------------------------------------------
 
+void Eth1394Port::make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode)
+{
+    packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tcode & 0xF) << 4);
+    packet_FW[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
+    packet_FW[2] = bswap_32(addr&0xFFFFFFFF);
+}
+
 int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                               size_t length, quadlet_t *buffer)
 {
@@ -601,9 +608,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     //quadlet_t packet_FW[length_fw];
     quadlet_t packet_FW[5];
 
-    packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tcode & 0xF) << 4);
-    packet_FW[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
-    packet_FW[2] = bswap_32(addr&0xFFFFFFFF);
+    make_1394_header(packet_FW, node, addr, tcode);
     if (tcode == BREAD)
         packet_FW[3] = bswap_32((length & 0xFFFF) << 16);
     packet_FW[length_fw-1] =
@@ -641,76 +646,76 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         }
     }
 
-//    ethpcap_recv_nonblocking();
-
-    // Grab a packet
+    // Read packets
     struct pcap_pkthdr header;	/* The header that pcap gives us */
     const u_char *packet;		/* The actual packet */
-    packet = pcap_next(handle, &header);
-
-    if (packet == NULL) {
-        outStr << "Error: Receive failed" << std::endl;
-        return -1;
-    }
-
-    int tcode_recv = packet[17] >> 4;
-    if (tcode == QREAD && tcode_recv == QRESPONSE) {
-        // check header crc
-        uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
-        uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
-        if(headercheck((unsigned char*)packet, 1)){
-            if(crc_check == crc_original) {
-                memcpy(buffer, &packet[26], 4);
-//                buffer[0] = bswap_32(buffer[0]);
-            }
-            else{
-                outStr <<"ERROR: crc check error"<<std::endl;
-                return -1;
-            }
-        }
-        else{
-            outStr <<"ERROR: Ethernet header error"<<std::endl;
-            return -1;
-        }
-    }
-    else if (tcode == BREAD && tcode_recv == BRESPONSE) {
-        if(headercheck((unsigned char*)packet, 1)){
-            if (length == (packet[26] << 8 | packet[27])) {
-                uint32_t crc_h_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
-                uint32_t crc_h_original = bswap_32(*((uint32_t*)(packet+30)));
-                if(crc_h_check == crc_h_original){
-// A little bug here: if length==8, then the data crc is not correct(due to QLA code error)
-                    memcpy(buffer, &packet[34], length);
-//                    for(int i=0;i<length/4;i++)
-//                    {
-//                        buffer[i] = bswap_32(buffer[i]);
-//                    }
+    unsigned int numPackets = 0;
+    while ((packet = pcap_next(handle, &header)) != NULL) {
+        numPackets++;
+        int tcode_recv = packet[17] >> 4;
+        if (tcode == QREAD && tcode_recv == QRESPONSE) {
+            // check header crc
+            uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
+            uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
+            if(headercheck((unsigned char*)packet, 1)){
+                if(crc_check == crc_original) {
+                    memcpy(buffer, &packet[26], 4);
+    //                buffer[0] = bswap_32(buffer[0]);
                 }
-                else{
-                    outStr <<"ERROR: header crc check error"<<std::endl;
+                else {
+                    outStr <<"ERROR: crc check error"<<std::endl;
                     return -1;
                 }
             }
             else{
-                outStr << "ERROR: block read response size error" << std::endl;
+                outStr <<"ERROR: Ethernet header error"<<std::endl;
                 return -1;
             }
         }
-        else{
-            outStr <<"ERROR: Ethernet header error"<<std::endl;
-            return -1;
+        else if (tcode == BREAD && tcode_recv == BRESPONSE) {
+            if(headercheck((unsigned char*)packet, 1)){
+                if (length == (packet[26] << 8 | packet[27])) {
+                    uint32_t crc_h_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
+                    uint32_t crc_h_original = bswap_32(*((uint32_t*)(packet+30)));
+                    if(crc_h_check == crc_h_original){
+// A little bug here: if length==8, then the data crc is not correct(due to QLA code error)
+                        memcpy(buffer, &packet[34], length);
+//                        for(int i=0;i<length/4;i++)
+//                        {
+//                            buffer[i] = bswap_32(buffer[i]);
+//                        }
+                    }
+                    else{
+                        outStr <<"ERROR: header crc check error"<<std::endl;
+                        return -1;
+                    }
+                }
+                else{
+                    outStr << "ERROR: block read response size error" << std::endl;
+                    return -1;
+                }
+            }
+            else{
+                outStr <<"ERROR: Ethernet header error"<<std::endl;
+                return -1;
+            }
+        }
+        else {
+            outStr << "ERROR: unknown response tcode: " << tcode_recv << std::endl;
+            //return -1;
         }
 
+        if (!TEST) {
+            std::cout << "-------- Read Response ---------" << std::endl;
+            print_frame((unsigned char*)buffer, length);
+        }
     }
-    else {
-        outStr << "ERROR: unknown response tcode: " << tcode_recv << std::endl;
+
+    if (numPackets < 1) {
+        outStr << "Error: Receive failed" << std::endl;
         return -1;
     }
 
-    if (!TEST) {
-        std::cout << "-------- Read Response ---------" << std::endl;
-        print_frame((unsigned char*)buffer, length);
-    }
     return 0;
 }
 
@@ -735,16 +740,11 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
         return -1;
     }
 
-    // sanity check
     quadlet_t *packet_FW = new quadlet_t[length_fw];
-    if (length == 4) tcode = Eth1394Port::QWRITE;
-    else tcode = Eth1394Port::BWRITE;
 
     // header
     //! \todo fix packet[3] bug for block write request
-    packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tcode & 0xF) << 4);
-    packet_FW[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
-    packet_FW[2] = bswap_32(addr&0xFFFFFFFF);
+    make_1394_header(packet_FW, node, addr, tcode);
 
     //quadlet write
     if(length == 4){
