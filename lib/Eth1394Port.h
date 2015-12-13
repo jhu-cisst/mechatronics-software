@@ -102,7 +102,7 @@ protected:
     bool ScanNodes(void);
 
 public:
-    Eth1394Port(int portNum, std::ostream &debugStream = std::cerr);
+    Eth1394Port(int portNum, std::ostream &debugStream = std::cerr, Eth1394CallbackType cb = 0);
 
     // For now, always returns 1
     int NumberOfUsers(void) { return 1; }

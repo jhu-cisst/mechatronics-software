@@ -16,6 +16,22 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
+// Ethernet status, as reported by KSZ8851 on FPGA board
+void PrintEthernetStatus(AmpIO &Board)
+{
+    AmpIO_UInt16 reg;
+    Board.ReadKSZ8851Reg(0xF8, reg);
+    std::cout << "Port 1 status:";
+    if (reg & 0x0020) std::cout << " link-good";
+    if (reg & 0x0040) std::cout << " an-done";
+    if (reg & 0x0200) std::cout << " full-duplex";
+    else std::cout << " half-duplex";
+    if (reg & 0x0400) std::cout << " 100Mbps";
+    else std::cout << " 10Mbps";
+    if (reg & 0x2000) std::cout << " polarity-reversed";
+    std::cout << std::endl;
+}
+
 bool InitEthernet(AmpIO &Board)
 {
     if (Board.GetFirmwareVersion() < 5) {
@@ -49,16 +65,24 @@ bool InitEthernet(AmpIO &Board)
     Board.WriteKSZ8851Reg(0x70, (AmpIO_UInt16) 0x01EE);  // Enable QMU transmit flow control, CRC, and padding
     Board.WriteKSZ8851Reg(0x86, (AmpIO_UInt16) 0x4000);  // Enable QMU receive frame data pointer auto increment
     Board.WriteKSZ8851Reg(0x9C, (AmpIO_UInt16) 0x0001);  // Configure receive frame threshold for 1 frame
+    // 7: enable UDP, TCP, and IP checksums
+    // 4: enable flow control (for receive in full duplex mode)
+    // F: enable broadcast, multicast, unicast, and all frames
+    // 2: enable Receive Inverse Filtering
     Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x74F2);  // Enable QMU receive flow control (0x7CE0 recommended)
+    // 7: enable UDP, TCP, and IP checksums
+    // C: enable MAC address filtering, enable flow control (for receive in full duplex mode)
+    // E: enable broadcast, multicast, and unicast
+    //Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x7CE0);  // Enable QMU receive flow control
     Board.WriteKSZ8851Reg(0x76, (AmpIO_UInt16) 0x0016);  // Enable QMU receive ICMP/UDP lite frame checksum verification
     Board.WriteKSZ8851Reg(0x82, (AmpIO_UInt16) 0x0030);  // Enable QMU receive IP header 2-byte offset (0x0230 recommended)
-    // Force link in half duplex if auto-negotiation failed; restart port 1 auto-negotiation
+    // Force link in half duplex if auto-negotiation failed
     Board.ReadKSZ8851Reg(0xF6, reg);
-    reg = (reg & ~(1<<5)) | (1 << 13);
+    reg = (reg & ~(1<<5));
     Board.WriteKSZ8851Reg(0xF6, reg);
      // ---
     Board.WriteKSZ8851Reg(0x92, (AmpIO_UInt16) 0xFFFF);   // Clear the interrupt status
-    Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0x6000);   // Enable transmit and receive interrupts
+    Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0x2000);   // Enable receive interrupts (TODO: also consider link change interrupt)
     // Enable QMU transmit
     Board.ReadKSZ8851Reg(0x70, reg);
     reg |= 1;
@@ -67,8 +91,8 @@ bool InitEthernet(AmpIO &Board)
     Board.ReadKSZ8851Reg(0x74, reg);
     reg |= 1;
     Board.WriteKSZ8851Reg(0x74, reg);
-    // Wait 100 msec
-    usleep(100000L);
+    // Wait 2 sec
+    usleep(2000000L);
     return true;
 }
 
@@ -79,13 +103,12 @@ bool SendEthernetPacket(AmpIO &Board)
     Board.ReadKSZ8851Reg(0x78, reg);
     reg &= 0x0fff;
     std::cout << "TXQ memory = " << std::dec << reg << std::endl;
-    Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0);  // disable interrupts
     // Set up QMU DMA transfer operation
     Board.ReadKSZ8851Reg(0x82, reg);
     reg |= (1<<3);
     Board.WriteKSZ8851Reg(0x82, reg);
     // Now, transfer via DMA
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x8000);   // Control word (do not need interrupt on completion)
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0);   // Control word
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 34);  // Byte count (14+20=34)
     // Dest MAC: "HUB>PC" (byte swapped)
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x5548); // "UH"
@@ -119,8 +142,6 @@ bool SendEthernetPacket(AmpIO &Board)
     Board.ReadKSZ8851Reg(0x80, reg);
     reg |= 1;
     Board.WriteKSZ8851Reg(0x80, reg);
-    // Enable device interrupts
-    Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0x6000);   // Enable transmit and receive interrupts
     return true;
 }
 
@@ -141,7 +162,6 @@ bool ReceiveEthernetPacket(AmpIO &Board)
         std::cout << "RXIS interrupt not asserted" << std::endl;
         return false;
     }
-    Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0);  // disable interrupts
     reg |= 0x2000;
     Board.WriteKSZ8851Reg(0x92, reg);  // clear RXIS bit
     Board.ReadKSZ8851Reg(0x9C, reg);   // read frame count
@@ -215,7 +235,6 @@ bool ReceiveEthernetPacket(AmpIO &Board)
 
         }
     }
-    Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0x6000);   // Enable transmit and receive interrupts
 
     std::cout << "Received " << std::dec << rxFrameCount << " frames, " << numValid << " valid" << std::endl;
     if (numChecksumError || numCRCError || numOtherError) {
@@ -232,9 +251,11 @@ static AmpIO *QuadletReadCallbackBoard = 0;
 bool QuadletReadCallback(Eth1394Port &, unsigned char boardId, std::ostream &debugStream)
 {
     if (QuadletReadCallbackBoard) {
-        if (QuadletReadCallbackBoard->GetBoardId() != boardId)
+        if (QuadletReadCallbackBoard->GetBoardId() != boardId) {
             debugStream << "Warning: QuadletReadCallback called for board " << (unsigned int) boardId
                         << ", expected board " << (unsigned int) QuadletReadCallbackBoard->GetBoardId() << std::endl;
+            return false;
+        }
         AmpIO &Board = *QuadletReadCallbackBoard;
         // Receive the quadlet read request on the FPGA
         ReceiveEthernetPacket(Board);
@@ -252,31 +273,28 @@ int main()
 {
     quadlet_t read_data, write_data;
 
+    // Hard-coded for board #0
+    AmpIO board1(0);
+    AmpIO board2(0);
+
     FirewirePort FwPort(0, std::cout);
     if (!FwPort.IsOK()) {
         std::cout << "Failed to initialize firewire port" << std::endl;
         return 0;
     }
-    Eth1394Port EthPort(0, std::cout);
-    if (!EthPort.IsOK()) {
-        std::cout << "Failed to initialize ethernet port" << std::endl;
-        return 0;
-    }
-
-    // Hard-coded for board #0
-    AmpIO board1(0);
-    AmpIO board2(0);
-
     FwPort.AddBoard(&board1);
-    EthPort.AddBoard(&board2);
-
     if (!InitEthernet(board1)) {
         std::cout << "Failed to initialize Ethernet chip" << std::endl;
         return 0;
     }
 
     QuadletReadCallbackBoard = &board1;
-    EthPort.SetEth1394Callback(QuadletReadCallback);
+    Eth1394Port EthPort(0, std::cout, QuadletReadCallback);
+    if (!EthPort.IsOK()) {
+        std::cout << "Failed to initialize ethernet port" << std::endl;
+        return 0;
+    }
+    EthPort.AddBoard(&board2);
 
     // Turn off buffered I/O for keyboard
     struct termios oldTerm, newTerm;
@@ -291,8 +309,9 @@ int main()
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         std::cout << "  0) Quit" << std::endl;
-        std::cout << "  1) Send quadlet from PC to FPGA:" << std::endl;
-        std::cout << "  2) Send quadlet from FPGA to PC:" << std::endl;
+        std::cout << "  1) Send quadlet from PC to FPGA" << std::endl;
+        std::cout << "  2) Send quadlet from FPGA to PC" << std::endl;
+        std::cout << "  3) Ethernet port status" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -325,6 +344,9 @@ int main()
                     std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
                 break;
 
+        case '3':
+                PrintEthernetStatus(board1);
+                break;
         }
     }
 

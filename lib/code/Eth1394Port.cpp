@@ -49,11 +49,11 @@ bool headercheck(uint8_t* header, bool isHUBtoPC);
 void print_frame(unsigned char* buffer, int length);
 
 
-Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream):
+Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394CallbackType cb):
     BasePort(portNum, debugStream),
     NumOfNodes_(0),
     NumOfNodesInUse_(0),
-    eth1394_read_callback(0)
+    eth1394_read_callback(cb)
 {
     if (Init())
         eth1394_write_nodeidmode(1);
@@ -654,6 +654,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         numPackets++;
         int tcode_recv = packet[17] >> 4;
         if (tcode == QREAD && tcode_recv == QRESPONSE) {
+#if 0  // TODO: maybe remove CRC checking on PC
             // check header crc
             uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
             uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
@@ -666,6 +667,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     outStr <<"ERROR: crc check error"<<std::endl;
                     return -1;
                 }
+#else
+            if(headercheck((unsigned char*)packet, 1)){
+                memcpy(buffer, &packet[26], 4);
+#endif
             }
             else{
                 outStr <<"ERROR: Ethernet header error"<<std::endl;
@@ -675,6 +680,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         else if (tcode == BREAD && tcode_recv == BRESPONSE) {
             if(headercheck((unsigned char*)packet, 1)){
                 if (length == (packet[26] << 8 | packet[27])) {
+#if 0  // TODO: maybe remove CRC checking on PC
                     uint32_t crc_h_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
                     uint32_t crc_h_original = bswap_32(*((uint32_t*)(packet+30)));
                     if(crc_h_check == crc_h_original){
@@ -689,6 +695,9 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                         outStr <<"ERROR: header crc check error"<<std::endl;
                         return -1;
                     }
+#else
+                    memcpy(buffer, &packet[34], length);
+#endif
                 }
                 else{
                     outStr << "ERROR: block read response size error" << std::endl;
