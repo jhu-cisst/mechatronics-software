@@ -131,8 +131,8 @@ bool Eth1394Port::Init()
     pcap_freealldevs(alldevs);
 
     // initialize ethernet header
-    u_int8_t eth_dst[6] = {0x50,0x43,0x3e,0x48,0x55,0x42};
-    u_int8_t eth_src[6] = {0x4c,0x43,0x53,0x52,0x00,0x00};
+    u_int8_t eth_dst[6] = {0x01,0x23,0x45,0x13,0x94,0x00};  // CID,0x1394,boardid(0)
+    u_int8_t eth_src[6] = {0x4c,0x43,0x53,0x52,0x00,0x00};  // LCSR00
     memcpy(frame_hdr, eth_dst, 6);
     memcpy(&frame_hdr[3], eth_src, 6);
     frame_hdr[6] = bswap_16(0x0801);
@@ -623,6 +623,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     //uint8_t frame[ethlength];
     uint8_t frame[5*4+14];
     memcpy(frame, frame_hdr, 14);
+    frame[5] = node;   // last byte of dest address is board id
     memcpy(frame + 14, packet_FW, length_fw * 4);
 
     if (DEBUG) {
@@ -652,6 +653,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     unsigned int numPackets = 0;
     while ((packet = pcap_next(handle, &header)) != NULL) {
         numPackets++;
+        if (packet[11] != node) {
+            outStr << "Packet not from node " << node << " (src lsb is " << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
+            continue;
+        }
         int tcode_recv = packet[17] >> 4;
         if (tcode == QREAD && tcode_recv == QRESPONSE) {
 #if 0  // TODO: maybe remove CRC checking on PC
@@ -877,18 +882,24 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
 
 bool headercheck(uint8_t* header, bool isHUBtoPC)
 {
-    // the header should be "HUB>PC" "LCSR??" + 0x0801(ethertype)
-    if(isHUBtoPC && header[0] == 0x48 && header[1] == 0x55 && header[2] == 0x42 && header[3] == 0x3e &&
-            header[4] == 0x50 && header[5] == 0x43 && header[6] == 0x4c && header[7] == 0x43 &&
-            header[8] == 0x53 && header[9] == 0x52 && header[12] == 0x08 && header[13] == 0x01)
+    // the header should be "HUB>PC" "CID,0x1394,boardid" + 0x0801(ethertype)
+    if(isHUBtoPC &&
+       (header[0] == 0x48) && (header[1] == 0x55) && (header[2] == 0x42) &&  // dest (HUB)
+       (header[3] == 0x3e) && (header[4] == 0x50) && (header[5] == 0x43) &&  // dest (>PC)
+       (header[6] == 0x01) && (header[7] == 0x23) && (header[8] == 0x45) &&  // src (CID)
+       (header[9] == 0x13) && (header[10] == 0x94) && (header[11] == 0) &&   // src (0x1394, boardid)
+       (header[12] == 0x08) && (header[13] == 0x01)) // Ethertype
     {
         return true;
     }
 
-    // the header should be "PC>HUB" "LCSR??" + 0x0801(ethertype)
-    if (!isHUBtoPC && header[0] == 0x50 && header[1] == 0x43 && header[2] == 0x3e && header[3] == 0x48 &&
-            header[4] == 0x55 && header[5] == 0x42 && header[6] == 0x4c && header[7] == 0x43 &&
-            header[8] == 0x53 && header[9] == 0x52 && header[12] == 0x08 && header[13] == 0x01)
+    // the header should be "CID,0x1394,boardid" "LCSR??" + 0x0801(ethertype)
+    if (!isHUBtoPC && 
+        (header[0] == 0x01) && (header[1] == 0x23) && (header[2] == 0x45) &&  // dest (CID)
+        (header[3] == 0x13) && (header[4] == 0x94) && (header[5] == 0x00) &&  // dest (0x1394, boardid)
+        (header[6] == 0x4c) && (header[7] == 0x43) && (header[8] == 0x53) &&  // src (LCS)
+        (header[9] == 0x52) &&                                                // src (Rxx)
+        (header[12] == 0x08) && (header[13] == 0x01))                         // Ethertype (0x0801)
     {
         return true;
     }
