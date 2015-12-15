@@ -72,9 +72,10 @@ bool InitEthernet(AmpIO &Board)
     // C: enable MAC address filtering, enable flow control (for receive in full duplex mode)
     // E: enable broadcast, multicast, and unicast
     // Bit 4 = 0, Bit 1 = 0, Bit 11 = 1, Bit 8 = 0 (hash perfect, default)
-    Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x7CE0);  // Enable QMU receive flow control
-    Board.WriteKSZ8851Reg(0x76, (AmpIO_UInt16) 0x0016);  // Enable QMU receive ICMP/UDP lite frame checksum verification
-    Board.WriteKSZ8851Reg(0x82, (AmpIO_UInt16) 0x0030);  // Enable QMU receive IP header 2-byte offset (0x0230 recommended)
+    Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x7CE0);  // See above
+    // Following not needed:
+    // Board.WriteKSZ8851Reg(0x76, (AmpIO_UInt16) 0x0016);  // Enable QMU receive ICMP/UDP lite frame checksum verification
+    Board.WriteKSZ8851Reg(0x82, (AmpIO_UInt16) 0x0030);  // Enable QMU frame count threshold (1) and auto-dequeue
     // Force link in half duplex if auto-negotiation failed
     Board.ReadKSZ8851Reg(0xF6, reg);
     reg = (reg & ~(1<<5));
@@ -90,8 +91,8 @@ bool InitEthernet(AmpIO &Board)
     Board.ReadKSZ8851Reg(0x74, reg);
     reg |= 1;
     Board.WriteKSZ8851Reg(0x74, reg);
-    // Wait 2 sec
-    usleep(2000000L);
+    // Wait 2.5 sec
+    usleep(2500000L);
     return true;
 }
 
@@ -333,6 +334,7 @@ int main()
         std::cout << "  1) Send quadlet from PC to FPGA" << std::endl;
         std::cout << "  2) Send quadlet from FPGA to PC" << std::endl;
         std::cout << "  3) Ethernet port status" << std::endl;
+        std::cout << "  4) Initialize Ethernet port" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -380,6 +382,10 @@ int main()
 
         case '3':
                 PrintEthernetStatus(board1);
+                break;
+
+        case '4':
+                InitEthernet(board1);
                 break;
         }
     }
