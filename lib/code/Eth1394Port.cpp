@@ -18,6 +18,10 @@ http://www.cisst.org/cisst/license.txt.
 #include "Eth1394Port.h"
 #include <pcap.h>
 #include <iomanip>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <linux/if.h>
 
 #ifdef _MSC_VER
 #include <windows.h>  // for Sleep
@@ -45,8 +49,8 @@ uint32_t crc32(uint32_t crc, const void *buf, size_t size);
  \param isHUBtoPC  true: check HUB to PC, false: check PC to HUB
  \return bool true if valid
 */
-bool headercheck(uint8_t* header, bool isHUBtoPC);
 void print_frame(unsigned char* buffer, int length);
+void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr);
 
 
 Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394CallbackType cb):
@@ -118,7 +122,7 @@ bool Eth1394Port::Init()
     handle = NULL;
     handle = pcap_open_live(dev->name,
                             BUFSIZ,  // data buffer size
-                            1,       // promisc mode
+                            0,       // turn off promisc mode
                             100,     // read timeout 100 ms
                             errbuf); // error buffer
     if(handle == NULL)
@@ -127,14 +131,40 @@ bool Eth1394Port::Init()
         return false;
     }
 
+    // initialize ethernet header
+    u_int8_t eth_dst[6] = {0x22,0x22,0x45,0x13,0x94,0x00};  // CID,0x1394,boardid(0)
+    u_int8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
+
+    // Get local MAC address. There doesn't seem to be a better (portable) way to do
+    // this, other than the following socket/ioctl calls.
+    struct ifreq s;
+    strcpy(s.ifr_name, dev->name);
+
     // free alldevs
     pcap_freealldevs(alldevs);
 
-    // initialize ethernet header
-    u_int8_t eth_dst[6] = {0x01,0x23,0x45,0x13,0x94,0x00};  // CID,0x1394,boardid(0)
-    u_int8_t eth_src[6] = {0x4c,0x43,0x53,0x52,0x00,0x00};  // LCSR00
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        outStr << "ERROR: could not create socket for local MAC address" << std::endl;
+        return false;
+    }
+    else {
+        if (ioctl(fd, SIOCGIFHWADDR, &s) == 0) {
+           memcpy(eth_src, s.ifr_addr.sa_data, 6);
+           print_mac(outStr, "Local MAC address", eth_src);
+        }
+        else {
+            outStr << "ERROR: could not get local MAC address for " << dev->name << std::endl;
+            close(fd);
+            return false;
+        }
+        close(fd);
+    }
+
     memcpy(frame_hdr, eth_dst, 6);
-    memcpy(&frame_hdr[3], eth_src, 6);
+    memcpy(frame_hdr+3, eth_src, 6);
+
+    // Ethertype 0x0801 -- this will be changed to use length instead
     frame_hdr[6] = bswap_16(0x0801);
 
     return this->ScanNodes();
@@ -342,7 +372,7 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     //--- send out broadcast read request -----
     const size_t length_fw = 5;
     quadlet_t packet_FW[length_fw];
-    frame_hdr[5] = bswap_16(length_fw * 4);
+    //frame_hdr[5] = bswap_16(length_fw * 4);
 
     packet_FW[0] = bswap_32(0xFFC00000);
     packet_FW[1] = bswap_32(0xFFCFFFFF);
@@ -618,7 +648,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
     // Ethernet frame
     const int ethlength = length_fw * 4 + 14;  // eth frame length in byte
-    frame_hdr[5] = bswap_16(length_fw * 4);
+    //frame_hdr[5] = bswap_16(length_fw * 4);
 
     //uint8_t frame[ethlength];
     uint8_t frame[5*4+14];
@@ -651,19 +681,21 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     struct pcap_pkthdr header;	/* The header that pcap gives us */
     const u_char *packet;		/* The actual packet */
     unsigned int numPackets = 0;
+    unsigned int numPacketsValid = 0;
     while ((packet = pcap_next(handle, &header)) != NULL) {
         numPackets++;
-        if (packet[11] != node) {
-            outStr << "Packet not from node " << node << " (src lsb is " << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
-            continue;
-        }
-        int tcode_recv = packet[17] >> 4;
-        if (tcode == QREAD && tcode_recv == QRESPONSE) {
+        if (headercheck((unsigned char *)packet, true)) {
+            if (packet[11] != node) {
+                outStr << "Packet not from node " << node << " (src lsb is " << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
+                continue;
+            }
+            numPacketsValid++;
+            int tcode_recv = packet[17] >> 4;
+            if (tcode == QREAD && tcode_recv == QRESPONSE) {
 #if 0  // TODO: maybe remove CRC checking on PC
-            // check header crc
-            uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
-            uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
-            if(headercheck((unsigned char*)packet, 1)){
+                // check header crc
+                uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
+                uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
                 if(crc_check == crc_original) {
                     memcpy(buffer, &packet[26], 4);
     //                buffer[0] = bswap_32(buffer[0]);
@@ -673,17 +705,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     return -1;
                 }
 #else
-            if(headercheck((unsigned char*)packet, 1)){
                 memcpy(buffer, &packet[26], 4);
 #endif
             }
-            else{
-                outStr <<"ERROR: Ethernet header error"<<std::endl;
-                return -1;
-            }
-        }
-        else if (tcode == BREAD && tcode_recv == BRESPONSE) {
-            if(headercheck((unsigned char*)packet, 1)){
+            else if (tcode == BREAD && tcode_recv == BRESPONSE) {
                 if (length == (packet[26] << 8 | packet[27])) {
 #if 0  // TODO: maybe remove CRC checking on PC
                     uint32_t crc_h_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
@@ -709,14 +734,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     return -1;
                 }
             }
-            else{
-                outStr <<"ERROR: Ethernet header error"<<std::endl;
+            else {
+                outStr << "ERROR: unknown response tcode: " << tcode_recv << std::endl;
                 return -1;
             }
-        }
-        else {
-            outStr << "ERROR: unknown response tcode: " << tcode_recv << std::endl;
-            //return -1;
         }
 
         if (!TEST) {
@@ -725,10 +746,11 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         }
     }
 
-    if (numPackets < 1) {
+    if (numPacketsValid < 1) {
         outStr << "Error: Receive failed" << std::endl;
         return -1;
     }
+    outStr << "Processed " << numPackets << " packets, " << numPacketsValid << " valid" << std::endl;
 
     return 0;
 }
@@ -783,7 +805,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
 
     // Ethernet frame
     int ethlength = length_fw * 4 + 14;
-    frame_hdr[5] = bswap_16(length_fw * 4);
+    //frame_hdr[5] = bswap_16(length_fw * 4);
 
     uint8_t *frame = new uint8_t[ethlength];
     memcpy(frame, frame_hdr, 14);
@@ -809,7 +831,7 @@ int Eth1394Port::eth1394_write_nodenum(void)
 {
     uint16_t syn_frame = 0;
     syn_frame = ((NumOfNodesInUse_ - 1) << 12) | 0x0800;
-    frame_hdr[5] = bswap_16(syn_frame);
+    //frame_hdr[5] = bswap_16(syn_frame);
     unsigned char MSG[] = "This is a num_node synchronizing frame.";
     const int length_MSG = sizeof(MSG);
 
@@ -840,7 +862,7 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
         // actually a modified qwrite
         const size_t length_fw = 5;
         quadlet_t packet_FW[length_fw];
-        frame_hdr[5] = bswap_16(length_fw * 4);
+        //frame_hdr[5] = bswap_16(length_fw * 4);
 
         packet_FW[0] = bswap_32(0xFFFF0000);
         packet_FW[1] = bswap_32(0xFFFF0000);
@@ -880,31 +902,62 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
 // CRC related
 // ---------------------------------------------------------
 
-bool headercheck(uint8_t* header, bool isHUBtoPC)
+bool Eth1394Port::headercheck(uint8_t* header, bool isHUBtoPC) const
 {
-    // the header should be "HUB>PC" "CID,0x1394,boardid" + 0x0801(ethertype)
-    if(isHUBtoPC &&
-       (header[0] == 0x48) && (header[1] == 0x55) && (header[2] == 0x42) &&  // dest (HUB)
-       (header[3] == 0x3e) && (header[4] == 0x50) && (header[5] == 0x43) &&  // dest (>PC)
-       (header[6] == 0x01) && (header[7] == 0x23) && (header[8] == 0x45) &&  // src (CID)
-       (header[9] == 0x13) && (header[10] == 0x94) && (header[11] == 0) &&   // src (0x1394, boardid)
-       (header[12] == 0x08) && (header[13] == 0x01)) // Ethertype
-    {
-        return true;
+    unsigned int i;
+    const uint8_t *srcAddr;
+    const uint8_t *destAddr;
+    unsigned int bd_index;    // index of board id
+    if (isHUBtoPC) {
+        // the header should be "Local MAC addr" + "CID,0x1394,boardid"
+        destAddr = reinterpret_cast<const uint8_t *>(frame_hdr+3);
+        srcAddr = reinterpret_cast<const uint8_t *>(frame_hdr);
+        bd_index = 11;
     }
-
-    // the header should be "CID,0x1394,boardid" "LCSR??" + 0x0801(ethertype)
-    if (!isHUBtoPC && 
-        (header[0] == 0x01) && (header[1] == 0x23) && (header[2] == 0x45) &&  // dest (CID)
-        (header[3] == 0x13) && (header[4] == 0x94) && (header[5] == 0x00) &&  // dest (0x1394, boardid)
-        (header[6] == 0x4c) && (header[7] == 0x43) && (header[8] == 0x53) &&  // src (LCS)
-        (header[9] == 0x52) &&                                                // src (Rxx)
-        (header[12] == 0x08) && (header[13] == 0x01))                         // Ethertype (0x0801)
-    {
-        return true;
+    else {
+        // the header should be "CID,0x1394,boardid" + "Local MAC addr"
+        destAddr = reinterpret_cast<const uint8_t *>(frame_hdr);
+        srcAddr = reinterpret_cast<const uint8_t *>(frame_hdr+3);
+        bd_index = 5;
     }
-
-    return false;
+    bool isBroadcast = true;
+    for (i = 0; i < 6; i++) {
+        if (header[i] != 0xff) {
+            isBroadcast = false;
+            break;
+        }
+    }
+    // For now, we don't use broadcast packets
+    if (isBroadcast) {
+        outStr << "Header check found broadcast packet" << std::endl;
+        return false;
+    }
+    // We also don't use multicast packets
+    if (header[0]&1) {
+        outStr << "Header check found multicast packet" << std::endl;
+        print_mac(outStr, "Header", header);
+        return false;
+    }
+    for (i = 0; i < 6; i++) {
+        if (i == bd_index) continue;  // don't check boardid
+        if (header[i] != destAddr[i]) {
+            outStr << "Header check failed for destination address" << std::endl;
+            print_mac(outStr, "Header", header);
+            print_mac(outStr, "DestAddr", destAddr);
+            return false;
+        }
+        if (header[i+6] != srcAddr[i]) {
+            outStr << "Header check failed for source address" << std::endl;
+            print_mac(outStr, "Header", header+6);
+            print_mac(outStr, "DestAddr", srcAddr);
+            return false;
+        }
+    }
+    if ((header[12] != 0x08) || (header[13] != 0x01)) { // Ethertype
+        outStr << "Header check failed for Ethertype: " << std::hex << header[12] << header[13] << std::endl;
+        return false;
+    }
+    return true;
 }
 
 //  -----------  CRC ----------------
@@ -1024,3 +1077,11 @@ void print_frame(unsigned char* buffer, int length)
     }
     std::cout<<std::endl;
 }
+
+void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr)
+{
+    outStr << name << ": " << std::hex
+           << (int)addr[0] << ":" << (int)addr[1] << ":" << (int)addr[2] << ":"
+           << (int)addr[3] << ":" << (int)addr[4] << ":" << (int)addr[5] << std::endl;
+}
+

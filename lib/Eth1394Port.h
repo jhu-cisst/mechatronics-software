@@ -55,6 +55,8 @@ protected:
 
     Eth1394CallbackType eth1394_read_callback;
 
+    bool headercheck(uint8_t* header, bool isHUBtoPC) const;
+
     /**
      * @brief
      *

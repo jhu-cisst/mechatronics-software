@@ -59,26 +59,20 @@ bool InitEthernet(AmpIO &Board)
     // Now, program the chip
     AmpIO_UInt16 reg;
     // Set MAC address (48-bits) to CID(24),0x1394(16),boardid(8)
-    //    - for now, using 0x012345 for CID -- need to get CID from IEEE
+    //    - for now, using 0x222245 for CID -- need to get CID from IEEE
     //    - 8 bits for board id allows board ids from 0-255 (rotary switch only supports 0-15)
-    Board.WriteKSZ8851Reg(0x10, (AmpIO_UInt16) 0x9400);  // MAC address low = 0x13nn (nn = board id)
+    Board.WriteKSZ8851Reg(0x10, (AmpIO_UInt16) 0x9400);  // MAC address low = 0x94nn (nn = board id)
     Board.WriteKSZ8851Reg(0x12, (AmpIO_UInt16) 0x4513);  // MAC address middle = 0x4513
-    Board.WriteKSZ8851Reg(0x14, (AmpIO_UInt16) 0x0123);  // MAC address high = 0x0123
+    Board.WriteKSZ8851Reg(0x14, (AmpIO_UInt16) 0x2222);  // MAC address high = 0x2222
     Board.WriteKSZ8851Reg(0x84, (AmpIO_UInt16) 0x4000);  // Enable QMU transmit frame data pointer auto increment
     Board.WriteKSZ8851Reg(0x70, (AmpIO_UInt16) 0x01EE);  // Enable QMU transmit flow control, CRC, and padding
     Board.WriteKSZ8851Reg(0x86, (AmpIO_UInt16) 0x4000);  // Enable QMU receive frame data pointer auto increment
     Board.WriteKSZ8851Reg(0x9C, (AmpIO_UInt16) 0x0001);  // Configure receive frame threshold for 1 frame
     // 7: enable UDP, TCP, and IP checksums
-    // 4: enable flow control (for receive in full duplex mode)
-    // F: enable broadcast, multicast, unicast, and all frames
-    // 2: enable Receive Inverse Filtering
-    // Bit 4 = 1, Bit 1 = 1, Bit 11 = 0, Bit 8 = 0 (promiscuous mode)
-    Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x74F2);  // Enable QMU receive flow control (0x7CE0 recommended)
-    // 7: enable UDP, TCP, and IP checksums
     // C: enable MAC address filtering, enable flow control (for receive in full duplex mode)
     // E: enable broadcast, multicast, and unicast
     // Bit 4 = 0, Bit 1 = 0, Bit 11 = 1, Bit 8 = 0 (hash perfect, default)
-    //Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x7CE0);  // Enable QMU receive flow control
+    Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x7CE0);  // Enable QMU receive flow control
     Board.WriteKSZ8851Reg(0x76, (AmpIO_UInt16) 0x0016);  // Enable QMU receive ICMP/UDP lite frame checksum verification
     Board.WriteKSZ8851Reg(0x82, (AmpIO_UInt16) 0x0030);  // Enable QMU receive IP header 2-byte offset (0x0230 recommended)
     // Force link in half duplex if auto-negotiation failed
@@ -101,7 +95,8 @@ bool InitEthernet(AmpIO &Board)
     return true;
 }
 
-bool SendEthernetPacket(AmpIO &Board, nodeid_t node, nodeaddr_t addr, unsigned int tcode, quadlet_t quad_data)
+bool SendEthernetPacket(AmpIO &Board, nodeid_t node, nodeaddr_t addr, unsigned int tcode, quadlet_t quad_data,
+                        AmpIO_UInt16 *destAddr)
 {
     AmpIO_UInt16 reg;
     // Read QMU TXQ available memory
@@ -115,12 +110,12 @@ bool SendEthernetPacket(AmpIO &Board, nodeid_t node, nodeaddr_t addr, unsigned i
     // Now, transfer via DMA
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 0);   // Control word
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 34);  // Byte count (14+20=34)
-    // Dest MAC: "HUB>PC" (byte swapped)
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x5548);  // "UH"
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x3E42);  // ">B"
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x4350);  // "CP"
+    // Dest MAC (byte swapped)
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) destAddr[0]);
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) destAddr[1]);
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) destAddr[2]);
     // Source MAC: LCSR-CID,0x1394,boardid (byte swapped)
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x2301);  // CID
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x2222);  // CID
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x1345);  // CID, 0x13
     Board.WriteKSZ8851DMA((AmpIO_UInt16) (node << 8) | 0x0094);  // 0x94, boardid
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x0108);  // Ethertype
@@ -150,7 +145,8 @@ bool SendEthernetPacket(AmpIO &Board, nodeid_t node, nodeaddr_t addr, unsigned i
     return true;
 }
 
-bool ReceiveEthernetPacket(AmpIO &Board, nodeid_t &node, nodeaddr_t &addr, unsigned int &tcode, quadlet_t &quad_data)
+bool ReceiveEthernetPacket(AmpIO &Board, nodeid_t &node, nodeaddr_t &addr, unsigned int &tcode, quadlet_t &quad_data,
+                           AmpIO_UInt16 *srcAddr)
 {
     AmpIO_UInt16 status = Board.ReadKSZ8851Status();
     if (!(status & 0x8000)) {
@@ -219,6 +215,9 @@ bool ReceiveEthernetPacket(AmpIO &Board, nodeid_t &node, nodeaddr_t &addr, unsig
             reg &= ~(1<<3);
             Board.WriteKSZ8851Reg(0x82, reg);
             if (status & 0x8000) {  // if really valid
+                srcAddr[0] = data[3];
+                srcAddr[1] = data[4];
+                srcAddr[2] = data[5];
                 if (data[6] == 0xdd86) numIPv6++;
                 else if (data[6] == 0x0008) numIP++;
                 if (data[6] == 0x0108) {
@@ -271,14 +270,15 @@ bool QuadletReadCallback(Eth1394Port &, unsigned char boardId, std::ostream &deb
         nodeaddr_t addr;
         unsigned int tcode;
         quadlet_t quad_data;
-        ReceiveEthernetPacket(Board, boardid, addr, tcode, quad_data);
+        AmpIO_UInt16 srcAddress[3];
+        ReceiveEthernetPacket(Board, boardid, addr, tcode, quad_data, srcAddress);
         // Send a response packet for read request (tcode == 4)
         if (tcode == 4) {
             quadlet_t quad_write = 0x78563412;
             if (addr == 0) quad_write = 0;            // Status
             if (addr == 4) quad_write = 0x31414c51;   // Hardware version (QLA1)
             else if (addr == 7) quad_write = 0x05000000; // Firmware version (5)
-            SendEthernetPacket(Board, boardid, addr, 6, quad_write);
+            SendEthernetPacket(Board, boardid, addr, 6, quad_write, srcAddress);
         }
     }
     else {
@@ -304,6 +304,7 @@ int main()
     FwPort.AddBoard(&board1);
     if (!InitEthernet(board1)) {
         std::cout << "Failed to initialize Ethernet chip" << std::endl;
+        FwPort.RemoveBoard(0);
         return 0;
     }
 
@@ -311,6 +312,7 @@ int main()
     Eth1394Port EthPort(0, std::cout, QuadletReadCallback);
     if (!EthPort.IsOK()) {
         std::cout << "Failed to initialize ethernet port" << std::endl;
+        FwPort.RemoveBoard(0);
         return 0;
     }
     EthPort.AddBoard(&board2);
@@ -340,6 +342,7 @@ int main()
         nodeaddr_t addr;
         unsigned int tcode;
         quadlet_t quad_data;
+        AmpIO_UInt16 srcAddress[3];
 
         switch (c) {
             case '0':   // Quit
@@ -356,8 +359,13 @@ int main()
                 usleep(20000L);
 
                 // Receive on FPGA board
-                ReceiveEthernetPacket(board1, boardid, addr, tcode, quad_data);
-                std::cout << "quadlet data = " << std::hex << quad_data << std::endl;
+                quad_data = 0;
+                if (ReceiveEthernetPacket(board1, boardid, addr, tcode, quad_data, srcAddress))
+                    std::cout << "src = " << std::hex
+                              << (srcAddress[0]&0x00ff) << ":" << (srcAddress[0]>>8) << ":"
+                              << (srcAddress[1]&0x00ff) << ":" << (srcAddress[1]>>8) << ":"
+                              << (srcAddress[2]&0x00ff) << ":" << (srcAddress[2]>>8)
+                              << ", quadlet data = " << quad_data << std::endl;
                 break;
 
         case '2': 
