@@ -3,8 +3,12 @@
 
 #include <iostream>
 #include <stdio.h>
+
+#include <Amp1394/AmpIORevision.h>
+#if Amp1394_HAS_RAW1394
 #include <termios.h>
 #include "FirewirePort.h"
+#endif
 #include "Eth1394Port.h"
 #include "AmpIO.h"
 
@@ -16,6 +20,7 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
+#if Amp1394_HAS_RAW1394
 // Ethernet status, as reported by KSZ8851 on FPGA board
 void PrintEthernetStatus(AmpIO &Board)
 {
@@ -288,15 +293,15 @@ bool QuadletReadCallback(Eth1394Port &, unsigned char boardId, std::ostream &deb
     }
     return true;
 }
+#endif
 
 int main()
 {
-    quadlet_t read_data, write_data;
-
     // Hard-coded for board #0
     AmpIO board1(0);
     AmpIO board2(0);
 
+#if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
     if (!FwPort.IsOK()) {
         std::cout << "Failed to initialize firewire port" << std::endl;
@@ -316,8 +321,17 @@ int main()
         FwPort.RemoveBoard(0);
         return 0;
     }
+#else
+    Eth1394Port EthPort(0, std::cout);
+    if (!EthPort.IsOK()) {
+        std::cout << "Failed to initialize ethernet port" << std::endl;
+        return 0;
+    }
+#endif
     EthPort.AddBoard(&board2);
 
+    // For now, nothing more can be done without FireWire (RAW1394)
+#if Amp1394_HAS_RAW1394
     // Turn off buffered I/O for keyboard
     struct termios oldTerm, newTerm;
     tcgetattr(0, &oldTerm);
@@ -345,6 +359,8 @@ int main()
         unsigned int tcode;
         quadlet_t quad_data;
         AmpIO_UInt16 srcAddress[3];
+        quadlet_t read_data, write_data;
+
 
         switch (c) {
             case '0':   // Quit
@@ -390,8 +406,9 @@ int main()
         }
     }
 
-    FwPort.RemoveBoard(0);
-    EthPort.RemoveBoard(0);
     tcsetattr(0, TCSANOW, &oldTerm);  // Restore terminal I/O settings
+    FwPort.RemoveBoard(0);
+#endif
+    EthPort.RemoveBoard(0);
     return 0;
 }

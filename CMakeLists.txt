@@ -26,7 +26,10 @@ if (WIN32)
 
   # Need to specify where WinPcap Developer's Pack is installed
   find_path(PCAP_INCLUDE_DIR pcap.h)
-  find_library(PCAP_LIBRARIES "wpcap")
+  find_library(PCAP_LIBRARY "wpcap" DOC "Path to WinPcap library wpcap")
+  # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
+  find_library(PCAP_PACKET_LIBRARY "Packet" DOC "Path to WinPcap Packet library")
+  set(PCAP_LIBRARIES ${PCAP_LIBRARY} ${PCAP_PACKET_LIBRARY})
 
 else (WIN32)
 

@@ -55,10 +55,13 @@ if (Amp1394_HAS_RAW1394)
            RUNTIME DESTINATION bin)
 endif (Amp1394_HAS_RAW1394)
 
-if (Amp1394_HAS_PCAP AND Amp1394_HAS_RAW1394)
+if (Amp1394_HAS_PCAP)
   add_executable(eth1394Test mainEth1394.cpp)
-  target_link_libraries(eth1394Test Amp1394 ${PCAP_LIBRARIES} raw1394)
+  target_link_libraries(eth1394Test Amp1394 ${PCAP_LIBRARIES})
+  if (Amp1394_HAS_RAW1394)
+    target_link_libraries(eth1394Test raw1394)
+  endif (Amp1394_HAS_RAW1394)
   install (TARGETS eth1394Test
            COMPONENT Amp1394-utils
            RUNTIME DESTINATION bin)
-endif (Amp1394_HAS_PCAP AND Amp1394_HAS_RAW1394)
+endif (Amp1394_HAS_PCAP)

@@ -18,17 +18,20 @@ http://www.cisst.org/cisst/license.txt.
 #include "Eth1394Port.h"
 #include <pcap.h>
 #include <iomanip>
+
+#ifdef _MSC_VER
+#include <windows.h>  // for Sleep
+#include <memory.h>   // for memcpy
+#include <stdlib.h>   // for byteswap functions
+#include <Packet32.h> // winpcap include for PacketRequest
+#include <ntddndis.h> // for OID_802_3_CURRENT_ADDRESS
+inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
+inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
+#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
-
-#ifdef _MSC_VER
-#include <windows.h>  // for Sleep
-#include <stdlib.h>   // for byteswap functions
-inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
 #include <byteswap.h>
 #endif
 
@@ -127,7 +130,7 @@ bool Eth1394Port::Init()
                             errbuf); // error buffer
     if(handle == NULL)
     {
-        outStr <<"ERROR: Couldn't open device: "<< dev->name <<std::endl;
+        outStr << "ERROR: Couldn't open device: "<< dev->name <<std::endl;
         return false;
     }
 
@@ -135,8 +138,35 @@ bool Eth1394Port::Init()
     u_int8_t eth_dst[6] = {0x22,0x22,0x45,0x13,0x94,0x00};  // CID,0x1394,boardid(0)
     u_int8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
 
-    // Get local MAC address. There doesn't seem to be a better (portable) way to do
-    // this, other than the following socket/ioctl calls.
+    // Get local MAC address. There doesn't seem to be a better (portable) way to do this.
+#ifdef _MSC_VER
+    // On Windows, we can use the PacketRequest function provided by winpcap. This requires
+    // inclusion of Packet32.h and linking with Packet.lib.
+    // Other alternatives are SendARP and GetAdaptersAddresses. The latter is a replacement
+    // for the deprecated GetAdaptersInfo.
+    LPADAPTER adapter = PacketOpenAdapter(dev->name);
+    if (adapter) {
+        char data[sizeof(PACKET_OID_DATA)+5];
+        memset(data, 0, sizeof(data));
+        PPACKET_OID_DATA pOidData = (PPACKET_OID_DATA) data;
+        pOidData->Oid = OID_802_3_CURRENT_ADDRESS;
+        pOidData->Length = 6;
+        bool ret = PacketRequest(adapter, FALSE, pOidData);
+        PacketCloseAdapter(adapter);
+        if (ret) {
+            memcpy(eth_src, pOidData->Data, 6);
+        }
+        else {
+            outStr << "ERROR: could not get local MAC address for " << dev->name << std::endl;
+            return false;
+        }
+    }
+    else {
+        outStr << "ERROR: could not open adapter for " << dev->name << std::endl;
+        return false;
+    }
+#else
+    // On Linux, use the following socket/ioctl calls.
     struct ifreq s;
     strcpy(s.ifr_name, dev->name);
 
@@ -151,7 +181,6 @@ bool Eth1394Port::Init()
     else {
         if (ioctl(fd, SIOCGIFHWADDR, &s) == 0) {
            memcpy(eth_src, s.ifr_addr.sa_data, 6);
-           print_mac(outStr, "Local MAC address", eth_src);
         }
         else {
             outStr << "ERROR: could not get local MAC address for " << dev->name << std::endl;
@@ -160,6 +189,9 @@ bool Eth1394Port::Init()
         }
         close(fd);
     }
+#endif
+
+    print_mac(outStr, "Local MAC address", eth_src);
 
     memcpy(frame_hdr, eth_dst, 6);
     memcpy(frame_hdr+3, eth_src, 6);
