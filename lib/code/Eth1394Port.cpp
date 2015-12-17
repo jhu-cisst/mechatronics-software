@@ -134,8 +134,8 @@ bool Eth1394Port::Init()
         return false;
     }
 
-    // initialize ethernet header
-    u_int8_t eth_dst[6] = {0x22,0x22,0x45,0x13,0x94,0x00};  // CID,0x1394,boardid(0)
+    // initialize ethernet header (FA-61-OE is CID assigned to LCSR by IEEE)
+    u_int8_t eth_dst[6] = {0xFA,0x61,0x0E,0x13,0x94,0x00};  // CID,0x1394,boardid(0)
     u_int8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
 
     // Get local MAC address. There doesn't seem to be a better (portable) way to do this.

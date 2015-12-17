@@ -64,11 +64,11 @@ bool InitEthernet(AmpIO &Board)
     // Now, program the chip
     AmpIO_UInt16 reg;
     // Set MAC address (48-bits) to CID(24),0x1394(16),boardid(8)
-    //    - for now, using 0x222245 for CID -- need to get CID from IEEE
+    //    - FA-61-OE is CID assigned to LCSR by IEEE Registration Authority
     //    - 8 bits for board id allows board ids from 0-255 (rotary switch only supports 0-15)
     Board.WriteKSZ8851Reg(0x10, (AmpIO_UInt16) 0x9400);  // MAC address low = 0x94nn (nn = board id)
-    Board.WriteKSZ8851Reg(0x12, (AmpIO_UInt16) 0x4513);  // MAC address middle = 0x4513
-    Board.WriteKSZ8851Reg(0x14, (AmpIO_UInt16) 0x2222);  // MAC address high = 0x2222
+    Board.WriteKSZ8851Reg(0x12, (AmpIO_UInt16) 0x0E13);  // MAC address middle = 0xOE13
+    Board.WriteKSZ8851Reg(0x14, (AmpIO_UInt16) 0xFA61);  // MAC address high = 0xFA61
     Board.WriteKSZ8851Reg(0x84, (AmpIO_UInt16) 0x4000);  // Enable QMU transmit frame data pointer auto increment
     Board.WriteKSZ8851Reg(0x70, (AmpIO_UInt16) 0x01EE);  // Enable QMU transmit flow control, CRC, and padding
     Board.WriteKSZ8851Reg(0x86, (AmpIO_UInt16) 0x4000);  // Enable QMU receive frame data pointer auto increment
@@ -121,8 +121,8 @@ bool SendEthernetPacket(AmpIO &Board, nodeid_t node, nodeaddr_t addr, unsigned i
     Board.WriteKSZ8851DMA((AmpIO_UInt16) destAddr[1]);
     Board.WriteKSZ8851DMA((AmpIO_UInt16) destAddr[2]);
     // Source MAC: LCSR-CID,0x1394,boardid (byte swapped)
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x2222);  // CID
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x1345);  // CID, 0x13
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x61FA);  // CID
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x130E);  // CID, 0x13
     Board.WriteKSZ8851DMA((AmpIO_UInt16) (node << 8) | 0x0094);  // 0x94, boardid
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x0108);  // Ethertype
     //Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x1400); // Length (20 bytes), instead of Ethertype
