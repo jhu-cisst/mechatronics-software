@@ -124,7 +124,7 @@ bool SendEthernetPacket(AmpIO &Board, nodeid_t node, nodeaddr_t addr, unsigned i
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x61FA);  // CID
     Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x130E);  // CID, 0x13
     Board.WriteKSZ8851DMA((AmpIO_UInt16) (node << 8) | 0x0094);  // 0x94, boardid
-    Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x0108);  // Ethertype
+    Board.WriteKSZ8851DMA((AmpIO_UInt16) 20);     // length
     //Board.WriteKSZ8851DMA((AmpIO_UInt16) 0x1400); // Length (20 bytes), instead of Ethertype
     // We use 20 bytes for a quadlet read/write. The chip will automatically
     // pad the packet since the length is less than 64 bytes.
@@ -226,7 +226,8 @@ bool ReceiveEthernetPacket(AmpIO &Board, nodeid_t &node, nodeaddr_t &addr, unsig
                 srcAddr[2] = data[5];
                 if (data[6] == 0xdd86) numIPv6++;
                 else if (data[6] == 0x0008) numIP++;
-                if (data[6] == 0x0108) {
+                else {
+                    unsigned int packetLength = bswap_16(data[6]);
                     node = data[2]>>8;
                     tcode = data[8]>>12;
                     addr = bswap_16(data[12]); // not exactly correct (need some of data[11])

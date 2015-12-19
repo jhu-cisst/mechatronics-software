@@ -195,9 +195,7 @@ bool Eth1394Port::Init()
 
     memcpy(frame_hdr, eth_dst, 6);
     memcpy(frame_hdr+3, eth_src, 6);
-
-    // Ethertype 0x0801 -- this will be changed to use length instead
-    frame_hdr[6] = bswap_16(0x0801);
+    frame_hdr[6] = 0;   // length field
 
     return this->ScanNodes();
 }
@@ -404,7 +402,7 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     //--- send out broadcast read request -----
     const size_t length_fw = 5;
     quadlet_t packet_FW[length_fw];
-    //frame_hdr[5] = bswap_16(length_fw * 4);
+    frame_hdr[6] = bswap_16(length_fw * 4);
 
     packet_FW[0] = bswap_32(0xFFC00000);
     packet_FW[1] = bswap_32(0xFFCFFFFF);
@@ -680,7 +678,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
     // Ethernet frame
     const int ethlength = length_fw * 4 + 14;  // eth frame length in byte
-    //frame_hdr[5] = bswap_16(length_fw * 4);
+    frame_hdr[6] = bswap_16(length_fw * 4);
 
     //uint8_t frame[ethlength];
     uint8_t frame[5*4+14];
@@ -721,6 +719,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                 outStr << "Packet not from node " << node << " (src lsb is " << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
                 continue;
             }
+            unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
             numPacketsValid++;
             int tcode_recv = packet[17] >> 4;
             if (tcode == QREAD && tcode_recv == QRESPONSE) {
@@ -837,7 +836,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
 
     // Ethernet frame
     int ethlength = length_fw * 4 + 14;
-    //frame_hdr[5] = bswap_16(length_fw * 4);
+    frame_hdr[6] = bswap_16(length_fw * 4);
 
     uint8_t *frame = new uint8_t[ethlength];
     memcpy(frame, frame_hdr, 14);
@@ -863,7 +862,7 @@ int Eth1394Port::eth1394_write_nodenum(void)
 {
     uint16_t syn_frame = 0;
     syn_frame = ((NumOfNodesInUse_ - 1) << 12) | 0x0800;
-    //frame_hdr[5] = bswap_16(syn_frame);
+    frame_hdr[6] = bswap_16(syn_frame);
     unsigned char MSG[] = "This is a num_node synchronizing frame.";
     const int length_MSG = sizeof(MSG);
 
@@ -894,7 +893,7 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
         // actually a modified qwrite
         const size_t length_fw = 5;
         quadlet_t packet_FW[length_fw];
-        //frame_hdr[5] = bswap_16(length_fw * 4);
+        frame_hdr[6] = bswap_16(length_fw * 4);
 
         packet_FW[0] = bswap_32(0xFFFF0000);
         packet_FW[1] = bswap_32(0xFFFF0000);
@@ -984,10 +983,6 @@ bool Eth1394Port::headercheck(uint8_t* header, bool isHUBtoPC) const
             print_mac(outStr, "DestAddr", srcAddr);
             return false;
         }
-    }
-    if ((header[12] != 0x08) || (header[13] != 0x01)) { // Ethertype
-        outStr << "Header check failed for Ethertype: " << std::hex << header[12] << header[13] << std::endl;
-        return false;
     }
     return true;
 }
