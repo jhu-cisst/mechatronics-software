@@ -37,65 +37,125 @@ void PrintEthernetStatus(AmpIO &Board)
     std::cout << std::endl;
 }
 
-bool InitEthernet(AmpIO &Board)
+// Check contents of KSZ8851 register
+bool CheckRegister(AmpIO &Board, AmpIO_UInt8 regNum, AmpIO_UInt16 mask, AmpIO_UInt16 value)
+{
+    AmpIO_UInt16 reg;
+    Board.ReadKSZ8851Reg(regNum, reg);
+    if ((reg&mask) != value) {
+        std::cout << "Register " << std::hex << (int)regNum << ": read = " << reg
+                  << ", expected = " << value << " (mask = " << mask << ")" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+// Check whether Ethernet initialized correctly
+bool CheckEthernet(AmpIO &Board)
+{
+    bool ret = true;
+    ret &= CheckRegister(Board, 0x10, 0xffff, 0x9400);  // MAC address low = 0x94nn (nn = board id)
+    ret &= CheckRegister(Board, 0x12, 0xffff, 0x0E13);  // MAC address middle = 0xOE13
+    ret &= CheckRegister(Board, 0x14, 0xffff, 0xFA61);  // MAC address high = 0xFA61
+    ret &= CheckRegister(Board, 0x84, 0x4000, 0x4000);  // Enable QMU transmit frame data pointer auto increment
+    ret &= CheckRegister(Board, 0x70, 0x01fe, 0x01EE);  // Enable QMU transmit flow control, CRC, and padding
+    ret &= CheckRegister(Board, 0x86, 0x5000, 0x4000);  // Enable QMU receive frame data pointer auto increment
+    ret &= CheckRegister(Board, 0x9C, 0x00ff, 0x0001);  // Configure receive frame threshold for 1 frame
+    ret &= CheckRegister(Board, 0x74, 0xfffe, 0x7CE0);
+    ret &= CheckRegister(Board, 0x82, 0x03f7, 0x0030);  // Enable QMU frame count threshold (1) and auto-dequeue
+    ret &= CheckRegister(Board, 0x90, 0xffff, 0x2000);  // Enable receive interrupts (TODO: also consider link change interrupt)
+    ret &= CheckRegister(Board, 0x70, 0x0001, 0x0001);
+    ret &= CheckRegister(Board, 0x74, 0x0001, 0x0001);
+    return ret;
+}
+
+// If softInit true, then write to registers from PC via FireWire
+bool InitEthernet(AmpIO &Board, bool softInit = false)
 {
     if (Board.GetFirmwareVersion() < 5) {
         std::cout << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
         return false;
     }
+
     AmpIO_UInt16 status = Board.ReadKSZ8851Status();
     if (!(status&0x8000)) {
         std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
         return false;
     }
     std::cout << "   Ethernet controller status = " << std::hex << status << std::endl;
+
     // Reset the board
     Board.ResetKSZ8851();
     // Wait 100 msec
     usleep(100000L);
+
     // Read the status
     status = Board.ReadKSZ8851Status();
     std::cout << "   After reset, status = " << std::hex << status << std::endl;
+
+    if (!softInit) {
+        if (!(status&0x2000)) {
+            std::cout << "   Ethernet failed initialization" << std::endl;
+            return false;
+        }
+    }
+
     // Read the Chip ID (16-bit read)
     AmpIO_UInt16 chipID = Board.ReadKSZ8851ChipID();
     std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
     if ((chipID&0xfff0) != 0x8870)
         return false;
-    // Now, program the chip
-    AmpIO_UInt16 reg;
-    // Set MAC address (48-bits) to CID(24),0x1394(16),boardid(8)
-    //    - FA-61-OE is CID assigned to LCSR by IEEE Registration Authority
-    //    - 8 bits for board id allows board ids from 0-255 (rotary switch only supports 0-15)
-    Board.WriteKSZ8851Reg(0x10, (AmpIO_UInt16) 0x9400);  // MAC address low = 0x94nn (nn = board id)
-    Board.WriteKSZ8851Reg(0x12, (AmpIO_UInt16) 0x0E13);  // MAC address middle = 0xOE13
-    Board.WriteKSZ8851Reg(0x14, (AmpIO_UInt16) 0xFA61);  // MAC address high = 0xFA61
-    Board.WriteKSZ8851Reg(0x84, (AmpIO_UInt16) 0x4000);  // Enable QMU transmit frame data pointer auto increment
-    Board.WriteKSZ8851Reg(0x70, (AmpIO_UInt16) 0x01EE);  // Enable QMU transmit flow control, CRC, and padding
-    Board.WriteKSZ8851Reg(0x86, (AmpIO_UInt16) 0x4000);  // Enable QMU receive frame data pointer auto increment
-    Board.WriteKSZ8851Reg(0x9C, (AmpIO_UInt16) 0x0001);  // Configure receive frame threshold for 1 frame
-    // 7: enable UDP, TCP, and IP checksums
-    // C: enable MAC address filtering, enable flow control (for receive in full duplex mode)
-    // E: enable broadcast, multicast, and unicast
-    // Bit 4 = 0, Bit 1 = 0, Bit 11 = 1, Bit 8 = 0 (hash perfect, default)
-    Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x7CE0);  // See above
-    // Following not needed:
-    // Board.WriteKSZ8851Reg(0x76, (AmpIO_UInt16) 0x0016);  // Enable QMU receive ICMP/UDP lite frame checksum verification
-    Board.WriteKSZ8851Reg(0x82, (AmpIO_UInt16) 0x0030);  // Enable QMU frame count threshold (1) and auto-dequeue
-    // Force link in half duplex if auto-negotiation failed
-    Board.ReadKSZ8851Reg(0xF6, reg);
-    reg = (reg & ~(1<<5));
-    Board.WriteKSZ8851Reg(0xF6, reg);
-     // ---
-    Board.WriteKSZ8851Reg(0x92, (AmpIO_UInt16) 0xFFFF);   // Clear the interrupt status
-    Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0x2000);   // Enable receive interrupts (TODO: also consider link change interrupt)
-    // Enable QMU transmit
-    Board.ReadKSZ8851Reg(0x70, reg);
-    reg |= 1;
-    Board.WriteKSZ8851Reg(0x70, reg);
-    // Enable QMU receive
-    Board.ReadKSZ8851Reg(0x74, reg);
-    reg |= 1;
-    Board.WriteKSZ8851Reg(0x74, reg);
+
+    if (softInit) {
+        // Now, program the chip
+        AmpIO_UInt16 reg;
+        // Set MAC address (48-bits) to CID(24),0x1394(16),boardid(8)
+        //    - FA-61-OE is CID assigned to LCSR by IEEE Registration Authority
+        //    - 8 bits for board id allows board ids from 0-255 (rotary switch only supports 0-15)
+        Board.WriteKSZ8851Reg(0x10, (AmpIO_UInt16) 0x9400);  // MAC address low = 0x94nn (nn = board id)
+        Board.WriteKSZ8851Reg(0x12, (AmpIO_UInt16) 0x0E13);  // MAC address middle = 0xOE13
+        Board.WriteKSZ8851Reg(0x14, (AmpIO_UInt16) 0xFA61);  // MAC address high = 0xFA61
+        Board.WriteKSZ8851Reg(0x84, (AmpIO_UInt16) 0x4000);  // Enable QMU transmit frame data pointer auto increment
+        Board.WriteKSZ8851Reg(0x70, (AmpIO_UInt16) 0x01EE);  // Enable QMU transmit flow control, CRC, and padding
+        Board.WriteKSZ8851Reg(0x86, (AmpIO_UInt16) 0x4000);  // Enable QMU receive frame data pointer auto increment,
+                                                             // also decrease write data valid sample time to 4 nS (max)
+        Board.WriteKSZ8851Reg(0x9C, (AmpIO_UInt16) 0x0001);  // Configure receive frame threshold for 1 frame
+        // 7: enable UDP, TCP, and IP checksums
+        // C: enable MAC address filtering, enable flow control (for receive in full duplex mode)
+        // E: enable broadcast, multicast, and unicast
+        // Bit 4 = 0, Bit 1 = 0, Bit 11 = 1, Bit 8 = 0 (hash perfect, default)
+        Board.WriteKSZ8851Reg(0x74, (AmpIO_UInt16) 0x7CE0);  // See above
+        // Following not needed:
+        // Board.WriteKSZ8851Reg(0x76, (AmpIO_UInt16) 0x0016);  // Enable QMU receive ICMP/UDP lite frame checksum verification
+        Board.WriteKSZ8851Reg(0x82, (AmpIO_UInt16) 0x0030);  // Enable QMU frame count threshold (1) and auto-dequeue
+        // Force link in half duplex if auto-negotiation failed
+        Board.ReadKSZ8851Reg(0xF6, reg);
+        reg = (reg & ~(1<<5));
+        Board.WriteKSZ8851Reg(0xF6, reg);
+        // ---
+        Board.WriteKSZ8851Reg(0x92, (AmpIO_UInt16) 0xFFFF);   // Clear the interrupt status
+        Board.WriteKSZ8851Reg(0x90, (AmpIO_UInt16) 0x2000);   // Enable receive interrupts (TODO: also consider link change interrupt)
+        // Enable QMU transmit
+        Board.ReadKSZ8851Reg(0x70, reg);
+        reg |= 1;
+        Board.WriteKSZ8851Reg(0x70, reg);
+        // Enable QMU receive
+        Board.ReadKSZ8851Reg(0x74, reg);
+        reg |= 1;
+        Board.WriteKSZ8851Reg(0x74, reg);
+    }
+
+    // Check that KSZ8851 registers are as expected
+    if (!CheckEthernet(Board))
+        return false;
+
+    // Display the MAC address
+    AmpIO_UInt16 regLow, regMid, regHigh;
+    Board.ReadKSZ8851Reg(0x10, regLow);   // MAC address low = 0x94nn (nn = board id)
+    Board.ReadKSZ8851Reg(0x12, regMid);   // MAC address middle = 0xOE13
+    Board.ReadKSZ8851Reg(0x14, regHigh);  // MAC address high = 0xFA61
+    std::cout << "   MAC address = " << std::hex << regHigh << ":" << regMid << ":" << regLow << std::endl;
+
     // Wait 2.5 sec
     usleep(2500000L);
     return true;
@@ -184,17 +244,16 @@ bool ReceiveEthernetPacket(AmpIO &Board, nodeid_t &node, nodeaddr_t &addr, unsig
         Board.ReadKSZ8851Reg(0x7C, reg);  // read frame header status
         bool valid = (reg & 0x8000);
         if (valid) numValid++;
+        // The following errors are only for UDP, TCP, and IP packets, so not
+        // really an error here (and should not happen).
         if (reg & 0x3C00) {
             numChecksumError++;
-            valid = false;
         }
         else if (reg & 0x0001) {
             numCRCError++;
-            valid = false;
         }
         else if (reg & 0x0016) {
             numOtherError++;
-            valid = false;
         }
         if (valid) {
             Board.ReadKSZ8851Reg(0x7E, reg);  // read frame byte size
@@ -228,6 +287,7 @@ bool ReceiveEthernetPacket(AmpIO &Board, nodeid_t &node, nodeaddr_t &addr, unsig
                 else if (data[6] == 0x0008) numIP++;
                 else {
                     unsigned int packetLength = bswap_16(data[6]);
+                    std::cout << "Received packet length = " << std::dec << packetLength << std::endl;
                     node = data[2]>>8;
                     tcode = data[8]>>12;
                     addr = bswap_16(data[12]); // not exactly correct (need some of data[11])
@@ -349,7 +409,7 @@ int main()
         std::cout << "  1) Send quadlet from PC to FPGA" << std::endl;
         std::cout << "  2) Send quadlet from FPGA to PC" << std::endl;
         std::cout << "  3) Ethernet port status" << std::endl;
-        std::cout << "  4) Initialize Ethernet port" << std::endl;
+        std::cout << "  4) Initialize Ethernet port (software init)" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -402,7 +462,7 @@ int main()
                 break;
 
         case '4':
-                InitEthernet(board1);
+                InitEthernet(board1, true);
                 break;
         }
     }

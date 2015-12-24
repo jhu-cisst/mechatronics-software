@@ -621,12 +621,17 @@ bool TestEthernet(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
         if (Board.WriteKSZ8851Reg(0x12, MacAddrOutMid))
             logFile << ", write mid = " << MacAddrOutMid;
         MacAddrIn = 0;
+        bool failed = false;
         if (Board.ReadKSZ8851Reg(0x10, MacAddrIn))
             logFile << ", read low = " << MacAddrIn;
-        if (MacAddrOutLow != MacAddrIn) ret = false;
+        if (MacAddrOutLow != MacAddrIn) failed = true;
         if (Board.ReadKSZ8851Reg(0x12, MacAddrIn))
             logFile << ", read mid = " << MacAddrIn;
-        if (MacAddrOutMid != MacAddrIn) ret = false;
+        if (MacAddrOutMid != MacAddrIn) failed = true;
+        if (failed) {
+            logFile << " ***";
+            ret = false;
+        }
         logFile << std::endl;
     }
     return ret;
