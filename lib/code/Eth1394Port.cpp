@@ -39,7 +39,6 @@ const unsigned long QLA1_String = 0x514C4131;
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
 
 #define DEBUG 0
-#define TEST 1
 
 // crc related
 uint32_t BitReverse32(uint32_t input);
@@ -194,8 +193,9 @@ bool Eth1394Port::Init()
     print_mac(outStr, "Local MAC address", eth_src);
 
     memcpy(frame_hdr, eth_dst, 6);
-    memcpy(frame_hdr+3, eth_src, 6);
-    frame_hdr[6] = 0;   // length field
+    memcpy(frame_hdr+6, eth_src, 6);
+    frame_hdr[12] = 0;   // length field
+    frame_hdr[13] = 0;   // length field
 
     return this->ScanNodes();
 }
@@ -210,9 +210,9 @@ bool Eth1394Port::ScanNodes(void)
     IsAllBoardsBroadcastCapable_ = true;
 
     NumOfNodes_ = 0;
+    quadlet_t data;
     for (size_t bid = 0; bid < BoardIO::MAX_BOARDS; bid++)
     {
-        quadlet_t data;
         if (eth1394_read(bid, 0x04, 4, &data))
             continue;   // continue on error
 
@@ -359,25 +359,17 @@ bool Eth1394Port::ReadAllBoards(void)
 
     for (size_t bid = 0; bid < BoardIO::MAX_BOARDS; bid++)
     {
-        if(BoardInUseMask_[bid]){
-//            std::cerr << "Read board = " << bid << std::endl;
-
+        if (BoardInUseMask_[bid]) {
             bool ret = ReadBlock(bid, 0, BoardList[bid]->GetReadBuffer(),
                                  BoardList[bid]->GetReadNumBytes());
             if (ret) noneRead = false;
             else allOK = false;
             BoardList[bid]->SetReadValid(ret);
-
-            if (!ret) {
-                outStr << "------- Oops failed --------" << std::endl;
-            }
         }
     }
     if (noneRead) {
-        outStr << "Fail to read any board, check Ethernet physical connection" << std::endl;
+        outStr << "Failed to read any board, check Ethernet physical connection" << std::endl;
     }
-
-//    std::cerr << "read all boards done" << std::endl;
 
     return allOK;
 }
@@ -402,7 +394,9 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     //--- send out broadcast read request -----
     const size_t length_fw = 5;
     quadlet_t packet_FW[length_fw];
-    frame_hdr[6] = bswap_16(length_fw * 4);
+    // length field (big endian 16-bit integer)
+    frame_hdr[12] = 0;
+    frame_hdr[13] = length_fw * 4;
 
     packet_FW[0] = bswap_32(0xFFC00000);
     packet_FW[1] = bswap_32(0xFFCFFFFF);
@@ -583,9 +577,6 @@ bool Eth1394Port::ReadQuadlet(unsigned char boardId,
 
 bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
-//    std::cerr << "Write Quadlet called" << std::endl;
-//    std::cerr << "data = " << std::hex << data << std::endl;
-
     if (boardId >= BoardIO::MAX_BOARDS)
         return false;
     if (!BoardInUseMask_[boardId])
@@ -612,8 +603,6 @@ bool Eth1394Port::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *d
         outStr << "Board not under control" << std::endl;
         return false;
     }
-
-//    std::cerr << "eth1394 read before" << std::endl;
 
     return !eth1394_read(boardId, addr, nbytes, data);
 }
@@ -646,6 +635,20 @@ void Eth1394Port::make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr
     packet_FW[2] = bswap_32(addr&0xFFFFFFFF);
 }
 
+
+bool Eth1394Port::checkCRC(const unsigned char *packet) const
+{
+    // Eliminate CRC checking of FireWire packets received via Ethernet
+    // because Ethernet already includes CRC.
+#if 0
+    uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
+    uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
+    return (crc_check == crc_original);
+#else
+    return true;
+#endif
+}
+
 int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                               size_t length, quadlet_t *buffer)
 {
@@ -661,7 +664,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     }
     else
     {
-        outStr <<"ERROR: illegal length"<<std::endl;
+        outStr << "eth1394_read: illegal length = " << length << std::endl;
         return -1;
     }
 
@@ -678,7 +681,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
     // Ethernet frame
     const int ethlength = length_fw * 4 + 14;  // eth frame length in byte
-    frame_hdr[6] = bswap_16(length_fw * 4);
+    // length field (big endian 16-bit integer)
+    // Following assumes length is less than 256 bytes
+    frame_hdr[12] = 0;
+    frame_hdr[13] = length_fw * 4;
 
     //uint8_t frame[ethlength];
     uint8_t frame[5*4+14];
@@ -697,6 +703,9 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         return -1;
     }
 
+    struct timeval startTime;
+    gettimeofday(&startTime, NULL);
+
     // Invoke callback (if defined) between sending read request
     // and checking for read response. If callback returns false, we
     // skip checking for a received packet.
@@ -712,76 +721,62 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     const u_char *packet;		/* The actual packet */
     unsigned int numPackets = 0;
     unsigned int numPacketsValid = 0;
-    while ((packet = pcap_next(handle, &header)) != NULL) {
-        numPackets++;
-        if (headercheck((unsigned char *)packet, true)) {
-            if (packet[11] != node) {
-                outStr << "Packet not from node " << node << " (src lsb is " << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
-                continue;
-            }
-            unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
-            numPacketsValid++;
-            int tcode_recv = packet[17] >> 4;
-            if (tcode == QREAD && tcode_recv == QRESPONSE) {
-#if 0  // TODO: maybe remove CRC checking on PC
-                // check header crc
-                uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
-                uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
-                if(crc_check == crc_original) {
-                    memcpy(buffer, &packet[26], 4);
-    //                buffer[0] = bswap_32(buffer[0]);
+    double timeDiffSec = 0.0;
+
+    while ((numPacketsValid < 1) && (timeDiffSec < 0.15)) {
+        while ((packet = pcap_next(handle, &header)) != NULL) {
+            numPackets++;
+            if (headercheck((unsigned char *)packet, true)) {
+                if (packet[11] != node) {
+                    outStr << "Packet not from node " << node << " (src lsb is " 
+                           << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
+                    continue;
                 }
-                else {
-                    outStr <<"ERROR: crc check error"<<std::endl;
-                    return -1;
-                }
-#else
-                memcpy(buffer, &packet[26], 4);
-#endif
-            }
-            else if (tcode == BREAD && tcode_recv == BRESPONSE) {
-                if (length == (packet[26] << 8 | packet[27])) {
-#if 0  // TODO: maybe remove CRC checking on PC
-                    uint32_t crc_h_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
-                    uint32_t crc_h_original = bswap_32(*((uint32_t*)(packet+30)));
-                    if(crc_h_check == crc_h_original){
-// A little bug here: if length==8, then the data crc is not correct(due to QLA code error)
-                        memcpy(buffer, &packet[34], length);
-//                        for(int i=0;i<length/4;i++)
-//                        {
-//                            buffer[i] = bswap_32(buffer[i]);
-//                        }
-                    }
-                    else{
-                        outStr <<"ERROR: header crc check error"<<std::endl;
+                unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
+                outStr << "Packet length = " << std::dec << packetLength << std::endl;
+                numPacketsValid++;
+                int tcode_recv = packet[17] >> 4;
+                if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
+                    // check header crc
+                    if (checkCRC(packet))
+                        memcpy(buffer, &packet[26], 4);
+                    else {
+                        outStr <<"ERROR: crc check error"<<std::endl;
                         return -1;
                     }
-#else
-                    memcpy(buffer, &packet[34], length);
-#endif
                 }
-                else{
-                    outStr << "ERROR: block read response size error" << std::endl;
+                else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
+                    if (length == ((packet[26] << 8) | packet[27])) {
+                        if (checkCRC(packet))
+                            memcpy(buffer, &packet[34], length);
+                        else {
+                            outStr <<"ERROR: header crc check error"<<std::endl;
+                            return -1;
+                       }
+                    }
+                    else{
+                        outStr << "ERROR: block read response size error" << std::endl;
+                        return -1;
+                    }
+                }
+                else {
+                    outStr << "ERROR: unexpected response tcode: " << tcode_recv << std::endl;
                     return -1;
                 }
             }
-            else {
-                outStr << "ERROR: unknown response tcode: " << tcode_recv << std::endl;
-                return -1;
-            }
         }
-
-        if (!TEST) {
-            std::cout << "-------- Read Response ---------" << std::endl;
-            print_frame((unsigned char*)buffer, length);
-        }
+        struct timeval currentTime, diffTime;
+        gettimeofday(&currentTime, NULL);
+        timersub(&currentTime, &startTime, &diffTime);
+        timeDiffSec = diffTime.tv_sec + 1e-6*diffTime.tv_usec;
     }
 
     if (numPacketsValid < 1) {
         outStr << "Error: Receive failed" << std::endl;
         return -1;
     }
-    outStr << "Processed " << numPackets << " packets, " << numPacketsValid << " valid" << std::endl;
+    outStr << "Processed " << numPackets << " packets, " << numPacketsValid 
+           << " valid, time = " << timeDiffSec << " sec" << std::endl;
 
     return 0;
 }
@@ -790,8 +785,6 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
                                size_t length, quadlet_t *buffer)
 {
-//    std::cerr << "data = " << std::hex << buffer[0] << std::endl;
-
     size_t length_fw;  // in quadlet
     unsigned int tcode;
 
@@ -803,7 +796,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
         length_fw = 5 + length/4 + 1;
     }
     else{
-        outStr <<"ERROR: illegal length"<<std::endl;
+        outStr << "eth1394_write: illegal length = " << length << std::endl;
         return -1;
     }
 
@@ -836,7 +829,10 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
 
     // Ethernet frame
     int ethlength = length_fw * 4 + 14;
-    frame_hdr[6] = bswap_16(length_fw * 4);
+    // length field (big endian 16-bit integer)
+    // Following assumes length is less than 256 bytes
+    frame_hdr[12] = 0;
+    frame_hdr[13] = length_fw * 4;
 
     uint8_t *frame = new uint8_t[ethlength];
     memcpy(frame, frame_hdr, 14);
@@ -860,9 +856,8 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
 
 int Eth1394Port::eth1394_write_nodenum(void)
 {
-    uint16_t syn_frame = 0;
-    syn_frame = ((NumOfNodesInUse_ - 1) << 12) | 0x0800;
-    frame_hdr[6] = bswap_16(syn_frame);
+    frame_hdr[12] = ((NumOfNodesInUse_-1) << 4) | 0x08;
+    frame_hdr[13] = 0;
     unsigned char MSG[] = "This is a num_node synchronizing frame.";
     const int length_MSG = sizeof(MSG);
 
@@ -893,7 +888,9 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
         // actually a modified qwrite
         const size_t length_fw = 5;
         quadlet_t packet_FW[length_fw];
-        frame_hdr[6] = bswap_16(length_fw * 4);
+        // length field (big endian 16-bit integer)
+        frame_hdr[12] = 0;
+        frame_hdr[13] = length_fw * 4;
 
         packet_FW[0] = bswap_32(0xFFFF0000);
         packet_FW[1] = bswap_32(0xFFFF0000);
@@ -918,12 +915,12 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
 
         if (pcap_sendpacket(handle, frame, ethlength) != 0)
         {
-            std::cerr << "ERROR: send packet failed" << std::endl;
+            outStr << "ERROR: send packet failed" << std::endl;
             return -1;
         }
     }
     else{
-        std::cerr<<"ERROR: invalid mode number (0 or 1)"<<std::endl;
+        outStr << "ERROR: invalid mode number (0 or 1)" << std::endl;
         return -1;
     }
     return 0;
@@ -941,14 +938,14 @@ bool Eth1394Port::headercheck(uint8_t* header, bool isHUBtoPC) const
     unsigned int bd_index;    // index of board id
     if (isHUBtoPC) {
         // the header should be "Local MAC addr" + "CID,0x1394,boardid"
-        destAddr = reinterpret_cast<const uint8_t *>(frame_hdr+3);
-        srcAddr = reinterpret_cast<const uint8_t *>(frame_hdr);
+        destAddr = frame_hdr+6;
+        srcAddr = frame_hdr;
         bd_index = 11;
     }
     else {
         // the header should be "CID,0x1394,boardid" + "Local MAC addr"
-        destAddr = reinterpret_cast<const uint8_t *>(frame_hdr);
-        srcAddr = reinterpret_cast<const uint8_t *>(frame_hdr+3);
+        destAddr = frame_hdr;
+        srcAddr = frame_hdr+6;
         bd_index = 5;
     }
     bool isBroadcast = true;
@@ -980,7 +977,7 @@ bool Eth1394Port::headercheck(uint8_t* header, bool isHUBtoPC) const
         if (header[i+6] != srcAddr[i]) {
             outStr << "Header check failed for source address" << std::endl;
             print_mac(outStr, "Header", header+6);
-            print_mac(outStr, "DestAddr", srcAddr);
+            print_mac(outStr, "SrcAddr", srcAddr);
             return false;
         }
     }

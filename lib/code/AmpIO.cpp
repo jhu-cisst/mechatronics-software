@@ -901,11 +901,15 @@ bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data))) {
+        std::cout << "WriteQuadlet failed" << std::endl;
         return false;
+    }
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
+    if (!port->ReadQuadlet(BoardId, 12, read_data)) {
+        std::cout << "ReadQuadlet failed" << std::endl;
         return false;
+    }
     read_data = bswap_32(read_data);
     // Bit 31 indicates whether Ethernet is present
     if (!(read_data&0x80000000)) return false;

@@ -281,7 +281,8 @@ int main(int argc, char** argv)
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
             char line[80];
-            memset(line, ' ', sizeof(line));
+            memset(line, ' ', sizeof(line)-1);
+            line[sizeof(line)-1] = 0;
             for (i = cur_line; i < last_debug_line; i++)
                 mvwprintw(stdscr, i, lm, line);
             while (!debugStream.eof()) {

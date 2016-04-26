@@ -21,6 +21,7 @@
 #include <fstream>
 
 #include "FirewirePort.h"
+#include "Eth1394Port.h"
 #include "AmpIO.h"
 
 /*!
@@ -58,7 +59,7 @@ void ClearLines(int start, int end)
         mvprintw(start++, 9, blank);
 }
 
-bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
+bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
     bool pass = true;
     unsigned long data;
@@ -67,43 +68,72 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
     logFile << std::endl << "=== DIGITAL INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT4 and all digital inputs");
-    Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
 
-    usleep(1000);
-    Port.ReadAllBoards();
-    data = (Board.GetDigitalInput() & 0x0fff);
-    logFile << "   All inputs low: " << std::hex << data;
-    if (!data) {
-        sprintf(buf, "Setting all inputs low - PASS (%03lx)", data);
-        logFile << " - PASS" << std::endl;
+    logFile << "   All inputs low: ";
+    if (Board.WriteDigitalOutput(0x08, 0x08)) {  // DOUT is active high
+
+        usleep(1000);
+        if (Port->ReadAllBoards()) {
+            data = (Board.GetDigitalInput() & 0x0fff);
+            logFile << std::hex << data;
+            if (!data) {
+                sprintf(buf, "Setting all inputs low - PASS (%03lx)", data);
+                logFile << " - PASS" << std::endl;
+            }
+            else {
+                sprintf(buf, "Setting all inputs low - FAIL (%03lx)", data);
+                logFile << " - FAIL" << std::endl;
+                pass = false;
+            }
+        }
+        else {
+            strcpy(buf, "Failed to read from board");
+            logFile << " - Failed to read from board" << std::endl;
+            pass = false;
+        }
     }
     else {
-        sprintf(buf, "Setting all inputs low - FAIL (%03lx)", data);
-        logFile << " - FAIL" << std::endl;
+        strcpy(buf, "Failed to write to board");
+        logFile << " - Failed to write to board" << std::endl;
         pass = false;
     }
+    
     mvprintw(curLine++, 9, buf);
-    Board.WriteDigitalOutput(0x08, 0x00);  // DOUT is active low
+    logFile << "   All inputs high: ";
+    if (Board.WriteDigitalOutput(0x08, 0x00)) {  // DOUT is active low
 
-    usleep(1000);
-    Port.ReadAllBoards();
-    data = (Board.GetDigitalInput() & 0x0fff);
-    logFile << "   All inputs high: " << std::hex << data;
-    if (data == 0x0fff) {
-        sprintf(buf, "Setting all inputs high - PASS (%03lx)", data);
-        logFile << " - PASS" << std::endl;
+        usleep(1000);
+        if (Port->ReadAllBoards()) {
+            data = (Board.GetDigitalInput() & 0x0fff);
+            logFile << std::hex << data;
+            if (data == 0x0fff) {
+                sprintf(buf, "Setting all inputs high - PASS (%03lx)", data);
+                logFile << " - PASS" << std::endl;
+            }
+            else {
+                sprintf(buf, "Setting all inputs high - FAIL (%03lx)", data);
+                logFile << " - FAIL" << std::endl;
+                pass = false;
+            }
+        }
+        else {
+            strcpy(buf, "Failed to read from board");
+            logFile << " - Failed to read from board" << std::endl;
+            pass = false;
+        }
     }
     else {
-        sprintf(buf, "Setting all inputs high - FAIL (%03lx)", data);
-        logFile << " - FAIL" << std::endl;
+        strcpy(buf, "Failed to write to board");
+        logFile << " - Failed to write to board" << std::endl;
         pass = false;
     }
+
     mvprintw(curLine++, 9, buf);
     return pass;
 }
 
 
-bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
+bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
     int i, j;
     unsigned long darray[4];
@@ -121,7 +151,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     logFile << "   Preload to 0x000000: ";
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0);
-    Port.ReadAllBoards(); 
+    Port->ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
         logFile << std::hex << darray[i] << " ";
@@ -149,7 +179,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             EncUp(Board);
             usleep(100);
             logFile << "      ";
-            Port.ReadAllBoards(); 
+            Port->ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
                 logFile << darray[j];
@@ -199,7 +229,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     logFile << "   Preload to 0x000100: ";
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0x000100);
-    Port.ReadAllBoards(); 
+    Port->ReadAllBoards(); 
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
         logFile << std::hex << darray[i] << " ";
@@ -229,7 +259,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
             EncDown(Board);
             usleep(100);
             logFile << "      ";
-            Port.ReadAllBoards(); 
+            Port->ReadAllBoards(); 
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
                 logFile << std::hex << darray[j];
@@ -283,7 +313,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     return pass;
 }
 
-bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
+bool TestAnalogInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
     int i, j;
     char buf[80];
@@ -303,19 +333,28 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstre
     // Average 16 readings to reduce noise
     unsigned long pot[4] = { 0, 0, 0, 0};
     double potV[4];
+    int numValid = 0;
     for (i = 0; i < 16; i++) {
-        Port.ReadAllBoards();
-        for (j = 0; j < 4; j++)
-            pot[j] += Board.GetAnalogInput(j);
+        if (Port->ReadAllBoards()) {
+            numValid++;
+            for (j = 0; j < 4; j++)
+                pot[j] += Board.GetAnalogInput(j);
+        }
     }
-    logFile << "   Readings: ";
-    for (j = 0; j < 4; j++) {
-        pot[j] /= 16;
-        // Convert to voltage (16-bit converter, Vref = 4.5V)
-        potV[j] = pot[j]*4.5/65535;
-        logFile << potV[j] << " ";
-        if (fabs(potV[j] - measured) > 0.25)
-            pass = false;
+    if (numValid > 0) {
+        logFile << "   Readings: ";
+        for (j = 0; j < 4; j++) {
+            pot[j] /= numValid;
+            // Convert to voltage (16-bit converter, Vref = 4.5V)
+            potV[j] = pot[j]*4.5/65535;
+            logFile << potV[j] << " ";
+            if (fabs(potV[j] - measured) > 0.25)
+                pass = false;
+        }
+    }
+    else {
+        logFile << "   No valid readings!" << std::endl;
+        pass = false;
     }
     if (pass) {
         logFile << "- PASS" << std::endl;
@@ -332,7 +371,7 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstre
     return pass;
 }
 
-bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
+bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
     char buf[100];
     unsigned long status;
@@ -346,7 +385,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     mvprintw(curLine, 9, "Enable motor power -");
     refresh();
     sleep(1);
-    Port.ReadAllBoards();
+    Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Enable motor power: " << std::hex << status;
     if ((status&0x000cffff) != 0x000c0000) {
@@ -369,7 +408,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     // Enabling individual amplifiers
     Board.WriteAmpEnable(0x0f, 0x0f);
     usleep(1000);
-    Port.ReadAllBoards();
+    Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Amplifier enable: " << std::hex << status;
     mask = ignoreMV ? 0x0004ffff : 0x000cffff;
@@ -390,7 +429,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     // Turning amplifiers off
     Board.WriteAmpEnable(0x0f, 0);
     usleep(1000);
-    Port.ReadAllBoards();
+    Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Amplifier disable: " << std::hex << status;
     if ((status&mask) != (0x000c0000&mask)) {
@@ -408,7 +447,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     mvprintw(curLine, 9, "Disable motor power -");
     refresh();
     sleep(1);
-    Port.ReadAllBoards();
+    Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Disable motor power: " << std::hex << status;
     if ((status&0x000cffff) != 0) {
@@ -444,7 +483,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     // Turn off safety relay
     Board.WriteSafetyRelay(false);
     usleep(1000);
-    Port.ReadAllBoards();
+    Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Disable safety relay: " << std::hex << status;
     if ((status&0x00030000) != 0) {
@@ -461,7 +500,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, FirewirePort &Port, std::o
     return pass;
 }
 
-bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
+bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
     char buf[100];
     unsigned long status;
@@ -481,9 +520,9 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     dac = 0x8000;
     for (i = 0; i < 4; i++)
         Board.SetMotorCurrent(i, dac);
-    Port.WriteAllBoards();
+    Port->WriteAllBoards();
     sleep(1);  // wait for power to stabilize
-    Port.ReadAllBoards();
+    Port->ReadAllBoards();
     status = Board.GetStatus();
     if ((status&0x000cffff) != 0x000c0f0f) {
         sprintf(buf,"Failed to enable power (%08lx) - is motor power connected?", status);
@@ -553,14 +592,14 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
 
         for (i = 0; i < 4; i++)
             Board.SetMotorCurrent(i, dac);
-        Port.WriteAllBoards();
+        Port->WriteAllBoards();
         sleep(1);
-        Port.ReadAllBoards();
+        Port->ReadAllBoards();
     }
 
     for (i = 0; i < 4; i++)
         Board.SetMotorCurrent(i, 0x8000);
-    Port.WriteAllBoards();
+    Port->WriteAllBoards();
     Board.WriteAmpEnable(0x0f, 0);
     Board.WritePowerEnable(false);
 
@@ -573,7 +612,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, FirewirePort &Port, std::ofst
     return pass;
 }
 
-bool TestEthernet(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &logFile)
+bool TestEthernet(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
     logFile << std::endl << "=== Ethernet (KSZ8851) Test ===" << std::endl;
     if (Board.GetFirmwareVersion() < 5) {
@@ -637,9 +676,21 @@ bool TestEthernet(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     return ret;
 }
 
+void PrintDebugStream(std::stringstream &debugStream)
+{
+    char line[80];
+    while (!debugStream.eof()) {
+        debugStream.getline(line, sizeof(line));
+        std::cerr << line << std::endl;
+    }
+    debugStream.clear();
+    debugStream.str("");
+}
+
 int main(int argc, char** argv)
 {
     int i;
+    bool useFireWire = true;
     int port = 0;
     int board = 0;
     bool requireQLA_SN = true;
@@ -649,8 +700,21 @@ int main(int argc, char** argv)
         for (i = 1; i < argc; i++) {
             if (argv[i][0] == '-') {
                 if (argv[i][1] == 'p') {
-                    port = atoi(argv[i]+2);
-                    std::cerr << "Selecting port " << port << std::endl;
+                    // -p option can be -pN, -pfwN, or -pethN, where N
+                    // is the port number. -pN is equivalent to -pfwN
+                    // for backward compatibility.
+                    if (strncmp(argv[i]+2, "fw", 2) == 0)
+                        port = atoi(argv[i]+4);
+                    else if (strncmp(argv[i]+2, "eth", 3) == 0) {
+                        useFireWire = false;
+                        port = atoi(argv[i]+5);
+                    }
+                    else
+                        port = atoi(argv[i]+2);
+                    if (useFireWire)
+                        std::cerr << "Selecting FireWire port " << port << std::endl;
+                    else
+                        std::cerr << "Selecting Ethernet port " << port << std::endl;
                 }
                 else if (argv[i][1] == 'k')  {
                     requireQLA_SN = false;
@@ -670,17 +734,29 @@ int main(int argc, char** argv)
                 }
                 args_found++;
             }
-       }
+        }
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    FirewirePort Port(port, debugStream);
-    if (!Port.IsOK()) {
-        std::cerr << "Failed to initialize firewire port " << port << std::endl;
-        return -1;
+    BasePort *Port;
+    if (useFireWire) {
+        Port = new FirewirePort(port, debugStream);
+        if (!Port->IsOK()) {
+            PrintDebugStream(debugStream);
+            std::cerr << "Failed to initialize firewire port " << port << std::endl;
+            return -1;
+        }
+    }
+    else {
+        Port = new Eth1394Port(port, debugStream);
+        if (!Port->IsOK()) {
+            PrintDebugStream(debugStream);
+            std::cerr << "Failed to initialize ethernet port " << port << std::endl;
+            return -1;
+        }
     }
     AmpIO Board(board);
-    Port.AddBoard(&Board);
+    Port->AddBoard(&Board);
 
     std::string logFilename("QLA_");
     std::string QLA_SN = Board.GetQLASerialNumber();
@@ -720,7 +796,8 @@ int main(int argc, char** argv)
     mvprintw(6, 9, "3) Test analog feedback:");
     mvprintw(7, 9, "4) Test motor power control:");
     mvprintw(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
-    mvprintw(9, 9, "6) Test Ethernet controller:");
+    if (useFireWire)
+        mvprintw(9, 9, "6) Test Ethernet controller:");
 
     refresh();
 
@@ -794,17 +871,19 @@ int main(int argc, char** argv)
                 break;
 
             case '6':
-                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
-                    mvprintw(9, 46, "PASS");
-                else
-                    mvprintw(9, 46, "FAIL");
+                if (useFireWire) {
+                    ClearLines(TEST_START_LINE, DEBUG_START_LINE);
+                    if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
+                        mvprintw(9, 46, "PASS");
+                    else
+                        mvprintw(9, 46, "FAIL");
+                }
                 break;
         }
 
         refresh();
     }
 
-    Port.RemoveBoard(board);
+    Port->RemoveBoard(board);
     endwin();
 }

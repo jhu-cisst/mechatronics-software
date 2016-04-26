@@ -45,7 +45,7 @@ protected:
     };
 
     pcap_t *handle;
-    uint16_t frame_hdr[7];
+    uint8_t frame_hdr[14];  // dest addr (6), src addr (6), length (2)
 
     int NumOfNodes_;    // number of nodes exist
     int NumOfNodesInUse_;   //number of nodes under control
@@ -56,6 +56,7 @@ protected:
     Eth1394CallbackType eth1394_read_callback;
 
     bool headercheck(uint8_t* header, bool isHUBtoPC) const;
+    bool checkCRC(const unsigned char *packet) const;
 
     /**
      * @brief
