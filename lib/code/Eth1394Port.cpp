@@ -125,7 +125,7 @@ bool Eth1394Port::Init()
     handle = pcap_open_live(dev->name,
                             BUFSIZ,  // data buffer size
                             0,       // turn off promisc mode
-                            100,     // read timeout 100 ms
+                            1,       // read timeout 1 ms
                             errbuf); // error buffer
     if(handle == NULL)
     {
