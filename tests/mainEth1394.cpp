@@ -20,6 +20,9 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
+const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
+const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
+
 #if Amp1394_HAS_RAW1394
 // Ethernet debug
 void PrintEthernetDebug(AmpIO &Board)
@@ -39,9 +42,17 @@ void PrintEthernetDebug(AmpIO &Board)
     if (status&0x0100) std::cout << "qRead ";
     if (status&0x0080) std::cout << "qWrite ";
     if (status&0x0040) std::cout << "bRead ";
-    if (status&0x0020) std::cout << "PME ";
+    if (status&0x0020) std::cout << "bWrite ";
+    //if (status&0x0020) std::cout << "PME ";
     if (!(status&0x0010)) std::cout << "IRQ ";
-    std::cout << "state=" << (int)(status&0x000f) << std::endl;
+    if (status&0x0008) std::cout << "KSZ-idle ";
+    if (status&0x0004) std::cout << "ETH-idle ";
+    int waitInfo = status&0x0003;
+    if (waitInfo == 0) std::cout << "wait-none";
+    else if (waitInfo == 1) std::cout << "wait-ack";
+    else if (waitInfo == 2) std::cout << "wait-ack-clear";
+    else std::cout << "wait-flush";
+    std::cout << std::endl;
 }
 
 // Ethernet status, as reported by KSZ8851 on FPGA board
@@ -105,6 +116,7 @@ bool InitEthernet(AmpIO &Board)
         return false;
     }
     std::cout << "   Ethernet controller status = " << std::hex << status << std::endl;
+    PrintEthernetDebug(Board);
 
     // Reset the board
     Board.ResetKSZ8851();
@@ -117,6 +129,7 @@ bool InitEthernet(AmpIO &Board)
 
     if (!(status&0x2000)) {
         std::cout << "   Ethernet failed initialization" << std::endl;
+        PrintEthernetDebug(Board);
         return false;
     }
 
@@ -128,8 +141,10 @@ bool InitEthernet(AmpIO &Board)
 
 
     // Check that KSZ8851 registers are as expected
-    if (!CheckEthernet(Board))
+    if (!CheckEthernet(Board)) {
+        PrintEthernetDebug(Board);
         return false;
+    }
 
     // Display the MAC address
     AmpIO_UInt16 regLow, regMid, regHigh;
@@ -208,10 +223,11 @@ int main()
         std::cout << "  0) Quit" << std::endl;
         std::cout << "  1) Quadlet write to board" << std::endl;
         std::cout << "  2) Quadlet read from board" << std::endl;
-        std::cout << "  3) Block read from  board" << std::endl;
-        std::cout << "  4) Ethernet port status" << std::endl;
-        std::cout << "  5) Initialize Ethernet port" << std::endl;
-        std::cout << "  6) Ethernet debug info" << std::endl;
+        std::cout << "  3) Block read from board" << std::endl;
+        std::cout << "  4) Block write to board" << std::endl;
+        std::cout << "  5) Ethernet port status" << std::endl;
+        std::cout << "  6) Initialize Ethernet port" << std::endl;
+        std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -225,6 +241,7 @@ int main()
         quadlet_t read_data, write_data;
         quadlet_t fw_block_data[16];
         quadlet_t eth_block_data[16];
+        quadlet_t write_block[4] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444 };
         int i;
         char buf[5];
 
@@ -266,14 +283,48 @@ int main()
                 break;
 
         case '4':
-                PrintEthernetStatus(board1);
+                // Read from DAC (quadlet reads), modify values, write them using
+                // a block write, then read them again to check.
+                // Note that test can be done using FireWire by changing EthPort to FwPort.
+                for (i = 0; i < 4; i++) {
+                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
+                    EthPort.ReadQuadlet(0, addr, write_block[i]);
+                }
+                std::cout << "Read from DAC: " << std::hex << bswap_32(write_block[0]) << ", "
+                          << bswap_32(write_block[1]) << ", " << bswap_32(write_block[2]) << ", "
+                          << bswap_32(write_block[3]) << std::endl;
+                for (i = 0; i < 4; i++) {
+                    write_block[i] = bswap_32(VALID_BIT | ((bswap_32(write_block[i])+(i+1)*0x100) & DAC_MASK));
+                }
+#if 1
+                if (!EthPort.WriteBlock(0, 0, write_block, sizeof(write_block))) {
+                    std::cout << "Failed to write block data via Ethernet port" << std::endl;
+                    break;
+                }
+#else
+                for (i = 0; i < 4; i++) {
+                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
+                    EthPort.WriteQuadlet(0, addr, write_block[i]);
+                }
+#endif
+                for (i = 0; i < 4; i++) {
+                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
+                    EthPort.ReadQuadlet(0, addr, write_block[i]);
+                }
+                std::cout << "Read from DAC: " << std::hex << bswap_32(write_block[0]) << ", "
+                          << bswap_32(write_block[1]) << ", " << bswap_32(write_block[2]) << ", "
+                          << bswap_32(write_block[3]) << std::endl;
                 break;
 
         case '5':
-                InitEthernet(board1);
+                PrintEthernetStatus(board1);
                 break;
 
         case '6':
+                InitEthernet(board1);
+                break;
+
+        case '7':
                 PrintEthernetDebug(board1);
                 break;
         }

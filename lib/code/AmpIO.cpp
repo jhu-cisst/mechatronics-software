@@ -168,6 +168,17 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     out << std::dec;
 }
 
+bool AmpIO::HasEthernet(void) const
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return false;
+    read_data = bswap_32(read_data);
+    // Bit 31 indicates whether Ethernet is present
+    return (read_data&0x80000000);
+}
+
 AmpIO_UInt32 AmpIO::GetStatus(void) const
 {
     return bswap_32(read_buffer[STATUS_OFFSET]);

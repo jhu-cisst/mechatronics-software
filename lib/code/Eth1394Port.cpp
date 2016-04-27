@@ -791,7 +791,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     if (length == 4) {
         tcode = Eth1394Port::QWRITE;
         length_fw = 5;
-    } else if(length > 4 && length%4 == 0){
+    } else if ((length > 4) && (length%4 == 0)){
         tcode = Eth1394Port::BWRITE;
         length_fw = 5 + length/4 + 1;
     }
@@ -803,12 +803,10 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     quadlet_t *packet_FW = new quadlet_t[length_fw];
 
     // header
-    //! \todo fix packet[3] bug for block write request
     make_1394_header(packet_FW, node, addr, tcode);
 
     //quadlet write
-    if(length == 4){
-//        packet_FW[3] = bswap_32(buffer[0]);
+    if (length == 4) {
         packet_FW[3] = buffer[0];
         packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
     }

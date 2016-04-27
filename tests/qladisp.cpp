@@ -157,6 +157,7 @@ int main(int argc, char** argv)
             std::cerr << "Failed to initialize ethernet port " << port << std::endl;
             return -1;
         }
+        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
     }
 
     // Currently hard-coded for up to 2 boards; initialize at mid-range

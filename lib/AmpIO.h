@@ -53,6 +53,9 @@ public:
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
+    // Returns true if FPGA has Ethernet (Rev 2.0+)
+    bool HasEthernet(void) const;
+
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
     // by FirewirePort::ReadAllBoards. To read data immediately from the boards,

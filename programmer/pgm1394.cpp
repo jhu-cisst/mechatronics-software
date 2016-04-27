@@ -280,7 +280,7 @@ int main(int argc, char** argv)
     int i;
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
-    std::string mcsName("FPGA1394-QLA.mcs");
+    std::string mcsName;
 
     int args_found = 0;
     for (i = 1; i < argc; i++) {
@@ -310,6 +310,12 @@ int main(int argc, char** argv)
     AmpIO Board(board);
     Port.AddBoard(&Board);
 
+    if (mcsName.empty()) {
+        if (Board.HasEthernet())
+            mcsName = std::string("FPGA1394Eth-QLA.mcs");
+        else
+            mcsName = std::string("FPGA1394-QLA.mcs");
+    }
     mcsFile promFile;
     if (!promFile.OpenFile(mcsName)) {
         std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
