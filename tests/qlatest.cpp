@@ -5,10 +5,11 @@
  *
  * This program is used to test the FPGA1394+QLA board, assuming that it is
  * connected to the FPGA1394-QLA-Test board. It relies on the curses library
- * and the AmpIO library (which depends on libraw1394).
+ * and the AmpIO library (which depends on libraw1394 and/or pcap).
  *
  * Usage: qlatest [-pP] <board num>
- *        where P is the Firewire port number (default 0)
+ *        where P is the Firewire port number (default 0),
+ *        or a string such as ethP and fwP, where P is the port number
  *
  ******************************************************************************/
 
@@ -20,8 +21,13 @@
 #include <sstream>
 #include <fstream>
 
+#include <Amp1394/AmpIORevision.h>
+#if Amp1394_HAS_RAW1394
 #include "FirewirePort.h"
+#endif
+#if Amp1394_HAS_PCAP
 #include "Eth1394Port.h"
+#endif
 #include "AmpIO.h"
 
 /*!
@@ -702,7 +708,11 @@ void PrintDebugStream(std::stringstream &debugStream)
 int main(int argc, char** argv)
 {
     int i;
+#if Amp1394_HAS_RAW1394
     bool useFireWire = true;
+#else
+    bool useFireWire = false;
+#endif
     int port = 0;
     int board = 0;
     bool requireQLA_SN = true;
@@ -752,14 +762,20 @@ int main(int argc, char** argv)
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
     BasePort *Port;
     if (useFireWire) {
+#if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
         if (!Port->IsOK()) {
             PrintDebugStream(debugStream);
             std::cerr << "Failed to initialize firewire port " << port << std::endl;
             return -1;
         }
+#else
+        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
+        return -1;
+#endif
     }
     else {
+#if Amp1394_HAS_PCAP
         Port = new Eth1394Port(port, debugStream);
         if (!Port->IsOK()) {
             PrintDebugStream(debugStream);
@@ -767,6 +783,10 @@ int main(int argc, char** argv)
             return -1;
         }
         Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+#else
+        std::cerr << "Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
+        return -1;
+#endif
     }
     AmpIO Board(board);
     Port->AddBoard(&Board);

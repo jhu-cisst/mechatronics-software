@@ -5,7 +5,7 @@
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
   Created on: 2012
 
-  (C) Copyright 2012-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2016 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -20,10 +20,11 @@ http://www.cisst.org/cisst/license.txt.
  *
  * This program continuously displays the sensor feedback from the selected
  * board. It relies on the curses library and the AmpIO library (which
- * depends on libraw1394).
+ * depends on libraw1394 and/or pcap).
  *
  * Usage: sensor [-pP] <board num>
- *        where P is the Firewire port number (default 0)
+ *        where P is the Firewire port number (default 0),
+ *        or a string such as ethP and fwP, where P is the port number
  *
  ******************************************************************************/
 
@@ -34,8 +35,13 @@ http://www.cisst.org/cisst/license.txt.
 #include <sstream>
 #include <vector>
 
+#include <Amp1394/AmpIORevision.h>
+#if Amp1394_HAS_RAW1394
 #include "FirewirePort.h"
+#endif
+#if Amp1394_HAS_PCAP
 #include "Eth1394Port.h"
+#endif
 
 #include "AmpIO.h"
 
@@ -81,7 +87,11 @@ int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
     unsigned int i, j;
+#if Amp1394_HAS_RAW1394
     bool useFireWire = true;
+#else
+    bool useFireWire = false;
+#endif
     int port = 0;
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
@@ -143,14 +153,20 @@ int main(int argc, char** argv)
 
     BasePort *Port;
     if (useFireWire) {
+#if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
         if (!Port->IsOK()) {
             PrintDebugStream(debugStream);
             std::cerr << "Failed to initialize firewire port " << port << std::endl;
             return -1;
         }
+#else
+        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
+        return -1;
+#endif
     }
     else {
+#if Amp1394_HAS_PCAP
         Port = new Eth1394Port(port, debugStream);
         if (!Port->IsOK()) {
             PrintDebugStream(debugStream);
@@ -158,6 +174,10 @@ int main(int argc, char** argv)
             return -1;
         }
         Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+#else
+        std::cerr << "Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
+        return -1;
+#endif
     }
 
     // Currently hard-coded for up to 2 boards; initialize at mid-range

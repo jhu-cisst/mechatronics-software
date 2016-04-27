@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -30,6 +30,11 @@ else (WIN32)
       target_link_libraries(qladisp raw1394)
       target_link_libraries(qlatest raw1394)
     endif (Amp1394_HAS_RAW1394)
+
+    if (Amp1394_HAS_PCAP)
+      target_link_libraries(qladisp ${PCAP_LIBRARIES})
+      target_link_libraries(qlatest ${PCAP_LIBRARIES})
+    endif (Amp1394_HAS_PCAP)
 
     install (TARGETS qladisp qlatest
              COMPONENT Amp1394-utils
