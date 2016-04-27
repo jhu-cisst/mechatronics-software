@@ -380,6 +380,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     unsigned long mask;
 
     logFile << std::endl << "=== Motor Power Control ===" << std::endl;
+ retry:
     // Enabling motor power supply
     Board.WritePowerEnable(true);
     mvprintw(curLine, 9, "Enable motor power -");
@@ -389,8 +390,17 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     status = Board.GetStatus();
     logFile << "   Enable motor power: " << std::hex << status;
     if ((status&0x000cffff) != 0x000c0000) {
-        logFile << " - FAIL" << std::endl;
         sprintf(buf, "FAIL (%08lx) - is motor power connected?", status);
+        mvprintw(curLine++, 30, buf);
+        mvprintw(curLine, 9, "Do you want to retry (y/n)? ");
+        getstr(buf);
+        if ((buf[0] == 'y') || (buf[0] == 'Y')) {
+            mvprintw(curLine, 9, "                               ");
+            curLine -= 1;
+            mvprintw(curLine, 30, "                                           ");
+            goto retry;
+        }
+        logFile << " - FAIL" << std::endl;
         pass = false;
     }
     else {
@@ -577,7 +587,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
         if ((newTemp1 >= temp1) && (newTemp2 >= temp2))
             logFile << " - PASS" << std::endl;
         else
-            logFile << " - FAIL" << std::endl;
+            logFile << " - fail" << std::endl;
         sprintf(buf, "%4d (%s)    %4d (%s)", newTemp1, ((newTemp1 >= temp1) ? "PASS" : "FAIL"),
                 newTemp2, ((newTemp2 >= temp2) ? "PASS" : "FAIL"));
         mvprintw(curLine+3, 15, buf);
@@ -673,6 +683,8 @@ bool TestEthernet(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
         }
         logFile << std::endl;
     }
+    // Reset the board again (to restore MAC address)
+    Board.ResetKSZ8851();
     return ret;
 }
 
@@ -797,7 +809,7 @@ int main(int argc, char** argv)
     mvprintw(6, 9, "3) Test analog feedback:");
     mvprintw(7, 9, "4) Test motor power control:");
     mvprintw(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
-    if (useFireWire)
+    if (useFireWire && Board.HasEthernet())
         mvprintw(9, 9, "6) Test Ethernet controller:");
 
     refresh();
@@ -872,7 +884,7 @@ int main(int argc, char** argv)
                 break;
 
             case '6':
-                if (useFireWire) {
+                if (useFireWire && Board.HasEthernet()) {
                     ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                     if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
                         mvprintw(9, 46, "PASS");
