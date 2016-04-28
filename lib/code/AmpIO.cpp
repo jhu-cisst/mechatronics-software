@@ -27,6 +27,7 @@ http://www.cisst.org/cisst/license.txt.
 inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
 #else
 #include <byteswap.h>
+#include <unistd.h>  // for usleep
 #endif
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */

@@ -8,6 +8,7 @@
 #include <getopt.h>
 #include <byteswap.h>
 #include <sys/time.h>
+#include <unistd.h>  // for usleep
 
 #include "FirewirePort.h"
 #include "AmpIO.h"
