@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -29,6 +29,11 @@ endif (CXX_SUPPORTS_WEXTRA)
 check_cxx_compiler_flag ("-Wall" CXX_SUPPORTS_WALL)
 if (CXX_SUPPORTS_WALL)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+endif (CXX_SUPPORTS_WALL)
+
+check_cxx_compiler_flag ("-fPIC" CXX_SUPPORTS_FPIC)
+if (CXX_SUPPORTS_FPIC)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 endif (CXX_SUPPORTS_WALL)
 
 # ... for the build tree
