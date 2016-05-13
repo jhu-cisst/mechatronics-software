@@ -24,17 +24,17 @@ include (CheckCXXCompilerFlag)
 check_cxx_compiler_flag ("-Wextra" CXX_SUPPORTS_WEXTRA)
 if (CXX_SUPPORTS_WEXTRA)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
-endif (CXX_SUPPORTS_WEXTRA)
+endif ()
 
 check_cxx_compiler_flag ("-Wall" CXX_SUPPORTS_WALL)
 if (CXX_SUPPORTS_WALL)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
-endif (CXX_SUPPORTS_WALL)
+endif ()
 
 check_cxx_compiler_flag ("-fPIC" CXX_SUPPORTS_FPIC)
 if (CXX_SUPPORTS_FPIC)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
-endif (CXX_SUPPORTS_WALL)
+endif ()
 
 # ... for the build tree
 set (CONF_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lib" "${CMAKE_CURRENT_BINARY_DIR}")
@@ -63,9 +63,9 @@ add_subdirectory (lib)
 find_package (Curses)
 if (CURSES_FOUND)
   add_subdirectory(tests)
-else (CURSES_FOUND)
+else ()
   message ("Can't compile curses based test programs for Amp1394, make sure you have libcurses dev installed")
-endif (CURSES_FOUND)
+endif ()
 
 # Utility to flash/test board
 add_subdirectory (programmer)
