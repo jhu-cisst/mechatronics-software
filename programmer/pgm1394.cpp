@@ -253,7 +253,10 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
     address = 0x0000;
     for (size_t i = 0; i < str.length(); i++) {
         wbyte = str.at(i);
-        Board.PromWriteByte25AA128(address, wbyte);
+        if (!Board.PromWriteByte25AA128(address, wbyte)) {
+            std::cerr << "Failed to write byte " << i << std::endl;
+            return false;
+        }
         address += 1;  // inc to next byte
     }
 

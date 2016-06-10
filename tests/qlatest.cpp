@@ -312,6 +312,78 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
         mvprintw(curLine++, 49, buf);
         refresh();
     }
+
+    mvprintw(curLine, 9, "Testing direct encoder input (A,B,I)");
+    bool directPass = true;
+
+    // Test A channel directly
+    AmpIO_UInt8 chanA;
+    // Channel A low (DOUT is inverted)
+    Board.WriteDigitalOutput(0x01, 0x01);
+    Port->ReadAllBoards(); 
+    chanA = Board.GetEncoderChannelA();
+    if (chanA != 0x00) {
+        logFile << "   Setting channel A = 0, FAIL: " << std::hex << (int)chanA << std::endl;
+        directPass = false;
+        pass = false;
+    }
+    // Channel A high (DOUT is inverted)
+    Board.WriteDigitalOutput(0x01, 0x00);
+    Port->ReadAllBoards(); 
+    chanA = Board.GetEncoderChannelA();
+    if (chanA != 0x0f) {
+        logFile << "   Setting channel A = 1, FAIL: " << std::hex << (int)chanA << std::endl;
+        directPass = false;
+        pass = false;
+    }
+
+    // Test B channel directly
+    AmpIO_UInt8 chanB;
+    // Channel B low (DOUT is inverted)
+    Board.WriteDigitalOutput(0x02, 0x02);
+    Port->ReadAllBoards(); 
+    chanB = Board.GetEncoderChannelB();
+    if (chanB != 0x00) {
+        logFile << "   Setting channel B = 0, FAIL: " << std::hex << (int)chanB << std::endl;
+        directPass = false;
+        pass = false;
+    }
+    // Channel B high (DOUT is inverted)
+    Board.WriteDigitalOutput(0x02, 0x00);
+    Port->ReadAllBoards(); 
+    chanB = Board.GetEncoderChannelB();
+    if (chanB != 0x0f) {
+        logFile << "   Setting channel B = 1, FAIL: " << std::hex << (int)chanB << std::endl;
+        directPass = false;
+        pass = false;
+    }
+
+    // Test index
+    // Index low (DOUT is inverted)
+    AmpIO_UInt8 index;
+    Board.WriteDigitalOutput(0x04, 0x04);
+    Port->ReadAllBoards(); 
+    index = Board.GetEncoderIndex();
+    if (index != 0x00) {
+        logFile << "   Setting index = 0, FAIL: " << std::hex << (int)index << std::endl;
+        directPass = false;
+        pass = false;
+    }
+    // Index high (DOUT is inverted)
+    Board.WriteDigitalOutput(0x04, 0x00);
+    Port->ReadAllBoards(); 
+    index = Board.GetEncoderIndex();
+    if (index != 0x0f) {
+        logFile << "   Setting index = 1, FAIL: " << std::hex << (int)index << std::endl;
+        directPass = false;
+        pass = false;
+    }
+
+    if (directPass)
+        mvprintw(curLine++, 49, "- PASS");
+    else
+        mvprintw(curLine++, 49, "- FAIL");
+
     if (pass)
         logFile << "   Overall result: PASS" << std::endl;
     else
