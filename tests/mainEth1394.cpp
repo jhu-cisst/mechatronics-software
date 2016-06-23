@@ -23,6 +23,30 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 
+AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
+{
+    AmpIO_UInt32 crc = 0xffffffff;
+    for (size_t i = 0; i < len; i++) {
+        for (size_t j = 0; j < 8; j++) {
+            if (((crc >> 31) ^ (data[i] >> j)) & 0x01)
+                crc = (crc << 1) ^ 0x04c11db7;
+            else
+                crc = crc << 1;
+        }
+    }
+    return crc;    
+}
+
+// Compute parameters to initialize multicast hash table
+void ComputeMulticastHash(unsigned char *MulticastMAC, AmpIO_UInt8 &regAddr, AmpIO_UInt16 &regData)
+{
+    AmpIO_UInt32 crc = KSZ8851CRC(MulticastMAC, 6);
+    int regOffset = (crc >> 29) & 0x0006;  // first 2 bits of CRC (x2)
+    int regBit = (crc >> 26) & 0x00F;      // next 4 bits of CRC
+    regAddr = 0xA0 + regOffset;            // 0xA0 --> MAHTR0 (MAC Address Hash Table Register 0)
+    regData = (1 << regBit);
+}
+
 #if Amp1394_HAS_RAW1394
 // Ethernet debug
 void PrintEthernetDebug(AmpIO &Board)
@@ -44,7 +68,8 @@ void PrintEthernetDebug(AmpIO &Board)
     if (status&0x0040) std::cout << "bRead ";
     if (status&0x0020) std::cout << "bWrite ";
     //if (status&0x0020) std::cout << "PME ";
-    if (!(status&0x0010)) std::cout << "IRQ ";
+    //if (!(status&0x0010)) std::cout << "IRQ ";
+    if ((status&0x0010)) std::cout << "multicast ";
     if (status&0x0008) std::cout << "KSZ-idle ";
     if (status&0x0004) std::cout << "ETH-idle ";
     int waitInfo = status&0x0003;
@@ -96,6 +121,13 @@ bool CheckEthernet(AmpIO &Board)
     ret &= CheckRegister(Board, 0x86, 0x4000, 0x4000);  // Enable QMU receive frame data pointer auto increment
     ret &= CheckRegister(Board, 0x9C, 0x00ff, 0x0001);  // Configure receive frame threshold for 1 frame
     ret &= CheckRegister(Board, 0x74, 0xfffe, 0x7CE0);
+    // Check multicast hash table
+    unsigned char MulticastMAC[6];
+    Eth1394Port::GetDestMulticastMacAddr(MulticastMAC);
+    AmpIO_UInt8 HashReg;
+    AmpIO_UInt16 HashValue;
+    ComputeMulticastHash(MulticastMAC, HashReg, HashValue);
+    ret &= CheckRegister(Board, HashReg, 0xffff, HashValue);
     ret &= CheckRegister(Board, 0x82, 0x03f7, 0x0020);  // Enable QMU frame count threshold (1), no auto-dequeue
     ret &= CheckRegister(Board, 0x90, 0xffff, 0x2000);  // Enable receive interrupts (TODO: also consider link change interrupt)
     ret &= CheckRegister(Board, 0x70, 0x0001, 0x0001);
@@ -162,7 +194,7 @@ static char QuadletReadCallbackBoardId = 0;
 
 bool QuadletReadCallback(Eth1394Port &, unsigned char boardId, std::ostream &debugStream)
 {
-    if (QuadletReadCallbackBoardId != boardId) {
+    if ((QuadletReadCallbackBoardId != boardId) && (boardId != 0xff)) {
         debugStream << "Warning: QuadletReadCallback called for board " << (unsigned int) boardId
                     << ", expected board " << (unsigned int) QuadletReadCallbackBoardId << std::endl;
         return false;
@@ -173,6 +205,15 @@ bool QuadletReadCallback(Eth1394Port &, unsigned char boardId, std::ostream &deb
 
 int main()
 {
+    // Compute the hash table values used by the KSZ8851 chip to filter for multicast packets.
+    // The results (RegAddr and RegData) are hard-coded in the FPGA code (EthernetIO.v).
+    unsigned char MulticastMAC[6];
+    Eth1394Port::GetDestMulticastMacAddr(MulticastMAC);
+    AmpIO_UInt8 RegAddr;
+    AmpIO_UInt16 RegData;
+    ComputeMulticastHash(MulticastMAC, RegAddr, RegData);
+    std::cout << "Multicast hash table: register " << std::hex << (int)RegAddr << ", data = " << RegData << std::endl;
+
     // Hard-coded for board #0
     AmpIO board1(0);
     AmpIO board2(0);
@@ -228,6 +269,7 @@ int main()
         std::cout << "  5) Ethernet port status" << std::endl;
         std::cout << "  6) Initialize Ethernet port" << std::endl;
         std::cout << "  7) Ethernet debug info" << std::endl;
+        std::cout << "  8) Multicast quadlet read" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -301,7 +343,11 @@ int main()
                     std::cout << "Failed to write block data via Ethernet port" << std::endl;
                     break;
                 }
+                PrintEthernetDebug(board1);
 #else
+                //For testing (first write fails)
+                //addr = 0x0001 | ((1) << 4);  // channel 1-4, DAC Control
+                //EthPort.WriteQuadlet(0, addr, write_block[0]);
                 for (i = 0; i < 4; i++) {
                     addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
                     EthPort.WriteQuadlet(0, addr, write_block[i]);
@@ -327,6 +373,16 @@ int main()
         case '7':
                 PrintEthernetDebug(board1);
                 break;
+
+        case '8':   // Read request via Ethernet multicast
+                read_data = 0;
+                addr = 0;  // Return status register
+                if (EthPort.ReadQuadlet(0xff, addr, read_data))
+                    std::cout << "Read quadlet data: " << std::hex << bswap_32(read_data) << std::endl;
+                else
+                    std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
+                break;
+
         }
     }
 

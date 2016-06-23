@@ -2,9 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  Author(s):  Zihan Chen
+  Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2016 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -106,6 +106,17 @@ protected:
 
 public:
     Eth1394Port(int portNum, std::ostream &debugStream = std::cerr, Eth1394CallbackType cb = 0);
+
+    // Returns the destination MAC address (6 bytes)
+    // The first 3 characters are FA:61:OE, which is the CID assigned to LCSR by IEEE
+    // The next 2 characters are 13:94
+    // The last character is 0 (set it to the board address)
+    static void GetDestMacAddr(unsigned char *macAddr);
+
+    // Returns the destination multicast MAC address (6 bytes)
+    // The first 3 characters are FB:61:OE, which is the CID assigned to LCSR by IEEE, with the multicast bit set
+    // The last 3 characters are 13:94:FF
+    static void GetDestMulticastMacAddr(unsigned char *macAddr);
 
     // For now, always returns 1
     int NumberOfUsers(void) { return 1; }

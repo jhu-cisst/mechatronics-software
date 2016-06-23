@@ -2,9 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  Author(s):  Zihan Chen
+  Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2016 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -65,6 +65,26 @@ Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394Callback
         eth1394_write_nodeidmode(1);
     else
         outStr << "Initialization failed" << std::endl;
+}
+
+void Eth1394Port::GetDestMacAddr(unsigned char *macAddr)
+{
+    // CID,0x1394,boardid(0)
+    macAddr[0] = 0xFA;
+    macAddr[1] = 0x61;
+    macAddr[2] = 0x0E;
+    macAddr[3] = 0x13;
+    macAddr[4] = 0x94;
+    macAddr[5] = 0x00;
+}
+
+void Eth1394Port::GetDestMulticastMacAddr(unsigned char *macAddr)
+{
+    // Same as GetDestMacAddr, except with multicast bit set and
+    // last byte set to 0xFF.
+    GetDestMacAddr(macAddr);
+    macAddr[0] |= 0x01;
+    macAddr[5] = 0xFF;
 }
 
 void Eth1394Port::BoardInUseIntegerUpdate(void)
@@ -134,7 +154,8 @@ bool Eth1394Port::Init()
     }
 
     // initialize ethernet header (FA-61-OE is CID assigned to LCSR by IEEE)
-    u_int8_t eth_dst[6] = {0xFA,0x61,0x0E,0x13,0x94,0x00};  // CID,0x1394,boardid(0)
+    u_int8_t eth_dst[6];
+    GetDestMacAddr(eth_dst);
     u_int8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
 
     // Get local MAC address. There doesn't seem to be a better (portable) way to do this.
@@ -197,7 +218,12 @@ bool Eth1394Port::Init()
     frame_hdr[12] = 0;   // length field
     frame_hdr[13] = 0;   // length field
 
-    return this->ScanNodes();
+    bool ret = this->ScanNodes();
+    if (!ret) {
+        pcap_close(handle);
+        handle = 0;
+    }
+    return ret;
 }
 
 bool Eth1394Port::ScanNodes(void)
@@ -211,63 +237,58 @@ bool Eth1394Port::ScanNodes(void)
 
     NumOfNodes_ = 0;
     quadlet_t data;
-    for (size_t bid = 0; bid < BoardIO::MAX_BOARDS; bid++)
-    {
-        if (eth1394_read(bid, 0x04, 4, &data))
-            continue;   // continue on error
 
-        // check hardware version
-        data = bswap_32(data);
-        if (data != QLA1_String) {
-            outStr << "Node " << bid << " is not a QLA board" << std::endl
-                   << "data = " << std::hex << data << std::endl;
-            continue;
-        }
-
-        // read firmware version
-        unsigned long fver = 0;
-        if (eth1394_read(bid, 0x07, 4, &data)) {
-            outStr << "ScanNodes: unable to read firmware version from node "
-                   << bid << std::endl;
-            continue;
-        }
-        data = bswap_32(data);
-        fver = data;
-
-        // verify boardid
-        unsigned long board_ret = 0;
-        if (eth1394_read(bid, 0x00, 4, &data)) {
-            outStr << "ScanNodes: unable to read status from node "
-                   << bid << std::endl;
-            continue;
-        }
-        data = bswap_32(data);
-        // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
-        board_ret = (data & BOARD_ID_MASK) >> 24;
-        if (board_ret != bid) {
-            outStr << "Error: board ID does not match "
-                   << bid << std::endl;
-            continue;
-        }
-
-        outStr << "  BoardId = " << board_ret
-               << ", Firmware Version = " << fver << std::endl;
-
-        BoardExistMask_[bid] = true;
-        FirmwareVersion[bid] = fver;
-        NumOfNodes_++;        
-
-        // check firmware version
-        // FirmwareVersion >= 4, broadcast capable
-        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
+    // Find board id for first board (i.e., one connected by Ethernet)
+    int rc = eth1394_read(0xff, 0x00, 4, &data);
+    // One retry
+    if (rc) {
+        outStr << "ScanNodes: multicast failed, retrying" << std::endl;
+        rc = eth1394_read(0xff, 0x00, 4, &data);
     }
-
-    if (NumOfNodes_ == 0) {
-        outStr << "No FPGA boards connected" << std::endl;
-        pcap_close(handle);
-        handle = 0;
+    if (rc) {
+        outStr << "ScanNodes: no response via multicast" << std::endl;
         return false;
     }
+    unsigned long bid = 0;   // board id
+    data = bswap_32(data);
+    // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
+    bid = (data & BOARD_ID_MASK) >> 24;
+
+    // check hardware version
+    if (eth1394_read(bid, 0x04, 4, &data)) {
+        outStr << "ScanNodes: unable to read hardware version from node "
+               << bid << std::endl;
+        return false;
+    }
+    data = bswap_32(data);
+    if (data != QLA1_String) {
+        outStr << "Node " << bid << " is not a QLA board" << std::endl
+               << "data = " << std::hex << data << std::endl;
+        return false;
+    }
+
+    // read firmware version
+    unsigned long fver = 0;
+    if (eth1394_read(bid, 0x07, 4, &data)) {
+        outStr << "ScanNodes: unable to read firmware version from node "
+               << bid << std::endl;
+        return false;
+    }
+    data = bswap_32(data);
+    fver = data;
+
+    outStr << "  BoardId = " << bid
+           << ", Firmware Version = " << fver << std::endl;
+
+    BoardExistMask_[bid] = true;
+    FirmwareVersion[bid] = fver;
+    NumOfNodes_++;
+
+    // TODO: scan FireWire bus for other nodes
+
+    // check firmware version
+    // FirmwareVersion >= 4, broadcast capable
+    if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
@@ -276,7 +297,7 @@ bool Eth1394Port::ScanNodes(void)
     }
 
     // write num of nodes to eth1394 FPGA
-    outStr <<"Num of nodes: "<< NumOfNodes_ <<std::endl;
+    outStr << "Num of nodes: " << NumOfNodes_ << std::endl;
 
     return true;
 }
@@ -567,21 +588,32 @@ bool Eth1394Port::WriteAllBoardsBroadcast(void)
 bool Eth1394Port::ReadQuadlet(unsigned char boardId,
                               nodeaddr_t addr, quadlet_t &data)
 {
-    if (boardId >= BoardIO::MAX_BOARDS)
-        return false;
-    if (!BoardInUseMask_[boardId])
-        return false;
+    if (boardId != 0xff) {   // 0xff is for Ethernet multicast
+        if (boardId >= BoardIO::MAX_BOARDS) {
+            outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
+            return false;
+        }
+        if (!BoardInUseMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+            return false;
+        }
+    }
     return !eth1394_read(boardId, addr, 4, &data);
 }
 
 
 bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
-    if (boardId >= BoardIO::MAX_BOARDS)
-        return false;
-    if (!BoardInUseMask_[boardId])
-        return false;    
-
+    if (boardId != 0xff) {   // 0xff is for Ethernet multicast
+        if (boardId >= BoardIO::MAX_BOARDS) {
+            outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
+            return false;
+        }
+        if (!BoardInUseMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+            return false;    
+        }
+    }
     return !eth1394_write(boardId, addr, 4, &data);
 }
 
@@ -594,31 +626,38 @@ bool Eth1394Port::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
 
 bool Eth1394Port::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
 {
-    if (boardId >= BoardIO::MAX_BOARDS) {
-        outStr << "Invalid board ID" << std::endl;
-        return false;
+    if (boardId != 0xff) {   // 0xff is for Ethernet multicast
+        if (boardId >= BoardIO::MAX_BOARDS) {
+            outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
+            return false;
+        }
+        if (!BoardInUseMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+            return false;
+        }
     }
-
-    if (!BoardInUseMask_[boardId]) {
-        outStr << "Board not under control" << std::endl;
-        return false;
-    }
-
     return !eth1394_read(boardId, addr, nbytes, data);
 }
 
 bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
 {
-    if (boardId >= BoardIO::MAX_BOARDS)
-        return false;
-    if (!BoardInUseMask_[boardId])
-        return false;
+    if (boardId != 0xff) {   // 0xff is for Ethernet multicast
+        if (boardId >= BoardIO::MAX_BOARDS) {
+            outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
+            return false;
+        }
+        if (!BoardInUseMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+            return false;
+        }
+    }
     return !eth1394_write(boardId, addr, nbytes, data);
 }
 
 bool Eth1394Port::WriteBlockBroadcast(
         nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
 {
+    // TO FIX: eth1394_write does not yet handle 0xffff
     return !eth1394_write(0xffff, addr, nbytes, data);;
 }
 
@@ -652,13 +691,13 @@ bool Eth1394Port::checkCRC(const unsigned char *packet) const
 int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                               size_t length, quadlet_t *buffer)
 {
-    // sanity check
     unsigned int tcode;  // fw tcode
-    size_t length_fw;   // fw length in quadlet
+    size_t length_fw;    // fw length in quadlets
+
     if (length == 4) {
         tcode = Eth1394Port::QREAD;
         length_fw = 4;
-    } else if(length >4 && length%4 ==0) {
+    } else if ((length > 4) && (length%4 == 0)) {
         tcode = Eth1394Port::BREAD;
         length_fw = 5;
     }
@@ -671,7 +710,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     //quadlet_t packet_FW[length_fw];
     quadlet_t packet_FW[5];
 
-    make_1394_header(packet_FW, node, addr, tcode);
+    // header
+    //    make_1394_header(packet_FW, node, addr, tcode);
+    make_1394_header(packet_FW, 0, addr, tcode);
+
     if (tcode == BREAD)
         packet_FW[3] = bswap_32((length & 0xFFFF) << 16);
     packet_FW[length_fw-1] =
@@ -680,7 +722,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     if (DEBUG) print_frame((unsigned char*)packet_FW, length_fw*sizeof(quadlet_t));
 
     // Ethernet frame
-    const int ethlength = length_fw * 4 + 14;  // eth frame length in byte
+    const int ethlength = length_fw * 4 + 14;  // eth frame length in bytes
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
     frame_hdr[12] = 0;
@@ -689,11 +731,14 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     //uint8_t frame[ethlength];
     uint8_t frame[5*4+14];
     memcpy(frame, frame_hdr, 14);
+    if (node == 0xff) {      // multicast
+        frame[0] |= 0x01;    // set multicast destination address
+    }
     frame[5] = node;   // last byte of dest address is board id
     memcpy(frame + 14, packet_FW, length_fw * 4);
 
     if (DEBUG) {
-        std::cout << "-------- frame ---------" << std::endl;
+        std::cout << "------ Eth Frame ------" << std::endl;
         print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
     }
 
@@ -727,7 +772,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         while ((packet = pcap_next(handle, &header)) != NULL) {
             numPackets++;
             if (headercheck((unsigned char *)packet, true)) {
-                if (packet[11] != node) {
+                if ((node != 0xff) && (packet[11] != node)) {
                     outStr << "Packet not from node " << node << " (src lsb is " 
                            << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
                     continue;
@@ -785,17 +830,18 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
                                size_t length, quadlet_t *buffer)
 {
-    size_t length_fw;  // in quadlet
-    unsigned int tcode;
+    unsigned int tcode;  // fw tcode
+    size_t length_fw;    // fw length in quadlets
 
     if (length == 4) {
         tcode = Eth1394Port::QWRITE;
         length_fw = 5;
-    } else if ((length > 4) && (length%4 == 0)){
+    } else if ((length > 4) && (length%4 == 0)) {
         tcode = Eth1394Port::BWRITE;
         length_fw = 5 + length/4 + 1;
     }
-    else{
+    else
+    {
         outStr << "eth1394_write: illegal length = " << length << std::endl;
         return -1;
     }
@@ -806,12 +852,12 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     make_1394_header(packet_FW, node, addr, tcode);
 
     //quadlet write
-    if (length == 4) {
+    if (tcode == QWRITE) {
         packet_FW[3] = buffer[0];
         packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
     }
     // data for block write
-    if (length > 4) {
+    else {
         packet_FW[3] = bswap_32(length<<16);
         packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
         memcpy(&(packet_FW[5]), buffer, length);
@@ -826,7 +872,7 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     }
 
     // Ethernet frame
-    int ethlength = length_fw * 4 + 14;
+    int ethlength = length_fw * 4 + 14;  // eth frame length in bytes
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
     frame_hdr[12] = 0;
@@ -834,9 +880,12 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
 
     uint8_t *frame = new uint8_t[ethlength];
     memcpy(frame, frame_hdr, 14);
+    if (node == 0xff) {      // multicast
+        frame[0] |= 0x01;    // set multicast destination address
+    }
+    frame[5] = node;   // last byte of dest address is board id
     memcpy(frame + 14, packet_FW, length_fw * 4);
 
-    // print
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
         print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
@@ -1072,12 +1121,12 @@ uint32_t BitReverse32(uint32_t input)
 // It is also needed to be byteSwaped before putting into stream
 uint32_t crc32(uint32_t crc, const void *buf, size_t size)
 {
-  const uint8_t *p;
+    const uint8_t *p;
 
-  p = (uint8_t*)buf;
-  crc = crc ^ ~0U;
+    p = (uint8_t*)buf;
+    crc = crc ^ ~0U;
 
-  while (size--)
+    while (size--)
         crc = crc32_tab[(crc ^ BitReverseTable[*p++]) & 0xFF] ^ (crc >> 8);
 
   return crc ^ ~0U;
