@@ -10,7 +10,14 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include "mcsFile.h"
+
+#include <Amp1394/AmpIORevision.h>
+#if Amp1394_HAS_RAW1394
 #include "FirewirePort.h"
+#endif
+#if Amp1394_HAS_PCAP
+#include "Eth1394Port.h"
+#endif
 #include "AmpIO.h"
 
 int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
@@ -22,7 +29,7 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     tcsetattr(STDIN_FILENO, TCSANOW, &newTerm);  // change terminal settings
 
     int c = 0;
-    while ((c < '0') || (c > '5')) {
+    while ((c < '0') || (c > '7')) {
         if (c)
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
         std::cout << std::endl
@@ -36,7 +43,9 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
                   << "2) Verify PROM" << std::endl
                   << "3) Read PROM data" << std::endl
                   << "4) Program FPGA SN" << std::endl
-                  << "5) Program QLA SN" << std::endl << std::endl;
+                  << "5) Program QLA SN" << std::endl
+                  << "6) Read FPGA SN" << std::endl
+                  << "7) Read QLA SN" << std::endl  << std::endl;
 
         std::cout << "Select option: ";
         c = getchar();
@@ -281,15 +290,35 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
 int main(int argc, char** argv)
 {
     int i;
+#if Amp1394_HAS_RAW1394
+    bool useFireWire = true;
+#else
+    bool useFireWire = false;
+#endif
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
     std::string mcsName;
+    std::string sn;
 
     int args_found = 0;
     for (i = 1; i < argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            port = atoi(argv[i]+2);
-            std::cerr << "Selecting port " << port << std::endl;
+                std::cerr << "Selecting port " << port << std::endl;
+            // -p option can be -pN, -pfwN, or -pethN, where N
+            // is the port number. -pN is equivalent to -pfwN
+            // for backward compatibility.
+            if (strncmp(argv[i]+2, "fw", 2) == 0)
+                port = atoi(argv[i]+4);
+            else if (strncmp(argv[i]+2, "eth", 3) == 0) {
+                useFireWire = false;
+                port = atoi(argv[i]+5);
+            }
+            else
+                port = atoi(argv[i]+2);
+            if (useFireWire)
+                std::cerr << "Selecting FireWire port " << port << std::endl;
+            else
+                std::cerr << "Selecting Ethernet port " << port << std::endl;
         }
         else {
             if (args_found == 0)
@@ -301,17 +330,39 @@ int main(int argc, char** argv)
     }
     if (args_found < 1) {
         std::cerr << "Usage: pgm1394 <board-num> [<mcs-file>] [-pP]" << std::endl
-                  << "       where P = port number (default 0)" << std::endl;
+                  << "       where P = port number (default 0)" << std::endl
+                  << "       can also specify -pfwP or -pethP" << std::endl;
         return 0;
     }
 
-    FirewirePort Port(port);
-    if (!Port.IsOK()) {
-        std::cerr << "Failed to initialize firewire port " << port << std::endl;
+    BasePort *Port;
+    if (useFireWire) {
+#if Amp1394_HAS_RAW1394
+        Port = new FirewirePort(port, std::cerr);
+        if (!Port->IsOK()) {
+            std::cerr << "Failed to initialize firewire port " << port << std::endl;
+            return -1;
+        }
+#else
+        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
         return -1;
+#endif
+    }
+    else {
+#if Amp1394_HAS_PCAP
+        Port = new Eth1394Port(port, std::cerr);
+        if (!Port->IsOK()) {
+            std::cerr << "Failed to initialize ethernet port " << port << std::endl;
+            return -1;
+        }
+        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+#else
+        std::cerr << "Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
+        return -1;
+#endif
     }
     AmpIO Board(board);
-    Port.AddBoard(&Board);
+    Port->AddBoard(&Board);
 
     if (mcsName.empty()) {
         if (Board.HasEthernet())
@@ -347,12 +398,22 @@ int main(int argc, char** argv)
         case 5:
             PromQLASerialNumberProgram(Board);
             break;
+        case 6:
+            sn = Board.GetFPGASerialNumber();
+            if (!sn.empty())
+                std::cout << "FPGA serial number: " << sn << std::endl;
+            break;
+        case 7:
+            sn = Board.GetQLASerialNumber();
+            if (!sn.empty())
+                std::cout << "QLA serial number: " << sn << std::endl;
+            break;
         default:
             std::cout << "Not yet implemented" << std::endl;
         }
     }
 
     promFile.CloseFile();
-    Port.RemoveBoard(board);
+    Port->RemoveBoard(board);
 }
 
