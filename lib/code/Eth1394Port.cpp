@@ -748,8 +748,11 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         return -1;
     }
 
+
+#ifndef _MSC_VER
     struct timeval startTime;
     gettimeofday(&startTime, NULL);
+#endif
 
     // Invoke callback (if defined) between sending read request
     // and checking for read response. If callback returns false, we
@@ -810,18 +813,23 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                 }
             }
         }
+#ifndef _MSC_VER
         struct timeval currentTime, diffTime;
         gettimeofday(&currentTime, NULL);
         timersub(&currentTime, &startTime, &diffTime);
         timeDiffSec = diffTime.tv_sec + 1e-6*diffTime.tv_usec;
+#endif
     }
 
     if (numPacketsValid < 1) {
         outStr << "Error: Receive failed" << std::endl;
         return -1;
     }
-    outStr << "Processed " << numPackets << " packets, " << numPacketsValid 
-           << " valid, time = " << timeDiffSec << " sec" << std::endl;
+    outStr << "Processed " << numPackets << " packets, " << numPacketsValid << " valid"
+#ifndef _MSC_VER
+           << ", time = " << timeDiffSec << " sec"
+#endif
+           << std::endl;
 
     return 0;
 }

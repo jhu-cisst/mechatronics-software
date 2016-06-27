@@ -11,9 +11,11 @@
 #
 # --- end cisst license ---
 
+link_directories(${Amp1394_EXTRA_LIBRARY_DIR})
+
 add_executable(pgm1394 pgm1394.cpp mcsFile.h mcsFile.cpp)
 
-target_link_libraries(pgm1394 Amp1394 raw1394)
+target_link_libraries(pgm1394 Amp1394 ${Amp1394_EXTRA_LIBRARIES})
 
 install (TARGETS pgm1394
          COMPONENT Amp1394-utils

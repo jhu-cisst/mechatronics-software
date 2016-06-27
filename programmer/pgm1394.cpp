@@ -3,12 +3,16 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <termios.h>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#ifdef _MSC_VER
+#include <windows.h>  // for Sleep
+#else
+#include <termios.h>
 #include <unistd.h>
 #include <sys/time.h>
+#endif
 #include "mcsFile.h"
 
 #include <Amp1394/AmpIORevision.h>
@@ -22,11 +26,13 @@
 
 int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 {
+#ifndef _MSC_VER
     struct termios savedTerm, newTerm;
     tcgetattr(STDIN_FILENO, &savedTerm);
     newTerm = savedTerm;
     newTerm.c_lflag &= ~ICANON;  // turn off line buffering
     tcsetattr(STDIN_FILENO, TCSANOW, &newTerm);  // change terminal settings
+#endif
 
     int c = 0;
     while ((c < '0') || (c > '7')) {
@@ -52,16 +58,22 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
         std::cout << std::endl;
     }
 
+#ifndef _MSC_VER
     tcsetattr(STDIN_FILENO, TCSANOW, &savedTerm);  // restore terminal settings
+#endif
     return (c-'0');
 }
 
 // Returns time in seconds
 double get_time()
 {
+#ifdef _MSC_VER
+    return 0.0;
+#else
     struct timeval tv;
     gettimeofday(&tv, 0);
     return (1e-6*tv.tv_usec + tv.tv_sec);
+#endif
 }
 
 static double Callback_StartTime = 0.0;
@@ -199,9 +211,16 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     int ret;
     Callback_StartTime = get_time();
     Board.PromSectorErase(0x1F0000, PromProgramCallback);
-    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, str.length());
-    if (ret < 0) {std::cerr << "Can't program FPGA Serial Number";}
-    else usleep(5000);
+    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, static_cast<unsigned int>(str.length()));
+    if (ret < 0) {
+        std::cerr << "Can't program FPGA Serial Number";
+        return false;
+    }
+#ifdef _MSC_VER
+    Sleep(1);
+#else
+    usleep(5000);
+#endif
 
     BoardSNRead.clear();
     BoardSNRead = Board.GetFPGASerialNumber();
@@ -416,4 +435,3 @@ int main(int argc, char** argv)
     promFile.CloseFile();
     Port->RemoveBoard(board);
 }
-

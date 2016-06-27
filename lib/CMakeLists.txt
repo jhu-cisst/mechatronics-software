@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -19,22 +19,18 @@ set (HEADERS
 set (SOURCE_FILES
      code/AmpIO.cpp)
 
-set (Amp1394_EXTRA_LIBRARIES "")
-
 if (Amp1394_HAS_RAW1394)
   set (HEADERS ${HEADERS} FirewirePort.h)
   set (SOURCE_FILES ${SOURCE_FILES} code/FirewirePort.cpp)
-  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} raw1394)
 endif (Amp1394_HAS_RAW1394)
 
 if (Amp1394_HAS_PCAP)
   set (HEADERS ${HEADERS} Eth1394Port.h)
   set (SOURCE_FILES ${SOURCE_FILES} code/Eth1394Port.cpp)
-  if (WIN32)
-    include_directories(${PCAP_INCLUDE_DIR})
-  endif (WIN32)
-  set (Amp1394_EXTRA_LIBRARIES ${Amp1394__EXTRA_LIBRARIES} ${PCAP_LIBRARIES})
 endif (Amp1394_HAS_PCAP)
+
+include_directories(${Amp1394_EXTRA_INCLUDE_DIR})
+link_directories(${Amp1394_EXTRA_LIBRARY_DIR})
 
 # Create Amp1394 library
 add_library(Amp1394 STATIC
@@ -44,7 +40,7 @@ target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES})
 
 # ... for the build tree
 set (CONF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" "${Mechatronics_BINARY_DIR}")
-set (CONF_LIBRARY_DIR "${LIBRARY_OUTPUT_PATH}")
+set (CONF_LIBRARY_DIR "${LIBRARY_OUTPUT_PATH};${Amp1394_EXTRA_LIBRARY_DIR}")
 configure_file (../Amp1394Config.cmake.in
                 "${Mechatronics_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
 

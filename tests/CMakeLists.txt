@@ -11,6 +11,8 @@
 
 project(Amp1394Tests)
 
+link_directories(${Amp1394_EXTRA_LIBRARY_DIR})
+
 if (WIN32)
   message ("Cannot compile curses based test programs for Amp1394 on Windows")
 else (WIN32)
@@ -20,21 +22,10 @@ else (WIN32)
     include_directories (${CURSES_INCLUDE_DIR})
 
     add_executable(qladisp qladisp.cpp)
-    target_link_libraries(qladisp Amp1394 ${CURSES_LIBRARIES})
+    target_link_libraries(qladisp Amp1394 ${Amp1394_EXTRA_LIBRARIES} ${CURSES_LIBRARIES})
 
     add_executable(qlatest qlatest.cpp)
-    target_link_libraries(qlatest Amp1394 ${CURSES_LIBRARIES})
-
-    # Check if following needed, and for pcap
-    if (Amp1394_HAS_RAW1394)
-      target_link_libraries(qladisp raw1394)
-      target_link_libraries(qlatest raw1394)
-    endif (Amp1394_HAS_RAW1394)
-
-    if (Amp1394_HAS_PCAP)
-      target_link_libraries(qladisp ${PCAP_LIBRARIES})
-      target_link_libraries(qlatest ${PCAP_LIBRARIES})
-    endif (Amp1394_HAS_PCAP)
+    target_link_libraries(qlatest Amp1394 ${Amp1394_EXTRA_LIBRARIES} ${CURSES_LIBRARIES})
 
     install (TARGETS qladisp qlatest
              COMPONENT Amp1394-utils
@@ -52,8 +43,8 @@ if (Amp1394_HAS_RAW1394)
   add_executable(fwPortTest fwPortTest.cpp)
   target_link_libraries(fwPortTest Amp1394)
 
-  target_link_libraries(qlacloserelays raw1394)
-  target_link_libraries(fwPortTest raw1394)
+  target_link_libraries(qlacloserelays ${Amp1394_EXTRA_LIBRARIES})
+  target_link_libraries(fwPortTest ${Amp1394_EXTRA_LIBRARIES})
 
   install (TARGETS qlacloserelays fwPortTest
            COMPONENT Amp1394-utils
@@ -62,10 +53,7 @@ endif (Amp1394_HAS_RAW1394)
 
 if (Amp1394_HAS_PCAP)
   add_executable(eth1394Test mainEth1394.cpp)
-  target_link_libraries(eth1394Test Amp1394 ${PCAP_LIBRARIES})
-  if (Amp1394_HAS_RAW1394)
-    target_link_libraries(eth1394Test raw1394)
-  endif (Amp1394_HAS_RAW1394)
+  target_link_libraries(eth1394Test Amp1394 ${Amp1394_EXTRA_LIBRARIES})
   install (TARGETS eth1394Test
            COMPONENT Amp1394-utils
            RUNTIME DESTINATION bin)

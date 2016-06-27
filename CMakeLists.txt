@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -26,11 +26,9 @@ if (WIN32)
 
   # Need to specify where WinPcap Developer's Pack is installed
   find_path(PCAP_INCLUDE_DIR pcap.h)
-  find_library(PCAP_LIBRARY "wpcap" DOC "Path to WinPcap library wpcap")
   # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
-  find_library(PCAP_PACKET_LIBRARY "Packet" DOC "Path to WinPcap Packet library")
-  set(PCAP_LIBRARIES ${PCAP_LIBRARY} ${PCAP_PACKET_LIBRARY})
-
+  find_path(PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap wpcap and Packet libraries")
+  set(PCAP_LIBRARIES "wpcap" "Packet")
 else (WIN32)
 
   # On other platforms (mostly Linux), can build with pcap and/or libraw1394
@@ -38,6 +36,7 @@ else (WIN32)
   option (Amp1394_HAS_RAW1394   "Build Amp1394 with FireWire support (libraw1394)"   ON)
 
   # For now, assume pcap is installed somewhere standard
+  set(PCAP_INCLUDE_DIR "")
   set(PCAP_LIBRARIES "pcap")
 
 endif (WIN32)
@@ -46,6 +45,18 @@ if (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
   message (SEND_ERROR "Amp1394 requires at least one of Amp1394_HAS_RAW1394 or Amp1394_HAS_PCAP")
 endif (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
 
+set (Amp1394_EXTRA_INCLUDE_DIR "")
+set (Amp1394_EXTRA_LIBRARY_DIR "")
+set (Amp1394_EXTRA_LIBRARIES "")
+if (Amp1394_HAS_RAW1394)
+  # Assume libraw1394 is installed in standard include/lib directories
+  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} raw1394)
+endif (Amp1394_HAS_RAW1394)
+if (Amp1394_HAS_PCAP)
+  set (Amp1394_EXTRA_INCLUDE_DIR ${PCAP_INCLUDE_DIR})
+  set (Amp1394_EXTRA_LIBRARY_DIR ${PCAP_LIBRARY_DIR})
+  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} ${PCAP_LIBRARIES})
+endif (Amp1394_HAS_PCAP)
 
 if (UNIX)
   # Add some warnings
@@ -80,7 +91,4 @@ add_subdirectory (lib)
 add_subdirectory(tests)
 
 # Utility to flash/test board
-if (Amp1394_HAS_RAW1394)
-  # For now, requires FireWire interface.
-  add_subdirectory (programmer)
-endif (Amp1394_HAS_RAW1394)
+add_subdirectory (programmer)
