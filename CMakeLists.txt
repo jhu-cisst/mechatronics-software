@@ -19,6 +19,17 @@ set (Amp1394_VERSION_MINOR "2")
 set (Amp1394_VERSION_PATCH "0")
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
+# If LIBRARY_OUTPUT_PATH is not defined, define it here (note that if this
+# is built within cisst, then LIBRARY_OUTPUT_PATH is defined by cisst).
+if (NOT LIBRARY_OUTPUT_PATH)
+  set (LIBRARY_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/lib")
+endif (NOT LIBRARY_OUTPUT_PATH)
+
+# TODO: Move include files to Amp1394 subdirectory, i.e., lib/Amp1394 or lib/include/Amp1394.
+set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Mechatronics_BINARY_DIR}")
+set (Amp1394_LIBRARY_DIR ${LIBRARY_OUTPUT_PATH})
+set (Amp1394_LIBRARIES   Amp1394)
+
 if (WIN32)
 
   # On Windows, can build with winpcap (Ethernet support)
@@ -45,6 +56,10 @@ if (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
   message (SEND_ERROR "Amp1394 requires at least one of Amp1394_HAS_RAW1394 or Amp1394_HAS_PCAP")
 endif (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
 
+# TODO: Determine whether it is necessary to have separate EXTRA variables for LIBRARY_DIR
+#       and LIBRARIES. Currently, it seems that both are always used together.
+#       The Amp1394_EXTRA_INCLUDE_DIR should be separate since it is only needed when
+#       building Amp1394.
 set (Amp1394_EXTRA_INCLUDE_DIR "")
 set (Amp1394_EXTRA_LIBRARY_DIR "")
 set (Amp1394_EXTRA_LIBRARIES "")
@@ -57,6 +72,13 @@ if (Amp1394_HAS_PCAP)
   set (Amp1394_EXTRA_LIBRARY_DIR ${PCAP_LIBRARY_DIR})
   set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} ${PCAP_LIBRARIES})
 endif (Amp1394_HAS_PCAP)
+
+# Generate Amp1394Config.cmake
+set (CONF_INCLUDE_DIR ${Amp1394_INCLUDE_DIR})
+set (CONF_LIBRARY_DIR ${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
+set (CONF_LIBRARIES   ${Amp1394_LIBRARIES} ${AMP_EXTRA_LIBRARIES})
+configure_file (Amp1394Config.cmake.in
+                "${Mechatronics_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
 
 if (UNIX)
   # Add some warnings
@@ -71,13 +93,6 @@ if (UNIX)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
   endif (CXX_SUPPORTS_WALL)
 endif (UNIX)
-
-# To find Amp1394 library headers
-include_directories (${CMAKE_CURRENT_SOURCE_DIR}/lib
-                     ${CMAKE_CURRENT_BINARY_DIR})
-
-# To link with build libraries
-link_directories (${CMAKE_CURRENT_BINARY_DIR})
 
 # Utilities to test libraw1394
 if (Amp1394_HAS_RAW1394)

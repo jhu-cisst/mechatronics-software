@@ -1,7 +1,5 @@
 #
-# $Id$
-#
-# (C) Copyright 2012-2013 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2012-2016 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -11,11 +9,12 @@
 #
 # --- end cisst license ---
 
-link_directories(${Amp1394_EXTRA_LIBRARY_DIR})
+include_directories(${Amp1394_INCLUDE_DIR})
+link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 
 add_executable(pgm1394 pgm1394.cpp mcsFile.h mcsFile.cpp)
 
-target_link_libraries(pgm1394 Amp1394 ${Amp1394_EXTRA_LIBRARIES})
+target_link_libraries(pgm1394 ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
 install (TARGETS pgm1394
          COMPONENT Amp1394-utils

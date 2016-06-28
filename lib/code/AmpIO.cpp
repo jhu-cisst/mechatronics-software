@@ -630,7 +630,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
     quadlet_t write_data = 0x03000000|addr24;  // 03h = Read Data Bytes
     AmpIO_UInt32 page = 0;
     while (page < nbytes) {
-        unsigned int bytesToRead = std::min(nbytes - page, 256u);
+        unsigned int bytesToRead = ((nbytes-page)<256u) ? (nbytes-page) : 256u;
         if (!port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data)))
             return false;
         // Read FPGA status register; if 4 LSB are 0, command has finished.

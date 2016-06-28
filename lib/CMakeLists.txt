@@ -29,20 +29,14 @@ if (Amp1394_HAS_PCAP)
   set (SOURCE_FILES ${SOURCE_FILES} code/Eth1394Port.cpp)
 endif (Amp1394_HAS_PCAP)
 
-include_directories(${Amp1394_EXTRA_INCLUDE_DIR})
-link_directories(${Amp1394_EXTRA_LIBRARY_DIR})
+include_directories(${Amp1394_INCLUDE_DIR} ${Amp1394_EXTRA_INCLUDE_DIR})
+link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 
 # Create Amp1394 library
 add_library(Amp1394 STATIC
             ${HEADERS} ${SOURCE_FILES})
 
 target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES})
-
-# ... for the build tree
-set (CONF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" "${Mechatronics_BINARY_DIR}")
-set (CONF_LIBRARY_DIR "${LIBRARY_OUTPUT_PATH};${Amp1394_EXTRA_LIBRARY_DIR}")
-configure_file (../Amp1394Config.cmake.in
-                "${Mechatronics_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
 
 # revision file
 configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/AmpIORevision.h.in"
