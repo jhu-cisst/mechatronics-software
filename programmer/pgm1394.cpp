@@ -6,12 +6,8 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
-#ifdef _MSC_VER
-#include <windows.h>  // for Sleep
-#else
+#ifndef _MSC_VER
 #include <termios.h>
-#include <unistd.h>
-#include <sys/time.h>
 #endif
 #include "mcsFile.h"
 
@@ -23,6 +19,7 @@
 #include "Eth1394Port.h"
 #endif
 #include "AmpIO.h"
+#include "Amp1394Time.h"
 
 int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 {
@@ -64,25 +61,13 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     return (c-'0');
 }
 
-// Returns time in seconds
-double get_time()
-{
-#ifdef _MSC_VER
-    return 0.0;
-#else
-    struct timeval tv;
-    gettimeofday(&tv, 0);
-    return (1e-6*tv.tv_usec + tv.tv_sec);
-#endif
-}
-
 static double Callback_StartTime = 0.0;
 
 bool PromProgramCallback(const char *msg)
 {
     if (msg) std::cout << std::endl << msg << std::endl;
     else {
-        double t = get_time();
+        double t = Amp1394_GetTime();
         if ((t - Callback_StartTime) > 0.1) {
             std::cout << "." << std::flush;
             Callback_StartTime = t;
@@ -94,12 +79,12 @@ bool PromProgramCallback(const char *msg)
 
 bool PromProgram(AmpIO &Board, mcsFile &promFile)
 {
-    double startTime = get_time();
+    double startTime = Amp1394_GetTime();
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
         unsigned long addr = promFile.GetSectorAddress();
         std::cout << "Erasing sector " << std::hex << addr << std::dec << std::flush;
-        Callback_StartTime = get_time();
+        Callback_StartTime = Amp1394_GetTime();
         if (!Board.PromSectorErase(addr, PromProgramCallback)) {
             std::cout << "Failed to erase sector " << addr << std::endl;
             return false;
@@ -109,7 +94,7 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         const unsigned char *sectorData = promFile.GetSectorData();
         unsigned long numBytes = promFile.GetSectorNumBytes();
         unsigned long page = 0;
-        Callback_StartTime = get_time();
+        Callback_StartTime = Amp1394_GetTime();
         while (page < numBytes) {
             unsigned int bytesToProgram = ((numBytes-page)<256UL) ? (numBytes-page) : 256UL;
             if (!Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram,
@@ -121,7 +106,7 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         }
         std::cout << std::endl;
     }
-    std::cout << "PROM programming time = " << get_time() - startTime << " seconds"
+    std::cout << "PROM programming time = " << Amp1394_GetTime() - startTime << " seconds"
               << std::endl;
     return true;
 }
@@ -129,7 +114,7 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
 
 bool PromVerify(AmpIO &Board, mcsFile &promFile)
 {
-    double startTime = get_time();
+    double startTime = Amp1394_GetTime();
     unsigned char DownloadedSector[65536];
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
@@ -149,7 +134,7 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
         std::cout << std::endl;
     }
     std::cout << std::dec;
-    std::cout << "PROM verification time = " << get_time() - startTime << " seconds"
+    std::cout << "PROM verification time = " << Amp1394_GetTime() - startTime << " seconds"
               << std::endl;
     return true;
 }
@@ -209,18 +194,14 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     }
 
     int ret;
-    Callback_StartTime = get_time();
+    Callback_StartTime = Amp1394_GetTime();
     Board.PromSectorErase(0x1F0000, PromProgramCallback);
     ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, static_cast<unsigned int>(str.length()));
     if (ret < 0) {
         std::cerr << "Can't program FPGA Serial Number";
         return false;
     }
-#ifdef _MSC_VER
-    Sleep(1);
-#else
-    usleep(5000);
-#endif
+    Amp1394_Sleep(0.005);
 
     BoardSNRead.clear();
     BoardSNRead = Board.GetFPGASerialNumber();
