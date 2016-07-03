@@ -14,10 +14,12 @@ project(Amp1394)
 set (HEADERS
      BoardIO.h
      AmpIO.h
-     BasePort.h)
+     BasePort.h
+     Amp1394Time.h)
 
 set (SOURCE_FILES
-     code/AmpIO.cpp)
+     code/AmpIO.cpp
+     code/Amp1394Time.cpp)
 
 if (Amp1394_HAS_RAW1394)
   set (HEADERS ${HEADERS} FirewirePort.h)

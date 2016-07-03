@@ -271,6 +271,7 @@ public:
 
     // Returns the PROM ID (M25P15 ONLY)
     // should be 0x00202015 for the M25P16
+    // returns 0 on error
     AmpIO_UInt32 PromGetId(void);
 
     // PromGetStatus (General)
@@ -278,11 +279,11 @@ public:
     // (this is different than the interface status read from address offset 8)
     // The following masks are for the useful status register bits.
     enum { MASK_WIP = 1, MASK_WEL = 2 };   // status register bit masks
-    AmpIO_UInt32 PromGetStatus(PromType type = PROM_M25P16);
+    bool PromGetStatus(AmpIO_UInt32 &status, PromType type = PROM_M25P16);
 
     // PromGetResult (General)
     // returns the result (if any) from the last command sent
-    AmpIO_UInt32 PromGetResult(PromType type = PROM_M25P16);
+    bool PromGetResult(AmpIO_UInt32 &result, PromType type = PROM_M25P16);
 
     // Returns nbytes data read from the specified address
     bool PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,

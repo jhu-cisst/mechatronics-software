@@ -20,14 +20,13 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "AmpIO.h"
 #include "FirewirePort.h"
+#include "Amp1394Time.h"
 
 #ifdef _MSC_VER
-#include <windows.h>  // for Sleep
 #include <stdlib.h>
 inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
 #else
 #include <byteswap.h>
-#include <unistd.h>  // for usleep
 #endif
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
@@ -592,33 +591,33 @@ AmpIO_UInt32 AmpIO::PromGetId(void)
     quadlet_t data = 0x9f000000;
     if (port->WriteQuadlet(BoardId, 0x08, bswap_32(data))) {
         // Should be ready by now...
-        id = PromGetResult();
+        PromGetResult(id);
     }
     return id;
 }
 
-AmpIO_UInt32 AmpIO::PromGetStatus(PromType type)
+bool AmpIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
 {
-    AmpIO_UInt32 status = 0x80000000;
     quadlet_t data = 0x05000000;
     nodeaddr_t address = GetPromAddress(type, true);
 
-    if (port->WriteQuadlet(BoardId, address, bswap_32(data))) {
+    bool ret = port->WriteQuadlet(BoardId, address, bswap_32(data));
+    if (ret) {
         // Should be ready by now...
-        status = PromGetResult(type);
+        ret = PromGetResult(status, type);
     }
-    return status;
+    return ret;
 }
 
-AmpIO_UInt32 AmpIO::PromGetResult(PromType type)
+bool AmpIO::PromGetResult(AmpIO_UInt32 &result, PromType type)
 {
-    AmpIO_UInt32 result = 0xffffffff;
     quadlet_t data;
     nodeaddr_t address = GetPromAddress(type, false);
 
-    if (port->ReadQuadlet(BoardId, address, data))
+    bool ret = port->ReadQuadlet(BoardId, address, data);
+    if (ret)
         result = static_cast<AmpIO_UInt32>(bswap_32(data));
-    return result;
+    return ret;
 }
 
 bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
@@ -642,11 +641,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
         int i;
         const int MAX_LOOP_CNT = 8;
         for (i = 0; (i < MAX_LOOP_CNT) && read_data; i++) {
-#ifdef _WIN32
-            Sleep(1);    // 1 msec
-#else
-            usleep(10);  // 10 usec
-#endif
+            Amp1394_Sleep(0.00001);   // 10 usec
             if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
             read_data = bswap_32(read_data)&0x000f;
         }
@@ -656,7 +651,12 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
             return false;
         }
         // Now, read result. This should be the number of quadlets written.
-        AmpIO_UInt32 nRead = 4*PromGetResult();
+        AmpIO_UInt32 nRead;
+        if (!PromGetResult(nRead)) {
+            std::cout << "PromReadData: failed to get PROM result" << std::endl;
+            return false;
+        }
+        nRead *= 4;
         if (nRead != 256) { // should never happen
             std::cout << "PromReadData: incorrect number of bytes = "
                       << nRead << std::endl;
@@ -696,8 +696,14 @@ bool AmpIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
     if (!port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data)))
         return false;
     // Wait for erase to finish
-    while (PromGetStatus())
+    AmpIO_UInt32 status;
+    if (!PromGetStatus(status))
+        return false;
+    while (status) {
         PROGRESS_CALLBACK(cb, false);
+        if (!PromGetStatus(status))
+            return false;
+    }
     return true;
 }
 
@@ -744,7 +750,13 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         ERROR_CALLBACK(cb, msg);
     }
     // Now, read result. This should be the number of quadlets written.
-    AmpIO_UInt32 nWritten = 4*(PromGetResult()-1);
+    AmpIO_UInt32 nWritten;
+    if (!PromGetResult(nWritten)) {
+        std::ostringstream msg;
+        msg << "PromProgramPage: could not get PROM result";
+        ERROR_CALLBACK(cb, msg);
+    }
+    nWritten = 4*(nWritten-1);  // convert from quadlets to bytes
     if (nWritten != nbytes) {
         std::ostringstream msg;
         msg << "PromProgramPage: wrote " << nWritten << " of "
@@ -752,8 +764,19 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         ERROR_CALLBACK(cb, msg);
     }
     // Wait for "Write in Progress" bit to be cleared
-    while (PromGetStatus()&MASK_WIP)
-        PROGRESS_CALLBACK(cb, 0);
+    AmpIO_UInt32 status;
+    bool ret = PromGetStatus(status);
+    while (status&MASK_WIP) {
+        if (ret) {
+            PROGRESS_CALLBACK(cb, 0);
+        }
+        else {
+            std::ostringstream msg;
+            msg << "PromProgramPage: could not get PROM status" << std::endl;
+            ERROR_CALLBACK(cb, msg);
+        }
+        ret = PromGetStatus(status);
+    }
     return nWritten;
 }
 
@@ -785,8 +808,8 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
 
     if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
         // Should be ready by now...
-        result = PromGetResult(PROM_25AA128);
-
+        if (!PromGetResult(result, PROM_25AA128))
+            return false;
         // Get the last 8-bit of result
         data = result & 0xFF;
         return true;
@@ -800,22 +823,14 @@ bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
 {
     // enable write
     PromWriteEnable(PROM_25AA128);
-#ifdef _WIN32
-    Sleep(1);    // 1 msec
-#else
-    usleep(100); // 100 usec
-#endif
+    Amp1394_Sleep(0.0001);   // 100 usec
 
     // 8-bit cmd + 16-bit addr + 8-bit data
     quadlet_t write_data = 0x02000000|(addr << 8)|data;
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
     if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
         // wait 5ms for the PROM to be ready to take new commands
-#ifdef _WIN32
-        Sleep(5);
-#else
-        usleep(5000);
-#endif
+        Amp1394_Sleep(0.005);
         return true;
     }
     else

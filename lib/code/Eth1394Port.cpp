@@ -16,11 +16,12 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "Eth1394Port.h"
+#include "Amp1394Time.h"
+
 #include <pcap.h>
 #include <iomanip>
 
 #ifdef _MSC_VER
-#include <windows.h>  // for Sleep
 #include <memory.h>   // for memcpy
 #include <stdlib.h>   // for byteswap functions
 #include <Packet32.h> // winpcap include for PacketRequest
@@ -749,10 +750,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     }
 
 
-#ifndef _MSC_VER
-    struct timeval startTime;
-    gettimeofday(&startTime, NULL);
-#endif
+    double startTime = Amp1394_GetTime();
 
     // Invoke callback (if defined) between sending read request
     // and checking for read response. If callback returns false, we
@@ -808,28 +806,22 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     }
                 }
                 else {
-                    outStr << "ERROR: unexpected response tcode: " << tcode_recv << std::endl;
+                    outStr << "ERROR: unexpected response tcode: " << tcode_recv
+                           << " (sent tcode: " << tcode << ")" << std::endl;
                     return -1;
                 }
             }
         }
-#ifndef _MSC_VER
-        struct timeval currentTime, diffTime;
-        gettimeofday(&currentTime, NULL);
-        timersub(&currentTime, &startTime, &diffTime);
-        timeDiffSec = diffTime.tv_sec + 1e-6*diffTime.tv_usec;
-#endif
+        timeDiffSec = Amp1394_GetTime() - startTime;
     }
 
     if (numPacketsValid < 1) {
-        outStr << "Error: Receive failed" << std::endl;
+        outStr << "Error: Receive failed, addr = " << std::hex << addr
+               << ", nbytes = " << length << ", time = " << timeDiffSec << " sec" << std::endl;
         return -1;
     }
     outStr << "Processed " << numPackets << " packets, " << numPacketsValid << " valid"
-#ifndef _MSC_VER
-           << ", time = " << timeDiffSec << " sec"
-#endif
-           << std::endl;
+           << ", time = " << timeDiffSec << " sec" << std::endl;
 
     return 0;
 }
