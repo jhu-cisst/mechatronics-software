@@ -454,6 +454,18 @@ AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
     return bswap_32(read_data) & 0x0000000F;
 }
 
+bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | ENC_LOAD_OFFSET, read_data);
+        if (ret) sdata = static_cast<AmpIO_Int32>(bswap_32(read_data));
+    }
+    return ret;
+}
+
 bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow)
 {
     countsHigh = 0;

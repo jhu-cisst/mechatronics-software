@@ -152,6 +152,8 @@ public:
     bool ReadSafetyRelayStatus(void) const;
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
 
+    bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
+
     /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
 
         \param index which digital output bit (0-3, which correspond to OUT1-OUT4)

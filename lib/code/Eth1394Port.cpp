@@ -58,6 +58,7 @@ void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr);
 
 Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394CallbackType cb):
     BasePort(portNum, debugStream),
+    fw_tl(0),
     NumOfNodes_(0),
     NumOfNodesInUse_(0),
     eth1394_read_callback(cb)
@@ -86,6 +87,32 @@ void Eth1394Port::GetDestMulticastMacAddr(unsigned char *macAddr)
     GetDestMacAddr(macAddr);
     macAddr[0] |= 0x01;
     macAddr[5] = 0xFF;
+}
+
+void Eth1394Port::PrintDebug(std::ostream &debugStream, unsigned short status)
+{
+    debugStream << "Status: ";
+    if (status&0x4000) debugStream << "error ";
+    if (status&0x2000) debugStream << "initOK ";
+    if (status&0x1000) debugStream << "initReq ";
+    if (status&0x0800) debugStream << "ethIoErr ";
+    if (status&0x0400) debugStream << "cmdReq ";
+    if (status&0x0200) debugStream << "cmdAck ";
+    if (status&0x0100) debugStream << "qRead ";
+    if (status&0x0080) debugStream << "qWrite ";
+    if (status&0x0040) debugStream << "bRead ";
+    if (status&0x0020) debugStream << "bWrite ";
+    //if (status&0x0020) debugStream << "PME ";
+    //if (!(status&0x0010)) debugStream << "IRQ ";
+    if ((status&0x0010)) debugStream << "multicast ";
+    if (status&0x0008) debugStream << "KSZ-idle ";
+    if (status&0x0004) debugStream << "ETH-idle ";
+    int waitInfo = status&0x0003;
+    if (waitInfo == 0) debugStream << "wait-none";
+    else if (waitInfo == 1) debugStream << "wait-ack";
+    else if (waitInfo == 2) debugStream << "wait-ack-clear";
+    else debugStream << "wait-flush";
+    debugStream << std::endl;
 }
 
 void Eth1394Port::BoardInUseIntegerUpdate(void)
@@ -668,9 +695,14 @@ bool Eth1394Port::WriteBlockBroadcast(
 // Protected
 // ---------------------------------------------------------
 
-void Eth1394Port::make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode)
+void Eth1394Port::make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
+                                   unsigned int tl)
 {
-    packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tcode & 0xF) << 4);
+    // FFC0 replicates the base node ID when using FireWire on PC. This is followed by a transaction
+    // label (arbitrary value that is returned by any resulting FireWire packets) and the transaction code.
+    packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tl & 0x3F) << 10 | (tcode & 0x0F) << 4);
+    // FFFF is used as source ID (most significant 16 bits); not sure if this is needed.
+    // This is followed by the destination address, which is 48-bits long
     packet_FW[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
     packet_FW[2] = bswap_32(addr&0xFFFFFFFF);
 }
@@ -713,7 +745,8 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
     // header
     //    make_1394_header(packet_FW, node, addr, tcode);
-    make_1394_header(packet_FW, 0, addr, tcode);
+    fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
+    make_1394_header(packet_FW, 0, addr, tcode, fw_tl);
 
     if (tcode == BREAD)
         packet_FW[3] = bswap_32((length & 0xFFFF) << 16);
@@ -779,8 +812,13 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     continue;
                 }
                 unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
-                outStr << "Packet length = " << std::dec << packetLength << std::endl;
+                //outStr << "Packet length = " << std::dec << packetLength << std::endl;
                 numPacketsValid++;
+                int tl_recv = packet[16] >> 2;
+                if (tl_recv != fw_tl) {
+                    outStr << "Warning: expected tl = " << (unsigned int)fw_tl
+                           << ", received tl = " << tl_recv << std::endl;
+                }
                 int tcode_recv = packet[17] >> 4;
                 if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
                     // check header crc
@@ -806,9 +844,9 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     }
                 }
                 else {
-                    outStr << "ERROR: unexpected response tcode: " << tcode_recv
+                    outStr << "WARNING: unexpected response tcode: " << tcode_recv
                            << " (sent tcode: " << tcode << ")" << std::endl;
-                    return -1;
+                    continue;
                 }
             }
         }
@@ -849,7 +887,8 @@ int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
     quadlet_t *packet_FW = new quadlet_t[length_fw];
 
     // header
-    make_1394_header(packet_FW, node, addr, tcode);
+    fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
+    make_1394_header(packet_FW, node, addr, tcode, fw_tl);
 
     //quadlet write
     if (tcode == QWRITE) {
@@ -1011,6 +1050,7 @@ bool Eth1394Port::headercheck(uint8_t* header, bool isHUBtoPC) const
     if (header[0]&1) {
         outStr << "Header check found multicast packet" << std::endl;
         print_mac(outStr, "Header", header);
+        print_mac(outStr, "Src", header+6);
         return false;
     }
     for (i = 0; i < 6; i++) {

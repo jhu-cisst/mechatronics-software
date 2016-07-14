@@ -2,6 +2,7 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 #include <iostream>
+#include <iomanip>
 #include <stdio.h>
 
 #include <Amp1394/AmpIORevision.h>
@@ -56,28 +57,7 @@ void PrintEthernetDebug(AmpIO &Board)
         std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
         return;
     }
-    std::cout << "Status: ";
-    if (status&0x4000) std::cout << "error ";
-    if (status&0x2000) std::cout << "initOK ";
-    if (status&0x1000) std::cout << "initReq ";
-    if (status&0x0800) std::cout << "ethIoErr ";
-    if (status&0x0400) std::cout << "cmdReq ";
-    if (status&0x0200) std::cout << "cmdAck ";
-    if (status&0x0100) std::cout << "qRead ";
-    if (status&0x0080) std::cout << "qWrite ";
-    if (status&0x0040) std::cout << "bRead ";
-    if (status&0x0020) std::cout << "bWrite ";
-    //if (status&0x0020) std::cout << "PME ";
-    //if (!(status&0x0010)) std::cout << "IRQ ";
-    if ((status&0x0010)) std::cout << "multicast ";
-    if (status&0x0008) std::cout << "KSZ-idle ";
-    if (status&0x0004) std::cout << "ETH-idle ";
-    int waitInfo = status&0x0003;
-    if (waitInfo == 0) std::cout << "wait-none";
-    else if (waitInfo == 1) std::cout << "wait-ack";
-    else if (waitInfo == 2) std::cout << "wait-ack-clear";
-    else std::cout << "wait-flush";
-    std::cout << std::endl;
+    Eth1394Port::PrintDebug(std::cout, status);
 }
 
 // Ethernet status, as reported by KSZ8851 on FPGA board
@@ -190,6 +170,30 @@ bool InitEthernet(AmpIO &Board)
     return true;
 }
 
+void  ContinuousTest(BasePort *port)
+{
+    bool done = false;
+    quadlet_t read_data;
+    char buf[5] = "QLA1";
+    size_t success = 0;
+    size_t readFailures = 0;
+    size_t compareFailures = 0;
+    while (!done) {
+        read_data = 0;
+        if (!port->ReadQuadlet(0, 4, read_data))
+            readFailures++;
+        else {
+            if (memcmp((void *)&read_data, buf, 4) == 0)
+                success++;
+            else
+                compareFailures++;
+        }
+        if (readFailures + compareFailures > 5) done = true;
+    }
+    std::cout << "Success = " << std::dec << success << ", read failures = " << readFailures << ", compare failures = "
+              << compareFailures << std::endl;
+}
+
 static char QuadletReadCallbackBoardId = 0;
 
 bool QuadletReadCallback(Eth1394Port &, unsigned char boardId, std::ostream &debugStream)
@@ -270,6 +274,7 @@ int main()
         std::cout << "  6) Initialize Ethernet port" << std::endl;
         std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "  8) Multicast quadlet read" << std::endl;
+        std::cout << "  c) Continuous test (quadlet reads)" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -383,6 +388,9 @@ int main()
                     std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
                 break;
 
+        case 'c':
+            ContinuousTest(&EthPort);
+            break;
         }
     }
 

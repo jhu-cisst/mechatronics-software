@@ -47,6 +47,8 @@ protected:
     pcap_t *handle;
     uint8_t frame_hdr[14];  // dest addr (6), src addr (6), length (2)
 
+    uint8_t fw_tl;          // FireWire transaction label (6 bits)
+
     int NumOfNodes_;    // number of nodes exist
     int NumOfNodesInUse_;   //number of nodes under control
     bool BoardExistMask_[BoardIO::MAX_BOARDS];  // Boards connected in the network
@@ -117,6 +119,8 @@ public:
     // The first 3 characters are FB:61:OE, which is the CID assigned to LCSR by IEEE, with the multicast bit set
     // The last 3 characters are 13:94:FF
     static void GetDestMulticastMacAddr(unsigned char *macAddr);
+
+    static void PrintDebug(std::ostream &debugStream, unsigned short status);
 
     // For now, always returns 1
     int NumberOfUsers(void) { return 1; }
@@ -203,7 +207,8 @@ public:
     bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
 
     // helper function -- public for now
-    static void make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode);
+    static void make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
+                                 unsigned int tl);
 };
 
 #endif  // __Eth1394Port_H__
