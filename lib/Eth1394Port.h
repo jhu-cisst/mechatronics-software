@@ -73,16 +73,15 @@ protected:
     int eth1394_read(nodeid_t node, nodeaddr_t addr, size_t length, quadlet_t* buffer);
 
     /**
-     * @brief
+     * \brief Write FireWire packet via Ethernet
      *
-     * @param node
-     * @param addr
-     * @param length
-     * @param buffer
+     * \param node        destination board number
+     * \param buffer      address of pre-allocated buffer (includes space for Ethernet header)
+     * \param length_fw   length of FireWire packet, in quadlets
      *
-     * @return int 0 on success, -1 on failure
+     * \return true on success; false otherwise
      */
-    int eth1394_write(nodeid_t node, nodeaddr_t addr, size_t length, quadlet_t* buffer);
+    bool eth1394_write(nodeid_t node, quadlet_t* buffer, size_t length_fw);
 
     /*!
      \brief write number of FPGA boards on the bus
@@ -108,6 +107,8 @@ protected:
 
 public:
     Eth1394Port(int portNum, std::ostream &debugStream = std::cerr, Eth1394CallbackType cb = 0);
+
+    ~Eth1394Port();
 
     // Returns the destination MAC address (6 bytes)
     // The first 3 characters are FA:61:OE, which is the CID assigned to LCSR by IEEE

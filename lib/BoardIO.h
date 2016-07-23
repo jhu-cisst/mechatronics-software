@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -56,7 +56,8 @@ protected:
     unsigned int ReadBufferSize;
     quadlet_t *ReadBuffer;     // buffer for real-time reads
     unsigned int WriteBufferSize;
-    quadlet_t *WriteBuffer;    // buffer for real-time writes
+    quadlet_t *WriteBuffer;     // buffer for real-time writes
+    quadlet_t *WriteBufferData; // buffer for data part
 
     friend class BasePort;
     friend class FirewirePort;
@@ -70,6 +71,8 @@ protected:
     { writeValid = flag; if (writeValid) memset(WriteBuffer, 0, WriteBufferSize); }
     unsigned int GetWriteNumBytes() const { return WriteBufferSize; }
     quadlet_t *GetWriteBuffer() { return WriteBuffer; }
+    quadlet_t *GetWriteBufferData() { return WriteBufferData; }
+    virtual void InitWriteBuffer(quadlet_t *buf, size_t data_offset) = 0;
 
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards

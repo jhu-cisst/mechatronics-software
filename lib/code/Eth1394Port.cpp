@@ -36,6 +36,11 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
+const unsigned int ETH_ALIGN32 = 2;          // Number of extra bytes for 32-bit alignment
+const unsigned int ETH_HEADER_LEN = 14;      // Number of bytes in Ethernet header
+const unsigned int FW_QWRITE_HEADER = 3*4;   // Number of bytes in Firewire quadlet write header
+const unsigned int FW_BWRITE_HEADER = 5*4;   // Number of bytes in Firewire block write header
+const unsigned int FW_CRC = 4;               // Number of bytes in Firewire CRC
 const unsigned long QLA1_String = 0x514C4131;
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
 
@@ -67,6 +72,10 @@ Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394Callback
         eth1394_write_nodeidmode(1);
     else
         outStr << "Initialization failed" << std::endl;
+}
+
+Eth1394Port::~Eth1394Port()
+{
 }
 
 void Eth1394Port::GetDestMacAddr(unsigned char *macAddr)
@@ -356,21 +365,32 @@ unsigned long Eth1394Port::GetFirmwareVersion(unsigned char boardId) const
 
 bool Eth1394Port::AddBoard(BoardIO *board)
 {
-    if(board->BoardId >= BoardIO::MAX_BOARDS)
+    unsigned char bid = board->BoardId;
+    if(bid >= BoardIO::MAX_BOARDS)
         return false;
 
-    if (!BoardExistMask_[board->BoardId])
+    if (!BoardExistMask_[bid])
         return false;
 
-    if (!BoardInUseMask_[board->BoardId]){
-        BoardInUseMask_[board->BoardId] = true;
+    if (!BoardInUseMask_[bid]){
+        BoardInUseMask_[bid] = true;
         NumOfNodesInUse_++;
-        BoardList[board->BoardId] = board;
+        BoardList[bid] = board;
         BoardInUseIntegerUpdate();
+#if 0 // PK TEMP
         eth1394_write_nodenum();
         // write the GLOBAL_BOARD register
         WriteQuadletBroadcast(0xC,bswap_32(BoardInUseInteger_));
+#endif
         board->port = this;
+        // Allocate a buffer that is big enough for Ethernet and FireWire headers as well
+        // as the data to be sent.
+        size_t block_write_len = (ETH_ALIGN32 + ETH_HEADER_LEN + FW_BWRITE_HEADER +
+                                  board->GetWriteNumBytes() + FW_CRC)/sizeof(quadlet_t);
+        quadlet_t * buf = new quadlet_t[block_write_len];
+        // Offset into the data part of the buffer
+        size_t offset = (ETH_ALIGN32 + ETH_HEADER_LEN + FW_BWRITE_HEADER)/sizeof(quadlet_t);
+        board->InitWriteBuffer(buf, offset);
     }
 
     return true;
@@ -383,12 +403,17 @@ bool Eth1394Port::RemoveBoard(unsigned char boardId)
     if(BoardInUseMask_[boardId]){
         BoardInUseMask_[boardId] = false;
         NumOfNodesInUse_--;
+        // Free up the memory that was allocated in AddBoard
+        delete [] BoardList[boardId]->GetWriteBuffer();
+        BoardList[boardId]->InitWriteBuffer(0, 0);
         BoardList[boardId]->port = 0;
         BoardList[boardId] = 0;        
         BoardInUseIntegerUpdate();
+#if 0 // PK TEMP
         eth1394_write_nodenum();
         // write the GLOBAL_BOARD register
         WriteQuadletBroadcast(0xC,bswap_32(BoardInUseInteger_));
+#endif
     }
     return true;
 }
@@ -454,10 +479,10 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
 
     // Ethernet frame
-    const int ethlength = length_fw * 4 + 14;
+    const int ethlength = length_fw * 4 + ETH_HEADER_LEN;
     unsigned char frame[ethlength];
-    memcpy(frame, frame_hdr, 14);
-    memcpy(frame + 14, packet_FW, length_fw * 4);
+    memcpy(frame, frame_hdr, ETH_HEADER_LEN);
+    memcpy(frame + ETH_HEADER_LEN, packet_FW, length_fw * 4);
 
     if (pcap_sendpacket(handle, frame, ethlength) != 0)
     {
@@ -478,7 +503,7 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     ret = true;
 
     // check the packet length, in bytes
-    if (header.len - 14 - NumOfNodesInUse_ * 4 * 17 != 0)
+    if (header.len - ETH_HEADER_LEN - NumOfNodesInUse_ * 4 * 17 != 0)
     {
         outStr << "ERROR: Broadcast read packet length error" << std::endl;
         return false;
@@ -491,7 +516,7 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
             const int readSize = 17;  // 1 seq + 16 data, unit quadlet
             quadlet_t readBuffer[readSize];
 
-            memcpy(readBuffer, packet + 14 + loopSeq * readSize * 4, readSize * 4);
+            memcpy(readBuffer, packet + ETH_HEADER_LEN + loopSeq * readSize * 4, readSize * 4);
 
             unsigned int seq = (bswap_32(readBuffer[0]) >> 16);
 
@@ -530,7 +555,7 @@ bool Eth1394Port::WriteAllBoards()
 
     for (size_t bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
         if(BoardInUseMask_[bid]){
-            quadlet_t *buf = BoardList[bid]->GetWriteBuffer();
+            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
             unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
             unsigned int numQuads = numBytes/4;
             // Currently (Rev 1 firmware), the last quadlet (Status/Control register)
@@ -556,7 +581,7 @@ bool Eth1394Port::WriteAllBoards()
 
 bool Eth1394Port::WriteAllBoardsBroadcast(void)
 {
-    // check hanle
+    // check handle
     if (!handle) {
         outStr << "WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
@@ -577,7 +602,7 @@ bool Eth1394Port::WriteAllBoardsBroadcast(void)
     for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
         if (BoardList[bid]) {
             numOfBoards++;
-            quadlet_t *buf = BoardList[bid]->GetWriteBuffer();
+            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
             unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
             memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
             // bcBufferOffset equals total numBytes to write, when the loop ends
@@ -595,7 +620,7 @@ bool Eth1394Port::WriteAllBoardsBroadcast(void)
     // loop 2: send out control quadlet if necessary
     for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
         if (BoardList[bid]) {
-            quadlet_t *buf = BoardList[bid]->GetWriteBuffer();
+            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
             unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
             unsigned int numQuads = numBytes/4;
             quadlet_t ctrl = buf[numQuads-1];  // Get last quedlet
@@ -642,7 +667,21 @@ bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
             return false;    
         }
     }
-    return !eth1394_write(boardId, addr, 4, &data);
+
+    // Create buffer that is large enough for Ethernet header and Firewire packet
+    quadlet_t buffer[(ETH_ALIGN32+ETH_HEADER_LEN+FW_QWRITE_HEADER+4+FW_CRC)/sizeof(quadlet_t)];
+    quadlet_t *packet_FW = buffer + (ETH_ALIGN32+ETH_HEADER_LEN)/sizeof(quadlet_t);
+
+    // header
+    fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
+    make_1394_header(packet_FW, boardId, addr, Eth1394Port::QWRITE, fw_tl);
+    // quadlet data
+    packet_FW[3] = data;
+    // CRC
+    packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, FW_QWRITE_HEADER+4)));
+
+    size_t length_fw = (FW_QWRITE_HEADER + sizeof(quadlet_t) + FW_CRC)/sizeof(quadlet_t);
+    return eth1394_write(boardId, buffer, length_fw);
 }
 
 bool Eth1394Port::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
@@ -669,6 +708,19 @@ bool Eth1394Port::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *d
 
 bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
 {
+    if (nbytes == 4) {
+        return WriteQuadlet(boardId, addr, *data);
+    }
+    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
+        outStr << "WriteBlock: illegal length in bytes = " << nbytes << std::endl;
+        return false;
+    }
+
+    quadlet_t *frame = 0;     // The entire Ethernet frame (headers and data)
+    // Offset into the data part of the frame
+    size_t data_offset = (ETH_ALIGN32 + ETH_HEADER_LEN + FW_BWRITE_HEADER)/sizeof(quadlet_t);
+    bool realTimeWrite = false;
+
     if (boardId != 0xff) {   // 0xff is for Ethernet multicast
         if (boardId >= BoardIO::MAX_BOARDS) {
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
@@ -678,15 +730,53 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
             outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
             return false;
         }
+        // Check for real-time write
+        if ((BoardList[boardId]->GetWriteBufferData() == data) &&
+            (nbytes <= BoardList[boardId]->GetWriteNumBytes())) {
+            realTimeWrite = true;
+            frame = BoardList[boardId]->GetWriteBuffer();
+        }
     }
-    return !eth1394_write(boardId, addr, nbytes, data);
+
+    if (!realTimeWrite) {
+        size_t block_write_len = data_offset + (nbytes + FW_CRC)/sizeof(quadlet_t);
+        frame = new quadlet_t[block_write_len];
+    }
+
+    quadlet_t *fw_header = frame + (ETH_ALIGN32 + ETH_HEADER_LEN)/sizeof(quadlet_t);
+    // header
+    fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
+    make_1394_header(fw_header, boardId, addr, Eth1394Port::BWRITE, fw_tl);
+    // block length
+    fw_header[3] = bswap_32(nbytes<<16);
+    // header CRC
+    fw_header[4] = bswap_32(BitReverse32(crc32(0U, (void*)fw_header, FW_BWRITE_HEADER-sizeof(quadlet_t))));
+    // Pointer to data part of frame
+    quadlet_t *fw_data = frame + data_offset;
+    if (!realTimeWrite) {
+        // Copy the user-supplied data into the frame
+        memcpy(fw_data, data, nbytes);
+    }
+    // CRC
+    quadlet_t *fw_crc = fw_data + (nbytes/sizeof(quadlet_t));
+    *fw_crc = bswap_32(BitReverse32(crc32(0U, (void*)fw_data, nbytes)));
+
+    size_t length_fw = (FW_BWRITE_HEADER + nbytes + FW_CRC)/4;  // size in quadlets
+    bool ret = eth1394_write(boardId, frame, length_fw);
+    if (!realTimeWrite)
+        delete [] frame;
+    return ret;
 }
 
 bool Eth1394Port::WriteBlockBroadcast(
         nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
 {
+#if 0 // PK TEMP
     // TO FIX: eth1394_write does not yet handle 0xffff
     return !eth1394_write(0xffff, addr, nbytes, data);;
+#else
+    return false;
+#endif
 }
 
 
@@ -811,7 +901,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                            << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
                     continue;
                 }
-                unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
+                //unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
                 //outStr << "Packet length = " << std::dec << packetLength << std::endl;
                 numPacketsValid++;
                 int tl_recv = packet[16] >> 2;
@@ -865,79 +955,35 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 }
 
 
-int Eth1394Port::eth1394_write(nodeid_t node, nodeaddr_t addr,
-                               size_t length, quadlet_t *buffer)
+bool Eth1394Port::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_fw)
 {
-    unsigned int tcode;  // fw tcode
-    size_t length_fw;    // fw length in quadlets
-
-    if (length == 4) {
-        tcode = Eth1394Port::QWRITE;
-        length_fw = 5;
-    } else if ((length > 4) && (length%4 == 0)) {
-        tcode = Eth1394Port::BWRITE;
-        length_fw = 5 + length/4 + 1;
-    }
-    else
-    {
-        outStr << "eth1394_write: illegal length = " << length << std::endl;
-        return -1;
-    }
-
-    quadlet_t *packet_FW = new quadlet_t[length_fw];
-
-    // header
-    fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
-    make_1394_header(packet_FW, node, addr, tcode, fw_tl);
-
-    //quadlet write
-    if (tcode == QWRITE) {
-        packet_FW[3] = buffer[0];
-        packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
-    }
-    // data for block write
-    else {
-        packet_FW[3] = bswap_32(length<<16);
-        packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
-        memcpy(&(packet_FW[5]), buffer, length);
-        packet_FW[length_fw-1] = bswap_32(BitReverse32(crc32(0U, (void*)buffer, length)));
-    }
-
-    // print
-    if (DEBUG) {
-        std::cout << "------ FW Packet ------" << std::endl;
-        print_frame((unsigned char*)packet_FW, length_fw*sizeof(quadlet_t));
-        std::cout << std::endl;
-    }
-
     // Ethernet frame
-    int ethlength = length_fw * 4 + 14;  // eth frame length in bytes
-    // length field (big endian 16-bit integer)
-    // Following assumes length is less than 256 bytes
-    frame_hdr[12] = 0;
-    frame_hdr[13] = length_fw * 4;
-
-    uint8_t *frame = new uint8_t[ethlength];
-    memcpy(frame, frame_hdr, 14);
+    uint8_t *frame = reinterpret_cast<uint8_t *>(buffer) + ETH_ALIGN32;
+    memcpy(frame, frame_hdr, 12);
     if (node == 0xff) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
     }
     frame[5] = node;   // last byte of dest address is board id
-    memcpy(frame + 14, packet_FW, length_fw * 4);
+
+    // length field (big endian 16-bit integer)
+    // Following assumes length is less than 256 bytes
+    frame[12] = 0;
+    frame[13] = length_fw * 4;
+
+    // Firewire packet is already created by caller
+    int ethlength = length_fw*4 + ETH_HEADER_LEN;  // eth frame length in bytes
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
-        print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
+        print_frame((unsigned char*)frame, ethlength);
     }
 
     if (pcap_sendpacket(handle, frame, ethlength) != 0)
     {
         outStr << "ERROR: send packet failed" << std::endl;
-        return -1;
+        return false;
     }
-    delete [] packet_FW;
-    delete [] frame;
-    return 0;
+    return true;
 }
 
 int Eth1394Port::eth1394_write_nodenum(void)

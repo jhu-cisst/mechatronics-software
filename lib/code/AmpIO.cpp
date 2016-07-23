@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -79,13 +79,13 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes)
 {
     memset(read_buffer, 0, sizeof(read_buffer));
-    memset(write_buffer, 0, sizeof(write_buffer));
-    // Set members in base class (in the future, some of these may be set from
-    // the FirewirePort class, when the board is added)
+    memset(write_buffer_internal, 0, sizeof(write_buffer_internal));
+
+    // Set members in base class.
     ReadBufferSize = sizeof(read_buffer);
     ReadBuffer = read_buffer;
-    WriteBufferSize = sizeof(write_buffer);
-    WriteBuffer = write_buffer;
+    WriteBufferSize = sizeof(write_buffer_internal);
+    InitWriteBuffer(0, 0);
 }
 
 AmpIO::~AmpIO()
@@ -93,6 +93,18 @@ AmpIO::~AmpIO()
     if (port) {
         std::cerr << "Warning: AmpIO being destroyed while still in use by FirewirePort" << std::endl;
         port->RemoveBoard(this);
+    }
+}
+
+void AmpIO::InitWriteBuffer(quadlet_t *buf, size_t data_offset)
+{
+    if (buf) {
+        WriteBuffer = buf;
+        WriteBufferData = buf + data_offset;
+    }
+    else {
+        WriteBuffer = write_buffer_internal;
+        WriteBufferData = write_buffer_internal;
     }
 }
 
@@ -377,24 +389,24 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 void AmpIO::SetPowerEnable(bool state)
 {
     AmpIO_UInt32 enable_mask = bswap_32(0x00080000);
-    write_buffer[WB_CTRL_OFFSET] |=  enable_mask;
+    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
     AmpIO_UInt32 state_mask  = bswap_32(0x00040000);
     if (state)
-        write_buffer[WB_CTRL_OFFSET] |=  state_mask;
+        WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
     else
-        write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
+        WriteBufferData[WB_CTRL_OFFSET] &= ~state_mask;
 }
 
 bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 {
     if (index < NUM_CHANNELS) {
         AmpIO_UInt32 enable_mask = bswap_32(0x00000100 << index);
-        write_buffer[WB_CTRL_OFFSET] |=  enable_mask;
+        WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
         AmpIO_UInt32 state_mask  = bswap_32(0x00000001 << index);
         if (state)
-            write_buffer[WB_CTRL_OFFSET] |=  state_mask;
+            WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
         else
-            write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
+            WriteBufferData[WB_CTRL_OFFSET] &= ~state_mask;
         return true;
     }
     return false;
@@ -403,12 +415,12 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 void AmpIO::SetSafetyRelay(bool state)
 {
     AmpIO_UInt32 enable_mask = bswap_32(0x00020000);
-    write_buffer[WB_CTRL_OFFSET] |=  enable_mask;
+    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
     AmpIO_UInt32 state_mask  = bswap_32(0x00010000);
     if (state)
-        write_buffer[WB_CTRL_OFFSET] |=  state_mask;
+        WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
     else
-        write_buffer[WB_CTRL_OFFSET] &= ~state_mask;
+        WriteBufferData[WB_CTRL_OFFSET] &= ~state_mask;
 }
 
 bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
@@ -417,7 +429,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
     data = VALID_BIT | ((BoardId & 0x0F) << 24) | DAC_WR_A | (sdata & DAC_MASK);
 
     if (index < NUM_CHANNELS) {
-        write_buffer[index+WB_CURR_OFFSET] = bswap_32(data);
+        WriteBufferData[index+WB_CURR_OFFSET] = bswap_32(data);
         return true;
     }
     else

@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen
 
-  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -354,8 +354,18 @@ protected:
     enum { ReadBufSize = 4+3*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
+    // The (internal) read buffer; the base class ReadBuffer pointer
+    // is initialized to this buffer in the constructor.
     quadlet_t read_buffer[ReadBufSize];     // buffer for real-time reads
-    quadlet_t write_buffer[WriteBufSize];   // buffer for real-time writes
+
+    // Internal write buffer; the base class WriteBuffer and WriteBufferData pointers are
+    // initialized to this buffer in the constructor, so that they always point to valid memory.
+    // WriteBuffer and WriteBufferData can be changed by calling InitWriteBuffer
+    // (see Eth1394Port).
+    quadlet_t write_buffer_internal[WriteBufSize];
+
+    // Virtual method
+    void InitWriteBuffer(quadlet_t *buf, size_t data_offset);
 
     // Offsets of real-time read buffer contents, 16 = 4 + 2 * 4 quadlets
     enum {
