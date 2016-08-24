@@ -759,10 +759,14 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     }
     // CRC
     quadlet_t *fw_crc = fw_data + (nbytes/sizeof(quadlet_t));
+    // PK: temporarily save the last quadlet, which is the power control on a real-time write,
+    //     so that it does not get overwritten by the CRC.
+    quadlet_t temp_saved = *fw_crc;   // PK TEMP for real-time writes
     *fw_crc = bswap_32(BitReverse32(crc32(0U, (void*)fw_data, nbytes)));
 
     size_t length_fw = (FW_BWRITE_HEADER + nbytes + FW_CRC)/4;  // size in quadlets
     bool ret = eth1394_write(boardId, frame, length_fw);
+    *fw_crc = temp_saved;   // PK TEMP for real-time writes
     if (!realTimeWrite)
         delete [] frame;
     return ret;

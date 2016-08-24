@@ -68,7 +68,7 @@ protected:
     quadlet_t *GetReadBuffer() { return ReadBuffer; }
 
     void SetWriteValid(bool flag)
-    { writeValid = flag; if (writeValid) memset(WriteBuffer, 0, WriteBufferSize); }
+    { writeValid = flag; if (writeValid) memset(WriteBufferData, 0, WriteBufferSize); }
     unsigned int GetWriteNumBytes() const { return WriteBufferSize; }
     quadlet_t *GetWriteBuffer() { return WriteBuffer; }
     quadlet_t *GetWriteBufferData() { return WriteBufferData; }

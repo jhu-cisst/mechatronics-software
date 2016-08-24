@@ -101,6 +101,7 @@ void AmpIO::InitWriteBuffer(quadlet_t *buf, size_t data_offset)
     if (buf) {
         WriteBuffer = buf;
         WriteBufferData = buf + data_offset;
+        memset(WriteBufferData, 0, WriteBufSize*sizeof(quadlet_t));
     }
     else {
         WriteBuffer = write_buffer_internal;
