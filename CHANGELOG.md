@@ -1,6 +1,15 @@
 Change log
 ==========
 
+1.2.1 (2016-08-31)
+==================
+* API changes:
+  * None
+* New features:
+  * Compilation: use -fPIC when available
+* Bug fixes:
+ * None
+
 1.2.0 (2015-10-18)
 ==================
 * API changes:
