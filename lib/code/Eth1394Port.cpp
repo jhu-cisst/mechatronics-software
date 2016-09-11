@@ -105,8 +105,10 @@ void Eth1394Port::PrintDebug(std::ostream &debugStream, unsigned short status)
     if (status&0x2000) debugStream << "initOK ";
     if (status&0x1000) debugStream << "initReq ";
     if (status&0x0800) debugStream << "ethIoErr ";
-    if (status&0x0400) debugStream << "cmdReq ";
-    if (status&0x0200) debugStream << "cmdAck ";
+    //if (status&0x0400) debugStream << "cmdReq ";
+    //if (status&0x0200) debugStream << "cmdAck ";
+    if (status&0x0400) debugStream << "local ";
+    if (status&0x0200) debugStream << "remote ";
     if (status&0x0100) debugStream << "qRead ";
     if (status&0x0080) debugStream << "qWrite ";
     if (status&0x0040) debugStream << "bRead ";
@@ -840,7 +842,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     // header
     //    make_1394_header(packet_FW, node, addr, tcode);
     fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
-    make_1394_header(packet_FW, 0, addr, tcode, fw_tl);
+    make_1394_header(packet_FW, node, addr, tcode, fw_tl);
 
     if (tcode == BREAD)
         packet_FW[3] = bswap_32((length & 0xFFFF) << 16);
@@ -1071,18 +1073,15 @@ bool Eth1394Port::headercheck(uint8_t* header, bool isHUBtoPC) const
     unsigned int i;
     const uint8_t *srcAddr;
     const uint8_t *destAddr;
-    unsigned int bd_index;    // index of board id
     if (isHUBtoPC) {
         // the header should be "Local MAC addr" + "CID,0x1394,boardid"
         destAddr = frame_hdr+6;
         srcAddr = frame_hdr;
-        bd_index = 11;
     }
     else {
         // the header should be "CID,0x1394,boardid" + "Local MAC addr"
         destAddr = frame_hdr;
         srcAddr = frame_hdr+6;
-        bd_index = 5;
     }
     bool isBroadcast = true;
     for (i = 0; i < 6; i++) {
@@ -1103,8 +1102,7 @@ bool Eth1394Port::headercheck(uint8_t* header, bool isHUBtoPC) const
         print_mac(outStr, "Src", header+6);
         return false;
     }
-    for (i = 0; i < 6; i++) {
-        if (i == bd_index) continue;  // don't check boardid
+    for (i = 0; i < 5; i++) {   // don't check board id (last byte)
         if (header[i] != destAddr[i]) {
             outStr << "Header check failed for destination address" << std::endl;
             print_mac(outStr, "Header", header);
@@ -1236,7 +1234,7 @@ void print_frame(unsigned char* buffer, int length)
         if((i+3)%8 == 0)
             std::cout<<std::endl;
     }
-    std::cout<<std::endl;
+    std::cout << std::endl;
 }
 
 void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr)
