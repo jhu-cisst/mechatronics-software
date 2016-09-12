@@ -203,7 +203,7 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
     if (!port->ReadQuadlet(boardNum, 2, read_data))
         return false;
     read_data = bswap_32(read_data);
-    std::cout << "Node: " << ((read_data >> 2) && 0x000003f);
+    std::cout << "Node: " << std::dec << ((read_data >> 2) && 0x000003f);
     if (read_data & 0x02) std::cout << " (root)";
     if (read_data & 0x01) std::cout << " (power)";
     std::cout << std::endl;
@@ -271,18 +271,26 @@ int main(int argc, char **argv)
         return 0;
     }
     FwPort.AddBoard(&board1);
+#if 0
     if (!InitEthernet(board1)) {
         std::cout << "Failed to initialize Ethernet chip" << std::endl;
         FwPort.RemoveBoard(boardNum);
         return 0;
     }
+#else
+    // Read the Chip ID (16-bit read)
+    AmpIO_UInt16 chipID = board1.ReadKSZ8851ChipID();
+    std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
+#endif
 
     QuadletReadCallbackBoardId = board1.GetBoardId();
     Eth1394Port EthPort(0, std::cout, QuadletReadCallback);
     if (!EthPort.IsOK()) {
         std::cout << "Failed to initialize ethernet port" << std::endl;
+#if 0
         FwPort.RemoveBoard(boardNum);
         return 0;
+#endif
     }
 #else
     Eth1394Port EthPort(0, std::cout);
@@ -383,23 +391,13 @@ int main(int argc, char **argv)
                           << bswap_32(write_block[1]) << ", " << bswap_32(write_block[2]) << ", "
                           << bswap_32(write_block[3]) << std::endl;
                 for (i = 0; i < 4; i++) {
-                    write_block[i] = bswap_32(VALID_BIT | ((bswap_32(write_block[i])+(i+1)*0x100) & DAC_MASK));
+                    write_block[i] = bswap_32(VALID_BIT | (bswap_32(write_block[i])+(i+1)*0x100));
                 }
-#if 1
+                std::cout << "Setting new values" << std::endl;
                 if (!EthPort.WriteBlock(boardNum, 0, write_block, sizeof(write_block))) {
                     std::cout << "Failed to write block data via Ethernet port" << std::endl;
                     break;
                 }
-                PrintEthernetDebug(board1);
-#else
-                //For testing (first write fails)
-                //addr = 0x0001 | ((1) << 4);  // channel 1-4, DAC Control
-                //EthPort.WriteQuadlet(0, addr, write_block[0]);
-                for (i = 0; i < 4; i++) {
-                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
-                    EthPort.WriteQuadlet(boardNum, addr, write_block[i]);
-                }
-#endif
                 for (i = 0; i < 4; i++) {
                     addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
                     EthPort.ReadQuadlet(boardNum, addr, write_block[i]);
@@ -433,6 +431,7 @@ int main(int argc, char **argv)
         case 'c':
             ContinuousTest(&EthPort, boardNum);
             break;
+
         case 'f':
             std::cout << "Firewire PHY data via FireWire:" << std::endl;
             PrintFirewirePHY(&FwPort, boardNum);

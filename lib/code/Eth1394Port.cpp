@@ -794,6 +794,9 @@ bool Eth1394Port::WriteBlockBroadcast(
 void Eth1394Port::make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
                                    unsigned int tl)
 {
+    // For now, (node == 0xff) means Ethernet multicast. We change it to node 0.
+    if (node == 0xff)
+        node = 0;
     // FFC0 replicates the base node ID when using FireWire on PC. This is followed by a transaction
     // label (arbitrary value that is returned by any resulting FireWire packets) and the transaction code.
     packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tl & 0x3F) << 10 | (tcode & 0x0F) << 4);
@@ -954,8 +957,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                << ", nbytes = " << length << ", time = " << timeDiffSec << " sec" << std::endl;
         return -1;
     }
+#if 0
     outStr << "Processed " << numPackets << " packets, " << numPacketsValid << " valid"
            << ", time = " << timeDiffSec << " sec" << std::endl;
+#endif
 
     return 0;
 }
