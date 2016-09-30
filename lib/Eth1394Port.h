@@ -207,6 +207,12 @@ public:
     */
     bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
 
+    /*!
+     \brief Add delay (if needed) for PROM I/O operations
+     The delay is non-zero for Ethernet.
+    */
+    void PromDelay(void) const;
+
     // helper function -- public for now
     static void make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
                                  unsigned int tl);

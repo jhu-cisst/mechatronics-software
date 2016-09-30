@@ -785,7 +785,11 @@ bool Eth1394Port::WriteBlockBroadcast(
 #endif
 }
 
-
+void Eth1394Port::PromDelay(void) const
+{
+    // Wait 1 msec
+    Amp1394_Sleep(0.001);
+}
 
 // ---------------------------------------------------------
 // Protected

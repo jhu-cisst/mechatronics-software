@@ -332,9 +332,6 @@ int main(int argc, char **argv)
         std::cout << std::endl << std::endl;
 
         nodeaddr_t addr;
-        unsigned int tcode;
-        quadlet_t quad_data;
-        AmpIO_UInt16 srcAddress[3];
         quadlet_t read_data, write_data;
         quadlet_t fw_block_data[16];
         quadlet_t eth_block_data[16];

@@ -151,6 +151,12 @@ public:
      \return bool  True on success or False on failure
     */
     bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
+
+    /*!
+     \brief Add delay (if needed) for PROM I/O operations
+     The delay is 0 for FireWire.
+    */
+    void PromDelay(void) const {}
 };
 
 #endif // __FirewirePort_H__

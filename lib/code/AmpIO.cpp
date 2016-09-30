@@ -615,6 +615,7 @@ AmpIO_UInt32 AmpIO::PromGetId(void)
     AmpIO_UInt32 id = 0;
     quadlet_t data = 0x9f000000;
     if (port->WriteQuadlet(BoardId, 0x08, bswap_32(data))) {
+        port->PromDelay();
         // Should be ready by now...
         PromGetResult(id);
     }
@@ -628,6 +629,7 @@ bool AmpIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
 
     bool ret = port->WriteQuadlet(BoardId, address, bswap_32(data));
     if (ret) {
+        port->PromDelay();
         // Should be ready by now...
         ret = PromGetResult(status, type);
     }
@@ -766,7 +768,7 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     read_data = bswap_32(read_data);
     while (read_data&0x000f) {
         PROGRESS_CALLBACK(cb, -1);
-        if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
+        if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
         read_data = bswap_32(read_data);
     }
     if (read_data & 0xff000000) { // shouldn't happen
@@ -785,7 +787,7 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     if (nWritten != nbytes) {
         std::ostringstream msg;
         msg << "PromProgramPage: wrote " << nWritten << " of "
-            << nbytes << "bytes";
+            << nbytes << " bytes";
         ERROR_CALLBACK(cb, msg);
     }
     // Wait for "Write in Progress" bit to be cleared
@@ -832,6 +834,7 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
 
     if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
+        port->PromDelay();
         // Should be ready by now...
         if (!PromGetResult(result, PROM_25AA128))
             return false;
