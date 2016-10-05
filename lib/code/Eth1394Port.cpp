@@ -105,10 +105,12 @@ void Eth1394Port::PrintDebug(std::ostream &debugStream, unsigned short status)
     if (status&0x2000) debugStream << "initOK ";
     if (status&0x1000) debugStream << "initReq ";
     if (status&0x0800) debugStream << "ethIoErr ";
+    if (status&0x0400) debugStream << "PacketErr ";
+    if (status&0x0200) debugStream << "DestErr ";
     //if (status&0x0400) debugStream << "cmdReq ";
     //if (status&0x0200) debugStream << "cmdAck ";
-    if (status&0x0400) debugStream << "local ";
-    if (status&0x0200) debugStream << "remote ";
+    //if (status&0x0400) debugStream << "local ";
+    //if (status&0x0200) debugStream << "remote ";
     if (status&0x0100) debugStream << "qRead ";
     if (status&0x0080) debugStream << "qWrite ";
     if (status&0x0040) debugStream << "bRead ";

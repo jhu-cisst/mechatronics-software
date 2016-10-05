@@ -783,7 +783,8 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         msg << "PromProgramPage: could not get PROM result";
         ERROR_CALLBACK(cb, msg);
     }
-    nWritten = 4*(nWritten-1);  // convert from quadlets to bytes
+    if (nWritten > 0)
+        nWritten = 4*(nWritten-1);  // convert from quadlets to bytes
     if (nWritten != nbytes) {
         std::ostringstream msg;
         msg << "PromProgramPage: wrote " << nWritten << " of "
