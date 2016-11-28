@@ -170,7 +170,7 @@ bool InitEthernet(AmpIO &Board)
     return true;
 }
 
-void  ContinuousTest(BasePort *port, unsigned char boardNum)
+void  ContinuousReadTest(BasePort *port, unsigned char boardNum)
 {
     bool done = false;
     quadlet_t read_data;
@@ -178,7 +178,9 @@ void  ContinuousTest(BasePort *port, unsigned char boardNum)
     size_t success = 0;
     size_t readFailures = 0;
     size_t compareFailures = 0;
+    unsigned long count = 0;
     while (!done) {
+        count++;
         read_data = 0;
         if (!port->ReadQuadlet(boardNum, 4, read_data))
             readFailures++;
@@ -189,10 +191,56 @@ void  ContinuousTest(BasePort *port, unsigned char boardNum)
                 compareFailures++;
         }
         if (readFailures + compareFailures > 5) done = true;
+
+        // print status
+        if (count % 10000 == 0) {
+            std::cout << "Success = " << std::dec << success << ", read failures = " << readFailures << ", compare failures = "
+                      << compareFailures << std::endl;
+        }
     }
-    std::cout << "Success = " << std::dec << success << ", read failures = " << readFailures << ", compare failures = "
-              << compareFailures << std::endl;
 }
+
+void  ContinuousWriteTest(BasePort *ethPort, BasePort *fwPort, unsigned char boardNum)
+{
+    bool done = false;
+    quadlet_t read_data;
+    size_t success = 0;
+    size_t writeFailures = 0;
+    size_t compareFailures = 0;
+    quadlet_t write_data = 0x0;
+    int count = 0;
+
+    while (!done) {
+        read_data = -1;
+        write_data++;
+        count++;
+        if (!ethPort->WriteQuadlet(boardNum, 0x0F, bswap_32(write_data)))   // 0x0F is REG_DEBUG
+            writeFailures++;
+        else {
+            usleep(500);  // sleep 1ms
+            fwPort->ReadQuadlet(boardNum, 0x0F, read_data);
+            read_data = bswap_32(read_data);
+            if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
+                success++;
+            else {
+                compareFailures++;
+                std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
+            }
+        }
+        if (writeFailures + compareFailures > 200) done = true;
+
+        if (count % 1000 == 0) {
+            std::cout << "Success = " << std::dec << success << ", write failures = " << writeFailures << ", compare failures = "
+                      << compareFailures << std::endl;
+        }
+
+        if (count >= 10000) {
+            done = true;
+            std::cout << "end write_data = 0x" << std::hex << write_data << "\n";
+        }
+    }
+}
+
 
 bool PrintFirewirePHY(BasePort *port, int boardNum)
 {
@@ -325,6 +373,7 @@ int main(int argc, char **argv)
         std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "  8) Multicast quadlet read" << std::endl;
         std::cout << "  c) Continuous test (quadlet reads)" << std::endl;
+        std::cout << "  d) Continuous write test (quadlet write)" << std::endl;
         std::cout << "  f) Print Firewire PHY registers" << std::endl;
         std::cout << "Select option: ";
         
@@ -426,7 +475,11 @@ int main(int argc, char **argv)
                 break;
 
         case 'c':
-            ContinuousTest(&EthPort, boardNum);
+            ContinuousReadTest(&EthPort, boardNum);
+            break;
+
+        case 'd':
+            ContinuousWriteTest(&EthPort, &FwPort, boardNum);
             break;
 
         case 'f':
