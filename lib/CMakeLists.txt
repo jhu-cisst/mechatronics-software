@@ -40,6 +40,21 @@ add_library(Amp1394 STATIC
 
 target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES})
 
+
+option (Amp1394_BUILD_SWIG  "Build Amp1394 with Python wrapper" OFF)
+if (Amp1394_BUILD_SWIG)
+  find_package(SWIG REQUIRED)
+  include(${SWIG_USE_FILE})
+
+  find_package(PythonLibs)
+  include_directories(${PYTHON_INCLUDE_PATH})
+
+  set_source_files_properties(amp1394.i PROPERTIES CPLUSPLUS ON)
+  swig_add_module(amp1394 python amp1394.i ${HEADERS} ${SOURCE_FILES})
+  swig_link_libraries(amp1394 ${PYTHON_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+endif (Amp1394_BUILD_SWIG)
+
+
 # revision file
 configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/AmpIORevision.h.in"
                 "${Mechatronics_BINARY_DIR}/Amp1394/AmpIORevision.h")

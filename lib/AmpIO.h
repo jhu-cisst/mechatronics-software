@@ -38,7 +38,7 @@ class ostream;
 typedef int32_t  AmpIO_Int32;
 typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
-typedef uint8_t AmpIO_UInt8;
+typedef uint8_t  AmpIO_UInt8;
 
 class AmpIO : public BoardIO
 {

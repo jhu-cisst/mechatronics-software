@@ -9,6 +9,7 @@
 #
 # --- end cisst license ---
 
+cmake_minimum_required(VERSION 2.6)
 project(Amp1394Tests)
 
 include_directories(${Amp1394_INCLUDE_DIR})
