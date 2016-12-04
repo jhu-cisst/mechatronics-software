@@ -187,7 +187,6 @@ bool AmpIO::HasEthernet(void) const
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 12, read_data))
         return false;
-    read_data = bswap_32(read_data);
     // Bit 31 indicates whether Ethernet is present
     return (read_data&0x80000000);
 }
@@ -389,9 +388,9 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 
 void AmpIO::SetPowerEnable(bool state)
 {
-    AmpIO_UInt32 enable_mask = bswap_32(0x00080000);
+    AmpIO_UInt32 enable_mask = 0x00080000;
     WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
-    AmpIO_UInt32 state_mask  = bswap_32(0x00040000);
+    AmpIO_UInt32 state_mask  = 0x00040000;
     if (state)
         WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
     else
@@ -401,9 +400,9 @@ void AmpIO::SetPowerEnable(bool state)
 bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 {
     if (index < NUM_CHANNELS) {
-        AmpIO_UInt32 enable_mask = bswap_32(0x00000100 << index);
+        AmpIO_UInt32 enable_mask = 0x00000100 << index;
         WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
-        AmpIO_UInt32 state_mask  = bswap_32(0x00000001 << index);
+        AmpIO_UInt32 state_mask  = 0x00000001 << index;
         if (state)
             WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
         else
@@ -415,9 +414,9 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 
 void AmpIO::SetSafetyRelay(bool state)
 {
-    AmpIO_UInt32 enable_mask = bswap_32(0x00020000);
+    AmpIO_UInt32 enable_mask = 0x00020000;
     WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
-    AmpIO_UInt32 state_mask  = bswap_32(0x00010000);
+    AmpIO_UInt32 state_mask  = 0x00010000;
     if (state)
         WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
     else
@@ -445,7 +444,7 @@ AmpIO_UInt32 AmpIO::ReadStatus(void) const
 {
     AmpIO_UInt32 read_data = 0;
     if (port) port->ReadQuadlet(BoardId, 0, read_data);
-    return bswap_32(read_data);
+    return read_data;
 }
 
 bool AmpIO::ReadPowerStatus(void) const
@@ -464,7 +463,7 @@ AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
     AmpIO_UInt32 read_data = 0;
     // 11: quadlet read address for Safety Amp Disable
     if (port) port->ReadQuadlet(BoardId, 11, read_data);
-    return bswap_32(read_data) & 0x0000000F;
+    return read_data & 0x0000000F;
 }
 
 bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
@@ -474,7 +473,7 @@ bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
         AmpIO_UInt32 read_data;
         unsigned int channel = (index+1) << 4;
         ret = port->ReadQuadlet(BoardId, channel | ENC_LOAD_OFFSET, read_data);
-        if (ret) sdata = static_cast<AmpIO_Int32>(bswap_32(read_data));
+        if (ret) sdata = static_cast<AmpIO_Int32>(read_data);
     }
     return ret;
 }
@@ -489,7 +488,6 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
     unsigned int channel = (index+1) << 4;
     if (port && (index < NUM_CHANNELS)) {
         if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, read_data)) {
-            read_data = bswap_32(read_data);
             countsHigh = static_cast<AmpIO_UInt16>(read_data >> 16);
             countsLow  = static_cast<AmpIO_UInt16>(read_data);
             return true;
@@ -505,19 +503,19 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
 bool AmpIO::WritePowerEnable(bool state)
 {
     AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
-    return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
+    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
 }
 
 bool AmpIO::WriteAmpEnable(AmpIO_UInt8 mask, AmpIO_UInt8 state)
 {
     quadlet_t write_data = (mask << 8) | state;
-    return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
+    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
 }
 
 bool AmpIO::WriteSafetyRelay(bool state)
 {
     AmpIO_UInt32 write_data = state ? RELAY_ON : RELAY_OFF;
-    return (port ? port->WriteQuadlet(BoardId, 0, bswap_32(write_data)) : false);
+    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
 }
 
 bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
@@ -530,7 +528,7 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
         return false;
     }
     if (port && (index < NUM_CHANNELS)) {
-        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, bswap_32(static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE)));
+        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
     } else {
         return false;
     }
@@ -544,13 +542,13 @@ bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
         bits = BitReverse4[bits&0x0f];
     }
     quadlet_t write_data = (mask << 8) | bits;
-    return port->WriteQuadlet(BoardId, 6, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, 6, write_data);
 }
 
 bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     // period = counts(16 bits) * 5.208333 us (default = 0 = no timeout)
-    return port->WriteQuadlet(BoardId, 3, bswap_32(counts));
+    return port->WriteQuadlet(BoardId, 3, counts);
 }
 
 bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
@@ -563,7 +561,7 @@ bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_
     unsigned int channel = (index+1) << 4;
     if (port && (index < NUM_CHANNELS)) {
         AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsHigh) << 16) | countsLow;
-        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, bswap_32(counts));
+        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, counts);
     } else {
         return false;
     }
@@ -614,7 +612,7 @@ AmpIO_UInt32 AmpIO::PromGetId(void)
 {
     AmpIO_UInt32 id = 0;
     quadlet_t data = 0x9f000000;
-    if (port->WriteQuadlet(BoardId, 0x08, bswap_32(data))) {
+    if (port->WriteQuadlet(BoardId, 0x08, data)) {
         port->PromDelay();
         // Should be ready by now...
         PromGetResult(id);
@@ -627,7 +625,7 @@ bool AmpIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
     quadlet_t data = 0x05000000;
     nodeaddr_t address = GetPromAddress(type, true);
 
-    bool ret = port->WriteQuadlet(BoardId, address, bswap_32(data));
+    bool ret = port->WriteQuadlet(BoardId, address, data);
     if (ret) {
         port->PromDelay();
         // Should be ready by now...
@@ -638,12 +636,12 @@ bool AmpIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
 
 bool AmpIO::PromGetResult(AmpIO_UInt32 &result, PromType type)
 {
-    quadlet_t data;
+    quadlet_t read_data;
     nodeaddr_t address = GetPromAddress(type, false);
 
-    bool ret = port->ReadQuadlet(BoardId, address, data);
+    bool ret = port->ReadQuadlet(BoardId, address, read_data);
     if (ret)
-        result = static_cast<AmpIO_UInt32>(bswap_32(data));
+        result = static_cast<AmpIO_UInt32>(read_data);
     return ret;
 }
 
@@ -657,7 +655,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
     AmpIO_UInt32 page = 0;
     while (page < nbytes) {
         unsigned int bytesToRead = ((nbytes-page)<256u) ? (nbytes-page) : 256u;
-        if (!port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data)))
+        if (!port->WriteQuadlet(BoardId, 0x08, write_data))
             return false;
         // Read FPGA status register; if 4 LSB are 0, command has finished.
         // The IEEE-1394 clock is 24.576 MHz, so it should take
@@ -670,7 +668,7 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
         for (i = 0; (i < MAX_LOOP_CNT) && read_data; i++) {
             Amp1394_Sleep(0.00001);   // 10 usec
             if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
-            read_data = bswap_32(read_data)&0x000f;
+            read_data = read_data&0x000f;
         }
         if (i == MAX_LOOP_CNT) {
             std::cout << "PromReadData: command failed to finish, status = "
@@ -706,21 +704,21 @@ bool AmpIO::PromWriteEnable(PromType type)
 {
     quadlet_t write_data = 0x06000000;
     nodeaddr_t address = GetPromAddress(type, true);
-    return port->WriteQuadlet(BoardId, address, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, address, write_data);
 }
 
 bool AmpIO::PromWriteDisable(PromType type)
 {
     quadlet_t write_data = 0x04000000;
     nodeaddr_t address = GetPromAddress(type, true);
-    return port->WriteQuadlet(BoardId, address, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, address, write_data);
 }
 
 bool AmpIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
 {
     PromWriteEnable();
     quadlet_t write_data = 0xd8000000 | (addr&0x00ffffff);
-    if (!port->WriteQuadlet(BoardId, 0x08, bswap_32(write_data)))
+    if (!port->WriteQuadlet(BoardId, 0x08, write_data))
         return false;
     // Wait for erase to finish
     AmpIO_UInt32 status;
@@ -765,11 +763,9 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     // Read FPGA status register; if 4 LSB are 0, command has finished
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
-    read_data = bswap_32(read_data);
     while (read_data&0x000f) {
         PROGRESS_CALLBACK(cb, -1);
         if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
-        read_data = bswap_32(read_data);
     }
     if (read_data & 0xff000000) { // shouldn't happen
         std::ostringstream msg;
@@ -834,7 +830,7 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     quadlet_t write_data = 0x03000000|(addr << 8);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
 
-    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
+    if (port->WriteQuadlet(BoardId, address, write_data)) {
         port->PromDelay();
         // Should be ready by now...
         if (!PromGetResult(result, PROM_25AA128))
@@ -857,7 +853,7 @@ bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
     // 8-bit cmd + 16-bit addr + 8-bit data
     quadlet_t write_data = 0x02000000|(addr << 8)|data;
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (port->WriteQuadlet(BoardId, address, bswap_32(write_data))) {
+    if (port->WriteQuadlet(BoardId, address, write_data)) {
         // wait 5ms for the PROM to be ready to take new commands
         Amp1394_Sleep(0.005);
         return true;
@@ -879,7 +875,7 @@ bool AmpIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned in
     // trigger read
     quadlet_t write_data = 0xFE000000|(addr << 8)|(nquads-1);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (!port->WriteQuadlet(BoardId, address, bswap_32(write_data)))
+    if (!port->WriteQuadlet(BoardId, address, write_data))
         return false;
 
     // get result
@@ -909,7 +905,7 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     // trigger write
     quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    return port->WriteQuadlet(BoardId, address, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, address, write_data);
 }
 
 // ********************** KSZ8851 Ethernet Controller Methods ***********************************
@@ -918,33 +914,32 @@ bool AmpIO::ResetKSZ8851()
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x04000000;
-    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
 bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
 bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
 bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | data;
-    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+    if (!port->WriteQuadlet(BoardId, 12, write_data))
         return false;
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 12, read_data))
         return false;
-    read_data = bswap_32(read_data);
     // Bit 31 indicates whether Ethernet is present
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
@@ -957,7 +952,7 @@ bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data))) {
+    if (!port->WriteQuadlet(BoardId, 12, write_data)) {
         std::cout << "WriteQuadlet failed" << std::endl;
         return false;
     }
@@ -966,7 +961,6 @@ bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
         std::cout << "ReadQuadlet failed" << std::endl;
         return false;
     }
-    read_data = bswap_32(read_data);
     // Bit 31 indicates whether Ethernet is present
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
@@ -983,19 +977,18 @@ bool AmpIO::WriteKSZ8851DMA(const AmpIO_UInt16 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x0B000000 | data;
-    return port->WriteQuadlet(BoardId, 12, bswap_32(write_data));
+    return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
 bool AmpIO::ReadKSZ8851DMA(AmpIO_UInt16 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x09000000 | data;
-    if (!port->WriteQuadlet(BoardId, 12, bswap_32(write_data)))
+    if (!port->WriteQuadlet(BoardId, 12, write_data))
         return false;
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 12, read_data))
         return false;
-    read_data = bswap_32(read_data);
     // Bit 31 indicates whether Ethernet is present
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
@@ -1019,6 +1012,5 @@ AmpIO_UInt16 AmpIO::ReadKSZ8851Status()
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 12, read_data))
         return 0;
-    read_data = bswap_32(read_data);
     return static_cast<AmpIO_UInt16>(read_data>>16);
 }

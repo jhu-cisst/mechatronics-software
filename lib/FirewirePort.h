@@ -118,7 +118,7 @@ public:
     // Write to all boards using broadcasting
     bool WriteAllBoardsBroadcast(void);
 
-    // Read a quadlet from the specified board
+    // Read a quadlet from the specified board, true on success
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
     // Write a quadlet to the specified board

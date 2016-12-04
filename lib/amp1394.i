@@ -4,36 +4,42 @@
 /*Put headers and other declarations here*/
 #include "AmpIO.h"
 #include "Eth1394Port.h"
+#include "FirewirePort.h"
 #include <byteswap.h>
 extern void print_frame(unsigned char* buffer, int length);
 
- uint32_t bswap32(uint32_t in) {
-     return bswap_32(in);
- }
+/*Provide bswap_32*/
+uint32_t bswap32(uint32_t in) {
+    return bswap_32(in);
+}
 %}
-
 
 void print_frame(unsigned char* buffer, int length);
 uint32_t bswap32(uint32_t in);
 
 
+%include stdint.i
 typedef unsigned long int	nodeaddr_t;
 typedef unsigned int		quadlet_t;
 typedef unsigned int		uint32_t;
-typedef signed char		    AmpIO_UInt8;
 
 
 /*%apply int *INPUT { Int32 *in };*/
-%typemap(in,numinputs=0) quadlet_t& (quadlet_t temp) {
+%typemap(in,numinputs=0)
+    (quadlet_t& ARGOUT_QUADLET_T)
+    (quadlet_t temp)
+{
     $1 = &temp;
 }
-%typemap(argout) quadlet_t& ARGOUT_QUADLET_T{
+%typemap(argout) (quadlet_t& ARGOUT_QUADLET_T)
+{
     $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_int(*arg$argnum));
 }
 
-%apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
 
+// AmpIO class
 %include "AmpIO.h"
+
 
 class Eth1394Port
 {
@@ -58,7 +64,8 @@ public:
     bool WriteAllBoards(void);
     virtual bool WriteAllBoardsBroadcast(void);
     
-    // Read a quadlet 
+    // Read a quadlet
+    %apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
     // Write a quadlet
@@ -67,4 +74,27 @@ public:
     // int eth1394_write_nodeidmode(int mode);
 };
 
+
+class FirewirePort
+{
+ public:
+    FirewirePort(int portNum, std::ostream &debugStream = std::cerr);
+    ~FirewirePort();
+
+    int NumberOfUsers(void);
+    int GetNumOfNodes(void){return NumOfNodes_;}
+    bool IsOK(void) { return (handle != NULL); }
+
+    bool AddBoard(BoardIO *board);
+    bool RemoveBoard(unsigned char boardId);
+
+    int GetNodeId(unsigned char boardId) const;
+    unsigned long GetFirmwareVersion(unsigned char boardId) const;
+
+    %apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
+    bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
+    bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
+
+    bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
+};
 

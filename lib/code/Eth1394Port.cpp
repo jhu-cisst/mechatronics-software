@@ -570,7 +570,7 @@ bool Eth1394Port::WriteAllBoards()
             quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
             bool ret2 = true;
             if (ctrl) {    // if anything non-zero, write it
-                ret2 = WriteQuadlet(bid, 0, ctrl);
+                ret2 = WriteQuadlet(bid, 0x00, ctrl);
                 if (ret2) noneWritten = false;
                 else allOK = false;
             }
@@ -655,7 +655,9 @@ bool Eth1394Port::ReadQuadlet(unsigned char boardId,
             return false;
         }
     }
-    return !eth1394_read(boardId, addr, 4, &data);
+    bool ret = eth1394_read(boardId, addr, 4, &data);
+    data = bswap_32(data);
+    return (!ret);
 }
 
 
@@ -680,7 +682,7 @@ bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
     fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
     make_1394_header(packet_FW, boardId, addr, Eth1394Port::QWRITE, fw_tl);
     // quadlet data
-    packet_FW[3] = data;
+    packet_FW[3] = bswap_32(data);
     // CRC
     packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, FW_QWRITE_HEADER+4)));
 
@@ -692,6 +694,7 @@ bool Eth1394Port::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
 {
     // special case of WriteBlockBroadcast
     // nbytes = 4
+    data = bswap_32(data);
     return WriteBlockBroadcast(addr, &data, 4);
 }
 
