@@ -36,8 +36,35 @@ typedef unsigned int		uint32_t;
     $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_int(*arg$argnum));
 }
 
+%typemap(in,numinputs=0)
+    (int32_t& ARGOUT_INT32_T)
+    (int32_t temp)
+{
+    $1 = &temp;
+}
+%typemap(argout) (int32_t& ARGOUT_INT32_T)
+{
+    $result = SWIG_Python_AppendOutput($result, SWIG_From_int(*arg$argnum));
+}
+
+%typemap(in,numinputs=0)
+    (uint16_t& ARGOUT_UINT16_T)
+    (uint16_t temp)
+{
+    $1 = &temp;
+}
+%typemap(argout) (uint16_t& ARGOUT_UINT16_T)
+{
+    $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_short(*arg$argnum));
+}
+
 
 // AmpIO class
+// ReadDoutControl
+%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsHigh};
+%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsLow};
+// ReadEncoderPreload
+%apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata}; 
 %include "AmpIO.h"
 
 
@@ -96,5 +123,8 @@ class FirewirePort
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
     bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
+
+    // Stop Cycle Start Packets
+    void StopCycleStartPacket(void);
 };
 

@@ -49,6 +49,7 @@ protected:
 
     uint8_t fw_tl;          // FireWire transaction label (6 bits)
 
+    uint8_t BidBridge_; // bridge board ID
     int NumOfNodes_;    // number of nodes exist
     int NumOfNodesInUse_;   //number of nodes under control
     bool BoardExistMask_[BoardIO::MAX_BOARDS];  // Boards connected in the network
@@ -99,7 +100,7 @@ protected:
     int eth1394_write_nodeidmode(int mode);
 
 
-    // Initialize Firewire port
+    // Initialize Eth1394 port
     bool Init(void);
 
     // Look for nodes on the bus

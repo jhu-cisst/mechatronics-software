@@ -64,9 +64,6 @@ protected:
     // Initialize Firewire port
     bool Init(void);
 
-    // Stop Cycle Start Packets
-    void StopCycleStartPacket(void);
-
     // Cleanup Firewire port
     void Cleanup(void);
 
@@ -157,6 +154,9 @@ public:
      The delay is 0 for FireWire.
     */
     void PromDelay(void) const {}
+
+    // Stop Cycle Start Packets
+    void StopCycleStartPacket(void);
 };
 
 #endif // __FirewirePort_H__

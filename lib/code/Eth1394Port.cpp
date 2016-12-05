@@ -64,6 +64,7 @@ void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr);
 Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394CallbackType cb):
     BasePort(portNum, debugStream),
     fw_tl(0),
+    BidBridge_(0xFF),
     NumOfNodes_(0),
     NumOfNodesInUse_(0),
     eth1394_read_callback(cb)
@@ -139,7 +140,7 @@ void Eth1394Port::BoardInUseIntegerUpdate(void)
     BoardInUseInteger_ = tempBoardInUse;
 }
 
-bool Eth1394Port::Init()
+bool Eth1394Port::Init(void)
 {
     for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardExistMask_[i] = false;
@@ -290,39 +291,40 @@ bool Eth1394Port::ScanNodes(void)
         outStr << "ScanNodes: no response via multicast" << std::endl;
         return false;
     }
-    unsigned long bid = 0;   // board id
+
+    //    unsigned long BidBridge_ = 0;   // board id
     data = bswap_32(data);
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
-    bid = (data & BOARD_ID_MASK) >> 24;
+    BidBridge_ = (data & BOARD_ID_MASK) >> 24;
 
     // check hardware version
-    if (eth1394_read(bid, 0x04, 4, &data)) {
+    if (eth1394_read(BidBridge_, 0x04, 4, &data)) {
         outStr << "ScanNodes: unable to read hardware version from node "
-               << bid << std::endl;
+               << BidBridge_ << std::endl;
         return false;
     }
     data = bswap_32(data);
     if (data != QLA1_String) {
-        outStr << "Node " << bid << " is not a QLA board" << std::endl
+        outStr << "Node " << BidBridge_ << " is not a QLA board" << std::endl
                << "data = " << std::hex << data << std::endl;
         return false;
     }
 
     // read firmware version
     unsigned long fver = 0;
-    if (eth1394_read(bid, 0x07, 4, &data)) {
+    if (eth1394_read(BidBridge_, 0x07, 4, &data)) {
         outStr << "ScanNodes: unable to read firmware version from node "
-               << bid << std::endl;
+               << BidBridge_ << std::endl;
         return false;
     }
     data = bswap_32(data);
     fver = data;
 
-    outStr << "  BoardId = " << bid
+    outStr << "  BoardId = " << (int)BidBridge_
            << ", Firmware Version = " << fver << std::endl;
 
-    BoardExistMask_[bid] = true;
-    FirmwareVersion[bid] = fver;
+    BoardExistMask_[BidBridge_] = true;
+    FirmwareVersion[BidBridge_] = fver;
     NumOfNodes_++;
 
     // TODO: scan FireWire bus for other nodes
@@ -668,10 +670,10 @@ bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
             return false;
         }
-        if (!BoardInUseMask_[boardId]) {
-            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
-            return false;    
-        }
+//        if (!BoardInUseMask_[boardId]) {
+//            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+//            return false;
+//        }
     }
 
     // Create buffer that is large enough for Ethernet header and Firewire packet
@@ -876,7 +878,9 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     if (node == 0xff) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
     }
-    frame[5] = node;   // last byte of dest address is board id
+//    frame[5] = node;   // last byte of dest address is board id
+    frame[5] = BidBridge_;   // last byte of dest address is board id
+
     memcpy(frame + 14, packet_FW, length_fw * 4);
 
     if (DEBUG) {
@@ -914,8 +918,8 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         while ((packet = pcap_next(handle, &header)) != NULL) {
             numPackets++;
             if (headercheck((unsigned char *)packet, true)) {
-                if ((node != 0xff) && (packet[11] != node)) {
-                    outStr << "Packet not from node " << node << " (src lsb is " 
+                if ((node != 0xff) && (packet[11] != BidBridge_)) {
+                    outStr << "Packet not from node " << BidBridge_ << " (src lsb is "
                            << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
                     continue;
                 }
@@ -983,7 +987,8 @@ bool Eth1394Port::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_
     if (node == 0xff) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
     }
-    frame[5] = node;   // last byte of dest address is board id
+//    frame[5] = node;   // last byte of dest address is board id
+    frame[5] = BidBridge_;   // last byte of dest address is board id
 
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
