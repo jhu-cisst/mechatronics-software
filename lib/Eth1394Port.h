@@ -159,9 +159,6 @@ public:
     */
     bool RemoveBoard(unsigned char boardId);
 
-    // Set UseBroadcast_
-    void SetUseBroadcastFlag(bool bc = false);
-
     // Read all boards
     bool ReadAllBoards(void);
 

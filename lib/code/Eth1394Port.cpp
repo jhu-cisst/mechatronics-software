@@ -652,10 +652,10 @@ bool Eth1394Port::ReadQuadlet(unsigned char boardId,
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
             return false;
         }
-        if (!BoardInUseMask_[boardId]) {
-            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
-            return false;
-        }
+//        if (!BoardInUseMask_[boardId]) {
+//            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+//            return false;
+//        }
     }
     bool ret = eth1394_read(boardId, addr, 4, &data);
     data = bswap_32(data);

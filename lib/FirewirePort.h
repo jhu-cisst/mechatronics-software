@@ -89,9 +89,6 @@ public:
     // Set hub board
     bool SetHubBoard(BoardIO *hubboard);
 
-    // Set UseBroadcast_
-    void SetUseBroadcastFlag(bool bc);
-
     // Adds board(s)
     bool AddBoard(BoardIO *board);
 
