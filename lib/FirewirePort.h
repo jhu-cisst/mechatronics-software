@@ -129,11 +129,11 @@ public:
     bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
 
     // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                    unsigned int nbytes);
 
     // Write a block to the specified board
-    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                     unsigned int nbytes);
 
     /*!

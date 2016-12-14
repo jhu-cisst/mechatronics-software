@@ -63,14 +63,16 @@ void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr);
 
 Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394CallbackType cb):
     BasePort(portNum, debugStream),
-    fw_tl(0),
     BidBridge_(0xFF),
+    fw_tl(0),
     NumOfNodes_(0),
     NumOfNodesInUse_(0),
     eth1394_read_callback(cb)
 {
     if (Init())
-        eth1394_write_nodeidmode(1);
+//        eth1394_write_nodeidmode(1);
+//        eth1394_write_nodeidmode(0);
+        outStr << "Initialization done" << std::endl;
     else
         outStr << "Initialization failed" << std::endl;
 }
@@ -271,8 +273,17 @@ bool Eth1394Port::Init(void)
 bool Eth1394Port::ScanNodes(void)
 {
     // read each boards
-    //  - read firmware version
-    //  - set boardid (list or something)
+    //  1. Read bridge board id using Ethernet broadcast
+    //      eth1394_read(0xff, 0x00, 4, &data)
+    //  2. Now loop through node id (0x0-0xF, max 16 board) to build a Node2Board map
+    //  3. Build Board2Node map
+
+    int node, board;  // loop counters
+
+    // Clear Node2Board & Board2Node maps
+    memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
+    memset(Board2Node, BoardIO::MAX_BOARDS, sizeof(Board2Node));
+
 
 //    eth1394_write_nodeidmode(0);
     IsAllBoardsBroadcastCapable_ = true;
@@ -292,51 +303,77 @@ bool Eth1394Port::ScanNodes(void)
         return false;
     }
 
-    //    unsigned long BidBridge_ = 0;   // board id
-    data = bswap_32(data);
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
+    data = bswap_32(data);
     BidBridge_ = (data & BOARD_ID_MASK) >> 24;
+    outStr << "BidBridge_ = " << (int)BidBridge_ << "\n";
 
-    // check hardware version
-    if (eth1394_read(BidBridge_, 0x04, 4, &data)) {
-        outStr << "ScanNodes: unable to read hardware version from node "
-               << BidBridge_ << std::endl;
-        return false;
+    // Now scan all nodes
+    for (node = 0; node < BoardIO::MAX_BOARDS; node++)
+    {
+        // check hardware version
+        if (eth1394_read(node, 0x04, 4, &data)) {
+            outStr << "ScanNodes: unable to read hardware version from node "
+                   << node << std::endl;
+            break;
+        }
+        data = bswap_32(data);
+        if (data != QLA1_String) {
+            outStr << "Node " << node << " is not a QLA board" << std::endl
+                   << "data = " << std::hex << data << std::endl;
+            continue;
+        }
+
+        // read firmware version
+        unsigned long fver = 0;
+        if (eth1394_read(node, 0x07, 4, &data)) {
+            outStr << "ScanNodes: unable to read firmware version from node "
+                   << node << std::endl;
+            return false;
+        }
+        data = bswap_32(data);
+        fver = data;
+
+        // read board id
+        if (eth1394_read(node, 0x00, 4, &data)) {
+            outStr << "ScanNodes: unable to read status from node " << node << std::endl;
+            return false;
+        }
+        data = bswap_32(data);
+        // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
+        board = (data & BOARD_ID_MASK) >> 24;
+        outStr << "  Node " << node << ", BoardId = " << board
+               << ", Firmware Version = " << fver << std::endl;
+        if (Node2Board[node] < BoardIO::MAX_BOARDS) {
+            outStr << "    Duplicate entry, previous value = "
+                   << static_cast<int>(Node2Board[node]) << std::endl;
+        }
+        Node2Board[node] = board;
+        FirmwareVersion[board] = fver;
+        BoardExistMask_[board] = true;
+
+        // check firmware version
+        // FirmwareVersion >= 4, broadcast capable
+        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
+        NumOfNodes_++;
     }
-    data = bswap_32(data);
-    if (data != QLA1_String) {
-        outStr << "Node " << BidBridge_ << " is not a QLA board" << std::endl
-               << "data = " << std::hex << data << std::endl;
-        return false;
-    }
-
-    // read firmware version
-    unsigned long fver = 0;
-    if (eth1394_read(BidBridge_, 0x07, 4, &data)) {
-        outStr << "ScanNodes: unable to read firmware version from node "
-               << BidBridge_ << std::endl;
-        return false;
-    }
-    data = bswap_32(data);
-    fver = data;
-
-    outStr << "  BoardId = " << (int)BidBridge_
-           << ", Firmware Version = " << fver << std::endl;
-
-    BoardExistMask_[BidBridge_] = true;
-    FirmwareVersion[BidBridge_] = fver;
-    NumOfNodes_++;
-
-    // TODO: scan FireWire bus for other nodes
-
-    // check firmware version
-    // FirmwareVersion >= 4, broadcast capable
-    if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
         Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
         outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
+    }
+
+    // update Board2Node
+    for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
+        Board2Node[board] = BoardIO::MAX_BOARDS;
+        for (node = 0; node < NumOfNodes_; node++) {
+            if (Node2Board[node] == board) {
+                if (Board2Node[board] < BoardIO::MAX_BOARDS)
+                    outStr << "Warning: GetNodeId detected duplicate board id for " << board << std::endl;
+                Board2Node[board] = node;
+            }
+        }
     }
 
     // write num of nodes to eth1394 FPGA
@@ -357,7 +394,11 @@ void Eth1394Port::Reset(void)
 
 int Eth1394Port::GetNodeId(unsigned char boardId) const
 {
-    return boardId;
+//    return boardId;
+    if (boardId < BoardIO::MAX_BOARDS)
+        return Board2Node[boardId];
+    else
+        return BoardIO::MAX_BOARDS;  // ZC: maybe return -1
 }
 
 //! \todo MAXBOARDS?
@@ -647,17 +688,23 @@ bool Eth1394Port::WriteAllBoardsBroadcast(void)
 bool Eth1394Port::ReadQuadlet(unsigned char boardId,
                               nodeaddr_t addr, quadlet_t &data)
 {
+    int node = -1;
     if (boardId != 0xff) {   // 0xff is for Ethernet multicast
         if (boardId >= BoardIO::MAX_BOARDS) {
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
             return false;
         }
-//        if (!BoardInUseMask_[boardId]) {
-//            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
-//            return false;
-//        }
+        if (!BoardExistMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " does not exist" << std::endl;
+            return false;
+        }
+        node = GetNodeId(boardId);
     }
-    bool ret = eth1394_read(boardId, addr, 4, &data);
+    else {
+        node = 0xff;
+    }
+
+    bool ret = eth1394_read(node, addr, 4, &data);
     data = bswap_32(data);
     return (!ret);
 }
@@ -665,15 +712,20 @@ bool Eth1394Port::ReadQuadlet(unsigned char boardId,
 
 bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
+    int node = -1;
     if (boardId != 0xff) {   // 0xff is for Ethernet multicast
         if (boardId >= BoardIO::MAX_BOARDS) {
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
             return false;
         }
-//        if (!BoardInUseMask_[boardId]) {
-//            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
-//            return false;
-//        }
+        if (!BoardExistMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " does not exist" << std::endl;
+            return false;
+        }
+        node = GetNodeId(boardId);
+    }
+    else {
+        node = 0xff;   // multicast
     }
 
     // Create buffer that is large enough for Ethernet header and Firewire packet
@@ -682,14 +734,14 @@ bool Eth1394Port::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
 
     // header
     fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
-    make_1394_header(packet_FW, boardId, addr, Eth1394Port::QWRITE, fw_tl);
+    make_1394_header(packet_FW, node, addr, Eth1394Port::QWRITE, fw_tl);
     // quadlet data
     packet_FW[3] = bswap_32(data);
     // CRC
     packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, FW_QWRITE_HEADER+4)));
 
     size_t length_fw = (FW_QWRITE_HEADER + sizeof(quadlet_t) + FW_CRC)/sizeof(quadlet_t);
-    return eth1394_write(boardId, buffer, length_fw);
+    return eth1394_write(node, buffer, length_fw);
 }
 
 bool Eth1394Port::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
@@ -700,25 +752,30 @@ bool Eth1394Port::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
     return WriteBlockBroadcast(addr, &data, 4);
 }
 
-bool Eth1394Port::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
+bool Eth1394Port::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
 {
+    int node = -1;
     if (boardId != 0xff) {   // 0xff is for Ethernet multicast
         if (boardId >= BoardIO::MAX_BOARDS) {
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
             return false;
         }
-        if (!BoardInUseMask_[boardId]) {
-            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+        if (!BoardExistMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " does not exist" << std::endl;
             return false;
         }
+        node = GetNodeId(boardId);
     }
-    return !eth1394_read(boardId, addr, nbytes, data);
+    else {
+        node = 0xff;
+    }
+    return !eth1394_read(node, addr, nbytes, rdata);
 }
 
-bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
+bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
 {
     if (nbytes == 4) {
-        return WriteQuadlet(boardId, addr, *data);
+        return WriteQuadlet(boardId, addr, *wdata);
     }
     else if ((nbytes == 0) || ((nbytes%4) != 0)) {
         outStr << "WriteBlock: illegal length in bytes = " << nbytes << std::endl;
@@ -730,21 +787,26 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     size_t data_offset = (ETH_ALIGN32 + ETH_HEADER_LEN + FW_BWRITE_HEADER)/sizeof(quadlet_t);
     bool realTimeWrite = false;
 
+    int node = -1;
     if (boardId != 0xff) {   // 0xff is for Ethernet multicast
         if (boardId >= BoardIO::MAX_BOARDS) {
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
             return false;
         }
-        if (!BoardInUseMask_[boardId]) {
-            outStr << "Board " << static_cast<int>(boardId) << " not in use" << std::endl;
+        if (!BoardExistMask_[boardId]) {
+            outStr << "Board " << static_cast<int>(boardId) << " does not exist" << std::endl;
             return false;
         }
         // Check for real-time write
-        if ((BoardList[boardId]->GetWriteBufferData() == data) &&
+        if ((BoardList[boardId]->GetWriteBufferData() == wdata) &&
             (nbytes <= BoardList[boardId]->GetWriteNumBytes())) {
             realTimeWrite = true;
             frame = BoardList[boardId]->GetWriteBuffer();
         }
+        node = GetNodeId(boardId);
+    }
+    else {
+        node = 0xff;
     }
 
     if (!realTimeWrite) {
@@ -755,7 +817,7 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     quadlet_t *fw_header = frame + (ETH_ALIGN32 + ETH_HEADER_LEN)/sizeof(quadlet_t);
     // header
     fw_tl = (fw_tl+1)&0x3F;   // increment transaction label
-    make_1394_header(fw_header, boardId, addr, Eth1394Port::BWRITE, fw_tl);
+    make_1394_header(fw_header, node, addr, Eth1394Port::BWRITE, fw_tl);
     // block length
     fw_header[3] = bswap_32(nbytes<<16);
     // header CRC
@@ -764,7 +826,7 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     quadlet_t *fw_data = frame + data_offset;
     if (!realTimeWrite) {
         // Copy the user-supplied data into the frame
-        memcpy(fw_data, data, nbytes);
+        memcpy(fw_data, wdata, nbytes);
     }
     // CRC
     quadlet_t *fw_crc = fw_data + (nbytes/sizeof(quadlet_t));
@@ -774,7 +836,7 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     *fw_crc = bswap_32(BitReverse32(crc32(0U, (void*)fw_data, nbytes)));
 
     size_t length_fw = (FW_BWRITE_HEADER + nbytes + FW_CRC)/4;  // size in quadlets
-    bool ret = eth1394_write(boardId, frame, length_fw);
+    bool ret = eth1394_write(node, frame, length_fw);
     *fw_crc = temp_saved;   // PK TEMP for real-time writes
     if (!realTimeWrite)
         delete [] frame;
@@ -788,6 +850,7 @@ bool Eth1394Port::WriteBlockBroadcast(
     // TO FIX: eth1394_write does not yet handle 0xffff
     return !eth1394_write(0xffff, addr, nbytes, data);;
 #else
+    outStr << "Read from " << addr << " for " << nbytes << " bytes\n";
     return false;
 #endif
 }
@@ -877,9 +940,10 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     memcpy(frame, frame_hdr, 14);
     if (node == 0xff) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
+        frame[5] = node;     // keep multicast address
+    } else {
+        frame[5] = BidBridge_;   // last byte of dest address is bridge board id
     }
-//    frame[5] = node;   // last byte of dest address is board id
-    frame[5] = BidBridge_;   // last byte of dest address is board id
 
     memcpy(frame + 14, packet_FW, length_fw * 4);
 
@@ -986,8 +1050,8 @@ bool Eth1394Port::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_
     memcpy(frame, frame_hdr, 12);
     if (node == 0xff) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
+        frame[5] = node;     // keep multicast address
     }
-//    frame[5] = node;   // last byte of dest address is board id
     frame[5] = BidBridge_;   // last byte of dest address is board id
 
     // length field (big endian 16-bit integer)

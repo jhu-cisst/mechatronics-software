@@ -28,12 +28,13 @@ def TEST_ReadQuadlet(fw, eth):
 
 
 if __name__ == '__main__':
+    bid = 3;
     eth = amp1394.Eth1394Port(0)
-    bd1eth = amp1394.AmpIO(1)
+    bd1eth = amp1394.AmpIO(bid)
     eth.AddBoard(bd1eth)
 
     fw = amp1394.FirewirePort(0)
-    bd1fw = amp1394.AmpIO(1)
+    bd1fw = amp1394.AmpIO(bid)
     fw.AddBoard(bd1fw)
     import ipdb; ipdb.set_trace()
 

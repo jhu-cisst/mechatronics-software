@@ -41,3 +41,9 @@ add_custom_command(TARGET block1394 POST_BUILD
                       ${EXECUTABLE_OUTPUT_PATH}/block1394
                       ${EXECUTABLE_OUTPUT_PATH}/quad1394
                    COMMENT "Generating quad1394")
+
+add_custom_command(TARGET blocketh1394 POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy
+                      ${EXECUTABLE_OUTPUT_PATH}/blocketh1394
+                      ${EXECUTABLE_OUTPUT_PATH}/quadeth1394
+                   COMMENT "Generating quad1394eth")

@@ -46,10 +46,14 @@ protected:
 
     pcap_t *handle;
     uint8_t frame_hdr[14];  // dest addr (6), src addr (6), length (2)
+    uint8_t BidBridge_; // bridge board ID
 
     uint8_t fw_tl;          // FireWire transaction label (6 bits)
 
-    uint8_t BidBridge_; // bridge board ID
+    unsigned char Node2Board[BoardIO::MAX_BOARDS];
+    unsigned char Board2Node[BoardIO::MAX_BOARDS];
+    unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
+
     int NumOfNodes_;    // number of nodes exist
     int NumOfNodesInUse_;   //number of nodes under control
     bool BoardExistMask_[BoardIO::MAX_BOARDS];  // Boards connected in the network
@@ -188,11 +192,11 @@ public:
     bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
 
     // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                    unsigned int nbytes);
 
     // Write a block to the specified board
-    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                     unsigned int nbytes);
 
     /*!

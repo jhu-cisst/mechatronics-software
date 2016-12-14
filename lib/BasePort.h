@@ -131,11 +131,11 @@ public:
     virtual bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data) = 0;
 
     // Read a block from the specified board
-    virtual bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+    virtual bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                            unsigned int nbytes) = 0;
 
     // Write a block to the specified board
-    virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *data,
+    virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                             unsigned int nbytes) = 0;
 
     /*!

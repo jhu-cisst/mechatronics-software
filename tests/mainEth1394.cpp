@@ -92,6 +92,7 @@ bool CheckRegister(AmpIO &Board, AmpIO_UInt8 regNum, AmpIO_UInt16 mask, AmpIO_UI
 // Check whether Ethernet initialized correctly
 bool CheckEthernet(AmpIO &Board)
 {
+    std::cout << "Checking --- start ---" << "\n";
     bool ret = true;
     ret &= CheckRegister(Board, 0x10, 0xfff0, 0x9400);  // MAC address low = 0x940n (n = board id)
     ret &= CheckRegister(Board, 0x12, 0xffff, 0x0E13);  // MAC address middle = 0xOE13
@@ -109,9 +110,11 @@ bool CheckEthernet(AmpIO &Board)
     ComputeMulticastHash(MulticastMAC, HashReg, HashValue);
     ret &= CheckRegister(Board, HashReg, 0xffff, HashValue);
     ret &= CheckRegister(Board, 0x82, 0x03f7, 0x0020);  // Enable QMU frame count threshold (1), no auto-dequeue
-    ret &= CheckRegister(Board, 0x90, 0xffff, 0x2000);  // Enable receive interrupts (TODO: also consider link change interrupt)
+//    ret &= CheckRegister(Board, 0x90, 0xffff, 0x2000);  // Enable receive interrupts (TODO: also consider link change interrupt)
+    ret &= CheckRegister(Board, 0x90, 0xffff, 0xe000);  // Enable receive interrupts (TODO: also consider link change interrupt)
     ret &= CheckRegister(Board, 0x70, 0x0001, 0x0001);
     ret &= CheckRegister(Board, 0x74, 0x0001, 0x0001);
+    std::cout << "Checking ---- end ----" << "\n";
     return ret;
 }
 
@@ -134,6 +137,7 @@ bool InitEthernet(AmpIO &Board)
     Board.ResetKSZ8851();
     // Wait 100 msec
     usleep(100000L);
+    // Scan Nodes
 
     // Read the status
     status = Board.ReadKSZ8851Status();
@@ -191,9 +195,10 @@ void  ContinuousReadTest(BasePort *port, unsigned char boardNum)
                 compareFailures++;
         }
         if (readFailures + compareFailures > 5) done = true;
+        if (count >= 10000) done = true;
 
         // print status
-        if (count % 10000 == 0) {
+        if (count % 1000 == 0) {
             std::cout << "Success = " << std::dec << success << ", read failures = " << readFailures << ", compare failures = "
                       << compareFailures << std::endl;
         }
@@ -214,18 +219,18 @@ void  ContinuousWriteTest(BasePort *ethPort, BasePort *fwPort, unsigned char boa
         read_data = -1;
         write_data++;
         count++;
-        if (!ethPort->WriteQuadlet(boardNum, 0x0F, bswap_32(write_data)))   // 0x0F is REG_DEBUG
+        if (!ethPort->WriteQuadlet(boardNum, 0x0F, write_data))   // 0x0F is REG_DEBUG
             writeFailures++;
         else {
-            usleep(500);  // sleep 1ms
-            fwPort->ReadQuadlet(boardNum, 0x0F, read_data);
-            read_data = bswap_32(read_data);
-            if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
-                success++;
-            else {
-                compareFailures++;
-                std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
-            }
+//            usleep(50);  // sleep 1ms
+//            fwPort->ReadQuadlet(boardNum, 0x0F, read_data);
+//            read_data = bswap_32(read_data);
+//            if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
+//                success++;
+//            else {
+//                compareFailures++;
+//                std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
+//            }
         }
         if (writeFailures + compareFailures > 200) done = true;
 
@@ -246,30 +251,27 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
 {
     quadlet_t write_data = 0;
     quadlet_t read_data = 0;
-    if (!port->WriteQuadlet(boardNum, 1, bswap_32(write_data)))
+    if (!port->WriteQuadlet(boardNum, 1, write_data))
         return false;
     if (!port->ReadQuadlet(boardNum, 2, read_data))
         return false;
-    read_data = bswap_32(read_data);
     std::cout << "Node: " << std::dec << ((read_data >> 2) && 0x000003f);
     if (read_data & 0x02) std::cout << " (root)";
     if (read_data & 0x01) std::cout << " (power)";
     std::cout << std::endl;
     write_data = 1;
     read_data = 0;
-    if (!port->WriteQuadlet(boardNum, 1, bswap_32(write_data)))
+    if (!port->WriteQuadlet(boardNum, 1, write_data))
         return false;
     if (!port->ReadQuadlet(boardNum, 2, read_data))
         return false;
-    read_data = bswap_32(read_data);
     std::cout << "Gap count = " << (read_data&0x000003f) << " (default = 63)" << std::endl;
     write_data = 2;
     read_data = 0;
-    if (!port->WriteQuadlet(boardNum, 1, bswap_32(write_data)))
+    if (!port->WriteQuadlet(boardNum, 1, write_data))
         return false;
     if (!port->ReadQuadlet(boardNum, 2, read_data))
         return false;
-    read_data = bswap_32(read_data);
     int speed = (read_data >> 6)&0x00000003;
     std::cout << "Speed = " << speed << ", num_ports = " << (read_data&0x0000001f) << std::endl;
     return true;
@@ -360,6 +362,7 @@ int main(int argc, char **argv)
     tcsetattr(0, TCSANOW, &newTerm);
 
     bool done = false;
+    quadlet_t read_data, write_data;
     while (!done) {
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
@@ -374,6 +377,7 @@ int main(int argc, char **argv)
         std::cout << "  8) Multicast quadlet read" << std::endl;
         std::cout << "  c) Continuous test (quadlet reads)" << std::endl;
         std::cout << "  d) Continuous write test (quadlet write)" << std::endl;
+        std::cout << "  e) Read RXFCTR packet count" << std::endl;
         std::cout << "  f) Print Firewire PHY registers" << std::endl;
         std::cout << "Select option: ";
         
@@ -381,7 +385,6 @@ int main(int argc, char **argv)
         std::cout << std::endl << std::endl;
 
         nodeaddr_t addr;
-        quadlet_t read_data, write_data;
         quadlet_t fw_block_data[16];
         quadlet_t eth_block_data[16];
         quadlet_t write_block[4] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444 };
@@ -394,16 +397,27 @@ int main(int argc, char **argv)
                 break;
 
         case '1':   // Write quadlet from PC to FPGA
-                write_data = 0x0;
-                if (!EthPort.WriteQuadlet(boardNum, 0, write_data))
-                    std::cout << "Failed to write quadlet via Ethernet port" << std::endl;
-                break;
+//            std::cout << "Data to write: 0x";
+//            std::cin >> std::hex >> write_data;
+//            getchar();
+            write_data++;
+            if (!EthPort.WriteQuadlet(boardNum, 0x0F, write_data ))
+                std::cout << "Failed to write quadlet via Ethernet port" << std::endl;
+            else
+                std::cout << "Write data = 0x" << std::hex << write_data << "\n";
+//            else {
+//                read_data = 0;
+//                EthPort.ReadQuadlet(boardNum, 0x0F, read_data);
+//                std::cout << "Read quadlet data: 0x" << std::hex << bswap_32(read_data) << std::endl;
+//            }
+
+            break;
 
         case '2':   // Read request from PC via Ethernet (note that QuadletReadCallback is called)
                 read_data = 0;
-                addr = 4;  // Return QLA1
+                addr = 0x04;  // Return QLA1
                 if (EthPort.ReadQuadlet(boardNum, addr, read_data))
-                    std::cout << "Read quadlet data: " << std::hex << bswap_32(read_data) << std::endl;
+                    std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
                 else
                     std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
                 memcpy(buf, (char *)(&read_data), 4);
@@ -433,11 +447,11 @@ int main(int argc, char **argv)
                     addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
                     EthPort.ReadQuadlet(boardNum, addr, write_block[i]);
                 }
-                std::cout << "Read from DAC: " << std::hex << bswap_32(write_block[0]) << ", "
-                          << bswap_32(write_block[1]) << ", " << bswap_32(write_block[2]) << ", "
-                          << bswap_32(write_block[3]) << std::endl;
+                std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
+                          << write_block[1] << ", " << write_block[2] << ", "
+                          << write_block[3] << std::endl;
                 for (i = 0; i < 4; i++) {
-                    write_block[i] = bswap_32(VALID_BIT | (bswap_32(write_block[i])+(i+1)*0x100));
+                    write_block[i] = bswap_32(VALID_BIT | (write_block[i]+(i+1)*0x100));
                 }
                 std::cout << "Setting new values" << std::endl;
                 if (!EthPort.WriteBlock(boardNum, 0, write_block, sizeof(write_block))) {
@@ -448,9 +462,9 @@ int main(int argc, char **argv)
                     addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
                     EthPort.ReadQuadlet(boardNum, addr, write_block[i]);
                 }
-                std::cout << "Read from DAC: " << std::hex << bswap_32(write_block[0]) << ", "
-                          << bswap_32(write_block[1]) << ", " << bswap_32(write_block[2]) << ", "
-                          << bswap_32(write_block[3]) << std::endl;
+                std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
+                          << write_block[1] << ", " << write_block[2] << ", "
+                          << write_block[3] << std::endl;
                 break;
 
         case '5':
@@ -469,7 +483,7 @@ int main(int argc, char **argv)
                 read_data = 0;
                 addr = 0;  // Return status register
                 if (EthPort.ReadQuadlet(0xff, addr, read_data))
-                    std::cout << "Read quadlet data: " << std::hex << bswap_32(read_data) << std::endl;
+                    std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
                 else
                     std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
                 break;
@@ -480,6 +494,16 @@ int main(int argc, char **argv)
 
         case 'd':
             ContinuousWriteTest(&EthPort, &FwPort, boardNum);
+            break;
+
+        case 'e':
+            AmpIO_UInt16 reg;
+            board1.ReadKSZ8851Reg(0x92, reg);
+            std::cout << "ISR    = 0x" << std::hex << reg << "  ";
+            board1.ReadKSZ8851Reg(0x9C, reg);
+            std::cout << "RXFCTR = 0x" << std::hex << reg << "  ";
+            board1.ReadKSZ8851Reg(0x7C, reg);
+            std::cout << "RXFHSR = 0x" << std::hex << reg << "\n";
             break;
 
         case 'f':

@@ -1,6 +1,8 @@
 /* File : amp1394.i */
 %module amp1394
 %{
+#define SWIG_FILE_WITH_INIT
+    
 /*Put headers and other declarations here*/
 #include "AmpIO.h"
 #include "Eth1394Port.h"
@@ -14,11 +16,17 @@ uint32_t bswap32(uint32_t in) {
 }
 %}
 
+%include stdint.i
+%include numpy.i
+
+%init %{
+    import_array();
+%}
+
 void print_frame(unsigned char* buffer, int length);
 uint32_t bswap32(uint32_t in);
 
 
-%include stdint.i
 typedef unsigned long int	nodeaddr_t;
 typedef unsigned int		quadlet_t;
 typedef unsigned int		uint32_t;
@@ -69,6 +77,8 @@ typedef unsigned int		uint32_t;
 
 
 %apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
+%apply (unsigned int* ARGOUT_ARRAY1, int DIM1) {(quadlet_t *rdata, unsigned int nbytes)};
+%apply (unsigned int* IN_ARRAY1, int DIM1) {(quadlet_t *wdata, unsigned int nbytes)};
 %include "Eth1394Port.h"
 %include "FirewirePort.h"
 
