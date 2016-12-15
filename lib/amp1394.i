@@ -26,7 +26,6 @@ uint32_t bswap32(uint32_t in) {
 void print_frame(unsigned char* buffer, int length);
 uint32_t bswap32(uint32_t in);
 
-
 typedef unsigned long int	nodeaddr_t;
 typedef unsigned int		quadlet_t;
 typedef unsigned int		uint32_t;
@@ -66,19 +65,80 @@ typedef unsigned int		uint32_t;
     $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_short(*arg$argnum));
 }
 
+// -------------------------
+// IN_ARRAY
+%typecheck(SWIG_TYPECHECK_DOUBLE_ARRAY,
+           fragment="NumPy_Macros")
+  (quadlet_t* IN_ARRAY1, unsigned int NBYTES)
+{
+  $1 = is_array($input) || PySequence_Check($input);
+}
+%typemap(in,
+         fragment="NumPy_Fragments")
+  (quadlet_t* IN_ARRAY1, unsigned int NBYTES)
+  (PyArrayObject* array=NULL, int is_new_object=0)
+{
+  npy_intp size[1] = { -1 };
+  array = obj_to_array_contiguous_allow_conversion($input,
+                                                   NPY_UINT,
+                                                   &is_new_object);
+  if (!array || !require_dimensions(array, 1) ||
+      !require_size(array, size, 1)) SWIG_fail;
+  $1 = (quadlet_t*) array_data(array);
+  $2 = (unsigned int) array_size(array,0) * 4;
+}
+%typemap(freearg)
+  (quadlet_t* IN_ARRAY1, unsigned int NBYTES)
+{
+  if (is_new_object$argnum && array$argnum)
+    { Py_DECREF(array$argnum); }
+}
+
+// ----------------------------
+// ARGOUT_ARRAY
+%typemap(in,numinputs=1,
+         fragment="NumPy_Fragments")
+  (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES)
+  (PyObject* array = NULL)
+{
+  npy_intp dims[1];
+  if (!PyInt_Check($input))
+  {
+    const char* typestring = pytype_string($input);
+    PyErr_Format(PyExc_TypeError,
+                 "Int dimension expected.  '%s' given.",
+                 typestring);
+    SWIG_fail;
+  }
+  $2 = (unsigned int) PyInt_AsLong($input);
+  dims[0] = (npy_intp) $2;
+  array = PyArray_SimpleNew(1, dims, NPY_UINT);
+  if (!array) SWIG_fail;
+  $1 = (quadlet_t*) array_data(array);
+  $2 = $2 * 4;
+}
+%typemap(argout)
+  (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES)
+{
+  $result = SWIG_Python_AppendOutput($result,(PyObject*)array$argnum);
+}
+
+
 
 // AmpIO class
 // ReadDoutControl
 %apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsHigh};
 %apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsLow};
 // ReadEncoderPreload
-%apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata}; 
+%apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata};
+// %apply AmpIO_UInt8& ARGOUT_UINT8_T {AmpIO_UInt8 &data};
 %include "AmpIO.h"
 
 
+%apply (int* IN_ARRAY1, int DIM1) {(int* data, int size)};
 %apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
-%apply (unsigned int* ARGOUT_ARRAY1, int DIM1) {(quadlet_t *rdata, unsigned int nbytes)};
-%apply (unsigned int* IN_ARRAY1, int DIM1) {(quadlet_t *wdata, unsigned int nbytes)};
-%include "Eth1394Port.h"
+%apply (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES) {(quadlet_t *rdata, unsigned int nbytes)};
+%apply (quadlet_t* IN_ARRAY1, unsigned int NBYTES) {(quadlet_t *wdata, unsigned int nbytes)};
+%include "Eth1394Port.h"  
 %include "FirewirePort.h"
 

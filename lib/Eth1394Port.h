@@ -66,12 +66,12 @@ protected:
     bool checkCRC(const unsigned char *packet) const;
 
     /**
-     * @brief
+     * @brief send async read request to a node and wait for response.
      *
-     * @param node
-     * @param addr
-     * @param length
-     * @param buffer
+     * @param node: target node ID
+     * @param addr: address to read from
+     * @param length: amount of bytes of data to read
+     * @param buffer: pointer to buffer where data will be saved
      *
      * @return int 0 on success, -1 on failure
      */
@@ -104,10 +104,10 @@ protected:
     int eth1394_write_nodeidmode(int mode);
 
 
-    // Initialize Eth1394 port
+    //! Initialize Eth1394 port
     bool Init(void);
 
-    // Look for nodes on the bus
+    //! Look for nodes on the bus
     bool ScanNodes(void);
 
 public:
@@ -150,9 +150,20 @@ public:
     int GetNodeId(unsigned char boardId) const;
 
 
+    /*!
+     \brief Get board firmware version
+
+     \param boardId: board ID (rotary switch value)
+     \return unsigned long: firmware version number
+    */
     unsigned long GetFirmwareVersion(unsigned char boardId) const;
 
-    // Adds board(s)
+    /*!
+     \brief Add board to Eth1394 port
+
+     \param board: Board ID (rotary switch value)
+     \return bool true on success or false on failure
+    */
     bool AddBoard(BoardIO *board);
 
     /*!
@@ -203,11 +214,11 @@ public:
      \brief Write a block of data using asynchronous broadcast
 
      \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The pointer to write buffer data
+     \param wdata  The pointer to write buffer data
      \param nbytes  Number of bytes to be broadcasted
      \return bool  True on success or False on failure
     */
-    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
+    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations
@@ -215,8 +226,16 @@ public:
     */
     void PromDelay(void) const;
 
-    // helper function -- public for now
-    static void make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
+    /*!
+     \brief helper function to create 1394 packet header
+
+     \param packet: firewire packet
+     \param node: target node ID
+     \param addr: address to R/W to
+     \param tcode: 1394 transaction code
+     \param tl: transaction label
+    */
+    static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
                                  unsigned int tl);
 };
 

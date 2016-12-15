@@ -144,7 +144,7 @@ public:
      \param nbytes  Number of bytes to be broadcasted
      \return bool  True on success or False on failure
     */
-    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes);
+    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations
@@ -155,5 +155,7 @@ public:
     // Stop Cycle Start Packets
     void StopCycleStartPacket(void);
 };
+
+int arrayadd(int* data, int size);
 
 #endif // __FirewirePort_H__

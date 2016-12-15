@@ -844,7 +844,7 @@ bool Eth1394Port::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
 }
 
 bool Eth1394Port::WriteBlockBroadcast(
-        nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
+        nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
 {
 #if 0 // PK TEMP
     // TO FIX: eth1394_write does not yet handle 0xffff
@@ -865,7 +865,7 @@ void Eth1394Port::PromDelay(void) const
 // Protected
 // ---------------------------------------------------------
 
-void Eth1394Port::make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
+void Eth1394Port::make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
                                    unsigned int tl)
 {
     // For now, (node == 0xff) means Ethernet multicast. We change it to node 0.
@@ -873,11 +873,11 @@ void Eth1394Port::make_1394_header(quadlet_t *packet_FW, nodeid_t node, nodeaddr
         node = 0;
     // FFC0 replicates the base node ID when using FireWire on PC. This is followed by a transaction
     // label (arbitrary value that is returned by any resulting FireWire packets) and the transaction code.
-    packet_FW[0] = bswap_32((0xFFC0 | node) << 16 | (tl & 0x3F) << 10 | (tcode & 0x0F) << 4);
+    packet[0] = bswap_32((0xFFC0 | node) << 16 | (tl & 0x3F) << 10 | (tcode & 0x0F) << 4);
     // FFFF is used as source ID (most significant 16 bits); not sure if this is needed.
     // This is followed by the destination address, which is 48-bits long
-    packet_FW[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
-    packet_FW[2] = bswap_32(addr&0xFFFFFFFF);
+    packet[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
+    packet[2] = bswap_32(addr&0xFFFFFFFF);
 }
 
 
@@ -1074,6 +1074,7 @@ bool Eth1394Port::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_
     }
     return true;
 }
+
 
 int Eth1394Port::eth1394_write_nodenum(void)
 {

@@ -713,7 +713,7 @@ bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t 
 
 
 bool FirewirePort::WriteBlockBroadcast(
-        nodeaddr_t addr, quadlet_t *data, unsigned int nbytes)
+        nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
 {
     // check handle
     if (!handle_bc) {
@@ -735,7 +735,7 @@ bool FirewirePort::WriteBlockBroadcast(
     const nodeid_t broadcast_node_id = 0xffff;  // use node_id 0xffff to broadcast
     const unsigned long tag = 11;  // tag is random picked, not used
     // send broadcast request
-    rc = raw1394_start_write(handle_bc, broadcast_node_id, addr, nbytes, data, tag);
+    rc = raw1394_start_write(handle_bc, broadcast_node_id, addr, nbytes, wdata, tag);
     if (rc) {
         outStr << "WriteQuadletBroadcast: errno = " << strerror(errno) << std::endl;
         return false;
@@ -743,3 +743,15 @@ bool FirewirePort::WriteBlockBroadcast(
         return true;
     }
 }
+
+int arrayadd(int* data, int size)
+{
+    int sum = 0;
+    for (int i = 0; i < size; i++)
+    {
+        sum = sum + data[i];
+    }
+    return sum;
+}
+
+
