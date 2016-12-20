@@ -36,11 +36,11 @@
 */
 void EncUp(AmpIO &bd)
 {
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x03);
 }
 
 /*!
@@ -49,11 +49,11 @@ void EncUp(AmpIO &bd)
 */
 void EncDown(AmpIO &bd)
 {
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x03);
 }
 
 void ClearLines(int start, int end)
@@ -76,7 +76,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream 
                            " between DOUT4 and all digital inputs");
 
     logFile << "   All inputs low: ";
-    if (Board.WriteDigitalOutput(0x08, 0x08)) {  // DOUT is active high
+    if (Board.WriteDigitalOutput(0x08, 0x00)) {
 
         usleep(1000);
         if (Port->ReadAllBoards()) {
@@ -106,7 +106,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream 
     
     mvprintw(curLine++, 9, buf);
     logFile << "   All inputs high: ";
-    if (Board.WriteDigitalOutput(0x08, 0x00)) {  // DOUT is active low
+    if (Board.WriteDigitalOutput(0x08, 0x08)) {
 
         usleep(1000);
         if (Port->ReadAllBoards()) {
@@ -152,7 +152,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     logFile << std::endl << "=== ENCODER INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
-    Board.WriteDigitalOutput(0x0f, 0x00);
+    Board.WriteDigitalOutput(0x0f, 0x03);
     // First, test setting of encoder preload
     logFile << "   Preload to 0x000000: ";
     for (i = 0; i < 4; i++)
@@ -320,8 +320,8 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
 
     // Test A channel directly
     AmpIO_UInt8 chanA;
-    // Channel A low (DOUT is inverted)
-    Board.WriteDigitalOutput(0x01, 0x01);
+    // Channel A low
+    Board.WriteDigitalOutput(0x01, 0x00);
     usleep(100);
     Port->ReadAllBoards(); 
     chanA = Board.GetEncoderChannelA();
@@ -330,8 +330,8 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
         directPass = false;
         pass = false;
     }
-    // Channel A high (DOUT is inverted)
-    Board.WriteDigitalOutput(0x01, 0x00);
+    // Channel A high
+    Board.WriteDigitalOutput(0x01, 0x01);
     usleep(100);
     Port->ReadAllBoards(); 
     chanA = Board.GetEncoderChannelA();
@@ -343,8 +343,8 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
 
     // Test B channel directly
     AmpIO_UInt8 chanB;
-    // Channel B low (DOUT is inverted)
-    Board.WriteDigitalOutput(0x02, 0x02);
+    // Channel B low
+    Board.WriteDigitalOutput(0x02, 0x00);
     usleep(100);
     Port->ReadAllBoards(); 
     chanB = Board.GetEncoderChannelB();
@@ -353,8 +353,8 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
         directPass = false;
         pass = false;
     }
-    // Channel B high (DOUT is inverted)
-    Board.WriteDigitalOutput(0x02, 0x00);
+    // Channel B high
+    Board.WriteDigitalOutput(0x02, 0x02);
     usleep(100);
     Port->ReadAllBoards(); 
     chanB = Board.GetEncoderChannelB();
@@ -365,9 +365,9 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     }
 
     // Test index
-    // Index low (DOUT is inverted)
+    // Index low
     AmpIO_UInt8 index;
-    Board.WriteDigitalOutput(0x04, 0x04);
+    Board.WriteDigitalOutput(0x04, 0x00);
     usleep(100);
     Port->ReadAllBoards(); 
     index = Board.GetEncoderIndex();
@@ -376,8 +376,8 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
         directPass = false;
         pass = false;
     }
-    // Index high (DOUT is inverted)
-    Board.WriteDigitalOutput(0x04, 0x00);
+    // Index high
+    Board.WriteDigitalOutput(0x04, 0x04);
     usleep(100);
     Port->ReadAllBoards(); 
     index = Board.GetEncoderIndex();
