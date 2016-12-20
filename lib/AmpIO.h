@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen
 
-  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -56,6 +56,7 @@ public:
 
     AmpIO_UInt32 GetTimestamp(void) const;
 
+    // Return digital output state
     AmpIO_UInt8 GetDigitalOutput(void) const;
 
     /*! Utility method, uses result of GetDigitalInput but performs
@@ -167,6 +168,7 @@ public:
 
     bool WriteEncoderPreload(unsigned int index, AmpIO_Int32 enc);
 
+    // Set digital output state
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
