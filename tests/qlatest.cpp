@@ -29,11 +29,11 @@
 */
 void EncUp(AmpIO &bd)
 {
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x03);
 }
 
 /*!
@@ -42,11 +42,11 @@ void EncUp(AmpIO &bd)
 */
 void EncDown(AmpIO &bd)
 {
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x03);
 }
 
 void ClearLines(int start, int end)
@@ -67,7 +67,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
     logFile << std::endl << "=== DIGITAL INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT4 and all digital inputs");
-    Board.WriteDigitalOutput(0x08, 0x08);  // DOUT is active high
+    Board.WriteDigitalOutput(0x08, 0x00);
 
     usleep(1000);
     Port.ReadAllBoards();
@@ -83,7 +83,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstr
         pass = false;
     }
     mvprintw(curLine++, 9, buf);
-    Board.WriteDigitalOutput(0x08, 0x00);  // DOUT is active low
+    Board.WriteDigitalOutput(0x08, 0x08);
 
     usleep(1000);
     Port.ReadAllBoards();
@@ -116,7 +116,7 @@ bool TestEncoders(int curLine, AmpIO &Board, FirewirePort &Port, std::ofstream &
     logFile << std::endl << "=== ENCODER INPUTS ===" << std::endl;
     mvprintw(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
-    Board.WriteDigitalOutput(0x0f, 0x00);
+    Board.WriteDigitalOutput(0x0f, 0x03);
     // First, test setting of encoder preload
     logFile << "   Preload to 0x000000: ";
     for (i = 0; i < 4; i++)
