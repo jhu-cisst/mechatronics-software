@@ -706,7 +706,8 @@ int main(int argc, char** argv)
     mvprintw(6, 9, "3) Test analog feedback:");
     mvprintw(7, 9, "4) Test motor power control:");
     mvprintw(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
-    mvprintw(9, 9, "6) Test Ethernet controller:");
+    if (Board.HasEthernet())
+        mvprintw(9, 9, "6) Test Ethernet controller:");
 
     refresh();
 
@@ -780,11 +781,13 @@ int main(int argc, char** argv)
                 break;
 
             case '6':
-                ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
-                    mvprintw(9, 46, "PASS");
-                else
-                    mvprintw(9, 46, "FAIL");
+                if (Board.HasEthernet()) {
+                    ClearLines(TEST_START_LINE, DEBUG_START_LINE);
+                    if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
+                        mvprintw(9, 46, "PASS");
+                    else
+                        mvprintw(9, 46, "FAIL");
+                }
                 break;
         }
 

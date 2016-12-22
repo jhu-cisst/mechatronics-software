@@ -162,6 +162,17 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     out << std::dec;
 }
 
+bool AmpIO::HasEthernet(void) const
+{
+    if (GetFirmwareVersion() < 5) return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return false;
+    read_data = bswap_32(read_data);
+    // Bit 31 indicates whether Ethernet is present
+    return (read_data&0x80000000);
+}
+
 AmpIO_UInt32 AmpIO::GetStatus(void) const
 {
     return bswap_32(read_buffer[STATUS_OFFSET]);
@@ -729,7 +740,7 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     read_data = bswap_32(read_data);
     while (read_data&0x000f) {
         PROGRESS_CALLBACK(cb, -1);
-        if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
+        if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
         read_data = bswap_32(read_data);
     }
     if (read_data & 0xff000000) { // shouldn't happen
@@ -793,7 +804,7 @@ bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
 bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
 {
     // enable write
-    PromWriteEnable(PROM_25AA128);    
+    PromWriteEnable(PROM_25AA128);
     usleep(100);
 
     // 8-bit cmd + 16-bit addr + 8-bit data

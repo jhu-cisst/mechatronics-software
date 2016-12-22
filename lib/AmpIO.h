@@ -31,7 +31,7 @@ class ostream;
 typedef int32_t  AmpIO_Int32;
 typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
-typedef uint8_t AmpIO_UInt8;
+typedef uint8_t  AmpIO_UInt8;
 
 class AmpIO : public BoardIO
 {
@@ -45,6 +45,9 @@ public:
     // Return QLA serial number (empty string if not found)
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
+
+    // Returns true if FPGA has Ethernet (Rev 2.0+)
+    bool HasEthernet(void) const;
 
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled

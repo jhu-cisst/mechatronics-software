@@ -22,7 +22,7 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     tcsetattr(STDIN_FILENO, TCSANOW, &newTerm);  // change terminal settings
 
     int c = 0;
-    while ((c < '0') || (c > '5')) {
+    while ((c < '0') || (c > '7')) {
         if (c)
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
         std::cout << std::endl
@@ -36,7 +36,9 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
                   << "2) Verify PROM" << std::endl
                   << "3) Read PROM data" << std::endl
                   << "4) Program FPGA SN" << std::endl
-                  << "5) Program QLA SN" << std::endl << std::endl;
+                  << "5) Program QLA SN" << std::endl
+                  << "6) Read FPGA SN" << std::endl
+                  << "7) Read QLA SN" << std::endl  << std::endl;
 
         std::cout << "Select option: ";
         c = getchar();
@@ -190,9 +192,12 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     int ret;
     Callback_StartTime = get_time();
     Board.PromSectorErase(0x1F0000, PromProgramCallback);
-    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, str.length());
-    if (ret < 0) {std::cerr << "Can't program FPGA Serial Number";}
-    else usleep(5000);
+    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, static_cast<unsigned int>(str.length()));
+    if (ret < 0) {
+        std::cerr << "Can't program FPGA Serial Number";
+        return false;
+    }
+    usleep(5000);
 
     BoardSNRead.clear();
     BoardSNRead = Board.GetFPGASerialNumber();
@@ -253,7 +258,10 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
     address = 0x0000;
     for (size_t i = 0; i < str.length(); i++) {
         wbyte = str.at(i);
-        Board.PromWriteByte25AA128(address, wbyte);
+        if (!Board.PromWriteByte25AA128(address, wbyte)) {
+            std::cerr << "Failed to write byte " << i << std::endl;
+            return false;
+        }
         address += 1;  // inc to next byte
     }
 
@@ -280,7 +288,8 @@ int main(int argc, char** argv)
     int i;
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
-    std::string mcsName("FPGA1394-QLA.mcs");
+    std::string mcsName;
+    std::string sn;
 
     int args_found = 0;
     for (i = 1; i < argc; i++) {
@@ -310,6 +319,12 @@ int main(int argc, char** argv)
     AmpIO Board(board);
     Port.AddBoard(&Board);
 
+    if (mcsName.empty()) {
+        if (Board.HasEthernet())
+            mcsName = std::string("FPGA1394Eth-QLA.mcs");
+        else
+            mcsName = std::string("FPGA1394-QLA.mcs");
+    }
     mcsFile promFile;
     if (!promFile.OpenFile(mcsName)) {
         std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
@@ -337,6 +352,16 @@ int main(int argc, char** argv)
             break;
         case 5:
             PromQLASerialNumberProgram(Board);
+            break;
+        case 6:
+            sn = Board.GetFPGASerialNumber();
+            if (!sn.empty())
+                std::cout << "FPGA serial number: " << sn << std::endl;
+            break;
+        case 7:
+            sn = Board.GetQLASerialNumber();
+            if (!sn.empty())
+                std::cout << "QLA serial number: " << sn << std::endl;
             break;
         default:
             std::cout << "Not yet implemented" << std::endl;
