@@ -654,7 +654,8 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
     quadlet_t write_data = 0x03000000|addr24;  // 03h = Read Data Bytes
     AmpIO_UInt32 page = 0;
     while (page < nbytes) {
-        unsigned int bytesToRead = ((nbytes-page)<256u) ? (nbytes-page) : 256u;
+        const unsigned int maxReadSize = 64u;
+        unsigned int bytesToRead = ((nbytes-page)<maxReadSize) ? (nbytes-page) : maxReadSize;
         if (!port->WriteQuadlet(BoardId, 0x08, write_data))
             return false;
         // Read FPGA status register; if 4 LSB are 0, command has finished.
@@ -682,7 +683,9 @@ bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
             return false;
         }
         nRead *= 4;
-        if (nRead != 256) { // should never happen
+        // should never happen, as for now firmware always reads 256 bytes
+        // and saves to local registers in FPGA
+        if (nRead != 256) {
             std::cout << "PromReadData: incorrect number of bytes = "
                       << nRead << std::endl;
             return false;
@@ -931,10 +934,10 @@ bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data)
+bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | data;
+    quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | rdata;
     if (!port->WriteQuadlet(BoardId, 12, write_data))
         return false;
     quadlet_t read_data;
@@ -944,14 +947,14 @@ bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data)
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
     if (read_data&0x40000000) return false;
-    data = static_cast<AmpIO_UInt8>(read_data);
+    rdata = static_cast<AmpIO_UInt8>(read_data);
     return true;
 }
 
-bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
+bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | data;
+    quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | rdata;
     if (!port->WriteQuadlet(BoardId, 12, write_data)) {
         std::cout << "WriteQuadlet failed" << std::endl;
         return false;
@@ -965,7 +968,7 @@ bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data)
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
     if (read_data&0x40000000) return false;
-    data = static_cast<AmpIO_UInt16>(read_data);
+    rdata = static_cast<AmpIO_UInt16>(read_data);
     return true;
 }
 

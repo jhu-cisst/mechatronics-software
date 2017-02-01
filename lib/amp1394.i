@@ -17,6 +17,7 @@ uint32_t bswap32(uint32_t in) {
 %}
 
 %include stdint.i
+%include std_string.i
 %include numpy.i
 
 %init %{
@@ -127,11 +128,16 @@ typedef unsigned int		uint32_t;
 
 // AmpIO class
 // ReadDoutControl
+%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &rdata};
 %apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsHigh};
 %apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsLow};
 // ReadEncoderPreload
 %apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata};
 // %apply AmpIO_UInt8& ARGOUT_UINT8_T {AmpIO_UInt8 &data};
+
+%ignore AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
+%ignore AmpIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
+
 %include "AmpIO.h"
 
 

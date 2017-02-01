@@ -329,8 +329,8 @@ public:
     bool ResetKSZ8851();   // Reset the chip (requires ~60 msec)
     bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data);
     bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data);
-    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &data);
-    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &data);
+    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
+    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata);
     // Following are for DMA access (assumes chip has been placed in DMA mode)
     bool WriteKSZ8851DMA(const AmpIO_UInt16 &data);
     bool ReadKSZ8851DMA(AmpIO_UInt16 &data);
