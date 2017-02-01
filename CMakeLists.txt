@@ -15,7 +15,7 @@ cmake_minimum_required (VERSION 2.6)
 
 # Set the version number
 set (Amp1394_VERSION_MAJOR "1")
-set (Amp1394_VERSION_MINOR "2")
+set (Amp1394_VERSION_MINOR "3")
 set (Amp1394_VERSION_PATCH "0")
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
@@ -86,12 +86,17 @@ if (UNIX)
   check_cxx_compiler_flag ("-Wextra" CXX_SUPPORTS_WEXTRA)
   if (CXX_SUPPORTS_WEXTRA)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
-  endif (CXX_SUPPORTS_WEXTRA)
+  endif ()
 
   check_cxx_compiler_flag ("-Wall" CXX_SUPPORTS_WALL)
   if (CXX_SUPPORTS_WALL)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
-  endif (CXX_SUPPORTS_WALL)
+  endif ()
+
+  check_cxx_compiler_flag ("-fPIC" CXX_SUPPORTS_FPIC)
+  if (CXX_SUPPORTS_FPIC)
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+  endif ()
 endif (UNIX)
 
 # Utilities to test libraw1394

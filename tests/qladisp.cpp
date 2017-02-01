@@ -52,11 +52,11 @@ http://www.cisst.org/cisst/license.txt.
 */
 void EncUp(AmpIO &bd)
 {
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x01);
+    bd.WriteDigitalOutput(0x03, 0x03);
 }
 
 /*!
@@ -65,11 +65,11 @@ void EncUp(AmpIO &bd)
 */
 void EncDown(AmpIO &bd)
 {
-    bd.WriteDigitalOutput(0x03, 0x00);
-    bd.WriteDigitalOutput(0x03, 0x02);
     bd.WriteDigitalOutput(0x03, 0x03);
     bd.WriteDigitalOutput(0x03, 0x01);
     bd.WriteDigitalOutput(0x03, 0x00);
+    bd.WriteDigitalOutput(0x03, 0x02);
+    bd.WriteDigitalOutput(0x03, 0x03);
 }
 
 void PrintDebugStream(std::stringstream &debugStream)
@@ -237,7 +237,7 @@ int main(int argc, char** argv)
 
     wrefresh(stdscr);
 
-    unsigned char dig_out = 0;
+    unsigned char dig_out = 0x0f;
 
     int loop_cnt = 0;
     const int DEBUG_START_LINE = 19;

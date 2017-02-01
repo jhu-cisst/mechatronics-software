@@ -208,7 +208,11 @@ AmpIO_UInt32 AmpIO::GetDigitalInput(void) const
 
 AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
 {
-    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((bswap_32(read_buffer[DIGIO_OFFSET])>>12)&0x000f);
+    // Starting with Version 1.3.0 of this library, the digital outputs are inverted
+    // before being returned to the caller because they are inverted in hardware and/or firmware.
+    // This way, the digital output state matches the hardware state (i.e., 0 means digital output
+    // is at 0V).
+    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((~(bswap_32(read_buffer[DIGIO_OFFSET])>>12))&0x000f);
     // Firmware versions < 5 have bits in reverse order with respect to schematic
     if (GetFirmwareVersion() < 5)
         dout = BitReverse4[dout];
@@ -488,8 +492,10 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
     unsigned int channel = (index+1) << 4;
     if (port && (index < NUM_CHANNELS)) {
         if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, read_data)) {
-            countsHigh = static_cast<AmpIO_UInt16>(read_data >> 16);
-            countsLow  = static_cast<AmpIO_UInt16>(read_data);
+            // Starting with Version 1.3.0 of this library, we swap the high and low times
+            // because the digital outputs are inverted in hardware.
+            countsLow = static_cast<AmpIO_UInt16>(read_data >> 16);
+            countsHigh  = static_cast<AmpIO_UInt16>(read_data);
             return true;
         }
     }
@@ -541,7 +547,11 @@ bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
         mask = BitReverse4[mask&0x0f];
         bits = BitReverse4[bits&0x0f];
     }
-    quadlet_t write_data = (mask << 8) | bits;
+    // Starting with Version 1.3.0 of this library, the digital outputs are inverted
+    // before being sent because they are inverted in hardware and/or firmware.
+    // This way, the digital output state matches the hardware state (i.e., 0 means digital output
+    // is at 0V).
+    quadlet_t write_data = (mask << 8) | ((~bits)&0x0f);
     return port->WriteQuadlet(BoardId, 6, write_data);
 }
 
@@ -560,7 +570,9 @@ bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_
     //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec
     unsigned int channel = (index+1) << 4;
     if (port && (index < NUM_CHANNELS)) {
-        AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsHigh) << 16) | countsLow;
+        // Starting with Version 1.3.0 of this library, we swap the high and low times
+        // because the digital outputs are inverted in hardware.
+        AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsLow) << 16) | countsHigh;
         return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, counts);
     } else {
         return false;
@@ -575,6 +587,10 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
     if ((duty < 0.0) || (duty > 1.0)) return false;
     // Compute high time and low time (in counts). Note that we return false
     // if either time is greater than 16 bits, rather than attempting to adjust.
+    // Starting with Version 1.3.0 of this library, digital outputs are inverted
+    // to match the actual output. This function does not need to be changed,
+    // however,  because the inversion is performed in WriteDoutControl and
+    // WriteDigitalOutput.
     AmpIO_UInt32 highTime = GetDoutCounts(duty/freq);
     if (highTime > 65535L) return false;
     AmpIO_UInt32 lowTime = GetDoutCounts((1.0-duty)/freq);
