@@ -20,6 +20,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <pcap.h>
 #include <iomanip>
+#include <sstream>
 
 #ifdef _MSC_VER
 #include <memory.h>   // for memcpy
@@ -257,6 +258,26 @@ bool Eth1394Port::Init(void)
 
     print_mac(outStr, "Local MAC address", eth_src);
 
+    // Following filters out any packets from local ethernet interface,
+    // most of which are multicast packets and are not of interest
+    struct bpf_program fp;		            // The compiled filter expression
+    std::stringstream ss_filter;
+    ss_filter << "not ether src " << std::hex
+       << (int)eth_src[0] << ":" << (int)eth_src[1] << ":" << (int)eth_src[2] << ":"
+       << (int)eth_src[3] << ":" << (int)eth_src[4] << ":" << (int)eth_src[5];
+
+    std::cout << "pcap filter = " << ss_filter.str() << "\n";
+
+    if (pcap_compile(handle, &fp, ss_filter.str().c_str(), 0, PCAP_NETMASK_UNKNOWN) == -1) {
+        outStr << "ERROR: could not parse filter " << ss_filter.str() << "\n";
+        return false;
+    }
+
+    if (pcap_setfilter(handle, &fp) == -1) {
+        outStr << "ERROR: could not install fitler " << ss_filter.str() << "\n";
+        return false;
+    }
+
     memcpy(frame_hdr, eth_dst, 6);
     memcpy(frame_hdr+6, eth_src, 6);
     frame_hdr[12] = 0;   // length field
@@ -284,8 +305,6 @@ bool Eth1394Port::ScanNodes(void)
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
     memset(Board2Node, BoardIO::MAX_BOARDS, sizeof(Board2Node));
 
-
-//    eth1394_write_nodeidmode(0);
     IsAllBoardsBroadcastCapable_ = true;
 
     NumOfNodes_ = 0;
@@ -319,7 +338,7 @@ bool Eth1394Port::ScanNodes(void)
         }
         data = bswap_32(data);
         if (data != QLA1_String) {
-            outStr << "Node " << node << " is not a QLA board" << std::endl
+            outStr << "Node " << node << " is not a QLA board    "
                    << "data = " << std::hex << data << std::endl;
             continue;
         }
@@ -978,7 +997,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     unsigned int numPacketsValid = 0;
     double timeDiffSec = 0.0;
 
-    while ((numPacketsValid < 1) && (timeDiffSec < 0.15)) {
+    while ((numPacketsValid < 1) && (timeDiffSec < 0.5)) {
         while ((packet = pcap_next(handle, &header)) != NULL) {
             numPackets++;
             if (headercheck((unsigned char *)packet, true)) {
@@ -1031,7 +1050,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
     if (numPacketsValid < 1) {
         outStr << "Error: Receive failed, addr = " << std::hex << addr
-               << ", nbytes = " << length << ", time = " << timeDiffSec << " sec" << std::endl;
+               << ", nbytes = " << length << ", time = " << timeDiffSec << " sec" << ", num pkt = " << numPackets << std::endl;
         return -1;
     }
 #if 0
