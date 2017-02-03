@@ -3,8 +3,9 @@
 import amp1394
 import time
 import numpy as np
+import argparse
 from random import randint
-from amp1394 import bswap32
+from amp1394 import bswap32, bswap16
 
 def TestWriteQuadletBroadcast(fw):
     """Write Quadlet Broadcast"""
@@ -13,8 +14,7 @@ def TestWriteQuadletBroadcast(fw):
     nnodes = fw.GetNumOfNodes()
         
 
-def TestQRead(eth, fw):
-    bid = 3
+def TestQRead(eth, fw, bid):
     wval = randint(1, 1000)
     fw.WriteQuadlet(bid, 0x03, wval)
     ret, rval = eth.ReadQuadlet(bid, 0x03)
@@ -24,8 +24,7 @@ def TestQRead(eth, fw):
     else:
         return False
 
-def TestQWrite(eth, fw):
-    bid = 3
+def TestQWrite(eth, fw, bid):
     wval = randint(1, 1000)
     eth.WriteQuadlet(bid, 0x03, wval)
     ret, rval = fw.ReadQuadlet(bid, 0x03)
@@ -35,8 +34,7 @@ def TestQWrite(eth, fw):
     else:
         return False
 
-def TestBRead(eth, fw):
-    bid = 3
+def TestBRead(eth, fw, bid):
     wval = [randint(1,1000), randint(1,1000), randint(1,1000)]
     fw.WriteBlock(bid, 0x1000, wval)
     ret, rval = eth.ReadBlock(bid, 0x1000, len(wval))
@@ -49,8 +47,7 @@ def TestBRead(eth, fw):
             ispass = False
     return ispass
 
-def TestBWrite(eth, fw):
-    bid = 3
+def TestBWrite(eth, fw, bid):
     wval = [randint(1,1000), randint(1,1000), randint(1,1000)]
     eth.WriteBlock(bid, 0x1000, wval)
     ret, rval = eth.ReadBlock(bid, 0x1000, len(wval))
@@ -75,6 +72,7 @@ def TestContinuousRead(eth, bid=3, len=100):
         ret = False
         rval = 0
         [ret, rval] = eth.ReadQuadlet(bid, 0x04)
+        time.sleep(0.001)
         if not ret:
             print "failed to read quadlet"
             readFailures = readFailures + 1
@@ -112,6 +110,55 @@ def TestContinuousWrite(eth, bid=3, len=100):
     [ret, rval] = eth.ReadQuadlet(bid, 0x03)
     print "i = " + str(i) + "  rval = " + str(rval)
 
+def TestContinuous(eth, bid=0, len=100):
+    print "Continuous Write/Read"
+    start = time.time()
+    for i in range(0,len):
+        twait = 0.00001
+        wval = i % 65535
+        wret = eth.WriteQuadlet(bid, 0x03, wval)
+        # time.sleep(twait)
+        [rret, val] = eth.ReadQuadlet(bid, 0x03)
+        # time.sleep(twait)
+        if not wret or not rret:
+            print "write = " + str(wval) + "  read = " + str(val)
+        elif wval != val:
+            print "wval = " + str(wval) + "  rval = " + str(val)
+
+    print "Time elapsed for " + str(len) + " W/R = " + \
+          str( time.time() - start ) + " sec"
+
+def ReceivePacket(bd):
+    # bd: firewire board
+    _, RXFCTR = bd.ReadKSZ8851Reg(0x9C)
+    _, RXFHSR = bd.ReadKSZ8851Reg(0x7C)
+    _, RXFHBCR = bd.ReadKSZ8851Reg(0x7E)
+    bd.WriteKSZ8851Reg(0x86, 0x5000)
+    _, RXQCR = bd.ReadKSZ8851Reg(0x82)
+    bd.WriteKSZ8851Reg(0x82, RXQCR|0x0008)
+
+    numWords = (((RXFHBCR&0x0FFF) + 3) & 0xFFFC) >> 1
+    print "num bytes = " + str(RXFHBCR)
+    print "num words = " + str(numWords)
+
+    # skip
+    dummy = bd.ReadKSZ8851DMA()
+    status = bd.ReadKSZ8851DMA()
+    length = bd.ReadKSZ8851DMA()
+    
+    dataStr = ''
+    for i in range(0, numWords):
+        _, data = bd.ReadKSZ8851DMA()
+        dataStr = dataStr + format(bswap16(data), '04X') + ' '
+        if i == 3 or i == 6:
+            dataStr = dataStr + '\n'
+        if (i > 7) and (i+2)%4==0:
+            dataStr = dataStr + '\n'
+    print dataStr
+
+    _, RXQCR = bd.ReadKSZ8851Reg(0x82)
+    bd.WriteKSZ8851Reg(0x82, RXQCR&0xFFF7)
+
 
 
 # Test setup
@@ -121,21 +168,56 @@ def TestContinuousWrite(eth, bid=3, len=100):
 #    - on firewire indirectly connected board
 #  - test block read/write
 
+def PrintEthDebug(fwbd):
+    status = fwbd.ReadKSZ8851Status()
+    dbgstr = ""
+    if (status&0x4000): dbgstr = dbgstr + "error "
+    if (status&0x2000): dbgstr = dbgstr + "initOK "
+    if (status&0x1000): dbgstr = dbgstr + "initReq "
+    if (status&0x0800): dbgstr = dbgstr + "ethIoErr "
+    if (status&0x0400): dbgstr = dbgstr + "PacketErr "
+    if (status&0x0200): dbgstr = dbgstr + "DestErr "
+    if (status&0x0100): dbgstr = dbgstr + "qRead "
+    if (status&0x0080): dbgstr = dbgstr + "qWrite "
+    if (status&0x0040): dbgstr = dbgstr + "bRead "
+    if (status&0x0020): dbgstr = dbgstr + "bWrite "
+    if (status&0x0010): dbgstr = dbgstr + "multicast "
+    if (status&0x0008): dbgstr = dbgstr + "KSZ-idle "
+    if (status&0x0004): dbgstr = dbgstr + "ETH-idle "
+    print "Eth dbg = " + dbgstr
+    
+    
 
-bid = 3
-fw = amp1394.FirewirePort(0)
-bd1 = amp1394.AmpIO(bid)
-fw.AddBoard(bd1)
+if __name__ == '__main__':
 
-eth = amp1394.Eth1394Port(0)
-bd2 = amp1394.AmpIO(bid)
-eth.AddBoard(bd2)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--board', default=0, type=int,
+                        help="board id, default = 0")
+    parser.add_argument('-f', '--firewire', default=False, help="firewire only mode")
+    parser.add_argument('-t', '--test', default=False, help="enable basic test")
+    args = parser.parse_args()
 
+    print "===================="
+    print "bid = " + str(args.board)
+    bid = args.board
 
-TestQRead(eth, fw)
-TestQWrite(eth, fw)
-TestBRead(eth, fw)
-TestBWrite(eth, fw)
+    if args.firewire:
+        fw = amp1394.FirewirePort(0)
+        bd1 = amp1394.AmpIO(bid)
+        fw.AddBoard(bd1)
+    else:
+        fw = amp1394.FirewirePort(0)
+        bd1 = amp1394.AmpIO(bid)
+        fw.AddBoard(bd1)
+        
+        eth = amp1394.Eth1394Port(0)
+        bd2 = amp1394.AmpIO(bid)
+        eth.AddBoard(bd2)
 
+    if args.test:
+        TestQRead(eth, fw, bid)
+        TestQWrite(eth, fw, bid)
+        TestBRead(eth, fw, bid)
+        TestBWrite(eth, fw, bid)
 
 import ipdb; ipdb.set_trace()

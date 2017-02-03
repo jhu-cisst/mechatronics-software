@@ -14,6 +14,11 @@ extern void print_frame(unsigned char* buffer, int length);
 uint32_t bswap32(uint32_t in) {
     return bswap_32(in);
 }
+
+uint16_t bswap16(uint16_t in) {
+    return bswap_16(in);
+}
+
 %}
 
 %include stdint.i
@@ -26,6 +31,7 @@ uint32_t bswap32(uint32_t in) {
 
 void print_frame(unsigned char* buffer, int length);
 uint32_t bswap32(uint32_t in);
+uint16_t bswap16(uint16_t in);
 
 typedef unsigned long int	nodeaddr_t;
 typedef unsigned int		quadlet_t;
