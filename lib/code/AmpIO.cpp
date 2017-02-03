@@ -999,10 +999,10 @@ bool AmpIO::WriteKSZ8851DMA(const AmpIO_UInt16 &data)
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool AmpIO::ReadKSZ8851DMA(AmpIO_UInt16 &data)
+bool AmpIO::ReadKSZ8851DMA(AmpIO_UInt16 &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x09000000 | data;
+    quadlet_t write_data = 0x09000000 | rdata;
     if (!port->WriteQuadlet(BoardId, 12, write_data))
         return false;
     quadlet_t read_data;
@@ -1012,7 +1012,7 @@ bool AmpIO::ReadKSZ8851DMA(AmpIO_UInt16 &data)
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
     if (read_data&0x40000000) return false;
-    data = static_cast<AmpIO_UInt16>(read_data);
+    rdata = static_cast<AmpIO_UInt16>(read_data);
     return true;
 }
 

@@ -308,7 +308,7 @@ bool Eth1394Port::ScanNodes(void)
     IsAllBoardsBroadcastCapable_ = true;
 
     NumOfNodes_ = 0;
-    quadlet_t data;
+    quadlet_t data = 0x0;   // initialize data to 0
 
     // Find board id for first board (i.e., one connected by Ethernet)
     int rc = eth1394_read(0xff, 0x00, 4, &data);
@@ -324,6 +324,8 @@ bool Eth1394Port::ScanNodes(void)
 
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     data = bswap_32(data);
+    std::cout << "data = 0x" << std::hex << data << "\n";
+
     BidBridge_ = (data & BOARD_ID_MASK) >> 24;
     outStr << "BidBridge_ = " << (int)BidBridge_ << "\n";
 
@@ -713,10 +715,10 @@ bool Eth1394Port::ReadQuadlet(unsigned char boardId,
             outStr << "Invalid board ID: " << static_cast<int>(boardId) << std::endl;
             return false;
         }
-        if (!BoardExistMask_[boardId]) {
-            outStr << "Board " << static_cast<int>(boardId) << " does not exist" << std::endl;
-            return false;
-        }
+//        if (!BoardExistMask_[boardId]) {
+//            outStr << "Board " << static_cast<int>(boardId) << " does not exist" << std::endl;
+//            return false;
+//        }
         node = GetNodeId(boardId);
     }
     else {
@@ -1011,7 +1013,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                 numPacketsValid++;
                 int tl_recv = packet[16] >> 2;
                 if (tl_recv != fw_tl) {
-                    outStr << "Warning: expected tl = " << (unsigned int)fw_tl
+                    outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
                            << ", received tl = " << tl_recv << std::endl;
                 }
                 int tcode_recv = packet[17] >> 4;
@@ -1041,7 +1043,8 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                 else {
                     outStr << "WARNING: unexpected response tcode: " << tcode_recv
                            << " (sent tcode: " << tcode << ")" << std::endl;
-                    continue;
+                    return -1;
+//                    continue;
                 }
             }
         }
