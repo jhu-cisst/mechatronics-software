@@ -43,6 +43,7 @@ FirewirePort::PortListType FirewirePort::PortList;
 FirewirePort::FirewirePort(int portNum, std::ostream &ostr):
     PortNum(portNum),
     outStr(ostr),
+    ReadErrorCounter_(0),
     max_board(0),
     NumOfBoards_(0),
     NumOfNodes_(0),
@@ -437,7 +438,18 @@ bool FirewirePort::ReadAllBoards(void)
             BoardList[board]->SetReadValid(ret);
 
             if (!ret) {
-                outStr << "ReadAllBoards: read failed on port " << PortNum << ", board " << board << std::endl;
+                if (ReadErrorCounter_ == 0) {
+                    outStr << "ReadAllBoards: read failed on port "
+                           << PortNum << ", board " << board << std::endl;
+                }
+                ReadErrorCounter_++;
+                if (ReadErrorCounter_ == 10000) {
+                    outStr << "ReadAllBoards: read failed on port "
+                           << PortNum << ", board " << board << " occurred 10,000 times" << std::endl;
+                    ReadErrorCounter_ = 0;
+                }
+            } else {
+                ReadErrorCounter_ = 0;
             }
         }
     }

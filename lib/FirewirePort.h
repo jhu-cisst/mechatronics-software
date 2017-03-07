@@ -50,6 +50,7 @@ protected:
 
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
+    size_t ReadErrorCounter_;
 
     int max_board;  // highest index of used (non-zero) entry in BoardList
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
