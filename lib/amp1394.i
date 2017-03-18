@@ -150,6 +150,7 @@ typedef unsigned int		uint32_t;
 %apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
 %apply (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES) {(quadlet_t *rdata, unsigned int nbytes)};
 %apply (quadlet_t* IN_ARRAY1, unsigned int NBYTES) {(quadlet_t *wdata, unsigned int nbytes)};
+%include "BasePort.h"
 %include "Eth1394Port.h"  
 %include "FirewirePort.h"
 
