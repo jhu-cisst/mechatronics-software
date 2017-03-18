@@ -299,11 +299,12 @@ int main(int argc, char** argv)
     int board = BoardIO::MAX_BOARDS;
     std::string mcsName;
     std::string sn;
+    bool auto_mode = false;
 
     int args_found = 0;
     for (i = 1; i < argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-                std::cerr << "Selecting port " << port << std::endl;
+            std::cerr << "Selecting port " << port << std::endl;
             // -p option can be -pN, -pfwN, or -pethN, where N
             // is the port number. -pN is equivalent to -pfwN
             // for backward compatibility.
@@ -319,6 +320,10 @@ int main(int argc, char** argv)
                 std::cerr << "Selecting FireWire port " << port << std::endl;
             else
                 std::cerr << "Selecting Ethernet port " << port << std::endl;
+        }
+        else if ((argv[i][0] == '-') && (argv[i][1] == 'a')) {
+            std::cerr << "Running in auto mode" << std::endl;
+            auto_mode = true;
         }
         else {
             if (args_found == 0)
@@ -376,6 +381,13 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    if (auto_mode) {
+        PromProgram(Board, promFile);
+        PromVerify(Board, promFile);
+        goto cleanup;
+    }
+
+
     unsigned long addr;
 
     while (int c = GetMenuChoice(Board, mcsName)) {
@@ -413,6 +425,7 @@ int main(int argc, char** argv)
         }
     }
 
+cleanup:
     promFile.CloseFile();
     Port->RemoveBoard(board);
 }
