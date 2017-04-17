@@ -2,7 +2,7 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  Author(s):  Zihan Chen, Peter Kazanzides
+  Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
   (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
 
@@ -25,7 +25,7 @@ http://www.cisst.org/cisst/license.txt.
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
-const AmpIO_UInt32 MIDRANGE_VEL     = 0x00008000;  /*!< Midrange value of encoder velocity */
+const AmpIO_UInt32 MIDRANGE_VEL     = 0x00020000;  /*!< Midrange value of encoder velocity */
 const AmpIO_UInt32 MIDRANGE_FRQ     = 0x00008000;  /*!< Midrange value of encoder frequency */
 const AmpIO_UInt32 MIDRANGE_ACC     = 0x00008000;  /*!< Midrange value of encoder acc */
 const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder preload value */
@@ -42,7 +42,7 @@ const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned A
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
-const AmpIO_UInt32 ENC_VEL_MASK     = 0x0000ffff;  /*!< Mask for encoder velocity bits */
+const AmpIO_UInt32 ENC_VEL_MASK     = 0x003fffff;  /*!< Mask for encoder velocity bits */
 const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder frequency bits */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
@@ -286,25 +286,44 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 // for low level function the + MIDRANGE_VEL
 AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) const
 {
-    // buff = [cnter_now, cnter_latch]
-    // cnter_latch: tick latched velcotity data
-    // cnter_now  : ongoing counting cnter data
-    // both are signed 16-bit data
-    // Clock = 768 kHz
+// temp current the enc period velocity is unsigned 16 bits
+// for low level function the + MIDRANGE_VEL
+AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) const
+{
+    // buff[0] = direction of the velocity
+    // buff[1] = whether it's latched or running counter
+    // buff[10:31] = velocity
+    // Clock = 3.072 kHz
     // stored in a 32 bit unsiged int
-
     if (index >= NUM_CHANNELS)
         return 0L;
 
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    AmpIO_UInt32 tmp_cnter, cnter;
+    tmp_vel = ((buff << 10) >> 10);
+    
+    if (tmp_cnter  == MIDRANGE_VEL) {
+        cnter = 0.0;
+    } else {
+        // convert to signed
+        if (mIsAllBoardsFirmWareFour) {
+            cnter_dir = buff[0];
+            if (cnter_dir){
+                cnter = tmp_cnter;
+            }
+            else {
+                cnter = -tmp_cnter;
+        }
+    }
+    
+    return (AmpIO_UInt32) cnter;
+}
 
-    AmpIO_UInt32 cnter, cnter_latch;
-    cnter_latch = buff & ENC_VEL_MASK;
-    cnter = ((buff & 0xFFFF0000) >> 16);
-
-    if (islatch) return cnter_latch;
-    else return cnter;
+bool AmpIO::GetIsVelocityLatched(void) const
+{
+    quadlet_t buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    return buff[1];
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
