@@ -94,7 +94,9 @@ public:
 
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderVelocity(unsigned int index, const bool islatch = true) const;
+    AmpIO_Int32 GetEncoderVelocity(unsigned int index) const;
+
+    bool GetIsVelocityLatched(unsigned int index) const;
 
     AmpIO_Int32 GetEncoderMidRange(void) const;
 

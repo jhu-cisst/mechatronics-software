@@ -284,11 +284,7 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 
 // temp current the enc period velocity is unsigned 16 bits
 // for low level function the + MIDRANGE_VEL
-AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) const
-{
-// temp current the enc period velocity is unsigned 16 bits
-// for low level function the + MIDRANGE_VEL
-AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) const
+AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     // buff[0] = direction of the velocity
     // buff[1] = whether it's latched or running counter
@@ -300,30 +296,25 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index, const bool islatch) c
 
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    AmpIO_UInt32 tmp_cnter, cnter;
-    tmp_vel = ((buff << 10) >> 10);
+
+    AmpIO_Int32 cnter;
+    bool cnter_dir;
     
-    if (tmp_cnter  == MIDRANGE_VEL) {
-        cnter = 0.0;
-    } else {
-        // convert to signed
-        if (mIsAllBoardsFirmWareFour) {
-            cnter_dir = buff[0];
-            if (cnter_dir){
-                cnter = tmp_cnter;
-            }
-            else {
-                cnter = -tmp_cnter;
-        }
+    // convert to signed
+    cnter_dir = ((buff << 1) >> 31);
+    if (cnter_dir){
+        cnter = ((buff << 10) >> 10);
     }
-    
-    return (AmpIO_UInt32) cnter;
+    else {
+        cnter = -1*((buff << 10) >> 10);
+    }
+    return  cnter;
 }
 
-bool AmpIO::GetIsVelocityLatched(void) const
+bool AmpIO::GetIsVelocityLatched(unsigned int index) const
 {
     quadlet_t buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    return buff[1];
+    return (buff >> 31);
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
