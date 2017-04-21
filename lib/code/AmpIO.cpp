@@ -300,6 +300,7 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
     AmpIO_Int32 cnter;
     bool cnter_dir;
     
+    
     // convert to signed
     cnter_dir = ((buff << 1) >> 31);
     if (cnter_dir){
