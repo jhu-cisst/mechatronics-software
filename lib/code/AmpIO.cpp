@@ -284,7 +284,7 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 
 // temp current the enc period velocity is unsigned 16 bits
 // for low level function the + MIDRANGE_VEL
-AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
+AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index, bool isLowRes) const
 {
     // buff[0] = direction of the velocity
     // buff[1] = whether it's latched or running counter
@@ -295,38 +295,14 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         return 0L;
 
     quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    if (isLowRes) {
+        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    } else {
+        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    }
 
     AmpIO_Int32 cnter;
     bool cnter_dir;
-       
-    // convert to signed
-    cnter_dir = ((buff << 1) >> 31);
-    if (cnter_dir){
-        cnter = ((buff << 10) >> 10);
-    }
-    else {
-         cnter = -1*((buff << 10) >> 10);
-    }
-    return buff;
-}
-
-AmpIO_Int32 AmpIO::GetEncoderVelocityLowRes(unsigned int index) const
-{
-    // buff[0] = direction of the velocity
-    // buff[1] = whether it's latched or running counter
-    // buff[10:31] = velocity
-    // Clock = 3.072 kHz
-    // stored in a 32 bit unsiged int
-    if (index >= NUM_CHANNELS)
-        return 0L;
-
-    quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-
-    AmpIO_Int32 cnter;
-    bool cnter_dir;
-    
     
     // convert to signed
     cnter_dir = ((buff << 1) >> 31);
