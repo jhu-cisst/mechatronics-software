@@ -299,16 +299,15 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 
     AmpIO_Int32 cnter;
     bool cnter_dir;
-    
-    
-    // // convert to signed
-    // cnter_dir = ((buff << 1) >> 31);
-    // if (cnter_dir){
-    //     cnter = ((buff << 10) >> 10);
-    // }
-    // else {
-    //     cnter = -1*((buff << 10) >> 10);
-    // }
+       
+    // convert to signed
+    cnter_dir = ((buff << 1) >> 31);
+    if (cnter_dir){
+        cnter = ((buff << 10) >> 10);
+    }
+    else {
+         cnter = -1*((buff << 10) >> 10);
+    }
     return buff;
 }
 
