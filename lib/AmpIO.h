@@ -98,6 +98,8 @@ public:
 
     bool GetIsVelocityLatched(unsigned int index) const;
 
+    AmpIO_Int32 GetEncoderVelocityLowRes(unsigned int index) const;
+
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
     // GetPowerStatus: returns true if motor power supply voltage
@@ -337,13 +339,17 @@ protected:
     // Number of channels in the node (4 for QLA)
     enum { NUM_CHANNELS = 4 };
 
-    enum { ReadBufSize = 4+3*NUM_CHANNELS,
+    // enum { ReadBufSize = 4+3*NUM_CHANNELS,
+    //        WriteBufSize = NUM_CHANNELS+1 };
+
+    enum { ReadBufSize = 4+4*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
     quadlet_t read_buffer[ReadBufSize];     // buffer for real-time reads
     quadlet_t write_buffer[WriteBufSize];   // buffer for real-time writes
 
-    // Offsets of real-time read buffer contents, 16 = 4 + 2 * 4 quadlets
+    // Offsets of real-time read buffer contents, 16 = 4 + 3 * 4 quadlets
+    // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet
@@ -352,7 +358,8 @@ protected:
         MOTOR_CURR_OFFSET = 4,    // half quadlet per channel (lower half)
         ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
         ENC_POS_OFFSET    = 4+NUM_CHANNELS,    // one quadlet per channel
-        ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS   // one quadlet per channel
+        ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS,  // one quadlet per channel
+        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS   // one quadlet per channel
     };
 
     // offsets of real-time write buffer contents
