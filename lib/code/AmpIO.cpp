@@ -43,6 +43,8 @@ const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC valu
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK     = 0x003fffff;  /*!< Mask for encoder velocity bits */
+const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity direction bits */
+const AmpIO_UInt32 ENC_CHN_MASK     = 0x40000000;  /*!< Mask for encoder velocity channel bits */
 const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder frequency bits */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
@@ -305,20 +307,47 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index, bool isLowRes) const
     bool cnter_dir;
     
     // convert to signed
-    cnter_dir = ((buff << 1) >> 31);
+    cnter_dir = ((buff & ENC_DIR_MASK) >> 30);
     if (cnter_dir){
-        cnter = ((buff << 10) >> 10);
+        cnter = (buff & ENC_VEL_MASK);
     }
     else {
-        cnter = -1*((buff << 10) >> 10);
+        cnter = -1*(buff & ENC_VEL_MASK);
     }
     return  cnter;
 }
 
-bool AmpIO::GetIsVelocityLatched(unsigned int index) const
+bool AmpIO::GetIsVelocityLatched(unsigned int index, bool isLowRes) const
 {
-    quadlet_t buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    quadlet_t buff;
+    if (isLowRes) {
+        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    } else {
+        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    }
     return (buff >> 31);
+}
+
+AmpIO_UInt32 AmpIO::GetEncoderChannel(unsigned int index, bool isLowRes) const
+{
+    quadlet_t buff;
+    if (isLowRes) {
+        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    } else {
+        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    }
+    return ((buff & ENC_CHN_MASK) >> 27);
+}
+
+AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index, bool isLowRes) const
+{
+    quadlet_t buff;
+    if (isLowRes) {
+        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    } else {
+        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    }
+    return buff;
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
