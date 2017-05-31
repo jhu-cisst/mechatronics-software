@@ -94,13 +94,13 @@ public:
 
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
-    AmpIO_Int32 GetEncoderVelocity(unsigned int index, bool isLowRes = 0) const;
+    AmpIO_Int32 GetEncoderVelocity(unsigned int index) const;
 
-    bool GetIsVelocityLatched(unsigned int index, bool isLowRes = 0) const;
+    bool GetIsVelocityLatched(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index, bool isLowRes = 0) const;
+    AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderChannel(unsigned int index, bool isLowRes = 0) const;
+    AmpIO_UInt32 GetEncoderChannel(unsigned int index) const;
     
     AmpIO_Int32 GetEncoderMidRange(void) const;
 

@@ -286,7 +286,7 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 
 // temp current the enc period velocity is unsigned 16 bits
 // for low level function the + MIDRANGE_VEL
-AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index, bool isLowRes) const
+AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     // buff[0] = direction of the velocity
     // buff[1] = whether it's latched or running counter
@@ -297,11 +297,7 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index, bool isLowRes) const
         return 0L;
 
     quadlet_t buff;
-    if (isLowRes) {
-        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-    } else {
-        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    }
+    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
 
     AmpIO_Int32 cnter;
     bool cnter_dir;
@@ -317,36 +313,24 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index, bool isLowRes) const
     return  cnter;
 }
 
-bool AmpIO::GetIsVelocityLatched(unsigned int index, bool isLowRes) const
+bool AmpIO::GetIsVelocityLatched(unsigned int index) const
 {
     quadlet_t buff;
-    if (isLowRes) {
-        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-    } else {
-        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    }
+    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
     return (buff >> 31);
 }
 
-AmpIO_UInt32 AmpIO::GetEncoderChannel(unsigned int index, bool isLowRes) const
+AmpIO_UInt32 AmpIO::GetEncoderChannel(unsigned int index) const
 {
     quadlet_t buff;
-    if (isLowRes) {
-        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-    } else {
-        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    }
+    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
     return ((buff & ENC_CHN_MASK) >> 27);
 }
 
-AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index, bool isLowRes) const
+AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
-    if (isLowRes) {
-        buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-    } else {
-        buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    }
+    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
     return buff;
 }
 
