@@ -44,7 +44,7 @@ const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK     = 0x003fffff;  /*!< Mask for encoder velocity bits */
 const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity direction bits */
-const AmpIO_UInt32 ENC_CHN_MASK     = 0x40000000;  /*!< Mask for encoder velocity channel bits */
+const AmpIO_UInt32 ENC_CHN_MASK     = 0x18000000;  /*!< Mask for encoder velocity channel bits */
 const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder frequency bits */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
