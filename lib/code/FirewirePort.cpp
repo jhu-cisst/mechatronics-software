@@ -230,6 +230,7 @@ void FirewirePort::PollEvents(void)
 
 bool FirewirePort::ScanNodes(void)
 {
+
     int node, board;  // loop counters
 
     // Clear any existing Node2Board
@@ -447,7 +448,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     bool retdebug = !raw1394_read(handle,
                                   baseNodeId + hub_node_id,    // boardid 7
                                   debugAddr,           // read from hub addr
-                                  4,          // read all 16 boards
+                                  4,                   // read all 16 boards
                                   &debugData);
     if (!retdebug) {
         raw1394_errcode_t ecode = raw1394_get_errcode(handle);
@@ -461,15 +462,18 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     if (ReadSequence_ == 65536) {
         ReadSequence_ = 1;
     }
-    quadlet_t bcReqData = bswap_32((ReadSequence_ << 16) + BoardExistMask_);
+    quadlet_t bcReqData = (ReadSequence_ << 16) + BoardExistMask_;
     nodeaddr_t bcReqAddr = 0xffffffff000F;    // special address to trigger broadcast read
 
-#if FAKEBC
+
+//#if FAKEBC
+#if 1
+    bcReqData = bswap_32(bcReqData);
     ret = !raw1394_write(handle,
-                              baseNodeId,
-                              bcReqAddr,
-                              4,
-                              &bcReqData);
+                         baseNodeId,
+                         bcReqAddr,
+                         4,
+                         &bcReqData);
     if (!ret) {
         raw1394_errcode_t ecode = raw1394_get_errcode(handle);
         std::cerr << "bbbbbbb fake ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
@@ -479,12 +483,13 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     WriteQuadletBroadcast(bcReqAddr, bcReqData);
 #endif
 
-//    // Manual sleep 50 us
+    // Manual sleep 5 * N + 5 us
     timeval start, check;
     gettimeofday(&start, NULL);
     while(true) {
         gettimeofday(&check, NULL);
-        if (((check.tv_sec-start.tv_sec)*1000000 + check.tv_usec-start.tv_usec) > (5.0*NumOfNodes_+10.0)) {
+//        if (((check.tv_sec-start.tv_sec)*1000000 + check.tv_usec-start.tv_usec) > (5.0*NumOfNodes_+5.0)) {
+        if (((check.tv_sec-start.tv_sec)*1000000 + check.tv_usec-start.tv_usec) > (10 + 5.0*NumOfBoards_)) {
             break;
         }
     }
@@ -494,14 +499,16 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     quadlet_t hubReadBuffer[hubReadSize];
     memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
 
+#if 1
     // raw1394_read 0 = SUCCESS, -1 = FAIL, flip return value
     ret = !raw1394_read(handle,
                         baseNodeId + hub_node_id,
                         0x1000,           // read from hub addr
                         272 * 4,          // read all 16 boards
                         hubReadBuffer);
+#endif
 
-
+#if 1
     // ----- DEBUG -----------
     static int raw1394readCounter = 0;
     if (!ret) {
@@ -528,6 +535,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
                 outStr << "errorcounter = " << errorcounter << std::endl;
                 outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
             }
+//            std::cerr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
 
             memcpy(BoardList[board]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * 4);
 
@@ -536,6 +544,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
             BoardList[board]->SetReadValid(ret);
         }
     }
+#endif
 
     if (noneRead) {
         PollEvents();
@@ -618,7 +627,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     // now broadcast out the huge packet
     bool ret = true;
 
-#if FAKEBC
+#if 1
     ret = !raw1394_write(handle,
                          baseNodeId,
                          0xffffffff0000,
@@ -723,7 +732,7 @@ bool FirewirePort::WriteBlockBroadcast(
 
     // check address
     // ZC: maybe limit address to 8 bits reg_addr[7:0]
-    //     and cheat firewire driver
+    //     and cheat firewire driverg
     if (addr < CSR_REGISTER_BASE + CSR_CONFIG_ROM_END) {
         outStr << "WriteQuadletBroadcast: address not allowed, \n"
                << "addr should > CSR_REG_BASE + CSR_CONFIG_ROM_END" << std::endl;

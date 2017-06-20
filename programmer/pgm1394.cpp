@@ -383,6 +383,9 @@ int main(int argc, char** argv)
     }
 
     if (auto_mode) {
+        std::cout << std::endl
+                  << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
+                  << "MCS file: " << mcsName << std::endl;
         PromProgram(Board, promFile);
         PromVerify(Board, promFile);
         goto cleanup;

@@ -79,6 +79,7 @@ public:
     int NumberOfUsers(void);
 
     // Getter
+    int GetNumOfBoards(void){return NumOfBoards_;}
     int GetNumOfNodes(void){return NumOfNodes_;}
     unsigned char* GetNode2Board(void){return Node2Board;}
 
