@@ -1,5 +1,5 @@
-/* File : amp1394.i */
-%module amp1394
+/* File : Amp1394.i */
+%module Amp1394
 %{
 #define SWIG_FILE_WITH_INIT
     
@@ -7,7 +7,13 @@
 #include "AmpIO.h"
 #include "Eth1394Port.h"
 #include "FirewirePort.h"
+#ifdef _MSC_VER
+#include <stdlib.h>
+inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
+inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
+#else
 #include <byteswap.h>
+#endif
 extern void print_frame(unsigned char* buffer, int length);
 
 /*Provide bswap_32*/

@@ -22,6 +22,11 @@ http://www.cisst.org/cisst/license.txt.
 #include <iomanip>
 #include <sstream>
 
+#ifndef PCAP_NETMASK_UNKNOWN
+// Some versions of pcap.h do not define this
+#define PCAP_NETMASK_UNKNOWN    0xffffffff
+#endif
+
 #ifdef _MSC_VER
 #include <memory.h>   // for memcpy
 #include <stdlib.h>   // for byteswap functions
