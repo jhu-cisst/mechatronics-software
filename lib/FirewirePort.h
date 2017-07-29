@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -41,6 +41,8 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     unsigned char Board2Node[BoardIO::MAX_BOARDS];
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
+
+    size_t ReadErrorCounter_;
 
     int max_board;  // highest index of used (non-zero) entry in BoardList
     BoardIO *HubBoard_;
