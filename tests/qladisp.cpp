@@ -147,6 +147,19 @@ int main(int argc, char** argv)
             }
             return 0;
         }
+
+        // keys
+        std::cerr << "Keys:" << std::endl
+                  << "'r': reset FireWire port" << std::endl
+                  << "'d': turn watchdog on/off (25.0 ms)" << std::endl
+                  << "'p': turn power on/off (board and axis)" << std::endl
+                  << "'o': turn power on/off (board only)" << std::endl
+                  << "'i': turn power on/off (axis only)" << std::endl
+                  << "'w': increment encoders" << std::endl
+                  << "'s': decrement encoders" << std::endl
+                  << "'=': increase motor current by about 50mA" << std::endl
+                  << "'-': increase motor current by about 50mA" << std::endl;
+        return 0;
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
@@ -203,6 +216,8 @@ int main(int argc, char** argv)
             BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
     }
     bool power_on = false;
+    bool power_board = false;
+    bool power_axis = false;
     for (j = 0; j < BoardList.size(); j++) {
         BoardList[j]->WriteSafetyRelay(false);
         BoardList[j]->WritePowerEnable(false);
@@ -274,15 +289,69 @@ int main(int argc, char** argv)
             power_on = !power_on;
             for (j = 0; j < BoardList.size(); j++) {
                 if (power_on) {
+                    power_board = true;
+                    power_axis = true;
                     BoardList[j]->WriteSafetyRelay(true);
                     BoardList[j]->WritePowerEnable(true);
                     usleep(40000); // sleep 40 ms
                     BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
                 }
                 else {
+                    power_board = false;
+                    power_axis = false;
                     BoardList[j]->WriteAmpEnable(0x0f, 0x00);
                     BoardList[j]->WritePowerEnable(false);
                     BoardList[j]->WriteSafetyRelay(false);
+                }
+            }
+        }
+        else if (c == 'p') {
+            power_on = !power_on;
+            for (j = 0; j < BoardList.size(); j++) {
+                if (power_on) {
+                    power_board = true;
+                    power_axis = true;
+                    BoardList[j]->WriteSafetyRelay(true);
+                    BoardList[j]->WritePowerEnable(true);
+                    usleep(40000); // sleep 40 ms
+                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
+                }
+                else {
+                    power_board = false;
+                    power_axis = false;
+                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
+                    BoardList[j]->WritePowerEnable(false);
+                    BoardList[j]->WriteSafetyRelay(false);
+                }
+            }
+        }
+        else if (c == 'o') {
+            power_board = !power_board;
+            for (j = 0; j < BoardList.size(); j++) {
+                if (power_board) {
+                    // if axis are on, it's like having all power on
+                    power_on = power_axis;
+                    BoardList[j]->WriteSafetyRelay(true);
+                    BoardList[j]->WritePowerEnable(true);
+                }
+                else {
+                    power_on = false;
+                    BoardList[j]->WritePowerEnable(false);
+                    BoardList[j]->WriteSafetyRelay(false);
+                }
+            }
+        }
+        else if (c == 'i') {
+            power_axis = !power_axis;
+            for (j = 0; j < BoardList.size(); j++) {
+                if (power_axis) {
+                    // if boards are on, it's like having all power on
+                    power_on = power_board;
+                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
+                }
+                else {
+                    power_on = false;
+                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
                 }
             }
         }

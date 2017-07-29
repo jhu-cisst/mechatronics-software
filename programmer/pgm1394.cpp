@@ -6,8 +6,8 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
-#include <unistd.h>
 #ifndef _MSC_VER
+#include <unistd.h>
 #include <termios.h>
 #endif
 #include "mcsFile.h"
