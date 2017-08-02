@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -33,22 +33,23 @@ set (Amp1394_LIBRARIES   Amp1394)
 if (WIN32)
 
   # On Windows, can build with winpcap (Ethernet support)
-  option (Amp1394_HAS_PCAP      "Build Amp1394 with Ethernet support (winpcap)" ON)
+  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap)" ON)
 
   # Need to specify where WinPcap Developer's Pack is installed
-  find_path(PCAP_INCLUDE_DIR pcap.h)
+  find_path (PCAP_INCLUDE_DIR pcap.h)
   # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
-  find_path(PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap wpcap and Packet libraries")
-  set(PCAP_LIBRARIES "wpcap" "Packet")
+  find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap wpcap and Packet libraries")
+  set (PCAP_LIBRARIES "wpcap" "Packet")
+
 else (WIN32)
 
   # On other platforms (mostly Linux), can build with pcap and/or libraw1394
-  option (Amp1394_HAS_PCAP      "Build Amp1394 with Ethernet support (pcap)" OFF)
-  option (Amp1394_HAS_RAW1394   "Build Amp1394 with FireWire support (libraw1394)"   ON)
+  option (Amp1394_HAS_PCAP   "Build Amp1394 with Ethernet support (pcap)"       OFF)
+  option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
 
   # For now, assume pcap is installed somewhere standard
-  set(PCAP_INCLUDE_DIR "")
-  set(PCAP_LIBRARIES "pcap")
+  set (PCAP_INCLUDE_DIR "")
+  set (PCAP_LIBRARIES "pcap")
 
 endif (WIN32)
 
@@ -76,7 +77,7 @@ endif (Amp1394_HAS_PCAP)
 # Generate Amp1394Config.cmake
 set (CONF_INCLUDE_DIR ${Amp1394_INCLUDE_DIR})
 set (CONF_LIBRARY_DIR ${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
-set (CONF_LIBRARIES   ${Amp1394_LIBRARIES} ${AMP_EXTRA_LIBRARIES})
+set (CONF_LIBRARIES   ${Amp1394_LIBRARIES}   ${Amp1394_EXTRA_LIBRARIES})
 configure_file (Amp1394Config.cmake.in
                 "${Mechatronics_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
 
@@ -108,7 +109,7 @@ endif (Amp1394_HAS_RAW1394)
 add_subdirectory (lib)
 
 # Test programs (some use curses for text based display)
-add_subdirectory(tests)
+add_subdirectory (tests)
 
 # Utility to flash/test board
 add_subdirectory (programmer)

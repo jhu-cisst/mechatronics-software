@@ -15,7 +15,7 @@ set (Amp1394_INCLUDE_DIR "@CONF_INCLUDE_DIR@")
 set (Amp1394_LIBRARY_DIR "@CONF_LIBRARY_DIR@")
  
 # Libraries to link against
-set (Amp1394_LIBRARIES @CONF_LIBRARIES@)
+set (Amp1394_LIBRARIES "@CONF_LIBRARIES@")
 
 # FireWire/Ethernet support
 set (Amp1394_HAS_RAW1394 "@Amp1394_HAS_RAW1394@")
