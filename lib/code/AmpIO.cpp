@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -25,11 +25,8 @@ http://www.cisst.org/cisst/license.txt.
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
-const AmpIO_UInt32 MIDRANGE_VEL     = 0x00020000;  /*!< Midrange value of encoder velocity */
-const AmpIO_UInt32 MIDRANGE_FRQ     = 0x00008000;  /*!< Midrange value of encoder frequency */
-const AmpIO_UInt32 MIDRANGE_ACC     = 0x00008000;  /*!< Midrange value of encoder acc */
-const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder preload value */
-const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;
+const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
+const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
 
 const AmpIO_UInt32 PWR_ENABLE       = 0x000c0000;  /*!< Turn pwr_en on             */
 const AmpIO_UInt32 PWR_DISABLE      = 0x00080000;  /*!< Turn pwr_en off            */
@@ -40,12 +37,16 @@ const AmpIO_UInt32 MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current a
 const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
-const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask */
+const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
-const AmpIO_UInt32 ENC_VEL_MASK     = 0x003fffff;  /*!< Mask for encoder velocity bits */
-const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity direction bits */
-const AmpIO_UInt32 ENC_CHN_MASK     = 0x18000000;  /*!< Mask for encoder velocity channel bits */
-const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder frequency bits */
+const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <=5 (16 bits) */
+const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >=6 (22 bits) */
+const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder velocity (frequency) bits [not used] */
+
+// Following offsets are for FPGA Firmware Version 6+ (22 bits)
+const AmpIO_UInt32 ENC_LATCH_MASK   = 0x80000000;  /*!< Velocity based on latched value (1) or running counter (0) */
+const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
+const AmpIO_UInt32 ENC_CHN_MASK     = 0x18000000;  /*!< Mask for encoder velocity (period) channel bits */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
@@ -284,47 +285,44 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
     return 0;
 }
 
-// temp current the enc period velocity is unsigned 16 bits
-// for low level function the + MIDRANGE_VEL
+// Returns encoder velocity
 AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
-    // buff[0] = direction of the velocity
-    // buff[1] = whether it's latched or running counter
-    // buff[10:31] = velocity
-    // Clock = 3.072 kHz
-    // stored in a 32 bit unsiged int
     if (index >= NUM_CHANNELS)
         return 0L;
 
-    quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    quadlet_t buff = GetEncoderVelocityRaw(index);
 
-    AmpIO_Int32 cnter;
-    bool cnter_dir;
-    
-    // convert to signed
-    cnter_dir = ((buff & ENC_DIR_MASK) >> 30);
-    if (cnter_dir){
-        cnter = (buff & ENC_VEL_MASK);
+    if (GetFirmwareVersion() < 6) {
+        // buff = [cnter_now, cnter_latch]
+        // cnter_latch: tick latched velocity data
+        // cnter_now  : ongoing counting cnter data
+        // both are signed 16-bit data
+        // Clock = 768 kHz
+        return (buff & ENC_VEL_MASK_16);
     }
     else {
-        cnter = -1*(buff & ENC_VEL_MASK);
+        // buff[31] = whether latched (1) or free-running counter (0)
+        // buff[30] = direction of the velocity
+        // buff[29] = whether there was a direction change
+        // buff[28:27] = which encoder signal was used (see GetEncoderVelocityChannel)
+        // buff[26:22] = should be 0
+        // buff[21:0] = velocity (22 bits)
+        // Clock = 3.072 kHz
+        // stored in a 32 bit unsigned int
+
+        AmpIO_Int32 cnter;
+        bool cnter_dir;
+
+        // convert to signed
+        if (buff & ENC_DIR_MASK) {
+            cnter = (buff & ENC_VEL_MASK_22);
+        }
+        else {
+            cnter = -1*(buff & ENC_VEL_MASK_22);
+        }
+        return  cnter;
     }
-    return  cnter;
-}
-
-bool AmpIO::GetIsVelocityLatched(unsigned int index) const
-{
-    quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    return (buff >> 31);
-}
-
-AmpIO_UInt32 AmpIO::GetEncoderChannel(unsigned int index) const
-{
-    quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
-    return ((buff & ENC_CHN_MASK) >> 27);
 }
 
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
@@ -332,6 +330,24 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
     return buff;
+}
+
+bool AmpIO::GetIsVelocityLatched(unsigned int index) const
+{
+    bool ret = true;
+    if (GetFirmwareVersion() >= 6)
+        ret = (GetEncoderVelocityRaw(index) & ENC_LATCH_MASK);
+    return ret;
+}
+
+int AmpIO::GetEncoderVelocityChannel(unsigned int index) const
+{
+    int chan = 0;
+    if (GetFirmwareVersion() >= 6) {
+        quadlet_t buff = GetEncoderVelocityRaw(index);
+        chan = static_cast<int>((buff & ENC_CHN_MASK) >> 27);
+    }
+    return chan;
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
