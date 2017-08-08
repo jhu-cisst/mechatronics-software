@@ -94,13 +94,15 @@ public:
 
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
-    /*! Returns the estimated encoder velocity as a signed value.
-        Generally, the velocity is estimated by measuring the time between two consecutive edges.
-        Specific details depend on the version of FPGA firmware.
+    /*! Returns the encoder period, which is the time between two consecutive edges, as a signed value.
+        Specific details depend on the version of FPGA firmware. This value can be used to estimate the encoder
+        velocity, which is given by 4/(period*clk) counts/sec, where clk is the period of the clock used to measure
+        the encoder period. The numerator is 4 because an encoder period is equal to 4 counts (quadrature).
+        This method probably should have been called GetEncoderPeriod.
         \note In prior versions of this library (up through 1.3.0), there was an optional "islatch"
         boolean parameter, which defaulted to true. This is no longer supported by FPGA Firmware
         Version 6+ and thus has been removed. If this library is used with prior versions of firmware,
-        it will return the estimated velocity corresponding to a true "islatch", and that velocity will
+        it will return the estimated period corresponding to a true "islatch", and that period will
         occupy the lower 16-bits. */
     AmpIO_Int32 GetEncoderVelocity(unsigned int index) const;
 
@@ -117,7 +119,7 @@ public:
         for FPGA Firmware Version 6+. The method returns 0 for previous versions of firmware. */
     int GetEncoderVelocityChannel(unsigned int index) const;
 
-    /*! Returns the raw encoder velocity value.
+    /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 

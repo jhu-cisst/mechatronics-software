@@ -285,7 +285,7 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
     return 0;
 }
 
-// Returns encoder velocity
+// Returns encoder period; encoder velocity is 4/period.
 AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
@@ -295,8 +295,8 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 
     if (GetFirmwareVersion() < 6) {
         // buff = [cnter_now, cnter_latch]
-        // cnter_latch: tick latched velocity data
-        // cnter_now  : ongoing counting cnter data
+        // cnter_latch: latched counter value
+        // cnter_now  : free-running counter value
         // both are signed 16-bit data
         // Clock = 768 kHz
         return (buff & ENC_VEL_MASK_16);
@@ -312,7 +312,6 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         // stored in a 32 bit unsigned int
 
         AmpIO_Int32 cnter;
-        bool cnter_dir;
 
         // convert to signed
         if (buff & ENC_DIR_MASK) {
