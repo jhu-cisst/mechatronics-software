@@ -36,6 +36,8 @@ protected:
     std::ostream &outStr;
     ProtocolType Protocol_;         // protocol type in use
     bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
+    bool IsAllBoardsBroadcastShorterWait_;   // TRUE if all nodes bc capable and support shorter wait
+    bool IsNoBoardsBroadcastShorterWait_;   // TRUE if no nodes support the shorter wait
     unsigned int ReadSequence_;   // sequence number for WABB
 
     // Port Index, e.g. eth0 -> PortNum = 0
@@ -52,6 +54,9 @@ public:
     BasePort(int portNum, std::ostream &ostr = std::cerr):
         outStr(ostr),
         Protocol_(BasePort::PROTOCOL_SEQ_RW),
+        IsAllBoardsBroadcastCapable_(false),
+        IsAllBoardsBroadcastShorterWait_(false),
+        IsNoBoardsBroadcastShorterWait_(true),
         ReadSequence_(0),
         PortNum(portNum)
     {
