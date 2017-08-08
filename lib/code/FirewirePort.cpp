@@ -247,6 +247,8 @@ bool FirewirePort::ScanNodes(void)
 
     outStr << "ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
     IsAllBoardsBroadcastCapable_ = true;
+    IsAllBoardsBroadcastShorterWait_ = true;
+    IsNoBoardsBroadcastShorterWait_ = true;
     // Iterate through all connected nodes (except for last one, which is the PC).
     for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
@@ -288,12 +290,22 @@ bool FirewirePort::ScanNodes(void)
         // check firmware version
         // FirmwareVersion >= 4, broadcast capable
         if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
+        // FirmwareVersion >= 6, broadcast with possibly shorter wait (i.e., skipping nodes
+        // on the bus that are not part of the current configuration).
+        if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
+        else          IsNoBoardsBroadcastShorterWait_ = false;
     }
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
         Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
         outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
+        if (IsAllBoardsBroadcastShorterWait_)
+            outStr << "ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
+        else if (IsNoBoardsBroadcastShorterWait_)
+            outStr << "ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
+        else
+            outStr << "ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
     }
 
     // update Board2Node
@@ -474,8 +486,18 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     if (ReadSequence_ == 65536) {
         ReadSequence_ = 1;
     }
-    quadlet_t bcReqData = (ReadSequence_ << 16) + BoardExistMask_;
-    nodeaddr_t bcReqAddr = 0xffffffff000F;    // special address to trigger broadcast read
+
+    quadlet_t bcReqData = (ReadSequence_ << 16);
+    if (IsAllBoardsBroadcastShorterWait_ || IsNoBoardsBroadcastShorterWait_)
+        bcReqData += BoardExistMask_;
+    else
+        // For a mixed set of boards, disable the shorter wait capability by "tricking" the system into thinking
+        // that all nodes are used in this configuration. Otherwise, boards with the shorter wait capability may
+        // attempt to transmit at the same time as boards that do not have this capability. The FireWire bus
+        // arbitration protocol should prevent disaster, but this could lead to lower efficiency.
+        bcReqData += ((1 << NumOfNodes_)-1);
+
+    nodeaddr_t bcReqAddr = 0xffffffff000f;    // special address to trigger broadcast read
 
 
 //#if FAKEBC
@@ -495,15 +517,16 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     WriteQuadletBroadcast(bcReqAddr, bcReqData);
 #endif
 
-    // Manual sleep 5 * N + 5 us
+    // Wait for all boards to respond with data
     timeval start, check;
     gettimeofday(&start, NULL);
     while(true) {
         gettimeofday(&check, NULL);
-//        if (((check.tv_sec-start.tv_sec)*1000000 + check.tv_usec-start.tv_usec) > (5.0*NumOfNodes_+5.0)) {
-        if (((check.tv_sec-start.tv_sec)*1000000 + check.tv_usec-start.tv_usec) > (10 + 5.0*NumOfBoards_)) {
-            break;
-        }
+        double timeDiff = (check.tv_sec-start.tv_sec)*1000000 + (check.tv_usec-start.tv_usec);
+        if (IsAllBoardsBroadcastShorterWait_ && (timeDiff > (10 + 5.0*NumOfBoards_)))
+            break;  // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
+        else if (timeDiff > (5.0*NumOfNodes_+5.0))
+            break;  // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
     }
 
     // initialize max buffer

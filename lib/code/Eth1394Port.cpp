@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2016 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2017 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -311,6 +311,8 @@ bool Eth1394Port::ScanNodes(void)
     memset(Board2Node, BoardIO::MAX_BOARDS, sizeof(Board2Node));
 
     IsAllBoardsBroadcastCapable_ = true;
+    IsAllBoardsBroadcastShorterWait_ = false;    // Not yet supported for Ethernet interface
+    IsNoBoardsBroadcastShorterWait_ = true;      // Not yet supported for Ethernet interface
 
     NumOfNodes_ = 0;
     quadlet_t data = 0x0;   // initialize data to 0
