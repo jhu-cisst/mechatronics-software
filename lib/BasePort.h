@@ -54,10 +54,10 @@ public:
     BasePort(int portNum, std::ostream &ostr = std::cerr):
         outStr(ostr),
         Protocol_(BasePort::PROTOCOL_SEQ_RW),
-        ReadSequence_(0),
         IsAllBoardsBroadcastCapable_(false),
         IsAllBoardsBroadcastShorterWait_(false),
         IsNoBoardsBroadcastShorterWait_(true),
+        ReadSequence_(0),
         PortNum(portNum)
     {
         memset(BoardList, 0, sizeof(BoardList));
