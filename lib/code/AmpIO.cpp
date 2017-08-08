@@ -318,6 +318,48 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
     return 0;
 }
 
+// Returns encoder velocity in counts/sec.
+// For clarity and efficiency, this duplicates some code rather than calling GetEncoderVelocity.
+double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
+{
+    if (index >= NUM_CHANNELS)
+        return 0L;
+
+    quadlet_t buff = GetEncoderVelocityRaw(index);
+
+    AmpIO_Int32 periodSigned;
+    double vel;
+    if (GetFirmwareVersion() < 6) {
+        // Prior to Firmware Version 6, the latched counter value is returned
+        // as the lower 16 bits. The upper 16 bits are the free-running counter,
+        // which is not used in this implementation, but could be used to better
+        // handle deceleration (i.e., when the free-running counter value is greater than
+        // the latched counter value). But, for firmware prior to Version 6, the
+        // returned free-running counter value is for the last encoder edge type rather
+        // than for the next expected encoder edge, so it will not work as well.
+        periodSigned = buff & ENC_VEL_MASK_16;
+        if (periodSigned == 0x00008000)  // if overflow
+            vel = 0.0;
+        else {
+            // Sign extend if necessary
+            if (periodSigned & 0x00008000)
+                periodSigned |= 0xffff0000;
+            vel = (4.0 * 768000.0) / periodSigned;
+        }
+    }
+    else {
+        periodSigned = buff & ENC_VEL_MASK_22;
+        if (periodSigned == static_cast<AmpIO_Int32>(ENC_VEL_MASK_22))   // if overflow
+            vel = 0.0;
+        else {
+            if (!(buff & ENC_DIR_MASK))
+                periodSigned = -periodSigned;
+            vel = (4.0 * 3072000.0) / periodSigned;
+        }
+    }
+    return vel;
+}
+
 // Returns encoder period; encoder velocity is 4/period.
 AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
@@ -332,6 +374,8 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         // cnter_now  : free-running counter value
         // both are signed 16-bit data
         // Clock = 768 kHz
+        // PROGRAMMER NOTE: the 16-bit signed value is not sign extended
+        //                  to 32 bits (backward compatible behavior)
         return (buff & ENC_VEL_MASK_16);
     }
     else {
@@ -341,18 +385,16 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         // buff[28:27] = which encoder signal was used (see GetEncoderVelocityChannel)
         // buff[26:22] = should be 0
         // buff[21:0] = velocity (22 bits)
-        // Clock = 3.072 kHz
+        // Clock = 3.072 MHz
         // stored in a 32 bit unsigned int
 
         AmpIO_Int32 cnter;
 
-        // convert to signed
-        if (buff & ENC_DIR_MASK) {
-            cnter = (buff & ENC_VEL_MASK_22);
-        }
-        else {
-            cnter = -1*(buff & ENC_VEL_MASK_22);
-        }
+        // mask and convert to signed
+        cnter = buff & ENC_VEL_MASK_22;
+        if (!(buff & ENC_DIR_MASK))
+            cnter = -cnter;
+
         return  cnter;
     }
 }
