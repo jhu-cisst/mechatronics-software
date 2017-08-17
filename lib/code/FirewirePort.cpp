@@ -299,7 +299,6 @@ bool FirewirePort::ScanNodes(void)
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
         Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-        outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
         if (IsAllBoardsBroadcastShorterWait_)
             outStr << "ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
         else if (IsNoBoardsBroadcastShorterWait_)
