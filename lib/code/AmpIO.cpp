@@ -133,7 +133,6 @@ std::string AmpIO::GetFPGASerialNumber(void)
     if (sn.substr(0,5) == "FPGA ")
         sn.erase(0,5);
     else {
-        std::cerr << "Invalid FPGA Serial Number: " << sn << std::endl;
         sn.clear();
     }
     return sn;
@@ -157,7 +156,6 @@ std::string AmpIO::GetQLASerialNumber(void)
     if (sn.substr(0,4) == "QLA ")
         sn.erase(0,4);
     else {
-        std::cerr << "Invalid QLA Serial Number: " << sn << std::endl;
         sn.clear();
     }
     return sn;
