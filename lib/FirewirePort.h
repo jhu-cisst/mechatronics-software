@@ -121,6 +121,10 @@ public:
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
+    // Write a No-op quadlet to reset watchdog counters on boards.
+    // This is used by WriteAllBoards if no other valid command is written
+    bool WriteNoOp(unsigned char boardId);
+
     //
     /*!
      \brief Write a quadlet to all boards using broadcasting
