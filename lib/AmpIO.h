@@ -404,6 +404,11 @@ protected:
     // Virtual method
     void InitWriteBuffer(quadlet_t *buf, size_t data_offset);
 
+    // Test if the current write buffer contains commands that will
+    // reset the watchdog on the board.  In practice, checks if
+    // there's any valid bit on the 4 requested currents.
+    bool WriteBufferResetsWatchdog(void) const;
+ 
     // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
     // Note that there are two velocity measurements. The first one (ENC_VEL_OFFSET)
     // measures the time between consecutive encoder edges of the same type.

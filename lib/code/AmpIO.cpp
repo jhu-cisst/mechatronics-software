@@ -71,7 +71,7 @@ const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from F
 
 #define ERROR_CALLBACK(CB, MSG)         \
     if (CB) (*CB)(MSG.str().c_str());   \
-    else { std::cout << MSG.str() << std::endl; }
+    else { std::cerr << MSG.str() << std::endl; }
 
 
 AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 0011
@@ -112,6 +112,15 @@ void AmpIO::InitWriteBuffer(quadlet_t *buf, size_t data_offset)
     }
 }
 
+bool AmpIO::WriteBufferResetsWatchdog(void) const
+{
+    return
+        (bswap_32(WriteBufferData[WB_CURR_OFFSET + 0]) & VALID_BIT)
+        | (bswap_32(WriteBufferData[WB_CURR_OFFSET + 1]) & VALID_BIT)
+        | (bswap_32(WriteBufferData[WB_CURR_OFFSET + 2]) & VALID_BIT)
+        | (bswap_32(WriteBufferData[WB_CURR_OFFSET + 3]) & VALID_BIT);
+}
+
 AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
 {
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
@@ -146,8 +155,9 @@ std::string AmpIO::GetQLASerialNumber(void)
     AmpIO_UInt8 data;
     const size_t QLASNSize = 11;
     for (size_t i = 0; i < QLASNSize; i++) {
-        if (!PromReadByte25AA128(address, data))
-            std::cerr << "Failed to get QLA Serial Number" << std::endl;
+        if (!PromReadByte25AA128(address, data)) {
+            std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+        }
         else {
             sn.push_back(data);
             address += 1;
@@ -268,7 +278,8 @@ bool AmpIO::GetEncoderOverflow(unsigned int index) const
         return bswap_32(read_buffer[index+ENC_POS_OFFSET]) & ENC_OVER_MASK;
     }
     else {
-        std::cerr << "Warning: GetEncoderOverflow, index out of range " << index << std::endl;
+        std::cerr << "AmpIO::GetEncoderOverflow: index out of range " << index
+                  << ", nb channels is " << NUM_CHANNELS << std::endl;
     }
     return true; // send error "code"
 }
@@ -568,7 +579,10 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
 {
     countsHigh = 0;
     countsLow = 0;
-    if (GetFirmwareVersion() < 5) return false;
+    if (GetFirmwareVersion() < 5) {
+        std::cerr << "AmpIO::ReadDoutControl: requires firmware 5 or above" << std::endl;
+        return false;
+    }
 
     AmpIO_UInt32 read_data;
     unsigned int channel = (index+1) << 4;
@@ -612,7 +626,7 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
 
     if ((sdata >= ENC_MIDRANGE)
             || (sdata < -ENC_MIDRANGE)) {
-        std::cerr << "Error: WriteEncoderPreload, preload out of range" << std::endl;
+        std::cerr << "AmpIO::WriteEncoderPreload, preload out of range " << sdata << std::endl;
         return false;
     }
     if (port && (index < NUM_CHANNELS)) {
@@ -645,8 +659,11 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 
 bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
 {
-    if (GetFirmwareVersion() < 5) return false;
- 
+    if (GetFirmwareVersion() < 5) {
+        std::cerr << "AmpIO::WriteDoutControl: requires firmware 5 or above" << std::endl;
+        return false;
+    }
+
     // Counter frequency = 49.152 MHz --> 1 count is about 0.02 uS
     //    Max high/low time = (2^16-1)/49.152 usec = 1333.3 usec = 1.33 msec
     //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec
@@ -839,7 +856,7 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     const unsigned int MAX_PAGE = 256;  // 64 quadlets
     if (nbytes > MAX_PAGE) {
         std::ostringstream msg;
-        msg << "PromProgramPage: error, nbytes = " << nbytes
+        msg << "AmpIO::PromProgramPage: error, nbytes = " << nbytes
             << " (max = " << MAX_PAGE << ")";
         ERROR_CALLBACK(cb, msg);
         return -1;
@@ -870,21 +887,21 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     }
     if (read_data & 0xff000000) { // shouldn't happen
         std::ostringstream msg;
-        msg << "PromProgramPage: FPGA error = " << read_data;
+        msg << "AmpIO::PromProgramPage: FPGA error = " << read_data;
         ERROR_CALLBACK(cb, msg);
     }
     // Now, read result. This should be the number of quadlets written.
     AmpIO_UInt32 nWritten;
     if (!PromGetResult(nWritten)) {
         std::ostringstream msg;
-        msg << "PromProgramPage: could not get PROM result";
+        msg << "AmpIO::PromProgramPage: could not get PROM result";
         ERROR_CALLBACK(cb, msg);
     }
     if (nWritten > 0)
         nWritten = 4*(nWritten-1);  // convert from quadlets to bytes
     if (nWritten != nbytes) {
         std::ostringstream msg;
-        msg << "PromProgramPage: wrote " << nWritten << " of "
+        msg << "AmpIO::PromProgramPage: wrote " << nWritten << " of "
             << nbytes << " bytes";
         ERROR_CALLBACK(cb, msg);
     }
@@ -897,7 +914,7 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         }
         else {
             std::ostringstream msg;
-            msg << "PromProgramPage: could not get PROM status" << std::endl;
+            msg << "AmpIO::PromProgramPage: could not get PROM status" << std::endl;
             ERROR_CALLBACK(cb, msg);
         }
         ret = PromGetStatus(status);
@@ -917,7 +934,7 @@ nodeaddr_t AmpIO::GetPromAddress(PromType type, bool isWrite)
     else if (type == PROM_25AA128 && !isWrite)
         return 0x3002;
     else
-        std::cerr << "Error: unsupported PROM type" << std::endl;
+        std::cerr << "AmpIO::GetPromAddress: unsupported PROM type " << type << std::endl;
 
     return 0x00;
 }
