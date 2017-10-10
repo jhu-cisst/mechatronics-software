@@ -5,7 +5,7 @@
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
   Created on: 2012
 
-  (C) Copyright 2012-2016 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2017 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -143,13 +143,12 @@ int main(int argc, char** argv)
             // try to locate all boards available on default port
             FirewirePort Port(port, std::cerr);
             if (!Port.IsOK()) {
-                std::cerr << "Failed to initialize firewire port " << port << std::endl;
+                std::cerr << "Failed to initialize FireWire port " << port << std::endl;
             }
-            return 0;
         }
 
         // keys
-        std::cerr << "Keys:" << std::endl
+        std::cerr << std::endl << "Keys:" << std::endl
                   << "'r': reset FireWire port" << std::endl
                   << "'d': turn watchdog on/off (25.0 ms)" << std::endl
                   << "'p': turn power on/off (board and axis)" << std::endl
@@ -158,7 +157,7 @@ int main(int argc, char** argv)
                   << "'w': increment encoders" << std::endl
                   << "'s': decrement encoders" << std::endl
                   << "'=': increase motor current by about 50mA" << std::endl
-                  << "'-': increase motor current by about 50mA" << std::endl;
+                  << "'-': increase motor current by about 50mA" << std::endl << std::endl;
         return 0;
     }
 
@@ -166,19 +165,22 @@ int main(int argc, char** argv)
 
     BasePort *Port;
     if (useFireWire) {
+        std::cerr << "Attempting to connect using FireWire" << std::endl;
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
         if (!Port->IsOK()) {
             PrintDebugStream(debugStream);
-            std::cerr << "Failed to initialize firewire port " << port << std::endl;
+            std::cerr << "Failed to initialize FireWire port " << port << std::endl;
             return -1;
         }
+        std::cerr << "FireWire port properly initialized" << std::endl;
 #else
         std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
         return -1;
 #endif
     }
     else {
+        std::cerr << "Attempting to connect using Ethernet/PCAP" << std::endl;
 #if Amp1394_HAS_PCAP
         Port = new Eth1394Port(port, debugStream);
         if (!Port->IsOK()) {
@@ -261,7 +263,7 @@ int main(int argc, char** argv)
     int c;
 
     // control loop
-//    Port->WriteAllBoardsBroadcast(); // dummy write to start the pipeline
+    // Port->WriteAllBoardsBroadcast(); // dummy write to start the pipeline
 
     while ((c = getch()) != ESC_CHAR) {
         if (c == 'r') Port->Reset();
@@ -376,8 +378,9 @@ int main(int argc, char** argv)
             for (i = cur_line; i < last_debug_line; i++)
                 mvwprintw(stdscr, i, lm, line);
             while (!debugStream.eof()) {
-                debugStream.getline(line, sizeof(line));
-                mvwprintw(stdscr, cur_line++, lm, line);
+                std::string stringLine;
+                std::getline(debugStream, stringLine);
+                mvwprintw(stdscr, cur_line++, lm, stringLine.c_str());
             }
             debugStream.clear();
             debugStream.str("");
