@@ -103,7 +103,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream 
         logFile << " - Failed to write to board" << std::endl;
         pass = false;
     }
-    
+
     mvprintw(curLine++, 9, buf);
     logFile << "   All inputs high: ";
     if (Board.WriteDigitalOutput(0x08, 0x08)) {
@@ -158,7 +158,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
         logFile << std::hex << darray[i] << " ";
@@ -186,7 +186,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
             EncUp(Board);
             usleep(100);
             logFile << "      ";
-            Port->ReadAllBoards(); 
+            Port->ReadAllBoards();
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
                 logFile << darray[j];
@@ -237,7 +237,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0x000100);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
         logFile << std::hex << darray[i] << " ";
@@ -267,7 +267,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
             EncDown(Board);
             usleep(100);
             logFile << "      ";
-            Port->ReadAllBoards(); 
+            Port->ReadAllBoards();
             for (j = 0; j < 4; j++) {
                 darray[j] = Board.GetEncoderPosition(j);
                 logFile << std::hex << darray[j];
@@ -323,7 +323,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     // Channel A low
     Board.WriteDigitalOutput(0x01, 0x00);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     chanA = Board.GetEncoderChannelA();
     if (chanA != 0x00) {
         logFile << "   Setting channel A = 0, FAIL: " << std::hex << (int)chanA << std::endl;
@@ -333,7 +333,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     // Channel A high
     Board.WriteDigitalOutput(0x01, 0x01);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     chanA = Board.GetEncoderChannelA();
     if (chanA != 0x0f) {
         logFile << "   Setting channel A = 1, FAIL: " << std::hex << (int)chanA << std::endl;
@@ -346,7 +346,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     // Channel B low
     Board.WriteDigitalOutput(0x02, 0x00);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     chanB = Board.GetEncoderChannelB();
     if (chanB != 0x00) {
         logFile << "   Setting channel B = 0, FAIL: " << std::hex << (int)chanB << std::endl;
@@ -356,7 +356,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     // Channel B high
     Board.WriteDigitalOutput(0x02, 0x02);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     chanB = Board.GetEncoderChannelB();
     if (chanB != 0x0f) {
         logFile << "   Setting channel B = 1, FAIL: " << std::hex << (int)chanB << std::endl;
@@ -369,7 +369,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     AmpIO_UInt8 index;
     Board.WriteDigitalOutput(0x04, 0x00);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     index = Board.GetEncoderIndex();
     if (index != 0x00) {
         logFile << "   Setting index = 0, FAIL: " << std::hex << (int)index << std::endl;
@@ -379,7 +379,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     // Index high
     Board.WriteDigitalOutput(0x04, 0x04);
     usleep(100);
-    Port->ReadAllBoards(); 
+    Port->ReadAllBoards();
     index = Board.GetEncoderIndex();
     if (index != 0x0f) {
         logFile << "   Setting index = 1, FAIL: " << std::hex << (int)index << std::endl;
@@ -559,7 +559,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
 
     // Turn on safety relay
     Board.WriteSafetyRelay(true);
-    usleep(10000);  // 10 ms 
+    usleep(10000);  // 10 ms
     logFile << "   Enable safety relay: " << std::hex << Board.ReadStatus();
     if (!Board.ReadSafetyRelayStatus()) {
         logFile << " - FAIL" << std::endl;
@@ -605,7 +605,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
     bool pass = true;
 
     // Disable watchdog
-    Board.WriteWatchdogPeriod(0x0000);  
+    Board.WriteWatchdogPeriod(0x0000);
 
     logFile << std::endl << "=== Power Amplifier Test ===" << std::endl;
     mvprintw(curLine, 9, "Temperature sensors - ");
@@ -668,7 +668,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
         mvprintw(curLine+1, 15, buf);
 
         unsigned short newTemp1 = Board.GetAmpTemperature(0)/2;
-        unsigned short newTemp2 = Board.GetAmpTemperature(1)/2;        
+        unsigned short newTemp2 = Board.GetAmpTemperature(1)/2;
         logFile << "   Motor temperatures: " << std::dec  << newTemp1 << ", " << newTemp2 << " degC (expected to be increasing)";
         if ((newTemp1 >= temp1) && (newTemp2 >= temp2))
             logFile << " - PASS" << std::endl;
@@ -776,11 +776,7 @@ bool TestEthernet(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
 
 void PrintDebugStream(std::stringstream &debugStream)
 {
-    char line[80];
-    while (!debugStream.eof()) {
-        debugStream.getline(line, sizeof(line));
-        std::cerr << line << std::endl;
-    }
+    std::cerr << debugStream.str() << std::endl;
     debugStream.clear();
     debugStream.str("");
 }
@@ -928,8 +924,9 @@ int main(int argc, char** argv)
             for (i = cur_line; i < last_debug_line; i++)
                 mvprintw(i, 9, line);
             while (!debugStream.eof()) {
-                debugStream.getline(line, sizeof(line));
-                mvwprintw(stdscr,cur_line++, 9, line);
+                std::string stringLine;
+                std::getline(debugStream, stringLine);
+                mvwprintw(stdscr,cur_line++, 9, stringLine.c_str());
             }
             debugStream.clear();
             debugStream.str("");
@@ -967,7 +964,7 @@ int main(int argc, char** argv)
                     mvprintw(6, 46, "FAIL");
                 break;
 
-            case '4': 
+            case '4':
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                 if (TestMotorPowerControl(TEST_START_LINE, Board, Port, logFile))
                     mvprintw(7, 46, "PASS");
@@ -975,7 +972,7 @@ int main(int argc, char** argv)
                     mvprintw(7, 46, "FAIL");
                 break;
 
-            case '5': 
+            case '5':
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                 if (TestPowerAmplifier(TEST_START_LINE, Board, Port, logFile))
                     mvprintw(8, 46, "PASS");
