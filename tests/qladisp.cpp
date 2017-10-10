@@ -153,7 +153,7 @@ int main(int argc, char** argv)
                   << "'d': turn watchdog on/off (25.0 ms)" << std::endl
                   << "'p': turn power on/off (board and axis)" << std::endl
                   << "'o': turn power on/off (board only)" << std::endl
-                  << "'i': turn power on/off (axis only)" << std::endl
+                  << "'i': turn power on/off (axis only, requires board first)" << std::endl
                   << "'w': increment encoders" << std::endl
                   << "'s': decrement encoders" << std::endl
                   << "'=': increase motor current by about 50mA" << std::endl
@@ -295,30 +295,8 @@ int main(int argc, char** argv)
                     power_axis = true;
                     BoardList[j]->WriteSafetyRelay(true);
                     BoardList[j]->WritePowerEnable(true);
-                    usleep(40000); // sleep 40 ms
                     BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
-                }
-                else {
-                    power_board = false;
-                    power_axis = false;
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
-                    BoardList[j]->WritePowerEnable(false);
-                    BoardList[j]->WriteSafetyRelay(false);
-                }
-            }
-        }
-        else if (c == 'p') {
-            power_on = !power_on;
-            for (j = 0; j < BoardList.size(); j++) {
-                if (power_on) {
-                    power_board = true;
-                    power_axis = true;
-                    BoardList[j]->WriteSafetyRelay(true);
-                    BoardList[j]->WritePowerEnable(true);
-                    usleep(40000); // sleep 40 ms
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
-                }
-                else {
+                } else {
                     power_board = false;
                     power_axis = false;
                     BoardList[j]->WriteAmpEnable(0x0f, 0x00);
