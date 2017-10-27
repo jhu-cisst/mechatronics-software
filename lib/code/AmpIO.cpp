@@ -44,10 +44,13 @@ const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC 
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
-const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
+const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflo mask */
 const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <=5 (16 bits) */
 const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >=6 (22 bits) */
-const AmpIO_UInt32 ENC_FRQ_MASK     = 0x0000ffff;  /*!< Mask for encoder velocity (frequency) bits [not used] */
+const AmpIO_UInt32 ENC_ACC_REC_MASK     = 0xffff0000;
+const AmpIO_UInt32 ENC_ACC_PAST_MASK     = 0x0000ffff;  /*!< Mask for encoder velocity (frequency) 
+bits [not used] */
+const AmpIO_UInt32 ENC_VEL_STATUS   = 0xfe0000;
 
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
 const AmpIO_UInt32 ENC_LATCH_MASK   = 0x80000000;  /*!< Velocity based on latched value (1) or running counter (0) */
@@ -408,10 +411,50 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
     }
 }
 
+double AmpIO::GetEncoderAcceleration(unsigned int index) const
+{
+    
+    if (index >= NUM_CHANNELS)
+        return 0L;
+
+    quadlet_t a_buff = GetEncoderAccelerationRaw(index);
+    quadlet_t v_buff = GetEncoderVelocityRaw(index);
+    
+    const double period = 1.0 / 3072000.0; // Clock period defined in firmware - different than system clock
+    double prev_perd = ((AmpIO_UInt32) (a_buff & ENC_ACC_PAST_MASK))*period;
+    double cur_perd = (((AmpIO_UInt32) (a_buff & ENC_ACC_REC_MASK)) >> 16)*period;
+    double total_perd = ((AmpIO_UInt32) (v_buff & ENC_VEL_MASK_22))*period;
+    
+   if (GetFirmwareVersion() >= 6) {
+       return (1.0/cur_perd - 1.0/prev_perd)/total_perd;
+    }
+}
+
+AmpIO_Int32 AmpIO::GetEncoderAccPrevRaw(unsigned int index) const
+{
+    quadlet_t buff = GetEncoderAccelerationRaw(index);
+    AmpIO_UInt32 prev_perd = buff & ENC_ACC_PAST_MASK;
+    return prev_perd;
+}
+
+AmpIO_Int32 AmpIO::GetEncoderAccRecRaw(unsigned int index) const
+{
+    quadlet_t buff = GetEncoderAccelerationRaw(index);
+    AmpIO_UInt32 cur_perd = (buff & ENC_ACC_REC_MASK) >> 16;
+    return cur_perd;
+}
+
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    return buff;
+}
+
+AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
+{
+    quadlet_t buff;
+    buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
     return buff;
 }
 

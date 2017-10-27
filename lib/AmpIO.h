@@ -123,6 +123,8 @@ public:
         occupy the lower 16-bits. */
     AmpIO_Int32 GetEncoderVelocity(unsigned int index) const;
 
+    double GetEncoderAcceleration(unsigned int index) const;
+    
     /*! Returns true if the estimated velocity is based on the most recent latched value.
         Returns false if it is based on a free-running counter. This method is provided for
         testing and is not likely to be useful in applications. It is only meaningful for FPGA Firmware
@@ -136,10 +138,15 @@ public:
         for FPGA Firmware Version 6+. The method returns 0 for previous versions of firmware. */
     int GetEncoderVelocityChannel(unsigned int index) const;
 
+    AmpIO_Int32 GetEncoderAccPrevRaw(unsigned int index) const;
+    AmpIO_Int32 GetEncoderAccRecRaw(unsigned int index) const;
+
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
+    AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
+    
     /*! Returns midrange value of encoder position. */
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
