@@ -417,16 +417,13 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
     if (index >= NUM_CHANNELS)
         return 0L;
 
-    quadlet_t a_buff = GetEncoderAccelerationRaw(index);
-    quadlet_t v_buff = GetEncoderVelocityRaw(index);
+    quadlet_t buff = GetEncoderAccelerationRaw(index);
     
-    const double period = 1.0 / 3072000.0; // Clock period defined in firmware - different than system clock
-    double prev_perd = ((AmpIO_UInt32) (a_buff & ENC_ACC_PAST_MASK))*period;
-    double cur_perd = (((AmpIO_UInt32) (a_buff & ENC_ACC_REC_MASK)) >> 16)*period;
-    double total_perd = ((AmpIO_UInt32) (v_buff & ENC_VEL_MASK_22))*period;
-    
+    double prev_perd = (buff & ENC_ACC_PAST_MASK);
+    double cur_perd = ((buff & ENC_ACC_REC_MASK) >> 16);
+
    if (GetFirmwareVersion() >= 6) {
-       return (1.0/cur_perd - 1.0/prev_perd)/total_perd;
+       return ((double) (cur_perd - prev_perd))/prev_perd;
     }
 }
 
