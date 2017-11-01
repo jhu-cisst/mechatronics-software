@@ -423,7 +423,14 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
     double cur_perd = ((buff & ENC_ACC_REC_MASK) >> 16);
 
    if (GetFirmwareVersion() >= 6) {
-       return ((double) (cur_perd - prev_perd))/prev_perd;
+       double acc = ((double) (cur_perd - prev_perd))/prev_perd;
+       if (acc > 0.3){
+           return 0.3;
+       } else if (acc < -0.3) {
+           return -0.3;
+       } else {
+           return acc;
+       }
     }
 }
 
