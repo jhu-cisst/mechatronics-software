@@ -47,15 +47,16 @@ const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (2
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflo mask */
 const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <=5 (16 bits) */
 const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >=6 (22 bits) */
-const AmpIO_UInt32 ENC_ACC_REC_MASK     = 0xffff0000;
-const AmpIO_UInt32 ENC_ACC_PAST_MASK     = 0x0000ffff;  /*!< Mask for encoder velocity (frequency) 
-bits [not used] */
+const AmpIO_UInt32 ENC_ACC_REC_MS_MASK     = 0xfff00000;
+const AmpIO_UInt32 ENC_ACC_REC_LS_MASK     = 0x3fc00000;
+const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff;  
 const AmpIO_UInt32 ENC_VEL_STATUS   = 0xfe0000;
 
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
-const AmpIO_UInt32 ENC_LATCH_MASK   = 0x80000000;  /*!< Velocity based on latched value (1) or running counter (0) */
+const AmpIO_UInt32 ENC_DIR_CHANGED_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) direction changed bit */
 const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
-const AmpIO_UInt32 ENC_CHN_MASK     = 0x18000000;  /*!< Mask for encoder velocity (period) channel bits */
+const AmpIO_UInt32 ENC_CHN_MASK     = 0x00300000;  /*!< Mask for encoder velocity (period) channel bits */
+const AmpIO_UInt32 ENC_NEXT_CHN_MASK     = 0x00c00000;  /*!< Mask for encoder velocity (period) channel bits */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
@@ -404,11 +405,30 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 
         // mask and convert to signed
         cnter = buff & ENC_VEL_MASK_22;
-        if (!(buff & ENC_DIR_MASK))
+        if (!GetEncoderDir(index))
             cnter = -cnter;
 
         return  cnter;
     }
+}
+
+// Returns previous encoder period; encoder velocity is 4/period.
+AmpIO_Int32 AmpIO::GetEncoderPrevVelocity(unsigned int index) const
+{
+    if (index >= NUM_CHANNELS)
+        return 0L;
+
+    AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;;
+    AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
+    AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
+    AmpIO_Int32 prev_cnter;
+
+    prev_cnter = cnter - rec_perd + prev_perd;
+
+    if (!GetEncoderDir(index))
+        prev_cnter = -prev_cnter;
+    return prev_cnter;
+    
 }
 
 double AmpIO::GetEncoderAcceleration(unsigned int index) const
@@ -417,35 +437,56 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
     if (index >= NUM_CHANNELS)
         return 0L;
 
-    quadlet_t buff = GetEncoderAccelerationRaw(index);
-    
-    double prev_perd = (buff & ENC_ACC_PAST_MASK);
-    double cur_perd = ((buff & ENC_ACC_REC_MASK) >> 16);
+    const double period = 1.0 / 3072000.0; // Clock period defined in firmware - different than system clock
+    AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
+    AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
 
-   if (GetFirmwareVersion() >= 6) {
-       double acc = ((double) (cur_perd - prev_perd))/prev_perd;
-       if (acc > 0.3){
-           return 0.3;
-       } else if (acc < -0.3) {
-           return -0.3;
-       } else {
-           return acc;
-       }
+    double percent_threshold = 0.0001;
+
+    if ((GetFirmwareVersion() >= 6)) {
+        double acc = 0;
+        acc = (double) (rec_perd - prev_perd)/(prev_perd + rec_perd);
+
+        if ((1.0/rec_perd < percent_threshold) && (1.0/rec_perd > -percent_threshold) && !GetEncoderDirChanged(index)) {
+            return acc;
+        } else {
+            return 0;
+        }
     }
 }
 
-AmpIO_Int32 AmpIO::GetEncoderAccPrevRaw(unsigned int index) const
+bool AmpIO::GetEncoderDirChanged(unsigned int index) const
 {
-    quadlet_t buff = GetEncoderAccelerationRaw(index);
-    AmpIO_UInt32 prev_perd = buff & ENC_ACC_PAST_MASK;
+    quadlet_t buff = GetEncoderVelocityRaw(index);
+    return buff & ENC_DIR_CHANGED_MASK;
+}
+
+bool AmpIO::GetEncoderDir(unsigned int index) const
+{
+    quadlet_t buff = GetEncoderVelocityRaw(index);
+    return buff & ENC_DIR_MASK;
+}
+
+AmpIO_Int32 AmpIO::GetEncoderAccPrev(unsigned int index) const
+{
+    quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    AmpIO_Int32 prev_perd = buff & ENC_ACC_PREV_MASK;
     return prev_perd;
 }
 
-AmpIO_Int32 AmpIO::GetEncoderAccRecRaw(unsigned int index) const
+AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
 {
-    quadlet_t buff = GetEncoderAccelerationRaw(index);
-    AmpIO_UInt32 cur_perd = (buff & ENC_ACC_REC_MASK) >> 16;
-    return cur_perd;
+    AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
+    AmpIO_UInt32 cur_perd = ((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22);
+    return (AmpIO_Int32) cur_perd;
+}
+
+AmpIO_Int32 AmpIO::GetEncoderAccRunning(unsigned int index) const
+{
+    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
+    AmpIO_Int32 running_perd = buff & ENC_ACC_PREV_MASK;
+    return running_perd;
 }
 
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
@@ -462,22 +503,25 @@ AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
     return buff;
 }
 
-bool AmpIO::GetIsVelocityLatched(unsigned int index) const
+AmpIO_Int32 AmpIO::GetEncoderNextChannel(unsigned int index) const
 {
-    bool ret = true;
-    if (GetFirmwareVersion() >= 6)
-        ret = (GetEncoderVelocityRaw(index) & ENC_LATCH_MASK);
-    return ret;
+    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
+    AmpIO_UInt32 channel = (buff & ENC_NEXT_CHN_MASK) >> 22;
+    return channel;
 }
 
-int AmpIO::GetEncoderVelocityChannel(unsigned int index) const
+AmpIO_Int32 AmpIO::GetEncoderVelocityChannel(unsigned int index) const
 {
-    int chan = 0;
-    if (GetFirmwareVersion() >= 6) {
-        quadlet_t buff = GetEncoderVelocityRaw(index);
-        chan = static_cast<int>((buff & ENC_CHN_MASK) >> 27);
-    }
-    return chan;
+    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
+    AmpIO_UInt32 channel = (buff & ENC_CHN_MASK) >> 20;
+    return channel;
+}
+
+bool AmpIO::GetEncoderExpectedEdge(unsigned int index) const
+{
+    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
+    AmpIO_UInt32 is_expected = buff >> 26;
+    return is_expected > 0;
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
