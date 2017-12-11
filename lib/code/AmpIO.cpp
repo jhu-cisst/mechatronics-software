@@ -58,11 +58,12 @@ const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocit
 const AmpIO_UInt32 ENC_CHN_MASK     = 0x00300000;  /*!< Mask for encoder velocity (period) channel bits */
 const AmpIO_UInt32 ENC_NEXT_CHN_MASK     = 0x00c00000;  /*!< Mask for expected encoder velocity (period) channel bits */
 const AmpIO_UInt32 ENC_LATCH_OVER_MASK = 0x01000000; /*!< Mask for whether a latch value is at overflow */
+const AmpIO_UInt32 LATCH_OVERFLOW   = 0xFFFFF;     /* Overflow value of a quarter latch */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
 const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
-
+const double VEL_PERD               = 1.0/3072000;     /* Slower clock for velocity measurements */
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
 //                    the parameter is NULL, but the function returns an error if
@@ -332,17 +333,15 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
     return 0;
 }
 
-// Returns encoder velocity in counts/sec.
-// For clarity and efficiency, this duplicates some code rather than calling GetEncoderVelocity.
+// Returns encoder velocity -> 4/period
 double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
+  if (index >= NUM_CHANNELS)
         return 0L;
 
     quadlet_t buff = GetEncoderVelocityRaw(index);
 
-    AmpIO_Int32 periodSigned;
-    double vel;
+    AmpIO_Int32 cnter;
     if (GetFirmwareVersion() < 6) {
         // Prior to Firmware Version 6, the latched counter value is returned
         // as the lower 16 bits. The upper 16 bits are the free-running counter,
@@ -351,31 +350,38 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         // the latched counter value). But, for firmware prior to Version 6, the
         // returned free-running counter value is for the last encoder edge type rather
         // than for the next expected encoder edge, so it will not work as well.
-        periodSigned = buff & ENC_VEL_MASK_16;
-        if (periodSigned == 0x00008000)  // if overflow
-            vel = 0.0;
+        cnter = buff & ENC_VEL_MASK_16;
+        if (cnter == 0x00008000)  // if overflow
+            return 0;
         else {
             // Sign extend if necessary
-            if (periodSigned & 0x00008000)
-                periodSigned |= 0xffff0000;
-            vel = (4.0 * 768000.0) / periodSigned;
+            if (cnter & 0x00008000)
+                cnter |= 0xffff0000;
+            return (4.0 * 768000.0) / cnter;
+        }
+    } else {
+        // buff[31] = whether full cycle period has overflowed
+        // buff[30] = direction of the encoder
+        // buff[29:22] = upper 
+        // buff[21:0] = velocity (22 bits)
+        // Clock = 3.072 MHz
+        
+        // mask and convert to signed
+        cnter = buff & ENC_VEL_MASK_22;
+        
+        if (GetEncoderVelocityOverflow(index)) {
+            return 0;
+        } else if (!GetEncoderDir(index)) {
+            return -4.0/((double)cnter*VEL_PERD);
+        } else {
+            return  4.0/((double)cnter*VEL_PERD);
         }
     }
-    else {
-        periodSigned = buff & ENC_VEL_MASK_22;
-        if (periodSigned == static_cast<AmpIO_Int32>(ENC_VEL_MASK_22))   // if overflow
-            vel = 0.0;
-        else {
-            if (!(buff & ENC_DIR_MASK))
-                periodSigned = -periodSigned;
-            vel = (4.0 * 3072000.0) / periodSigned;
-        }
-    }
-    return vel;
 }
 
-// Returns encoder period; encoder velocity is 4/period.
-AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
+
+// Deprecated: returns encoder period in old firmware; encoder velocity is 4/period.
+AmpIO_UInt32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -393,28 +399,14 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         return (buff & ENC_VEL_MASK_16);
     }
     else {
-        // buff[31] = whether latched (1) or free-running counter (0)
-        // buff[30] = direction of the velocity
-        // buff[29] = whether there was a direction change
-        // buff[28:27] = which encoder signal was used (see GetEncoderVelocityChannel)
-        // buff[26:22] = should be 0
-        // buff[21:0] = velocity (22 bits)
-        // Clock = 3.072 MHz
-        // stored in a 32 bit unsigned int
-
-        AmpIO_Int32 cnter;
-
-        // mask and convert to signed
-        cnter = buff & ENC_VEL_MASK_22;
-        if (!GetEncoderDir(index))
-            cnter = -cnter;
-
-        return  cnter;
+        // Encoder size has changed in the later firmware
+        // and this function should not be used.
+        return (buff & ENC_VEL_MASK_22);
     }
 }
 
-// Returns previous encoder period; encoder velocity is 4/period.
-AmpIO_Int32 AmpIO::GetEncoderPrevVelocity(unsigned int index) const
+// Returns previous encoder period counter
+AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -422,16 +414,11 @@ AmpIO_Int32 AmpIO::GetEncoderPrevVelocity(unsigned int index) const
     AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;;
     AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
     AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
-    AmpIO_Int32 prev_cnter;
 
-    prev_cnter = cnter - rec_perd + prev_perd;
-
-    if (!GetEncoderDir(index))
-        prev_cnter = -prev_cnter;
-    return prev_cnter;
-    
+    return cnter - rec_perd + prev_perd;    
 }
 
+// Estimate acceleration from two quarters of the same type
 double AmpIO::GetEncoderAcceleration(unsigned int index) const
 {
     
@@ -440,22 +427,28 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
 
     AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
     AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
+    AmpIO_Int32 prev_cnter = GetEncoderPrevCounter(index);
     bool latch_overflow = GetEncoderLatchOverflow(index);
     bool overflow = GetEncoderVelocityOverflow(index);
     
     double percent_threshold = 0.0005;
 
     if ((GetFirmwareVersion() >= 6)) {
-        double acc = 0;
-        acc = (double) (prev_perd - rec_perd)/(prev_perd + rec_perd);
+        double acc;
+        if (latch_overflow && (rec_perd != 0xFFFFF)) {
+            acc = 4.0*((prev_perd - LATCH_OVERFLOW)/(prev_perd + LATCH_OVERFLOW))/((double) prev_cnter * VEL_PERD);
+        } else {
+            acc = 4.0*((prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) prev_cnter * VEL_PERD);
+        }
+        
+        if (!GetEncoderDir(index)) {
+            acc = -acc;
+        }
 
         if ((1.0/rec_perd > percent_threshold) || (1.0/rec_perd < -percent_threshold)) {
             return 0;
         }
-        else if (latch_overflow && (rec_perd != 0xFFFFF)) {
-            return acc;
-        }
-        else if (overflow) {
+        else if (overflow && !(latch_overflow && (rec_perd != 0xFFFFF))) {
             return 0;
         }
         else {
