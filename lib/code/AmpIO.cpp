@@ -53,10 +53,11 @@ const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff;
 const AmpIO_UInt32 ENC_VEL_STATUS   = 0xfe0000;
 
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
-const AmpIO_UInt32 ENC_DIR_CHANGED_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) direction changed bit */
+const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) direction changed bit */
 const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
 const AmpIO_UInt32 ENC_CHN_MASK     = 0x00300000;  /*!< Mask for encoder velocity (period) channel bits */
-const AmpIO_UInt32 ENC_NEXT_CHN_MASK     = 0x00c00000;  /*!< Mask for encoder velocity (period) channel bits */
+const AmpIO_UInt32 ENC_NEXT_CHN_MASK     = 0x00c00000;  /*!< Mask for expected encoder velocity (period) channel bits */
+const AmpIO_UInt32 ENC_LATCH_OVER_MASK = 0x01000000; /*!< Mask for whether a latch value is at overflow */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
@@ -437,28 +438,36 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
     if (index >= NUM_CHANNELS)
         return 0L;
 
-    const double period = 1.0 / 3072000.0; // Clock period defined in firmware - different than system clock
     AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
     AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
-
-    double percent_threshold = 0.0001;
+    bool latch_overflow = GetEncoderLatchOverflow(index);
+    bool overflow = GetEncoderVelocityOverflow(index);
+    
+    double percent_threshold = 0.0005;
 
     if ((GetFirmwareVersion() >= 6)) {
         double acc = 0;
-        acc = (double) (rec_perd - prev_perd)/(prev_perd + rec_perd);
+        acc = (double) (prev_perd - rec_perd)/(prev_perd + rec_perd);
 
-        if ((1.0/rec_perd < percent_threshold) && (1.0/rec_perd > -percent_threshold) && !GetEncoderDirChanged(index)) {
-            return acc;
-        } else {
+        if ((1.0/rec_perd > percent_threshold) || (1.0/rec_perd < -percent_threshold)) {
             return 0;
         }
+        else if (latch_overflow && (rec_perd != 0xFFFFF)) {
+            return acc;
+        }
+        else if (overflow) {
+            return 0;
+        }
+        else {
+            return acc;
+        } 
     }
 }
 
-bool AmpIO::GetEncoderDirChanged(unsigned int index) const
+bool AmpIO::GetEncoderVelocityOverflow(unsigned int index) const
 {
     quadlet_t buff = GetEncoderVelocityRaw(index);
-    return buff & ENC_DIR_CHANGED_MASK;
+    return buff & ENC_VEL_OVER_MASK;
 }
 
 bool AmpIO::GetEncoderDir(unsigned int index) const
@@ -478,8 +487,8 @@ AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
 {
     AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
     AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
-    AmpIO_UInt32 cur_perd = ((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22);
-    return (AmpIO_Int32) cur_perd;
+    AmpIO_Int32 cur_perd = ((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22) & ENC_ACC_PREV_MASK;
+    return cur_perd;
 }
 
 AmpIO_Int32 AmpIO::GetEncoderAccRunning(unsigned int index) const
@@ -517,11 +526,11 @@ AmpIO_Int32 AmpIO::GetEncoderVelocityChannel(unsigned int index) const
     return channel;
 }
 
-bool AmpIO::GetEncoderExpectedEdge(unsigned int index) const
+bool AmpIO::GetEncoderLatchOverflow(unsigned int index) const
 {
     quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_UInt32 is_expected = buff >> 26;
-    return is_expected > 0;
+    AmpIO_UInt32 overflowed = (buff & ENC_LATCH_OVER_MASK) >> 24;
+    return overflowed > 0;
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const

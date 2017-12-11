@@ -132,15 +132,15 @@ public:
 
     /*! Indicates which encoder signal (0=Aup, 1=Adown, 2=Bup, 3=Bdown) was used for the estimated velocity.
         If the latched value was used, this corresponds to the encoder transition that triggered the latch. If the
-        free running counter was used, this indicates the next expected encoder signal (based on the current direction).
+        free running counter was used, this indicates the next expectd encoder signal (based on the current direction).
         This method is provided for testing and is not likely to be useful in applications. It is only valid
         for FPGA Firmware Version 6+. The method returns 0 for previous versions of firmware. */
     AmpIO_Int32 GetEncoderVelocityChannel(unsigned int index) const;
     AmpIO_Int32 GetEncoderNextChannel(unsigned int index) const;
 
-    bool GetEncoderDirChanged(unsigned int index) const;
+    bool GetEncoderVelocityOverflow(unsigned int index) const;
     bool GetEncoderDir(unsigned int index) const;
-    bool GetEncoderExpectedEdge(unsigned int index) const;
+    bool GetEncoderLatchOverflow(unsigned int index) const;
     AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
     AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
     AmpIO_Int32 GetEncoderAccRunning(unsigned int index) const;
