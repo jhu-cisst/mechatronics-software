@@ -115,6 +115,10 @@ public:
         it will return the estimated period corresponding to a true "islatch", and that period will
         occupy the lower 16-bits. */
     AmpIO_UInt32 GetEncoderVelocity(unsigned int index) const;
+
+
+    /*! Returns the encoder period (counter) of the previous full cycle.
+        Used internally to calculate acceleration. */ 
     AmpIO_Int32 GetEncoderPrevCounter(unsigned int index) const;
 
     
@@ -125,31 +129,32 @@ public:
         If the counter overflows, the velocity is set to 0. This method should work with all versions of firmware,
         but has improved performance starting with Version 6. */
     double GetEncoderVelocityCountsPerSecond(unsigned int index) const;
+
+    /*! Returns the encoder accleration in counts per second, based on the scaled difference
+        between the most recent full cycle and the previous full cycle. Since velocity is averaged
+        over an entire cycle, acceleration is applied to half the cycle to reduce delays. */
     double GetEncoderAcceleration(unsigned int index) const;
-    
-    /*! Returns true if the estimated velocity is based on the most recent latched value.
-        Returns false if it is based on a free-running counter. This method is provided for
-        testing and is not likely to be useful in applications. It is only meaningful for FPGA Firmware
 
-    /*! Indicates which encoder signal (0=Aup, 1=Adown, 2=Bup, 3=Bdown) was used for the estimated velocity.
-        If the latched value was used, this corresponds to the encoder transition that triggered the latch. If the
-        free running counter was used, this indicates the next expectd encoder signal (based on the current direction).
-        This method is provided for testing and is not likely to be useful in applications. It is only valid
-        for FPGA Firmware Version 6+. The method returns 0 for previous versions of firmware. */
-    AmpIO_Int32 GetEncoderVelocityChannel(unsigned int index) const;
-    AmpIO_Int32 GetEncoderNextChannel(unsigned int index) const;
-
+    /*! Returns whether the full cycle counter has overflows (22 bits) */
     bool GetEncoderVelocityOverflow(unsigned int index) const;
-    bool GetEncoderDir(unsigned int index) const;
-    bool GetEncoderLatchOverflow(unsigned int index) const;
-    AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
-    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
-    AmpIO_Int32 GetEncoderAccRunning(unsigned int index) const;
 
+    /*! Returns the direction the encoder is moving in. */
+    bool GetEncoderDir(unsigned int index) const;
+    
+    /*! Returns the latched period of five encoder quarter cycles
+        ago. Used internally to calculate acceleration. */
+    AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
+
+    /*! Returns the latched period of the most recent encoder
+      quarter cycle. Used internally to calculate acceleration. */
+    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
+    
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
+    /*! Returns the raw encoder acceleration fields value.
+        This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
     
     /*! Returns midrange value of encoder position. */

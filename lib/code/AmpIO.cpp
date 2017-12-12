@@ -428,47 +428,44 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
     AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
     AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
     AmpIO_Int32 prev_cnter = GetEncoderPrevCounter(index);
-    bool latch_overflow = GetEncoderLatchOverflow(index);
     bool overflow = GetEncoderVelocityOverflow(index);
     
     double percent_threshold = 0.0005;
 
     if ((GetFirmwareVersion() >= 6)) {
         double acc;
-        if (latch_overflow && (rec_perd != 0xFFFFF)) {
-            acc = 4.0*((prev_perd - LATCH_OVERFLOW)/(prev_perd + LATCH_OVERFLOW))/((double) prev_cnter * VEL_PERD);
-        } else {
-            acc = 4.0*((prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) prev_cnter * VEL_PERD);
-        }
+        acc = 4.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) prev_cnter * VEL_PERD);
         
         if (!GetEncoderDir(index)) {
             acc = -acc;
         }
 
         if ((1.0/rec_perd > percent_threshold) || (1.0/rec_perd < -percent_threshold)) {
-            return 0;
+            acc = 0;
         }
-        else if (overflow && !(latch_overflow && (rec_perd != 0xFFFFF))) {
-            return 0;
-        }
-        else {
-            return acc;
-        } 
+
+        return acc;
+    }
+    else {
+        return 0;
     }
 }
 
+// Counter over full cycle has overflowed
 bool AmpIO::GetEncoderVelocityOverflow(unsigned int index) const
 {
     quadlet_t buff = GetEncoderVelocityRaw(index);
     return buff & ENC_VEL_OVER_MASK;
 }
 
+// Direction of encoder at last velocity reading
 bool AmpIO::GetEncoderDir(unsigned int index) const
 {
     quadlet_t buff = GetEncoderVelocityRaw(index);
     return buff & ENC_DIR_MASK;
 }
 
+// Latch from 5 quarter cycles ago for accleration calculation
 AmpIO_Int32 AmpIO::GetEncoderAccPrev(unsigned int index) const
 {
     quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
@@ -476,21 +473,16 @@ AmpIO_Int32 AmpIO::GetEncoderAccPrev(unsigned int index) const
     return prev_perd;
 }
 
+// Latch last quarter cycle for acceleration calculation
 AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
 {
     AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
     AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
-    AmpIO_Int32 cur_perd = ((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22) & ENC_ACC_PREV_MASK;
+    AmpIO_Int32 cur_perd = (((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
     return cur_perd;
 }
 
-AmpIO_Int32 AmpIO::GetEncoderAccRunning(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_Int32 running_perd = buff & ENC_ACC_PREV_MASK;
-    return running_perd;
-}
-
+// Raw velocity field (includes period of velocity as well as some aprts of AccRec)
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
@@ -498,32 +490,12 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
     return buff;
 }
 
+// Raw acclereation field (includes AccPrev and parts of AccRec)
 AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
 {
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
     return buff;
-}
-
-AmpIO_Int32 AmpIO::GetEncoderNextChannel(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_UInt32 channel = (buff & ENC_NEXT_CHN_MASK) >> 22;
-    return channel;
-}
-
-AmpIO_Int32 AmpIO::GetEncoderVelocityChannel(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_UInt32 channel = (buff & ENC_CHN_MASK) >> 20;
-    return channel;
-}
-
-bool AmpIO::GetEncoderLatchOverflow(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_UInt32 overflowed = (buff & ENC_LATCH_OVER_MASK) >> 24;
-    return overflowed > 0;
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
