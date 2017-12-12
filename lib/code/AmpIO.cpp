@@ -44,22 +44,16 @@ const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC 
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
-const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflo mask */
+const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <=5 (16 bits) */
 const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >=6 (22 bits) */
 const AmpIO_UInt32 ENC_ACC_REC_MS_MASK     = 0xfff00000;
 const AmpIO_UInt32 ENC_ACC_REC_LS_MASK     = 0x3fc00000;
 const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff;  
-const AmpIO_UInt32 ENC_VEL_STATUS   = 0xfe0000;
 
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
 const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) direction changed bit */
 const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
-const AmpIO_UInt32 ENC_CHN_MASK     = 0x00300000;  /*!< Mask for encoder velocity (period) channel bits */
-const AmpIO_UInt32 ENC_NEXT_CHN_MASK     = 0x00c00000;  /*!< Mask for expected encoder velocity (period) channel bits */
-const AmpIO_UInt32 ENC_LATCH_OVER_MASK = 0x01000000; /*!< Mask for whether a latch value is at overflow */
-const AmpIO_UInt32 LATCH_OVERFLOW   = 0xFFFFF;     /* Overflow value of a quarter latch */
-
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
 const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
