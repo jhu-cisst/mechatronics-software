@@ -105,6 +105,23 @@ public:
 
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
+
+    /*! Returns the encoder period, which is the time between two consecutive edges, as a signed value.
+        Specific details depend on the version of FPGA firmware. This value can be used to estimate the encoder
+        velocity This method probably should have been called GetEncoderPeriod.
+        \note In prior versions of this library (up through 1.3.0), there was an optional "islatch"
+        boolean parameter, which defaulted to true. This is no longer supported by FPGA Firmware
+        Version 6+ and thus has been removed. If this library is used with prior versions of firmware,
+        it will return the estimated period corresponding to a true "islatch", and that period will
+        occupy the lower 16-bits. */
+    AmpIO_UInt32 GetEncoderVelocity(unsigned int index) const;
+
+
+    /*! Returns the encoder period (counter) of the previous full cycle.
+        Used internally to calculate acceleration. */ 
+    AmpIO_Int32 GetEncoderPrevCounter(unsigned int index) const;
+
+    
     /*! Returns the encoder velocity, in counts per second, based on the FPGA measurement
         of the encoder period (i.e., time between two consecutive edges). Specifically, the
         velocity is given by 4/(period*clk) counts/sec, where clk is the period of the clock used to measure
@@ -113,33 +130,33 @@ public:
         but has improved performance starting with Version 6. */
     double GetEncoderVelocityCountsPerSecond(unsigned int index) const;
 
-    /*! Returns the encoder period, which is the time between two consecutive edges, as a signed value.
-        Specific details depend on the version of FPGA firmware. This value can be used to estimate the encoder
-        velocity (see GetEncoderVelocityCountsPerSecond). This method probably should have been called GetEncoderPeriod.
-        \note In prior versions of this library (up through 1.3.0), there was an optional "islatch"
-        boolean parameter, which defaulted to true. This is no longer supported by FPGA Firmware
-        Version 6+ and thus has been removed. If this library is used with prior versions of firmware,
-        it will return the estimated period corresponding to a true "islatch", and that period will
-        occupy the lower 16-bits. */
-    AmpIO_Int32 GetEncoderVelocity(unsigned int index) const;
+    /*! Returns the encoder accleration in counts per second, based on the scaled difference
+        between the most recent full cycle and the previous full cycle. Since velocity is averaged
+        over an entire cycle, acceleration is applied to half the cycle to reduce delays. */
+    double GetEncoderAcceleration(unsigned int index) const;
 
-    /*! Returns true if the estimated velocity is based on the most recent latched value.
-        Returns false if it is based on a free-running counter. This method is provided for
-        testing and is not likely to be useful in applications. It is only meaningful for FPGA Firmware
-        Version 6+. The method returns true for prior versions of firmware. */
-    bool GetIsVelocityLatched(unsigned int index) const;
+    /*! Returns whether the full cycle counter has overflows (22 bits) */
+    bool GetEncoderVelocityOverflow(unsigned int index) const;
 
-    /*! Indicates which encoder signal (0=Aup, 1=Adown, 2=Bup, 3=Bdown) was used for the estimated velocity.
-        If the latched value was used, this corresponds to the encoder transition that triggered the latch. If the
-        free running counter was used, this indicates the next expected encoder signal (based on the current direction).
-        This method is provided for testing and is not likely to be useful in applications. It is only valid
-        for FPGA Firmware Version 6+. The method returns 0 for previous versions of firmware. */
-    int GetEncoderVelocityChannel(unsigned int index) const;
+    /*! Returns the direction the encoder is moving in. */
+    bool GetEncoderDir(unsigned int index) const;
+    
+    /*! Returns the latched period of five encoder quarter cycles
+        ago. Used internally to calculate acceleration. */
+    AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
 
+    /*! Returns the latched period of the most recent encoder
+      quarter cycle. Used internally to calculate acceleration. */
+    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
+    
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
+    /*! Returns the raw encoder acceleration fields value.
+        This method is provided for internal use and testing. */
+    AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
+    
     /*! Returns midrange value of encoder position. */
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
