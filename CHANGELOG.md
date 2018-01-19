@@ -1,16 +1,20 @@
 Change log
 ==========
 
-1.3.0 (2016-12-23)
+1.3.0 (2017-11-07)
 ==================
 * API changes:
   * Methods that read/write digital outputs invert the signals so that the actual output matches the logical value; i.e., dout=0 causes low output (0V), dout=1 causes high output (e.g., 5V).
+  * Watchdog is now automatically reset when any write command is sent (sends a no-op if needed)
 * New features:
   * Added `HasEthernet` method to `AmpIO`; returns true for FPGA V2.x.
   * pgm1394 detects FPGA hardware version (V1.x or V2.x) and automatically selects correct programming file (`FPGA1394-QLA.mcs` for V1.x and `FPGA1394Eth-QLA.mcs` for V2.x).
   * Added options to read FPGA and QLA serial numbers in pgm1394.
+  * Ongoing development for ethernet/PCAP and FPGA based velocity estimation (will require firmware > 5 not yet released)
+  * Can be compiled on Windows for future ethernet support
+  * Updated Python wrappers
 * Bug fixes:
-  * None
+  * qladisp and qlatest: fixed streaming of long error messages
 
 1.2.1 (2016-08-31)
 ==================
@@ -37,17 +41,17 @@ Change log
 ==================
 
 * API changes:
- * Encoder API now uses signed integers, assumes all values are related to mid range (for setters and getters)
- * Default protocol is now broadcast write if all boards have firmware version 4.0 or higher
+  * Encoder API now uses signed integers, assumes all values are related to mid range (for setters and getters)
+  * Default protocol is now broadcast write if all boards have firmware version 4.0 or higher
 * Deprecated features:
- * `SetUseBroadcastFlag` has been replaced by `SetProtocol`
+  * `SetUseBroadcastFlag` has been replaced by `SetProtocol`
 * New features:
- * Added revision number, new header file `AmpIORevision.h` needs to be included
- * Added method to get encoder channel A/B
- * Added `ProtocolType` to select between firewire no broadcast, write only broadcast or read/write broadcast
- * Added method to get encoder overflow bit
+  * Added revision number, new header file `AmpIORevision.h` needs to be included
+  * Added method to get encoder channel A/B
+  * Added `ProtocolType` to select between firewire no broadcast, write only broadcast or read/write broadcast
+  * Added method to get encoder overflow bit
 * Bug fixes:
- * None
+  * None
 
 1.0.0 (2014-01-24)
 ==================
