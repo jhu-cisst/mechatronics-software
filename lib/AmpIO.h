@@ -138,7 +138,7 @@ public:
     /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
         between the most recent full cycle and the previous full cycle. Since velocity is averaged
         over an entire cycle, acceleration can be applied over half the cycle to reduce delays. */
-    double GetEncoderAcceleration(unsigned int index) const;
+    double GetEncoderAcceleration(unsigned int index, double percent_threshold) const;
 
     /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
         encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
