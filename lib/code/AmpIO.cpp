@@ -62,7 +62,8 @@ const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velo
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
 const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
-const double VEL_PERD               = 1.0/3072000;     /* Slower clock for velocity measurements */
+const double VEL_PERD               = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
+const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
 //                    the parameter is NULL, but the function returns an error if
@@ -359,7 +360,7 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
             // Sign extend if necessary
             if (cnter & 0x00008000)
                 cnter |= 0xffff0000;
-            vel = (4.0 * 768000.0) / cnter;
+            vel = 4.0 * ((double)cnter*VEL_PERD_OLD);
         }
     } else if (fver == 6) {
         // buff[31] = whether full cycle period has overflowed
@@ -384,6 +385,30 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         vel = 0.0;
     }
     return vel;
+}
+
+// Returns the time delay of the encoder velocity measurement, in seconds.
+// Currently, this is equal to half the measured period, based on the assumption that measuring the
+// period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
+double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
+{
+    double delay = 0.0;
+    AmpIO_Int32 cnter;
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    if (fver < 6) {
+        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_16;
+        // This is a 16-bit signed value, but we want an unsigned period
+        if (cnter & 0x00008000) {
+            cnter |= 0xffff0000;   // sign extend
+            cnter = -cnter;        // negate to get a positive number
+        }
+        delay = ((double)cnter * VEL_PERD_OLD)/2.0;
+    }
+    else if (fver == 6) {
+        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
+        delay = ((double)cnter * VEL_PERD)/2.0;
+    }
+    return delay;
 }
 
 // Deprecated: returns encoder period; encoder velocity is 4/period.
@@ -437,7 +462,7 @@ AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
     return cnter - rec_perd + prev_perd;    
 }
 
-// Estimate acceleration from two quarters of the same type
+// Estimate acceleration from two quarters of the same type; units are counts/second**2
 // Valid for firmware version 6.
 double AmpIO::GetEncoderAcceleration(unsigned int index) const
 {
@@ -452,12 +477,14 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
         AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
         AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
         AmpIO_Int32 prev_cnter = GetEncoderPrevCounter(index);
+        AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
+        // What to do about velocity overflow?
         bool overflow = GetEncoderVelocityOverflow(index);
 
         const double percent_threshold = 0.0005;
 
         if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
-            acc = 4.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) prev_cnter * VEL_PERD);
+            acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD * (double) prev_cnter * VEL_PERD);
             if (!GetEncoderDir(index))
                 acc = -acc;
         }

@@ -113,6 +113,11 @@ public:
         but has improved performance starting with Version 6. */
     double GetEncoderVelocityCountsPerSecond(unsigned int index) const;
 
+    /*! Returns the time delay of the encoder velocity measurement, in seconds.
+        Currently, this is equal to half the measured period, based on the assumption that measuring the
+        period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle. */
+    double GetEncoderVelocityDelay(unsigned int index) const;
+
     /*! Returns the encoder period, which is the time between two consecutive edges, as a signed value.
         Specific details depend on the version of FPGA firmware. This value can be used to estimate the encoder
         velocity (see GetEncoderVelocityCountsPerSecond). This method probably should have been called GetEncoderPeriod.
@@ -130,9 +135,9 @@ public:
     /*! Returns midrange value of encoder position. */
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
-    /*! Returns the encoder accleration in counts per second, based on the scaled difference
+    /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
         between the most recent full cycle and the previous full cycle. Since velocity is averaged
-        over an entire cycle, acceleration is applied to half the cycle to reduce delays. */
+        over an entire cycle, acceleration can be applied over half the cycle to reduce delays. */
     double GetEncoderAcceleration(unsigned int index) const;
 
     /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
