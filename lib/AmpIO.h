@@ -2,9 +2,9 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 /*
-  Author(s):  Zihan Chen
+  Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -113,6 +113,11 @@ public:
         but has improved performance starting with Version 6. */
     double GetEncoderVelocityCountsPerSecond(unsigned int index) const;
 
+    /*! Returns the time delay of the encoder velocity measurement, in seconds.
+        Currently, this is equal to half the measured period, based on the assumption that measuring the
+        period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle. */
+    double GetEncoderVelocityDelay(unsigned int index) const;
+
     /*! Returns the encoder period, which is the time between two consecutive edges, as a signed value.
         Specific details depend on the version of FPGA firmware. This value can be used to estimate the encoder
         velocity (see GetEncoderVelocityCountsPerSecond). This method probably should have been called GetEncoderPeriod.
@@ -122,38 +127,24 @@ public:
         it will return the estimated period corresponding to a true "islatch", and that period will
         occupy the lower 16-bits. */
     AmpIO_Int32 GetEncoderVelocity(unsigned int index) const;
-    AmpIO_Int32 GetEncoderPrevVelocity(unsigned int index) const;
-
-    double GetEncoderAcceleration(unsigned int index) const;
-    
-    /*! Returns true if the estimated velocity is based on the most recent latched value.
-        Returns false if it is based on a free-running counter. This method is provided for
-        testing and is not likely to be useful in applications. It is only meaningful for FPGA Firmware
-
-    /*! Indicates which encoder signal (0=Aup, 1=Adown, 2=Bup, 3=Bdown) was used for the estimated velocity.
-        If the latched value was used, this corresponds to the encoder transition that triggered the latch. If the
-        free running counter was used, this indicates the next expectd encoder signal (based on the current direction).
-        This method is provided for testing and is not likely to be useful in applications. It is only valid
-        for FPGA Firmware Version 6+. The method returns 0 for previous versions of firmware. */
-    AmpIO_Int32 GetEncoderVelocityChannel(unsigned int index) const;
-    AmpIO_Int32 GetEncoderNextChannel(unsigned int index) const;
-
-    bool GetEncoderVelocityOverflow(unsigned int index) const;
-    bool GetEncoderDir(unsigned int index) const;
-    bool GetEncoderLatchOverflow(unsigned int index) const;
-    AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
-    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
-    AmpIO_Int32 GetEncoderAccRunning(unsigned int index) const;
 
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
-    AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
-    
     /*! Returns midrange value of encoder position. */
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
+    /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
+        between the most recent full cycle and the previous full cycle. Since velocity is averaged
+        over an entire cycle, acceleration can be applied over half the cycle to reduce delays. */
+    double GetEncoderAcceleration(unsigned int index) const;
+
+    /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
+        encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
+        This method is provided for internal use and testing. */
+    AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
+    
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.
@@ -420,6 +411,24 @@ protected:
     // there's any valid bit on the 4 requested currents.
     bool WriteBufferResetsWatchdog(void) const;
  
+    /*! Returns the encoder period (counter) of the previous full cycle.
+        Used internally to calculate acceleration. */
+    AmpIO_Int32 GetEncoderPrevCounter(unsigned int index) const;
+
+    /*! Returns whether the full cycle counter has overflows (22 bits) */
+    bool GetEncoderVelocityOverflow(unsigned int index) const;
+
+    /*! Returns the direction the encoder is moving in. */
+    bool GetEncoderDir(unsigned int index) const;
+
+    /*! Returns the latched period of five encoder quarter cycles
+        ago. Used internally to calculate acceleration. */
+    AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
+
+    /*! Returns the latched period of the most recent encoder
+      quarter cycle. Used internally to calculate acceleration. */
+    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
+
     // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
     // Note that there are two velocity measurements. The first one (ENC_VEL_OFFSET)
     // measures the time between consecutive encoder edges of the same type.

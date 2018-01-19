@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -44,25 +44,26 @@ const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC 
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
-const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflo mask */
+const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <=5 (16 bits) */
 const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >=6 (22 bits) */
-const AmpIO_UInt32 ENC_ACC_REC_MS_MASK     = 0xfff00000;
-const AmpIO_UInt32 ENC_ACC_REC_LS_MASK     = 0x3fc00000;
-const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff;  
-const AmpIO_UInt32 ENC_VEL_STATUS   = 0xfe0000;
+
+// Following masks are for the most recent quarter-cycle period and the previous one of the same type (i.e., four cycles ago).
+// These are used for estimating acceleration using Firmware Rev 6.
+const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder period) for upper 12 bits of most recent quarter-cycle period */
+const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000;   /*!< Mask (into encoder freq/acc) for lower 8 bits of most recent quarter-cycle period */
+const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff;   /*!< Mask (into encoder freq/acc) for all 20 bits of previous quarter-cycle period */
 
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
-const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) direction changed bit */
-const AmpIO_UInt32 ENC_DIR_MASK     = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
-const AmpIO_UInt32 ENC_CHN_MASK     = 0x00300000;  /*!< Mask for encoder velocity (period) channel bits */
-const AmpIO_UInt32 ENC_NEXT_CHN_MASK     = 0x00c00000;  /*!< Mask for expected encoder velocity (period) channel bits */
-const AmpIO_UInt32 ENC_LATCH_OVER_MASK = 0x01000000; /*!< Mask for whether a latch value is at overflow */
+// (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
+const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
+const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
 
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
 const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
-
+const double VEL_PERD               = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
+const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
 //                    the parameter is NULL, but the function returns an error if
@@ -332,7 +333,7 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
     return 0;
 }
 
-// Returns encoder velocity in counts/sec.
+// Returns encoder velocity in counts/sec -> 4/period
 // For clarity and efficiency, this duplicates some code rather than calling GetEncoderVelocity.
 double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
 {
@@ -341,9 +342,10 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
 
     quadlet_t buff = GetEncoderVelocityRaw(index);
 
-    AmpIO_Int32 periodSigned;
+    AmpIO_Int32 cnter;
     double vel;
-    if (GetFirmwareVersion() < 6) {
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    if (fver < 6) {
         // Prior to Firmware Version 6, the latched counter value is returned
         // as the lower 16 bits. The upper 16 bits are the free-running counter,
         // which is not used in this implementation, but could be used to better
@@ -351,30 +353,67 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         // the latched counter value). But, for firmware prior to Version 6, the
         // returned free-running counter value is for the last encoder edge type rather
         // than for the next expected encoder edge, so it will not work as well.
-        periodSigned = buff & ENC_VEL_MASK_16;
-        if (periodSigned == 0x00008000)  // if overflow
+        cnter = buff & ENC_VEL_MASK_16;
+        if (cnter == 0x00008000)  // if overflow
             vel = 0.0;
         else {
             // Sign extend if necessary
-            if (periodSigned & 0x00008000)
-                periodSigned |= 0xffff0000;
-            vel = (4.0 * 768000.0) / periodSigned;
+            if (cnter & 0x00008000)
+                cnter |= 0xffff0000;
+            vel = 4.0 * ((double)cnter*VEL_PERD_OLD);
+        }
+    } else if (fver == 6) {
+        // buff[31] = whether full cycle period has overflowed
+        // buff[30] = direction of the encoder
+        // buff[29:22] = upper 8 bits of most recent quarter-cycle period (for acceleration)
+        // buff[21:0] = velocity (22 bits)
+        // Clock = 3.072 MHz
+        
+        // mask and convert to signed
+        cnter = buff & ENC_VEL_MASK_22;
+        
+        if (GetEncoderVelocityOverflow(index)) {
+            vel = 0.0;
+        } else if (!GetEncoderDir(index)) {
+            vel = -4.0/((double)cnter*VEL_PERD);
+        } else {
+            vel = 4.0/((double)cnter*VEL_PERD);
         }
     }
     else {
-        periodSigned = buff & ENC_VEL_MASK_22;
-        if (periodSigned == static_cast<AmpIO_Int32>(ENC_VEL_MASK_22))   // if overflow
-            vel = 0.0;
-        else {
-            if (!(buff & ENC_DIR_MASK))
-                periodSigned = -periodSigned;
-            vel = (4.0 * 3072000.0) / periodSigned;
-        }
+        // Not sure what later firmware versions will do
+        vel = 0.0;
     }
     return vel;
 }
 
-// Returns encoder period; encoder velocity is 4/period.
+// Returns the time delay of the encoder velocity measurement, in seconds.
+// Currently, this is equal to half the measured period, based on the assumption that measuring the
+// period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
+double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
+{
+    double delay = 0.0;
+    AmpIO_Int32 cnter;
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    if (fver < 6) {
+        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_16;
+        // This is a 16-bit signed value, but we want an unsigned period
+        if (cnter & 0x00008000) {
+            cnter |= 0xffff0000;   // sign extend
+            cnter = -cnter;        // negate to get a positive number
+        }
+        delay = ((double)cnter * VEL_PERD_OLD)/2.0;
+    }
+    else if (fver == 6) {
+        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
+        delay = ((double)cnter * VEL_PERD)/2.0;
+    }
+    return delay;
+}
+
+// Deprecated: returns encoder period; encoder velocity is 4/period.
+// Note that number of bits used for encoder period has changed in later firmware,
+// so this function should not be used.
 AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
@@ -382,7 +421,8 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 
     quadlet_t buff = GetEncoderVelocityRaw(index);
 
-    if (GetFirmwareVersion() < 6) {
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    if (fver < 6) {
         // buff = [cnter_now, cnter_latch]
         // cnter_latch: latched counter value
         // cnter_now  : free-running counter value
@@ -392,90 +432,82 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         //                  to 32 bits (backward compatible behavior)
         return (buff & ENC_VEL_MASK_16);
     }
-    else {
-        // buff[31] = whether latched (1) or free-running counter (0)
-        // buff[30] = direction of the velocity
-        // buff[29] = whether there was a direction change
-        // buff[28:27] = which encoder signal was used (see GetEncoderVelocityChannel)
-        // buff[26:22] = should be 0
-        // buff[21:0] = velocity (22 bits)
-        // Clock = 3.072 MHz
-        // stored in a 32 bit unsigned int
-
+    else if (fver == 6) {
         AmpIO_Int32 cnter;
 
         // mask and convert to signed
         cnter = buff & ENC_VEL_MASK_22;
-        if (!GetEncoderDir(index))
+        if (!(buff & ENC_DIR_MASK))
             cnter = -cnter;
 
         return  cnter;
     }
+    else {
+        // Not sure what later firmware versions will do
+        return buff;
+    }
 }
 
-// Returns previous encoder period; encoder velocity is 4/period.
-AmpIO_Int32 AmpIO::GetEncoderPrevVelocity(unsigned int index) const
+// Returns previous encoder period counter (previous full cycle period);
+// Valid for firmware version 6.
+AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
 
-    AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;;
+    AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
     AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
     AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
-    AmpIO_Int32 prev_cnter;
 
-    prev_cnter = cnter - rec_perd + prev_perd;
-
-    if (!GetEncoderDir(index))
-        prev_cnter = -prev_cnter;
-    return prev_cnter;
-    
+    return cnter - rec_perd + prev_perd;    
 }
 
+// Estimate acceleration from two quarters of the same type; units are counts/second**2
+// Valid for firmware version 6.
 double AmpIO::GetEncoderAcceleration(unsigned int index) const
 {
     
     if (index >= NUM_CHANNELS)
         return 0L;
 
-    AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
-    AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
-    bool latch_overflow = GetEncoderLatchOverflow(index);
-    bool overflow = GetEncoderVelocityOverflow(index);
-    
-    double percent_threshold = 0.0005;
+    double acc = 0.0;
+    if ((GetFirmwareVersion() == 6)) {
+        // Not sure how later firmware versions will work
 
-    if ((GetFirmwareVersion() >= 6)) {
-        double acc = 0;
-        acc = (double) (prev_perd - rec_perd)/(prev_perd + rec_perd);
+        AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
+        AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
+        AmpIO_Int32 prev_cnter = GetEncoderPrevCounter(index);
+        AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
+        // What to do about velocity overflow?
+        bool overflow = GetEncoderVelocityOverflow(index);
 
-        if ((1.0/rec_perd > percent_threshold) || (1.0/rec_perd < -percent_threshold)) {
-            return 0;
+        const double percent_threshold = 0.0005;
+
+        if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
+            acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD * (double) prev_cnter * VEL_PERD);
+            if (!GetEncoderDir(index))
+                acc = -acc;
         }
-        else if (latch_overflow && (rec_perd != 0xFFFFF)) {
-            return acc;
-        }
-        else if (overflow) {
-            return 0;
-        }
-        else {
-            return acc;
-        } 
     }
+    return acc;
 }
 
+// Counter over full cycle has overflowed; only valid for Rev 6 firmware
 bool AmpIO::GetEncoderVelocityOverflow(unsigned int index) const
 {
     quadlet_t buff = GetEncoderVelocityRaw(index);
     return buff & ENC_VEL_OVER_MASK;
 }
 
+// Direction of encoder at last velocity reading
 bool AmpIO::GetEncoderDir(unsigned int index) const
 {
     quadlet_t buff = GetEncoderVelocityRaw(index);
     return buff & ENC_DIR_MASK;
 }
 
+// Latch from 5 quarter cycles ago for accleration calculation
+// Valid for firmware version 6.
 AmpIO_Int32 AmpIO::GetEncoderAccPrev(unsigned int index) const
 {
     quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
@@ -483,21 +515,18 @@ AmpIO_Int32 AmpIO::GetEncoderAccPrev(unsigned int index) const
     return prev_perd;
 }
 
+// Latch last quarter cycle for acceleration calculation
+// Valid for firmware version 6.
 AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
 {
     AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
     AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
-    AmpIO_Int32 cur_perd = ((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22) & ENC_ACC_PREV_MASK;
+    AmpIO_Int32 cur_perd = (((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
     return cur_perd;
 }
 
-AmpIO_Int32 AmpIO::GetEncoderAccRunning(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_Int32 running_perd = buff & ENC_ACC_PREV_MASK;
-    return running_perd;
-}
-
+// Raw velocity field; includes period of velocity and other data, depending on firmware version.
+// For firmware version 6, includes part of AccRec.
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
@@ -505,32 +534,15 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
     return buff;
 }
 
+// Raw acceleration field; for firmware prior to Version 6, this was actually the encoder "frequency"
+// (i.e., number of pulses in specified time period, which can be used to estimate velocity), but was never used.
+// Starting with Firmware Version 6, it has been reused to return some data that can be used to estimate
+// the acceleration. For testing only.
 AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
 {
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
     return buff;
-}
-
-AmpIO_Int32 AmpIO::GetEncoderNextChannel(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_UInt32 channel = (buff & ENC_NEXT_CHN_MASK) >> 22;
-    return channel;
-}
-
-AmpIO_Int32 AmpIO::GetEncoderVelocityChannel(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_UInt32 channel = (buff & ENC_CHN_MASK) >> 20;
-    return channel;
-}
-
-bool AmpIO::GetEncoderLatchOverflow(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[TEMP_OFFSET]);
-    AmpIO_UInt32 overflowed = (buff & ENC_LATCH_OVER_MASK) >> 24;
-    return overflowed > 0;
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
