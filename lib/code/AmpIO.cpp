@@ -464,7 +464,7 @@ AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
 
 // Estimate acceleration from two quarters of the same type; units are counts/second**2
 // Valid for firmware version 6.
-double AmpIO::GetEncoderAcceleration(unsigned int index) const
+double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshold) const
 {
     
     if (index >= NUM_CHANNELS)
@@ -480,8 +480,6 @@ double AmpIO::GetEncoderAcceleration(unsigned int index) const
         AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
         // What to do about velocity overflow?
         bool overflow = GetEncoderVelocityOverflow(index);
-
-        const double percent_threshold = 0.0005;
 
         if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
             acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD * (double) prev_cnter * VEL_PERD);
