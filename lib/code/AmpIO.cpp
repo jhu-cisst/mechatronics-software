@@ -474,17 +474,17 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
     if ((GetFirmwareVersion() == 6)) {
         // Not sure how later firmware versions will work
 
-        AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
-        AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
-        AmpIO_Int32 prev_cnter = GetEncoderPrevCounter(index);
-        AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
-        // What to do about velocity overflow?
-        bool overflow = GetEncoderVelocityOverflow(index);
+        if (!GetEncoderVelocityOverflow(index)) {
+            AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
+            AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
+            AmpIO_Int32 prev_cnter = GetEncoderPrevCounter(index);
+            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
 
-        if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
-            acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD * (double) prev_cnter * VEL_PERD);
-            if (!GetEncoderDir(index))
-                acc = -acc;
+            if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
+                acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD * (double) prev_cnter * VEL_PERD);
+                if (!GetEncoderDir(index))
+                    acc = -acc;
+            }
         }
     }
     return acc;

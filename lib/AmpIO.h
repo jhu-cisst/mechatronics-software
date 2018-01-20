@@ -136,9 +136,15 @@ public:
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
     /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
-        between the most recent full cycle and the previous full cycle. Since velocity is averaged
-        over an entire cycle, acceleration can be applied over half the cycle to reduce delays. */
-    double GetEncoderAcceleration(unsigned int index, double percent_threshold) const;
+        between the most recent full cycle and the previous full cycle. If the encoder counter overflowed
+        (i.e., velocity was very slow or zero), the acceleration is set to 0. Since velocity is averaged
+        over an entire cycle, acceleration can be applied over half the cycle to reduce delays.
+        The percent_threshold is between 0 and 1 and essentially controls the maximum velocity for
+        which acceleration is estimated. Specifically, if T is the most recent quarter-cycle period,
+        then the acceleration is set to 0 if the magnitude of 1/T is greater than percent_threshold.
+        This can avoid noisy acceleration estimates in those cases. Setting percent_threshold to 1.0
+        effectively disables this feature. */
+    double GetEncoderAcceleration(unsigned int index, double percent_threshold = 1.0) const;
 
     /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
         encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
