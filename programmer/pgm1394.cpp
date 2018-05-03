@@ -34,8 +34,9 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 
     int c = 0;
     while ((c < '0') || (c > '7')) {
-        if (c)
+        if (c) {
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
+        }
         std::cout << std::endl
                   << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
                   << "MCS file: " << mcsName << std::endl;
@@ -73,7 +74,7 @@ bool PromProgramCallback(const char *msg)
             std::cout << "." << std::flush;
             Callback_StartTime = t;
         }
-    }        
+    }
     return true;   // continue
 }
 
@@ -302,6 +303,8 @@ int main(int argc, char** argv)
     std::string sn;
     bool auto_mode = false;
 
+    std::cout << "Started " << argv[0]
+              << ", using AmpIO version " << Amp1394_VERSION << std::endl;
     int args_found = 0;
     for (i = 1; i < argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
