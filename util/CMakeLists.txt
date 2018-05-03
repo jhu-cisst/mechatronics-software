@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2012-2017 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2012-2018 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -11,7 +11,7 @@
 
 # Backward compatibility
 cmake_minimum_required (VERSION 2.6)
-project (util1394)
+project (Amp1394Utils)
 
 include_directories (${Amp1394_INCLUDE_DIR})
 link_directories (${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})

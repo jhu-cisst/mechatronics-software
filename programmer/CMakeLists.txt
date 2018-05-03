@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2012-2016 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2012-2018 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -8,6 +8,8 @@
 # http://www.cisst.org/cisst/license.txt.
 #
 # --- end cisst license ---
+
+project (Amp1394Programmer)
 
 include_directories(${Amp1394_INCLUDE_DIR})
 link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
