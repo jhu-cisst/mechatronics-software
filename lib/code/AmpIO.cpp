@@ -50,8 +50,8 @@ const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocit
 
 // Following masks are for the most recent quarter-cycle period and the previous one of the same type (i.e., four cycles ago).
 // These are used for estimating acceleration using Firmware Rev 6.
-const AmpIO_UInt32 ENC_ACC_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder freq/acc) for lower 8 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_SUM_MASK     = 0x03ffffff;   /*!< Mask (into encoder freq/acc) for all 20 bits of previous quarter-cycle period */
+const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder freq/acc) for lower 8 bits of most recent quarter-cycle period */
+const AmpIO_UInt32 ENC_VEL_SUM_MASK     = 0x03ffffff;   /*!< Mask (into encoder freq/acc) for all 20 bits of previous quarter-cycle period */
 
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
 // (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
@@ -368,7 +368,7 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         // Clock = 49.152 MHz
         
         // mask and convert to signed
-        cnter = buff & ENC_ACC_SUM_MASK;
+        cnter = buff & ENC_VEL_SUM_MASK;
         
         if (GetEncoderVelocityOverflow(index)) {
             vel = 0.0;
@@ -403,7 +403,7 @@ double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
         delay = ((double)cnter * VEL_PERD_OLD)/2.0;
     }
     else if (fver == 6) {
-        cnter = GetEncoderVelocityRaw(index) & ENC_ACC_SUM_MASK;
+        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_SUM_MASK;
         delay = ((double)cnter * VEL_PERD)/2.0;
     }
     return delay;
@@ -434,7 +434,7 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         AmpIO_Int32 cnter;
 
         // mask and convert to signed
-        cnter = buff & ENC_ACC_SUM_MASK;
+        cnter = buff & ENC_VEL_SUM_MASK;
         if (!(buff & ENC_DIR_MASK))
             cnter = -cnter;
 
@@ -461,7 +461,7 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
         if (!GetEncoderVelocityOverflow(index)) {
             AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
             AmpIO_Int32 rec_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
-            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_ACC_SUM_MASK;
+            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_SUM_MASK;
             // subtract the most recent quarter and add the statequarter 5 cycles ago to calculate
             // the last full-cycle period (over 4 quarters) 
             AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
@@ -495,7 +495,7 @@ bool AmpIO::GetEncoderDir(unsigned int index) const
 AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
 {
     quadlet_t buff = bswap_32(read_buffer[index+offset]);
-    AmpIO_Int32 perd = buff & ENC_ACC_QTR_MASK;
+    AmpIO_Int32 perd = buff & ENC_VEL_QTR_MASK;
     return perd;
 }
 
@@ -504,7 +504,7 @@ AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_QTR1_OFFSET]);
+    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
     return buff;
 }
 
