@@ -131,7 +131,7 @@ public:
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
-
+    
     /*! Returns midrange value of encoder position. */
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
@@ -146,11 +146,6 @@ public:
         effectively disables this feature. */
     double GetEncoderAcceleration(unsigned int index, double percent_threshold = 1.0) const;
 
-    /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
-        encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
-        This method is provided for internal use and testing. */
-    AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
-    
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.

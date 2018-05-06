@@ -404,7 +404,7 @@ double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
     }
     else if (fver == 6) {
         cnter = GetEncoderVelocityRaw(index) & ENC_VEL_SUM_MASK;
-        delay = ((double)cnter * VEL_PERD)/2.0;
+        delay = ((double)cnter * VEL_PERD)/2.0 + GetEncoderQtr(index, ENC_RUN_OFFSET);
     }
     return delay;
 }
@@ -421,10 +421,7 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 
     AmpIO_UInt32 fver = GetFirmwareVersion();
     if (fver < 6) {
-        // buff = [cnter_now, cnter_latch]
-        // cnter_latch: latched counter value
-        // cnter_now  : free-running counter value
-        // both are signed 16-bit data
+        // buff: latched counter value
         // Clock = 768 kHz
         // PROGRAMMER NOTE: the 16-bit signed value is not sign extended
         //                  to 32 bits (backward compatible behavior)
