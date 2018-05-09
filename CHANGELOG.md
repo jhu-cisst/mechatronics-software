@@ -1,6 +1,16 @@
 Change log
 ==========
 
+1.4.0 (2018-xx-xx)
+==================
+* API changes:
+  * None
+* New features:
+  * Support for firmware Rev6 velocity estimation
+  * `pgm1394` now displays version for AmpIO library
+* Bug fixes:
+  * Fixed CMakeLists project names
+
 1.3.0 (2017-11-07)
 ==================
 * API changes:
