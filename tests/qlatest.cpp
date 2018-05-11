@@ -145,7 +145,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     unsigned long darray[4];
     unsigned long testValue[4];
     char numStr[4][3] = { " 1", " 2", " 3", " 4" };
-    char buf[80];
+    char buf[250];
     bool pass = true;
     bool tmpFix;
 
