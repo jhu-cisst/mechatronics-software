@@ -653,7 +653,11 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
         for (i = 0; i < 4; i++) {
             cur[i] = Board.GetMotorCurrent(i);
             logFile << std::hex << cur[i];
-            if (abs(cur[i]-dac) > 0x0100) {
+            if ((cur[i] > (dac + 0x0100))
+                || ((dac > 0x0100)
+                    && (cur[i] < (dac - 0x0100))
+                    )
+                ) {
                 logFile << "* ";
                 mvprintw(curLine+2, 15+7*i, "FAIL");
                 pass = false;
