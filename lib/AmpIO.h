@@ -197,6 +197,8 @@ public:
 
     bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
 
+    AmpIO_UInt32 ReadDigitalIO(void) const;
+
     /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
 
         \param index which digital output bit (0-3, which correspond to OUT1-OUT4)
@@ -365,6 +367,12 @@ public:
     bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data);
     bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
     bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
+
+    // ********************** Dallas DS2505 (1-wire) Methods **************************
+    bool DallasWriteControl(AmpIO_UInt32 ctrl);
+    bool DallasReadStatus(AmpIO_UInt32 &status);
+    bool DallasWaitIdle();
+    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
 
     // ************************ Ethernet Methods *************************************
     // Following functions enable access to the KSZ8851 Ethernet controller on the

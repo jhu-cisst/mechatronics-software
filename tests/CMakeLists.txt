@@ -57,3 +57,11 @@ if (Amp1394_HAS_PCAP)
            COMPONENT Amp1394-utils
            RUNTIME DESTINATION bin)
 endif (Amp1394_HAS_PCAP)
+
+if (Amp1394_HAS_RAW1394 OR Amp1394_HAS_PCAP)
+  add_executable(instrument instrument.cpp)
+  target_link_libraries(instrument ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+  install (TARGETS instrument
+           COMPONENT Amp1394-utils
+           RUNTIME DESTINATION bin)
+endif (Amp1394_HAS_RAW1394 OR Amp1394_HAS_PCAP)

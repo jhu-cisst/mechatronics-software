@@ -685,6 +685,13 @@ bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
     return ret;
 }
 
+AmpIO_UInt32 AmpIO::ReadDigitalIO(void) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port) port->ReadQuadlet(BoardId, 0x0a, read_data);
+    return read_data;
+}
+
 bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow)
 {
     countsHigh = 0;
@@ -1134,6 +1141,68 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
     return port->WriteQuadlet(BoardId, address, write_data);
+}
+
+// ********************** Dallas DS2505 (1-wire) Methods ****************************************
+bool AmpIO::DallasWriteControl(AmpIO_UInt32 ctrl)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    return port->WriteQuadlet(BoardId, 13, ctrl);
+}
+
+
+bool AmpIO::DallasReadStatus(AmpIO_UInt32 &status)
+{
+    status = 0;
+    if (GetFirmwareVersion() < 7) return false;
+    return port->ReadQuadlet(BoardId, 13, status);
+}
+
+bool AmpIO::DallasWaitIdle()
+{
+    int i;
+    AmpIO_UInt32 status;
+    // Wait up to 500 msec. Based on measurements, approximate wait time is 250-300 msec.
+    for (i = 0; i < 500; i++) {
+        // Wait 1 msec
+        Amp1394_Sleep(0.001);
+        if (!DallasReadStatus(status)) return false;
+        // Done when in idle state
+        if ((status&0x000000F0) == 0)
+            break;
+    }
+    //std::cerr << "Wait time = " << i << " milliseconds" << std::endl;
+    return (i < 500);
+}
+
+bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    AmpIO_UInt32 status = ReadStatus();
+    // Check whether bi-directional I/O is available
+    if ((status & 0x00300000) != 0x00300000) return false;
+    if (!DallasWriteControl((addr<<16)|2)) return false;
+    if (!DallasWaitIdle()) return false;
+    if (!DallasReadStatus(status)) return false;
+    // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
+    if ((status & 0xFF00000F) != 0x0B00000B) return false;
+    nodeaddr_t address = 0x6000;
+    unsigned char *ptr = data;
+    // Read first block of data (up to 256 bytes)
+    unsigned int nb = (nbytes>256) ? 256 : nbytes;
+    if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
+    ptr += nb;
+    nbytes -= nb;
+    // Read additional blocks of data if necessary
+    while (nbytes > 0) {
+        if (!DallasWriteControl(3)) return false;
+        if (!DallasWaitIdle()) return false;
+        nb = (nbytes>256) ? 256 : nbytes;
+        if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
+        ptr += nb;
+        nbytes -= nb;
+    }
+    return true;
 }
 
 // ********************** KSZ8851 Ethernet Controller Methods ***********************************
