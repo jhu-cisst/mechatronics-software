@@ -354,6 +354,7 @@ public:
 
     // Program a page (up to 256 bytes) at the specified address.
     // This command calls PromWriteEnable.
+    // nbytes must be a multiple of 4.
     // If non-zero, the callback (cb) is called while the software is waiting
     // for the PROM to be programmed, or if there is an error.
     // Returns the number of bytes programmed (-1 if error).

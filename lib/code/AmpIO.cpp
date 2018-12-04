@@ -134,46 +134,49 @@ AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
 
 std::string AmpIO::GetFPGASerialNumber(void)
 {
-    // Format: FPGA 1234-56 (12 bytes)
+    // Format: FPGA 1234-56 (12 bytes) or FPGA 1234-567 (13 bytes).
+    // Note that on PROM, the string is terminated by 0xff because the sector
+    // is first erased (all bytes set to 0xff) before the string is written.
     AmpIO_UInt32 address = 0x001FFF00;
-    AmpIO_UInt8 data[20];
-    std::string sn; sn.clear();
-    const size_t FPGASNSize = 12;
+    char data[20];
+    std::string sn;
+    const size_t FPGASNSize = 13;
+    const size_t bytesToRead = (FPGASNSize+3)&0xFC;  // must be multiple of 4
 
-    PromReadData(address, data, FPGASNSize);
-    for (size_t i = 0; i < FPGASNSize; i++) {
-        sn.push_back(data[i]);
+    data[FPGASNSize] = 0;    // Make sure null-terminated
+    if (PromReadData(address, (AmpIO_UInt8 *)data, bytesToRead)) {
+        if (strncmp(data, "FPGA ", 5) == 0) {
+            char *p = strchr(data+5, 0xff);
+            if (p) *p = 0;      // Null terminate at first 0xff
+            sn.assign(data+5);
+        }
     }
-
-    if (sn.substr(0,5) == "FPGA ")
-        sn.erase(0,5);
-    else {
-        sn.clear();
-    }
+    else
+        std::cerr << "AmpIO::GetFPGASerialNumber: failed to read FPGA Serial Number" << std::endl;
     return sn;
 }
 
 std::string AmpIO::GetQLASerialNumber(void)
 {
-    // Format: QLA 1234-56
-    std::string sn; sn.clear();
+    // Format: QLA 1234-56 or QLA 1234-567.
+    // String is terminated by 0 or 0xff.
     AmpIO_UInt16 address = 0x0000;
-    AmpIO_UInt8 data;
-    const size_t QLASNSize = 11;
+    AmpIO_UInt8 data[20];
+    const size_t QLASNSize = 12;
+    std::string sn;
+
+    data[QLASNSize] = 0;  // make sure null-terminated
     for (size_t i = 0; i < QLASNSize; i++) {
-        if (!PromReadByte25AA128(address, data)) {
+        if (!PromReadByte25AA128(address, data[i])) {
             std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+            break;
         }
-        else {
-            sn.push_back(data);
-            address += 1;
-        }
+        if (data[i] == 0xff)
+            data[i] = 0;
+        address += 1;
     }
-    if (sn.substr(0,4) == "QLA ")
-        sn.erase(0,4);
-    else {
-        sn.clear();
-    }
+    if (strncmp((char *)data, "QLA ", 4) == 0)
+        sn.assign((char *)data+4);
     return sn;
 }
 
@@ -993,8 +996,12 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     nodeaddr_t address;
     if (fver >= 4) {address = 0x2000;}
     else {address = 0xc0;}
-    if (!port->WriteBlock(BoardId, address, data_ptr, nbytes+sizeof(quadlet_t)))
+    if (!port->WriteBlock(BoardId, address, data_ptr, nbytes+sizeof(quadlet_t))) {
+        std::ostringstream msg;
+        msg << "AmpIO::PromProgramPage: failed to write block, nbytes = " << nbytes;
+        ERROR_CALLBACK(cb, msg);
         return -1;
+    }
     // Read FPGA status register; if 4 LSB are 0, command has finished
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
