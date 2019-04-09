@@ -1,6 +1,16 @@
 Change log
 ==========
 
+1.5.0 (2019-04-19)
+==================
+* API changes:
+  * None
+* New features:
+  * Support FPGA/QLA serial numbers with up to 3 digits
+  * Support to read Dallas chip on da Vinci tools (requires firmware 7 to be released)
+* Bug fixes:
+  * None
+
 1.4.0 (2018-05-16)
 ==================
 * API changes:
