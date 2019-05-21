@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -365,16 +365,16 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
                 cnter |= 0xffff0000;
             vel = 4.0 * ((double)cnter*VEL_PERD_OLD);
         }
-    } else if (fver == 6) {
+    } else if (fver >= 6) {
         // buff[31] = whether full cycle period has overflowed
         // buff[30] = direction of the encoder
         // buff[29:22] = upper 8 bits of most recent quarter-cycle period (for acceleration)
         // buff[21:0] = velocity (22 bits)
         // Clock = 3.072 MHz
-        
+
         // mask and convert to signed
         cnter = buff & ENC_VEL_MASK_22;
-        
+
         if (GetEncoderVelocityOverflow(index)) {
             vel = 0.0;
         } else if (!GetEncoderDir(index)) {
@@ -382,10 +382,6 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         } else {
             vel = 4.0/((double)cnter*VEL_PERD);
         }
-    }
-    else {
-        // Not sure what later firmware versions will do
-        vel = 0.0;
     }
     return vel;
 }
@@ -407,7 +403,7 @@ double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
         }
         delay = ((double)cnter * VEL_PERD_OLD)/2.0;
     }
-    else if (fver == 6) {
+    else if (fver >= 6) {
         cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
         delay = ((double)cnter * VEL_PERD)/2.0;
     }
@@ -435,7 +431,7 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         //                  to 32 bits (backward compatible behavior)
         return (buff & ENC_VEL_MASK_16);
     }
-    else if (fver == 6) {
+    else if (fver >= 6) {
         AmpIO_Int32 cnter;
 
         // mask and convert to signed
@@ -444,10 +440,6 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
             cnter = -cnter;
 
         return  cnter;
-    }
-    else {
-        // Not sure what later firmware versions will do
-        return buff;
     }
 }
 
@@ -462,14 +454,14 @@ AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
     AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
     AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
 
-    return cnter - rec_perd + prev_perd;    
+    return cnter - rec_perd + prev_perd;
 }
 
 // Estimate acceleration from two quarters of the same type; units are counts/second**2
 // Valid for firmware version 6.
 double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshold) const
 {
-    
+
     if (index >= NUM_CHANNELS)
         return 0L;
 
