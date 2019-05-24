@@ -431,16 +431,14 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         //                  to 32 bits (backward compatible behavior)
         return (buff & ENC_VEL_MASK_16);
     }
-    else if (fver >= 6) {
-        AmpIO_Int32 cnter;
-
-        // mask and convert to signed
-        cnter = buff & ENC_VEL_MASK_22;
-        if (!(buff & ENC_DIR_MASK))
-            cnter = -cnter;
-
-        return  cnter;
+    // all other cases, fver >= 6
+    AmpIO_Int32 cnter;    
+    // mask and convert to signed
+    cnter = buff & ENC_VEL_MASK_22;
+    if (!(buff & ENC_DIR_MASK)) {
+        cnter = -cnter;
     }
+    return cnter;
 }
 
 // Returns previous encoder period counter (previous full cycle period);
@@ -647,6 +645,14 @@ AmpIO_UInt32 AmpIO::ReadStatus(void) const
     AmpIO_UInt32 read_data = 0;
     if (port) port->ReadQuadlet(BoardId, 0, read_data);
     return read_data;
+}
+
+bool AmpIO::ReadBlock(nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
+{
+    if (!port) {
+        return false;
+    }
+    return port->ReadBlock(BoardId, addr, rdata, nbytes);
 }
 
 bool AmpIO::ReadPowerStatus(void) const

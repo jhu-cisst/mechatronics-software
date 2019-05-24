@@ -191,6 +191,7 @@ public:
     // via the more efficient IEEE-1394 block transfer.
 
     AmpIO_UInt32 ReadStatus(void) const;
+    bool ReadBlock(nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
     bool ReadPowerStatus(void) const;
     bool ReadSafetyRelayStatus(void) const;
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
