@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -48,6 +48,7 @@ else (WIN32)
   option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
 
   # For now, assume pcap is installed somewhere standard
+  # To install:  sudo apt-get install libpcap-dev
   set (PCAP_INCLUDE_DIR "")
   set (PCAP_LIBRARIES "pcap")
 

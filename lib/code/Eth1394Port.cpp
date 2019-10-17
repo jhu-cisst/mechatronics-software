@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -39,6 +39,7 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
+#include <unistd.h>
 #include <byteswap.h>
 #endif
 
@@ -1034,7 +1035,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     }
                 }
                 else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
-                    if (length == ((packet[26] << 8) | packet[27])) {
+                    if (length == static_cast<size_t>((packet[26] << 8) | packet[27])) {
                         if (checkCRC(packet))
                             memcpy(buffer, &packet[34], length);
                         else {
