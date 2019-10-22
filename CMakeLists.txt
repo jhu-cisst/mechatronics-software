@@ -32,13 +32,16 @@ set (Amp1394_LIBRARIES   Amp1394)
 
 if (WIN32)
 
-  # On Windows, can build with winpcap (Ethernet support)
-  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap)" ON)
+  # On Windows, can build with WinPcap or Npcap (Ethernet support)
+  #    Use WinPcap for Windows XP and earlier (no longer maintained)
+  #    Use Npcap for Windows 7 and higher (use Npcap SDK)
+  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap or npcap)" ON)
 
-  # Need to specify where WinPcap Developer's Pack is installed
+  # Need to specify where WinPcap Developer's Pack or Npcap SDK is installed
   find_path (PCAP_INCLUDE_DIR pcap.h)
   # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
-  find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap wpcap and Packet libraries")
+  # Make sure to use correct version (32 or 64 bit)
+  find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap/Npcap wpcap and Packet libraries")
   set (PCAP_LIBRARIES "wpcap" "Packet")
 
 else (WIN32)

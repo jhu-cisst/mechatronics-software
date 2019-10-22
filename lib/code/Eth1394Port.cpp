@@ -18,6 +18,10 @@ http://www.cisst.org/cisst/license.txt.
 #include "Eth1394Port.h"
 #include "Amp1394Time.h"
 
+#ifdef _MSC_VER
+// Following seems to be necessary on Windows, at least with Npcap
+#define PCAP_DONT_INCLUDE_PCAP_BPF_H
+#endif
 #include <pcap.h>
 #include <iomanip>
 #include <sstream>
@@ -205,9 +209,9 @@ bool Eth1394Port::Init(void)
     }
 
     // initialize ethernet header (FA-61-OE is CID assigned to LCSR by IEEE)
-    u_int8_t eth_dst[6];
+    uint8_t eth_dst[6];
     GetDestMacAddr(eth_dst);
-    u_int8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
+    uint8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
 
     // Get local MAC address. There doesn't seem to be a better (portable) way to do this.
 #ifdef _MSC_VER
@@ -1155,7 +1159,7 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
 
         // Ethernet frame
         const int ethlength = length_fw * 4 + 14;
-        u_int8_t frame[ethlength];
+        uint8_t frame[ethlength];
         memcpy(frame, frame_hdr, 14);
         memcpy(frame + 14, packet_FW, length_fw * 4);
 
