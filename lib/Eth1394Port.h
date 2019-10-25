@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2016 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -44,6 +44,14 @@ protected:
         BRESPONSE = 7
     };
 
+    bool useUDP_Send;
+    bool useUDP_Recv;
+    int  socketFD;          // UDP socket
+    union {                 // IP address of server (FPGA)
+        unsigned long asULong;
+        unsigned char asBytes[4];
+    } IP_addr;
+    unsigned short UDP_port;    // Port on server (FPGA)
     pcap_t *handle;
     uint8_t frame_hdr[14];  // dest addr (6), src addr (6), length (2)
     uint8_t BidBridge_; // bridge board ID
@@ -64,6 +72,11 @@ protected:
 
     bool headercheck(uint8_t* header, bool isHUBtoPC) const;
     bool checkCRC(const unsigned char *packet) const;
+
+    bool UDP_Init(const std::string & host, unsigned short port);
+    bool UDP_Close();
+    int UDP_Send(const char *bufsend, size_t msglen);
+    int UDP_Recv(char * bufrecv, size_t maxlen, const double timeoutSec);
 
     /**
      * @brief send async read request to a node and wait for response.
@@ -114,6 +127,12 @@ public:
     Eth1394Port(int portNum, std::ostream &debugStream = std::cerr, Eth1394CallbackType cb = 0);
 
     ~Eth1394Port();
+
+    // Methods to get/set whether to send/receive via UDP or PCAP
+    void SetUDP_Send(bool flag) { useUDP_Send = flag; }
+    bool GetUDP_Send() const { return useUDP_Send; }
+    void SetUDP_Recv(bool flag) { useUDP_Recv = flag; }
+    bool GetUDP_Recv() const { return useUDP_Recv; }
 
     // Returns the destination MAC address (6 bytes)
     // The first 3 characters are FA:61:OE, which is the CID assigned to LCSR by IEEE

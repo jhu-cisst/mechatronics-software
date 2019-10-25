@@ -18,6 +18,27 @@ http://www.cisst.org/cisst/license.txt.
 #include "Eth1394Port.h"
 #include "Amp1394Time.h"
 
+// For UDP support (maybe not all are needed)
+#ifdef _MSC_VER
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#define WINSOCKVERSION MAKEWORD(2,2)
+// Following assertion checks that sizeof(SOCKET) is equal to sizeof(int).
+// In C++11, could instead use static_assert.
+//typedef char assertion_on_socket[(sizeof(SOCKET)==sizeof(int))*2-1];
+#else
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <string.h>  // for memset
+#include <math.h>    // for floor
+#define INVALID_SOCKET -1
+#define SOCKET_ERROR -1
+#endif
+
+// ********** For PCAP ************
 #ifdef _MSC_VER
 // Following seems to be necessary on Windows, at least with Npcap
 #define PCAP_DONT_INCLUDE_PCAP_BPF_H
@@ -74,6 +95,9 @@ void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr);
 
 Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394CallbackType cb):
     BasePort(portNum, debugStream),
+    useUDP_Send(false),
+    useUDP_Recv(false),
+    socketFD(INVALID_SOCKET),
     BidBridge_(0xFF),
     fw_tl(0),
     NumOfNodes_(0),
@@ -90,6 +114,7 @@ Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394Callback
 
 Eth1394Port::~Eth1394Port()
 {
+    UDP_Close();
 }
 
 void Eth1394Port::GetDestMacAddr(unsigned char *macAddr)
@@ -133,12 +158,18 @@ void Eth1394Port::PrintDebug(std::ostream &debugStream, unsigned short status)
     //if (!(status&0x0010)) debugStream << "IRQ ";
     if ((status&0x0010)) debugStream << "multicast ";
     if (status&0x0008) debugStream << "KSZ-idle ";
+#if 0
     if (status&0x0004) debugStream << "ETH-idle ";
     int waitInfo = status&0x0003;
     if (waitInfo == 0) debugStream << "wait-none";
     else if (waitInfo == 1) debugStream << "wait-ack";
     else if (waitInfo == 2) debugStream << "wait-ack-clear";
     else debugStream << "wait-flush";
+#else
+    if (status&0x0004) debugStream << "IPv4 ";
+    if (status&0x0002) debugStream << "ARP ";
+    if (status&0x0001) debugStream << "UDP ";
+#endif
     debugStream << std::endl;
 }
 
@@ -151,6 +182,158 @@ void Eth1394Port::BoardInUseIntegerUpdate(void)
             tempBoardInUse = tempBoardInUse | (0x1 << i);
     }
     BoardInUseInteger_ = tempBoardInUse;
+}
+
+bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
+{
+    int addr[4];
+    int n = sscanf(host.data(), "%d.%d.%d.%d", &addr[0], &addr[1], &addr[2], &addr[3]);
+    if (n == 4) {
+        for (int i = 0; i < 4; i++)
+            IP_addr.asBytes[i] = static_cast<unsigned char>(addr[i]);
+    }
+    else {
+        outStr << "Failed to parse IP address: " << host << ", n = " << n << std::endl;
+        return false;
+    }
+
+    UDP_port = port;
+#if 0
+    // Can probably hard-code following
+    hostent *he = gethostbyname(host.c_str());
+    if (!he) {
+        outStr << "Failed to find host entry " << host << std::endl;
+        return false;
+    }
+    if (!(he->h_addr_list && he->h_addr_list[0])) {
+        outStr << "Failed to find host " << host << std::endl;
+        return false;
+    }
+
+    // Set host and port
+    struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(port);
+    serverAddr.sin_addr.s_addr = *reinterpret_cast<unsigned long *>(he->h_addr_list[0]);
+#endif
+
+#ifdef _MSC_VER
+    WSADATA wsaData;
+    int retval = WSAStartup(WINSOCKVERSION, &wsaData);
+    if (retval != 0) {
+        outStr << "WSAStartup failed with error code " << retval << std::endl;
+        return false;
+    }
+    SOCKET s = socket(PF_INET, SOCK_DGRAM, 0);
+    if (s == INVALID_SOCKET) {
+        outStr << "Failed to open UDP socket" << std::endl;
+        return false;
+    }
+    // Problem: windows uses SOCKET type, which is UINT_PTR, which is
+    // unsigned __int64 on a 64-bit system and unsigned int on a 32-bit system.
+    // This should be fixed in a better way.
+    if (s > INT_MAX) {
+        outStr << "Socket cannot fit in an integer" << std::endl;
+        return false;
+    }
+    socketFD = static_cast<int>(s);
+#else
+    // Open UDP socket
+    socketFD = socket(PF_INET, SOCK_DGRAM, 0);
+
+    if (socketFD == INVALID_SOCKET) {
+        outStr << "Failed to open UDP socket" << std::endl;
+        return false;
+    }
+#endif
+
+#if 0
+    int retval = bind(socketFD, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
+    if (retval == SOCKET_ERROR) {
+        outStr << "Failed to set UDP host:port to " << host << ":" << port << std::endl;
+        UDP_Close();
+        return false;
+    }
+#endif
+    return true;
+}
+
+bool Eth1394Port::UDP_Close()
+{
+    if (socketFD != INVALID_SOCKET) {
+#ifdef _MSC_VER
+        if (closesocket(socketFD) != 0) {
+            outStr << "Close: failed to close socket " << socketFD << ", Error: " << WSAGetLastError() <<std::endl;
+            return false;
+        }
+        WSACleanup();
+#else
+        if (close(socketFD) != 0) {
+            outStr << "Close: failed to close socket " << socketFD << ", Error: " << errno << std::endl;
+            return false;
+        }
+#endif
+        socketFD = INVALID_SOCKET;
+    }
+    return true;
+}
+
+int Eth1394Port::UDP_Send(const char *bufsend, size_t msglen)
+{
+    // Set host and port
+    struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(UDP_port);
+    serverAddr.sin_addr.s_addr = IP_addr.asULong;
+    int retval = sendto(socketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
+
+    if (retval == SOCKET_ERROR) {
+        outStr << "Send: failed to send" << std::endl;
+        return -1;
+    }
+    else if (retval != static_cast<int>(msglen)) {
+        outStr << "Send: failed to send the whole message" << std::endl;
+    }
+    return retval;
+}
+
+int Eth1394Port::UDP_Recv(char *bufrecv, size_t maxlen, const double timeoutSec)
+{
+    int retval = 0;
+    int err    = 0;
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(socketFD, &readfds);
+
+
+#ifdef _MSC_VER
+    long sec = static_cast<long>(floor(timeoutSec));
+    long usec = static_cast<long>((timeoutSec - sec) * 1e6);
+#else
+    time_t sec = static_cast<time_t>(floor(timeoutSec));
+    suseconds_t usec = static_cast<suseconds_t>((timeoutSec - sec) * 1e6);
+#endif
+    timeval timeout = { sec , usec };
+    retval = select(socketFD + 1, &readfds, NULL, NULL, &timeout);
+
+    if (retval == SOCKET_ERROR) {
+#ifdef _MSC_VER
+        err = WSAGetLastError();
+#else
+        err = errno;
+#endif
+        outStr << "UDP_Recv error = " << err << std::endl;
+        return -1;
+    }
+    if (retval > 0) {
+        //struct sockaddr_in fromAddr;
+        //socklen_t length = sizeof(fromAddr);
+        //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
+        retval = recv(socketFD, bufrecv, maxlen, 0);
+    }
+   return retval;
 }
 
 bool Eth1394Port::Init(void)
@@ -194,6 +377,9 @@ bool Eth1394Port::Init(void)
         }
         return false;
     }
+
+    // Hard-coded IP and port for now
+    UDP_Init("192.168.0.100", 1394);
 
     // Open pcap handle
     handle = NULL;
@@ -564,30 +750,50 @@ bool Eth1394Port::ReadAllBoardsBroadcast(void)
     memcpy(frame, frame_hdr, ETH_HEADER_LEN);
     memcpy(frame + ETH_HEADER_LEN, packet_FW, length_fw * 4);
 
-    if (pcap_sendpacket(handle, frame, ethlength) != 0)
+    if (useUDP_Send) {
+        int nSent = UDP_Send(reinterpret_cast<const char *>(frame), ethlength);
+        if (nSent < ethlength) {
+            outStr << "ERROR: UDP send returned " << nSent << ", expected " << ethlength << std::endl;
+            return false;
+        }
+    }
+    else if (pcap_sendpacket(handle, frame, ethlength) != 0)
     {
-        outStr << "ERROR: send packet failed" << std::endl;
+        outStr << "ERROR: PCAP send packet failed" << std::endl;
         return false;
     }
 
     // Grab a packet
     struct pcap_pkthdr header;	/* The header that pcap gives us */
     const u_char *packet;		/* The actual packet */
-    packet = pcap_next(handle, &header);
+    char udp_packet[1024];  // TEMP -- more than needed
+    if (useUDP_Recv) {
+        int num = UDP_Recv(udp_packet, sizeof(udp_packet), 0.01);
+        int expNum = ETH_HEADER_LEN - NumOfNodesInUse_ * 4 * 17;
+        if (num < expNum) {
+            outStr << "Error: Broadcast Read Received, num = " << num
+                   << ", expNum = " << expNum << std::endl;
+            return false;
+        }
+        packet = reinterpret_cast<unsigned char *>(udp_packet);
+    }
+    else {
+        packet = pcap_next(handle, &header);
 
-    if (packet == NULL) {
-        outStr << "Error: Broadcast Read Received failed" << std::endl;
-        return false;
+        if (packet == NULL) {
+            outStr << "Error: Broadcast Read Received failed" << std::endl;
+            return false;
+        }
+
+        // check the packet length, in bytes
+        if (header.len - ETH_HEADER_LEN - NumOfNodesInUse_ * 4 * 17 != 0)
+        {
+            outStr << "ERROR: Broadcast read packet length error" << std::endl;
+            return false;
+        }
     }
 
     ret = true;
-
-    // check the packet length, in bytes
-    if (header.len - ETH_HEADER_LEN - NumOfNodesInUse_ * 4 * 17 != 0)
-    {
-        outStr << "ERROR: Broadcast read packet length error" << std::endl;
-        return false;
-    }
 
     // record the number of cycle
     int loopSeq = 0;
@@ -985,9 +1191,16 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
     }
 
-    if (pcap_sendpacket(handle, frame, ethlength) != 0)
+    if (useUDP_Send) {
+        int nSent = UDP_Send(reinterpret_cast<const char *>(frame), ethlength);
+        if (nSent < ethlength) {
+            outStr << "ERROR: UDP send returned " << nSent << ", expected " << ethlength << std::endl;
+            return -1;
+        }
+    }
+    else if (pcap_sendpacket(handle, frame, ethlength) != 0)
     {
-        outStr << "ERROR: send packet failed" << std::endl;
+        outStr << "ERROR: PCAP send packet failed" << std::endl;
         return -1;
     }
 
@@ -1010,9 +1223,21 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     unsigned int numPackets = 0;
     unsigned int numPacketsValid = 0;
     double timeDiffSec = 0.0;
+    char udp_packet[1024];  // TEMP -- more than needed
 
     while ((numPacketsValid < 1) && (timeDiffSec < 0.5)) {
-        while ((packet = pcap_next(handle, &header)) != NULL) {
+        while (1) {  // can probably eliminate this loop
+            if (useUDP_Recv) {
+                int num = UDP_Recv(udp_packet, sizeof(udp_packet), 0.5-timeDiffSec);
+                if (num < 34)  // Needs to be at least 34 bytes
+                    break;
+                packet = reinterpret_cast<unsigned char *>(udp_packet);
+            }
+            else {
+                packet = pcap_next(handle, &header);
+                if (packet == NULL)
+                    break;
+            }
             numPackets++;
             if (headercheck((unsigned char *)packet, true)) {
                 if ((node != 0xff) && (packet[11] != BidBridge_)) {
@@ -1100,16 +1325,24 @@ bool Eth1394Port::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_
         std::cout << "------ Eth Frame ------" << std::endl;
         print_frame((unsigned char*)frame, ethlength);
     }
-
-    if (pcap_sendpacket(handle, frame, ethlength) != 0)
-    {
-        outStr << "ERROR: send packet failed" << std::endl;
-        return false;
+    bool ret = true;
+    if (useUDP_Send) {
+        int nSent = UDP_Send(reinterpret_cast<const char *>(frame), ethlength);
+        if (nSent != ethlength) {
+            outStr << "ERROR: UDP send returned " << nSent << ", expected " << ethlength << std::endl;
+            ret = false;
+        }
     }
-    return true;
+    else if (pcap_sendpacket(handle, frame, ethlength) != 0)
+    {
+        outStr << "ERROR: PCAP send packet failed" << std::endl;
+        ret = false;
+    }
+    return ret;
 }
 
 
+// Probably not used
 int Eth1394Port::eth1394_write_nodenum(void)
 {
     frame_hdr[12] = ((NumOfNodesInUse_-1) << 4) | 0x08;
@@ -1129,14 +1362,23 @@ int Eth1394Port::eth1394_write_nodenum(void)
         print_frame((unsigned char*)frame, sizeof(frame));
     }
 
-    if (pcap_sendpacket(handle, frame, ethlength) != 0)
-    {
-        outStr << "ERROR: send packet failed" << std::endl;
-        return -1;
+    int ret = 0;
+    if (useUDP_Send) {
+        int nSent = UDP_Send(reinterpret_cast<const char *>(frame), ethlength);
+        if (nSent != ethlength) {
+            outStr << "ERROR: UDP send returned " << nSent << ", expected " << ethlength << std::endl;
+            ret = -1;
+        }
     }
-    return 0;
+    else if (pcap_sendpacket(handle, frame, ethlength) != 0)
+    {
+        outStr << "ERROR: PCAP send packet failed" << std::endl;
+        ret = -1;
+    }
+    return ret;
 }
 
+// NOT USED
 int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_node_id
 {
     if( mode == 0 || mode == 1)

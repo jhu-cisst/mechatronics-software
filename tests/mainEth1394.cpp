@@ -364,14 +364,19 @@ int main(int argc, char **argv)
 
     bool done = false;
     quadlet_t read_data, write_data;
+
     while (!done) {
 
+        bool UDP_recv = EthPort.GetUDP_Recv();
+        bool UDP_send = EthPort.GetUDP_Send();
+        std::string RecvMode = (UDP_recv ? "UDP" : "PCAP");
+        std::string SendMode = (UDP_send ? "UDP" : "PCAP");
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         std::cout << "  0) Quit" << std::endl;
-        std::cout << "  1) Quadlet write to board" << std::endl;
-        std::cout << "  2) Quadlet read from board" << std::endl;
-        std::cout << "  3) Block read from board" << std::endl;
-        std::cout << "  4) Block write to board" << std::endl;
+        std::cout << "  1) Quadlet write to board via " << SendMode << std::endl;
+        std::cout << "  2) Quadlet read from board via " << RecvMode << std::endl;
+        std::cout << "  3) Block read from board via " << RecvMode << std::endl;
+        std::cout << "  4) Block write to board via " << SendMode << std::endl;
         std::cout << "  5) Ethernet port status" << std::endl;
         std::cout << "  6) Initialize Ethernet port" << std::endl;
         std::cout << "  7) Ethernet debug info" << std::endl;
@@ -380,6 +385,8 @@ int main(int argc, char **argv)
         std::cout << "  d) Continuous write test (quadlet write)" << std::endl;
         std::cout << "  e) Read RXFCTR packet count" << std::endl;
         std::cout << "  f) Print Firewire PHY registers" << std::endl;
+        std::cout << "  r) Toggle receive mode (PCAP/UDP)" << std::endl;
+        std::cout << "  s) Toggle send model (PCAP/UDP)" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -513,6 +520,15 @@ int main(int argc, char **argv)
             std::cout << "Firewire PHY data via Ethernet:" << std::endl;
             PrintFirewirePHY(&EthPort, boardNum);
             break;
+
+        case 'r':
+            EthPort.SetUDP_Recv(!EthPort.GetUDP_Recv());
+            break;
+
+        case 's':
+            EthPort.SetUDP_Send(!EthPort.GetUDP_Send());
+            break;
+
         }
     }
 
