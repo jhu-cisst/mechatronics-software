@@ -154,22 +154,15 @@ void Eth1394Port::PrintDebug(std::ostream &debugStream, unsigned short status)
     if (status&0x0080) debugStream << "qWrite ";
     if (status&0x0040) debugStream << "bRead ";
     if (status&0x0020) debugStream << "bWrite ";
-    //if (status&0x0020) debugStream << "PME ";
-    //if (!(status&0x0010)) debugStream << "IRQ ";
-    if ((status&0x0010)) debugStream << "multicast ";
+    //if ((status&0x0010)) debugStream << "multicast ";
+    if ((status&0x0010)) debugStream << "UDP ";
     if (status&0x0008) debugStream << "KSZ-idle ";
-#if 0
     if (status&0x0004) debugStream << "ETH-idle ";
     int waitInfo = status&0x0003;
     if (waitInfo == 0) debugStream << "wait-none";
     else if (waitInfo == 1) debugStream << "wait-ack";
     else if (waitInfo == 2) debugStream << "wait-ack-clear";
     else debugStream << "wait-flush";
-#else
-    if (status&0x0004) debugStream << "IPv4 ";
-    if (status&0x0002) debugStream << "ARP ";
-    if (status&0x0001) debugStream << "UDP ";
-#endif
     debugStream << std::endl;
 }
 
@@ -379,7 +372,7 @@ bool Eth1394Port::Init(void)
     }
 
     // Hard-coded IP and port for now
-    UDP_Init("192.168.0.100", 1394);
+    UDP_Init("169.254.122.100", 1394);
 
     // Open pcap handle
     handle = NULL;
