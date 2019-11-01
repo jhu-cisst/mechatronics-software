@@ -1131,6 +1131,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 {
     unsigned int tcode;  // fw tcode
     size_t length_fw;    // fw length in quadlets
+    int length_fw_bytes; // fw length in bytes
 
     if (length == 4) {
         tcode = Eth1394Port::QREAD;
@@ -1144,6 +1145,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
         outStr << "eth1394_read: illegal length = " << length << std::endl;
         return -1;
     }
+    length_fw_bytes = length_fw*sizeof(quadlet_t);
 
     //quadlet_t packet_FW[length_fw];
     quadlet_t packet_FW[5];
@@ -1156,45 +1158,47 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     if (tcode == BREAD)
         packet_FW[3] = bswap_32((length & 0xFFFF) << 16);
     packet_FW[length_fw-1] =
-    bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, length_fw * 4 - 4)));
+    bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, length_fw_bytes - 4)));
 
-    if (DEBUG) print_frame((unsigned char*)packet_FW, length_fw*sizeof(quadlet_t));
-
-    // Ethernet frame
-    const int ethlength = length_fw * 4 + 14;  // eth frame length in bytes
-    // length field (big endian 16-bit integer)
-    // Following assumes length is less than 256 bytes
-    frame_hdr[12] = 0;
-    frame_hdr[13] = length_fw * 4;
-
-    //uint8_t frame[ethlength];
-    uint8_t frame[5*4+14];
-    memcpy(frame, frame_hdr, 14);
-    if (node == 0xff) {      // multicast
-        frame[0] |= 0x01;    // set multicast destination address
-        frame[5] = node;     // keep multicast address
-    } else {
-        frame[5] = BidBridge_;   // last byte of dest address is bridge board id
-    }
-
-    memcpy(frame + 14, packet_FW, length_fw * 4);
-
-    if (DEBUG) {
-        std::cout << "------ Eth Frame ------" << std::endl;
-        print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
-    }
+    if (DEBUG) print_frame((unsigned char*)packet_FW, length_fw_bytes);
 
     if (useUDP_Send) {
-        int nSent = UDP_Send(reinterpret_cast<const char *>(frame), ethlength);
-        if (nSent < ethlength) {
-            outStr << "ERROR: UDP send returned " << nSent << ", expected " << ethlength << std::endl;
+        int nSent = UDP_Send(reinterpret_cast<const char *>(packet_FW), length_fw_bytes);
+        if (nSent < length_fw_bytes) {
+            outStr << "ERROR: UDP send returned " << nSent << ", expected " << length_fw_bytes << std::endl;
             return -1;
         }
     }
-    else if (pcap_sendpacket(handle, frame, ethlength) != 0)
-    {
-        outStr << "ERROR: PCAP send packet failed" << std::endl;
-        return -1;
+    else {
+        // Ethernet frame
+        const int ethlength = length_fw * 4 + 14;  // eth frame length in bytes
+        // length field (big endian 16-bit integer)
+        // Following assumes length is less than 256 bytes
+        frame_hdr[12] = 0;
+        frame_hdr[13] = length_fw * 4;
+
+        //uint8_t frame[ethlength];
+        uint8_t frame[5*4+14];
+        memcpy(frame, frame_hdr, 14);
+        if (node == 0xff) {      // multicast
+            frame[0] |= 0x01;    // set multicast destination address
+            frame[5] = node;     // keep multicast address
+        } else {
+            frame[5] = BidBridge_;   // last byte of dest address is bridge board id
+        }
+
+        memcpy(frame + 14, packet_FW, length_fw * 4);
+
+        if (DEBUG) {
+            std::cout << "------ Eth Frame ------" << std::endl;
+            print_frame((unsigned char*)frame, ethlength*sizeof(uint8_t));
+        }
+
+        if (pcap_sendpacket(handle, frame, ethlength) != 0)
+        {
+            outStr << "ERROR: PCAP send packet failed" << std::endl;
+            return -1;
+        }
     }
 
 
@@ -1297,39 +1301,42 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
 bool Eth1394Port::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_fw)
 {
-    // Ethernet frame
-    uint8_t *frame = reinterpret_cast<uint8_t *>(buffer) + ETH_ALIGN32;
-    memcpy(frame, frame_hdr, 12);
-    if (node == 0xff) {      // multicast
-        frame[0] |= 0x01;    // set multicast destination address
-        frame[5] = node;     // keep multicast address
-    }
-    frame[5] = BidBridge_;   // last byte of dest address is board id
-
-    // length field (big endian 16-bit integer)
-    // Following assumes length is less than 256 bytes
-    frame[12] = 0;
-    frame[13] = length_fw * 4;
-
     // Firewire packet is already created by caller
-    int ethlength = length_fw*4 + ETH_HEADER_LEN;  // eth frame length in bytes
-
-    if (DEBUG) {
-        std::cout << "------ Eth Frame ------" << std::endl;
-        print_frame((unsigned char*)frame, ethlength);
-    }
     bool ret = true;
     if (useUDP_Send) {
-        int nSent = UDP_Send(reinterpret_cast<const char *>(frame), ethlength);
-        if (nSent != ethlength) {
-            outStr << "ERROR: UDP send returned " << nSent << ", expected " << ethlength << std::endl;
+        quadlet_t *packet_FW = buffer + (ETH_ALIGN32+ETH_HEADER_LEN)/sizeof(quadlet_t);
+        int length_fw_bytes = length_fw*sizeof(quadlet_t);
+        int nSent = UDP_Send(reinterpret_cast<const char *>(packet_FW), length_fw_bytes);
+        if (nSent != length_fw_bytes) {
+            outStr << "ERROR: UDP send returned " << nSent << ", expected " << length_fw_bytes << std::endl;
             ret = false;
         }
     }
-    else if (pcap_sendpacket(handle, frame, ethlength) != 0)
-    {
-        outStr << "ERROR: PCAP send packet failed" << std::endl;
-        ret = false;
+    else {
+        // Ethernet frame
+        uint8_t *frame = reinterpret_cast<uint8_t *>(buffer) + ETH_ALIGN32;
+        memcpy(frame, frame_hdr, 12);
+        if (node == 0xff) {      // multicast
+            frame[0] |= 0x01;    // set multicast destination address
+            frame[5] = node;     // keep multicast address
+        }
+        frame[5] = BidBridge_;   // last byte of dest address is board id
+
+        // length field (big endian 16-bit integer)
+        // Following assumes length is less than 256 bytes
+        frame[12] = 0;
+        frame[13] = length_fw * 4;
+
+        int ethlength = length_fw*4 + ETH_HEADER_LEN;  // eth frame length in bytes
+
+        if (DEBUG) {
+            std::cout << "------ Eth Frame ------" << std::endl;
+            print_frame((unsigned char*)frame, ethlength);
+        }
+        if (pcap_sendpacket(handle, frame, ethlength) != 0)  {
+            outStr << "ERROR: PCAP send packet failed" << std::endl;
+            ret = false;
+        }
     }
     return ret;
 }
