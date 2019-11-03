@@ -372,7 +372,7 @@ bool Eth1394Port::Init(void)
     }
 
     // Hard-coded IP and port for now
-    UDP_Init("169.254.122.100", 1394);
+    UDP_Init("169.254.101.100", 1394);
 
     // Open pcap handle
     handle = NULL;
@@ -1225,61 +1225,65 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     while ((numPacketsValid < 1) && (timeDiffSec < 0.5)) {
         while (1) {  // can probably eliminate this loop
             if (useUDP_Recv) {
-                int num = UDP_Recv(udp_packet, sizeof(udp_packet), 0.5-timeDiffSec);
-                if (num < 34)  // Needs to be at least 34 bytes
+                int num = UDP_Recv(udp_packet, sizeof(udp_packet), 1.0-timeDiffSec);
+                if (num < 16) { // Needs to be at least 16 bytes
+                    outStr << "UDP_Recv returned " << num << ", numPackets = " << numPackets << std::endl;
                     break;
+                }
                 packet = reinterpret_cast<unsigned char *>(udp_packet);
+                numPackets++;
             }
             else {
                 packet = pcap_next(handle, &header);
                 if (packet == NULL)
                     break;
-            }
-            numPackets++;
-            if (headercheck((unsigned char *)packet, true)) {
-                if ((node != 0xff) && (packet[11] != BidBridge_)) {
-                    outStr << "Packet not from node " << BidBridge_ << " (src lsb is "
-                           << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
-                    continue;
+                numPackets++;
+                if (headercheck((unsigned char *)packet, true)) {
+                    if ((node != 0xff) && (packet[11] != BidBridge_)) {
+                        outStr << "Packet not from node " << BidBridge_ << " (src lsb is "
+                               << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
+                        continue;
+                    }
                 }
                 //unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
                 //outStr << "Packet length = " << std::dec << packetLength << std::endl;
-                numPacketsValid++;
-                int tl_recv = packet[16] >> 2;
-                if (tl_recv != fw_tl) {
-                    outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
-                           << ", received tl = " << tl_recv << std::endl;
-                }
-                int tcode_recv = packet[17] >> 4;
-                if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
-                    // check header crc
-                    if (checkCRC(packet))
-                        memcpy(buffer, &packet[26], 4);
-                    else {
-                        outStr <<"ERROR: crc check error"<<std::endl;
-                        return -1;
-                    }
-                }
-                else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
-                    if (length == static_cast<size_t>((packet[26] << 8) | packet[27])) {
-                        if (checkCRC(packet))
-                            memcpy(buffer, &packet[34], length);
-                        else {
-                            outStr <<"ERROR: header crc check error"<<std::endl;
-                            return -1;
-                       }
-                    }
-                    else{
-                        outStr << "ERROR: block read response size error" << std::endl;
-                        return -1;
-                    }
-                }
+                packet += ETH_HEADER_LEN;  // Skip past Ethernet frame (to FireWire packet)
+            }
+            numPacketsValid++;
+            int tl_recv = packet[2] >> 2;
+            if (tl_recv != fw_tl) {
+                outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
+                       << ", received tl = " << tl_recv << std::endl;
+            }
+            int tcode_recv = packet[3] >> 4;
+            if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
+                // check header crc
+                if (checkCRC(packet))
+                    memcpy(buffer, &packet[12], 4);
                 else {
-                    outStr << "WARNING: unexpected response tcode: " << tcode_recv
-                           << " (sent tcode: " << tcode << ")" << std::endl;
+                    outStr << "ERROR: crc check error" << std::endl;
                     return -1;
-//                    continue;
                 }
+            }
+            else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
+                if (length == static_cast<size_t>((packet[12] << 8) | packet[13])) {
+                    if (checkCRC(packet))
+                        memcpy(buffer, &packet[20], length);
+                    else {
+                        outStr << "ERROR: header crc check error" << std::endl;
+                        return -1;
+                   }
+                }
+                else{
+                    outStr << "ERROR: block read response size error" << std::endl;
+                    return -1;
+                }
+            }
+            else {
+                outStr << "WARNING: unexpected response tcode: " << tcode_recv
+                       << " (sent tcode: " << tcode << ")" << std::endl;
+                return -1;
+//                continue;
             }
         }
         timeDiffSec = Amp1394_GetTime() - startTime;
