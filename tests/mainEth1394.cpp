@@ -364,6 +364,7 @@ int main(int argc, char **argv)
 
     bool done = false;
     quadlet_t read_data, write_data;
+    quadlet_t buffer[128];
 
     while (!done) {
 
@@ -387,6 +388,7 @@ int main(int argc, char **argv)
         std::cout << "  f) Print Firewire PHY registers" << std::endl;
         std::cout << "  r) Toggle receive mode (PCAP/UDP)" << std::endl;
         std::cout << "  s) Toggle send model (PCAP/UDP)" << std::endl;
+        std::cout << "  x) Read Ethernet data via FireWire" << std::endl;
         std::cout << "Select option: ";
         
         int c = getchar();
@@ -527,6 +529,11 @@ int main(int argc, char **argv)
 
         case 's':
             EthPort.SetUDP_Send(!EthPort.GetUDP_Send());
+            break;
+
+        case 'x':
+            if (board1.ReadEthernetData(buffer, 0, 64))
+                FirewirePort::PrintPacket(std::cout, buffer, 64);
             break;
 
         }

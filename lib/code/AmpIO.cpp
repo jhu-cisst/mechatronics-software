@@ -1316,3 +1316,19 @@ AmpIO_UInt16 AmpIO::ReadKSZ8851Status()
         return 0;
     return static_cast<AmpIO_UInt16>(read_data>>16);
 }
+
+bool AmpIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    // FireWirePacket size is currently 128 quadlets
+    if (offset+nquads > 128) return false;
+    // Firmware currently cannot read more than 64 quadlets
+    if (nquads > 64) return false;
+    nodeaddr_t address = 0x4000 + offset;   // ADDR_ETH = 0x4000
+    bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
+    if (ret) {
+        for (unsigned int i = 0; i < nquads; i++)
+            buffer[i] = bswap_32(buffer[i]);
+    }
+    return ret;
+}

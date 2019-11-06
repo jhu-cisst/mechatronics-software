@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -31,6 +31,16 @@ typedef int (*bus_reset_handler_t)(raw1394handle_t, unsigned int generation);
 class FirewirePort : public BasePort {
 public:
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
+
+    //! FireWire tcode
+    enum TCODE {
+        QWRITE = 0,
+        BWRITE = 1,
+        QREAD = 4,
+        BREAD = 5,
+        QRESPONSE = 6,
+        BRESPONSE = 7
+    };
 
 protected:
 
@@ -161,8 +171,9 @@ public:
 
     // Stop Cycle Start Packets
     void StopCycleStartPacket(void);
-};
 
-int arrayadd(int* data, int size);
+    // Print FireWire packet
+    static void PrintPacket(std::ostream &out, quadlet_t *packet, unsigned int max_quads);
+};
 
 #endif // __FirewirePort_H__

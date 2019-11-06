@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -398,6 +398,11 @@ public:
     //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
     // Returns 0 on error (i.e., if Ethernet not present, or read fails)
     AmpIO_UInt16 ReadKSZ8851Status();
+    // Read Ethernet data
+    //    buffer  buffer for storing data
+    //    offset  address offset (in quadlets)
+    //    nquads  number of quadlets to read (not more than 64)
+    bool ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
 
 protected:
     unsigned int NumAxes;   // not currently used

@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -808,12 +808,53 @@ bool FirewirePort::WriteBlockBroadcast(
     }
 }
 
-int arrayadd(int* data, int size)
+void FirewirePort::PrintPacket(std::ostream &out, quadlet_t *packet, unsigned int max_quads)
 {
-    int sum = 0;
-    for (int i = 0; i < size; i++)
-    {
-        sum = sum + data[i];
+    static const char *tcode_name[16] = { "qwrite", "bwrite", "wresponse", "", "qread", "bread",
+                                          "qresponse", "bresponse", "cycstart", "lockreq",
+                                          "stream", "lockresp", "", "", "", "" };
+    unsigned char tcode = (packet[0]&0x000000F0)>>4;
+    unsigned int data_length = 0;
+    // No point in printing anything if less than 5
+    if (max_quads < 5) {
+        out << "PrintPacket: should print more than 5 quadlets (max_quads = "
+            << max_quads << ")" << std::endl;
+        return;
     }
-    return sum;
+    out << "dest: " << std::hex << ((packet[0]&0xffc00000)>>20)
+        << ", node: " << std::dec << ((packet[0]&0x003f0000)>>16)
+        << ", tl: " << std::hex << ((packet[0]&0x0000fc00)>>10)
+        << ", rt: " << ((packet[0]&0x00000300)>>8)
+        << ", tcode: " << static_cast<unsigned int>(tcode) << " (" << tcode_name[tcode] << ")"
+        << ", pri: " << (packet[0]&0x0000000F) << std::endl;
+    out << "src: " << std::hex << ((packet[1]&0xffc00000)>>20)
+        << ", node: " << std::dec << ((packet[1]&0x003f0000)>>16);
+
+    if ((tcode == QRESPONSE) || (tcode == BRESPONSE)) {
+        out << ", rcode: " << std::dec << ((packet[1]&0x0000f0000)>>12) << std::endl;
+    }
+    else if ((tcode == QWRITE) || (tcode == QREAD) || (tcode == BWRITE) || (tcode == BREAD)) {
+        out << ", dest_off: " << std::hex << (packet[1]&0x0000ffff) << std::endl;
+        out << "dest_off: " << std::hex << packet[2] << std::endl;
+    }
+
+    if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
+        data_length = (packet[3]&0xffff0000) >> 16;
+        out << "data_length: " << std::dec << data_length
+            << ", ext_tcode: " << std::hex << (packet[3]&0x0000ffff) << std::endl;
+    }
+    else if ((tcode == QWRITE) || (tcode == QRESPONSE)) {
+        out << "data: " << std::hex << packet[3] << std::endl;
+    }
+
+    if (tcode == QREAD)
+        out << "header_crc: " << std::hex << packet[3] << std::endl;
+    else
+        out << "header_crc: " << std::hex << packet[4] << std::endl;
+
+    unsigned int lim = (data_length <= max_quads-5) ? data_length : max_quads-5;
+    for (unsigned int i = 0; i < lim; i++)
+        out << "data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
+    if ((data_length > 0) && (data_length < max_quads-5))
+        out << "data_crc: " << std::hex << packet[5+data_length] << std::endl;
 }
