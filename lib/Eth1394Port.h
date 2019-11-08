@@ -70,6 +70,7 @@ protected:
 
     Eth1394CallbackType eth1394_read_callback;
 
+    bool ParseFirewirePacket(const unsigned char *packet, size_t length, unsigned int tcode, quadlet_t *buffer);
     bool headercheck(uint8_t* header, bool isHUBtoPC) const;
     bool checkCRC(const unsigned char *packet) const;
 
@@ -146,6 +147,8 @@ public:
     static void GetDestMulticastMacAddr(unsigned char *macAddr);
 
     static void PrintDebug(std::ostream &debugStream, unsigned short status);
+
+    static void PrintDebugData(std::ostream &debugStream, const quadlet_t *data);
 
     // For now, always returns 1
     int NumberOfUsers(void) { return 1; }

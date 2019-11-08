@@ -212,6 +212,11 @@ public:
      */
     bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
 
+    /*! Read IPv4 address (only relevant for FPGA boards with Ethernet support)
+        \returns IPv4 address as string (e.g., 192.168.0.1) or empty string if error
+     */
+    std::string ReadIPv4Address(void) const;
+
     // ********************** WRITE Methods **********************************
 
     // Enable motor power to the entire board (it is still necessary
@@ -280,6 +285,12 @@ public:
                  over FireWire, or specified frequency or duty cycle not possible.
     */
     bool WritePWM(unsigned int index, double freq, double duty);
+
+    /*! Write IPv4 address.
+        \param IP address to write (e.g., 192.168.0.1)
+        \returns true if successful; false otherwise
+    */
+    bool WriteIPv4Address(const std::string &IPaddr);
 
     /*! \brief Get digital output time (in counts) corresponding to specified time in seconds.
 
@@ -403,6 +414,14 @@ public:
     //    offset  address offset (in quadlets)
     //    nquads  number of quadlets to read (not more than 64)
     bool ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
+
+    // ************************ FireWire Methods *************************************
+    // Read FireWire data
+    //    buffer  buffer for storing data
+    //    offset  address offset (in quadlets)
+    //    nquads  number of quadlets to read (not more than 64)
+    // Note: This is not yet fully implemented in firmware (e.g., need to edit FPGA1394Eth-QLA.v)
+    bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
 
 protected:
     unsigned int NumAxes;   // not currently used

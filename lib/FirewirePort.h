@@ -173,7 +173,7 @@ public:
     void StopCycleStartPacket(void);
 
     // Print FireWire packet
-    static void PrintPacket(std::ostream &out, quadlet_t *packet, unsigned int max_quads);
+    static void PrintPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads);
 };
 
 #endif // __FirewirePort_H__

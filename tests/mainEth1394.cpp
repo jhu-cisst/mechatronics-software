@@ -388,6 +388,8 @@ int main(int argc, char **argv)
         std::cout << "  f) Print Firewire PHY registers" << std::endl;
         std::cout << "  r) Toggle receive mode (PCAP/UDP)" << std::endl;
         std::cout << "  s) Toggle send model (PCAP/UDP)" << std::endl;
+        std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
+        std::cout << "  I) Set IPv4 address via FireWire" << std::endl;
         std::cout << "  x) Read Ethernet data via FireWire" << std::endl;
         std::cout << "Select option: ";
         
@@ -531,9 +533,22 @@ int main(int argc, char **argv)
             EthPort.SetUDP_Send(!EthPort.GetUDP_Send());
             break;
 
+        case 'i':
+            std::cout << "IP Address = " << board1.ReadIPv4Address() << std::endl;
+            break;
+
+        case 'I':
+            if (board1.WriteIPv4Address("128.200.100.20"))
+                std::cout << "Write IP address 128.200.100.20" << std::endl;
+            else
+                std::cout << "Failed to write IP address" << std::endl;
+            break;
+
         case 'x':
             if (board1.ReadEthernetData(buffer, 0, 64))
                 FirewirePort::PrintPacket(std::cout, buffer, 64);
+            if (board1.ReadEthernetData(buffer, 0x80, 17))
+                Eth1394Port::PrintDebugData(std::cout, buffer);
             break;
 
         }

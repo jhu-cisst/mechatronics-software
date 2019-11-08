@@ -25,8 +25,10 @@ http://www.cisst.org/cisst/license.txt.
 #ifdef _MSC_VER
 #include <stdlib.h>
 inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
+// Need inet_ntop and inet_pton
 #else
 #include <byteswap.h>
+#include <arpa/inet.h>  // for inet_ntop and inet_pton
 #endif
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
@@ -716,6 +718,29 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
     return false;
 }
 
+std::string AmpIO::ReadIPv4Address(void) const
+{
+    std::string retString;
+    if (GetFirmwareVersion() < 7) {
+        std::cerr << "AmpIO::ReadIPv4Address: requires firmware 7 or above" << std::endl;
+        return retString;
+    }
+    if (sizeof(struct in_addr) != sizeof(AmpIO_UInt32)) {
+        std::cout << "AmpIO:ReadIPv4Address: inconsistent data sizes" << std::endl;
+        return retString;
+    }
+    AmpIO_UInt32 read_data = 0;
+    if (port && port->ReadQuadlet(BoardId, 11, read_data)) {
+        std::cout << "IP RAW = " << std::hex << read_data << std::endl;
+        struct sockaddr_in sa;
+        sa.sin_addr = *reinterpret_cast<const struct in_addr *>(&read_data);
+        char IPstr[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(sa.sin_addr), IPstr, INET_ADDRSTRLEN);
+        retString.assign(IPstr);
+    }
+    return retString;
+}
+
 /*******************************************************************************
  * Write commands
  */
@@ -828,6 +853,22 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
     else
         ret = WriteDoutControl(index, static_cast<AmpIO_UInt16>(highTime), static_cast<AmpIO_UInt16>(lowTime));
     return ret;
+}
+
+bool AmpIO::WriteIPv4Address(const std::string &IPaddr)
+{
+    if (GetFirmwareVersion() < 7) {
+        std::cerr << "AmpIO::WriteIPv4Address: requires firmware 7 or above" << std::endl;
+        return "";
+    }
+    struct sockaddr_in sa;
+    inet_pton(AF_INET, IPaddr.c_str(), &(sa.sin_addr));
+    if (sizeof(sa.sin_addr) != sizeof(AmpIO_UInt32)) {
+        std::cout << "AmpIO:WriteIPv4Address: inconsistent data sizes" << std::endl;
+        return false;
+    }
+    AmpIO_UInt32 write_data = *reinterpret_cast<AmpIO_UInt32 *>(&sa.sin_addr);
+    return (port ? port->WriteQuadlet(BoardId, 11, write_data) : false);
 }
 
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
@@ -1320,11 +1361,24 @@ AmpIO_UInt16 AmpIO::ReadKSZ8851Status()
 bool AmpIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
     if (GetFirmwareVersion() < 5) return false;
-    // FireWirePacket size is currently 128 quadlets
-    if (offset+nquads > 128) return false;
     // Firmware currently cannot read more than 64 quadlets
     if (nquads > 64) return false;
     nodeaddr_t address = 0x4000 + offset;   // ADDR_ETH = 0x4000
+    bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
+    if (ret) {
+        for (unsigned int i = 0; i < nquads; i++)
+            buffer[i] = bswap_32(buffer[i]);
+    }
+    return ret;
+}
+
+// Following not yet fully implemented in firmware
+bool AmpIO::ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    // Firmware currently cannot read more than 64 quadlets
+    if (nquads > 64) return false;
+    nodeaddr_t address = 0x5000 + offset;   // ADDR_FW = 0x5000
     bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
     if (ret) {
         for (unsigned int i = 0; i < nquads; i++)

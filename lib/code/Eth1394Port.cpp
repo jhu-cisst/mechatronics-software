@@ -91,6 +91,7 @@ uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 */
 void print_frame(unsigned char* buffer, int length);
 void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr);
+void print_ip(std::ostream &outStr, const char* name, const uint8_t *addr);
 
 
 Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394CallbackType cb):
@@ -164,6 +165,91 @@ void Eth1394Port::PrintDebug(std::ostream &debugStream, unsigned short status)
     else if (waitInfo == 2) debugStream << "wait-ack-clear";
     else debugStream << "wait-flush";
     debugStream << std::endl;
+}
+
+void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *data)
+{
+    char headerString[5];
+    const char *hStr = reinterpret_cast<const char *>(data);
+    strncpy(headerString, hStr, 4);
+    headerString[4] = 0;
+    if (strcmp(headerString, "DBG0") != 0) {
+        debugStream << "Unexpected header string: " << headerString << " (should be DBG0)" << std::endl;
+        return;
+    }
+    // Following structure must match DebugData in EthernetIO.v
+    // TODO: portable way to pack structure
+    struct __attribute__((__packed__)) DebugData {
+        char     header[4];
+        uint32_t timestampBegin;
+        uint32_t eth_status;
+        uint8_t  isFlags;
+        uint8_t  moreFlags;
+        uint8_t  nextState;
+        uint8_t  state;
+        uint16_t RegISROther;
+        //        uint8_t  count;
+        //        uint8_t  FrameCount;
+        uint16_t RegISR;
+        uint8_t  destMac[6];
+        uint8_t  srcMac[6];
+        uint16_t LengthFW;
+        uint8_t  maxCount;
+        uint8_t  unused11;
+        uint8_t  hostIP[4];
+        uint8_t  fpgaIP[4];
+        uint16_t txPktWords;
+        uint16_t ipv4_length;
+        uint16_t numPacketValid;
+        uint16_t numPacketInvalid;
+        uint16_t numIPv4;
+        uint16_t numUDP;
+        uint16_t numARP;
+        uint16_t numICMP;
+        uint16_t numPacketError;
+        uint16_t unused2233;
+        uint32_t timestampEnd;
+    };
+    const DebugData *p = reinterpret_cast<const DebugData *>(data);
+    debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::endl;
+    debugStream << "Raw status: " << std::hex << p->eth_status << std::endl;
+    unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
+    Eth1394Port::PrintDebug(debugStream, status);
+    debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
+                << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
+    debugStream << "Flags: ";
+    if (p->moreFlags&0x01) debugStream << "IRQ ";
+    if (p->isFlags&0x80) debugStream << "isForward ";
+    if (p->isFlags&0x40) debugStream << "isInIRQ ";
+    if (p->isFlags&0x20) debugStream << "isARP ";
+    if (p->isFlags&0x10) debugStream << "isUDP ";
+    if (p->isFlags&0x08) debugStream << "isICMP  ";
+    if (p->isFlags&0x04) debugStream << "isEcho ";
+    if (p->isFlags&0x02) debugStream << "ipv4_long ";
+    if (p->isFlags&0x01) debugStream << "ipv4_short ";
+    debugStream << std::endl;
+    debugStream << "RegISR: " << std::hex << p->RegISR << std::endl;
+    debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
+//    debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
+//    debugStream << "Count: " << std::dec << static_cast<uint16_t>(p->count) << std::endl;
+    print_mac(debugStream, "DestMac", p->destMac);
+    print_mac(debugStream, "SrcMac", p->srcMac);
+    debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
+    debugStream << "Unused11: " << std::hex << static_cast<uint16_t>(p->unused11) << std::endl;
+    debugStream << "MaxCount: " << std::dec << static_cast<uint16_t>(p->maxCount) << std::endl;
+    print_ip(debugStream, "HostIP", p->hostIP);
+    print_ip(debugStream, "FpgaIP", p->fpgaIP);
+    debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
+    debugStream << "ipv4_length: " << std::dec << p->ipv4_length << std::endl;
+    debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
+    debugStream << "numPacketInvalid: " << std::dec << p->numPacketInvalid << std::endl;
+    debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
+    debugStream << "numUDP: " << std::dec << p->numUDP << std::endl;
+    debugStream << "numARP: " << std::dec << p->numARP << std::endl;
+    debugStream << "numICMP: " << std::dec << p->numICMP << std::endl;
+    debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
+    debugStream << "Unused2233: " << std::hex << p->unused2233 << std::endl;
+    debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
 void Eth1394Port::BoardInUseIntegerUpdate(void)
@@ -1250,41 +1336,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                 packet += ETH_HEADER_LEN;  // Skip past Ethernet frame (to FireWire packet)
             }
             numPacketsValid++;
-            int tl_recv = packet[2] >> 2;
-            if (tl_recv != fw_tl) {
-                outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
-                       << ", received tl = " << tl_recv << std::endl;
-            }
-            int tcode_recv = packet[3] >> 4;
-            if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
-                // check header crc
-                if (checkCRC(packet))
-                    memcpy(buffer, &packet[12], 4);
-                else {
-                    outStr << "ERROR: crc check error" << std::endl;
-                    return -1;
-                }
-            }
-            else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
-                if (length == static_cast<size_t>((packet[12] << 8) | packet[13])) {
-                    if (checkCRC(packet))
-                        memcpy(buffer, &packet[20], length);
-                    else {
-                        outStr << "ERROR: header crc check error" << std::endl;
-                        return -1;
-                   }
-                }
-                else{
-                    outStr << "ERROR: block read response size error" << std::endl;
-                    return -1;
-                }
-            }
-            else {
-                outStr << "WARNING: unexpected response tcode: " << tcode_recv
-                       << " (sent tcode: " << tcode << ")" << std::endl;
-                return -1;
-//                continue;
-            }
+            ParseFirewirePacket(packet, length, tcode, buffer);
         }
         timeDiffSec = Amp1394_GetTime() - startTime;
     }
@@ -1302,6 +1354,45 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     return 0;
 }
 
+
+bool Eth1394Port::ParseFirewirePacket(const unsigned char *packet, size_t length, unsigned int tcode, quadlet_t *buffer)
+{
+    int tl_recv = packet[2] >> 2;
+    if (tl_recv != fw_tl) {
+        outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
+               << ", received tl = " << tl_recv << std::endl;
+    }
+    int tcode_recv = packet[3] >> 4;
+    if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
+        // check header crc
+        if (checkCRC(packet))
+            memcpy(buffer, &packet[12], 4);
+        else {
+            outStr << "ERROR: crc check error" << std::endl;
+            return false;
+        }
+    }
+    else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
+        if (length == static_cast<size_t>((packet[12] << 8) | packet[13])) {
+            if (checkCRC(packet))
+                memcpy(buffer, &packet[20], length);
+            else {
+                outStr << "ERROR: header crc check error" << std::endl;
+                return false;
+            }
+        }
+        else{
+            outStr << "ERROR: block read response size error" << std::endl;
+            return false;
+        }
+    }
+    else {
+        outStr << "WARNING: unexpected response tcode: " << tcode_recv
+               << " (sent tcode: " << tcode << ")" << std::endl;
+        return false;
+    }
+    return true;
+}
 
 bool Eth1394Port::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_fw)
 {
@@ -1608,3 +1699,9 @@ void print_mac(std::ostream &outStr, const char* name, const uint8_t *addr)
            << (int)addr[3] << ":" << (int)addr[4] << ":" << (int)addr[5] << std::endl;
 }
 
+void print_ip(std::ostream &outStr, const char* name, const uint8_t *addr)
+{
+    outStr << name << ": " << std::dec
+           << (int)addr[0] << "." << (int)addr[1] << "." << (int)addr[2] << "." << (int)addr[3]
+           << std::endl;
+}

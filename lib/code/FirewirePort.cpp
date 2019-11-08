@@ -731,8 +731,6 @@ bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
     }
     else
         return false;
-
-    //        return !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
 }
 
 bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
@@ -808,7 +806,7 @@ bool FirewirePort::WriteBlockBroadcast(
     }
 }
 
-void FirewirePort::PrintPacket(std::ostream &out, quadlet_t *packet, unsigned int max_quads)
+void FirewirePort::PrintPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
 {
     static const char *tcode_name[16] = { "qwrite", "bwrite", "wresponse", "", "qread", "bread",
                                           "qresponse", "bresponse", "cycstart", "lockreq",
