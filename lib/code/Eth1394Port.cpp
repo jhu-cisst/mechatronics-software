@@ -169,48 +169,48 @@ void Eth1394Port::PrintDebug(std::ostream &debugStream, unsigned short status)
 
 void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *data)
 {
-    char headerString[5];
-    const char *hStr = reinterpret_cast<const char *>(data);
-    strncpy(headerString, hStr, 4);
-    headerString[4] = 0;
-    if (strcmp(headerString, "DBG0") != 0) {
-        debugStream << "Unexpected header string: " << headerString << " (should be DBG0)" << std::endl;
-        return;
-    }
     // Following structure must match DebugData in EthernetIO.v
-    // TODO: portable way to pack structure
-    struct __attribute__((__packed__)) DebugData {
-        char     header[4];
-        uint32_t timestampBegin;
-        uint32_t eth_status;
-        uint8_t  isFlags;
+    struct DebugData {
+        char     header[4];        // Quad 1
+        uint32_t timestampBegin;   // Quad 2
+        uint32_t eth_status;       // Quad 3
+        uint8_t  isFlags;          // Quad 4
         uint8_t  moreFlags;
         uint8_t  nextState;
         uint8_t  state;
-        uint16_t RegISROther;
+        uint16_t RegISROther;      // Quad 5
         //        uint8_t  count;
         //        uint8_t  FrameCount;
         uint16_t RegISR;
-        uint8_t  destMac[6];
-        uint8_t  srcMac[6];
-        uint16_t LengthFW;
+        uint8_t  destMac[6];       // Quad 6,7
+        uint8_t  srcMac[6];        // Quad 7,8
+        uint16_t LengthFW;         // Quad 9
         uint8_t  maxCount;
         uint8_t  unused11;
-        uint8_t  hostIP[4];
-        uint8_t  fpgaIP[4];
-        uint16_t txPktWords;
+        uint8_t  hostIP[4];        // Quad 10
+        uint8_t  fpgaIP[4];        // Quad 11
+        uint16_t txPktWords;       // Quad 12
         uint16_t ipv4_length;
-        uint16_t numPacketValid;
+        uint16_t numPacketValid;   // Quad 13
         uint16_t numPacketInvalid;
-        uint16_t numIPv4;
+        uint16_t numIPv4;          // Quad 14
         uint16_t numUDP;
-        uint16_t numARP;
+        uint16_t numARP;           // Quad 15
         uint16_t numICMP;
-        uint16_t numPacketError;
+        uint16_t numPacketError;   // Quad 16
         uint16_t unused2233;
-        uint32_t timestampEnd;
+        uint32_t timestampEnd;     // Quad 17
     };
+    if (sizeof(DebugData) != 17*sizeof(quadlet_t)) {
+        debugStream << "PrintDebugData: structure packing problem" << std::endl;
+        return;
+    }
     const DebugData *p = reinterpret_cast<const DebugData *>(data);
+    if (strncmp(p->header, "DBG0", 4) != 0) {
+        debugStream << "Unexpected header string: " << p->header[0] << p->header[1]
+                    << p->header[2] << p->header[3] << " (should be DBG0)" << std::endl;
+        return;
+    }
     debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::endl;
     debugStream << "Raw status: " << std::hex << p->eth_status << std::endl;
     unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
