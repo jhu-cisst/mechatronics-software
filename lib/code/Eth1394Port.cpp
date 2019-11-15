@@ -222,6 +222,8 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
     debugStream << "Flags: ";
+    if (p->moreFlags&0x04) debugStream << "isBroadcast ";
+    if (p->moreFlags&0x02) debugStream << "isMulticast ";
     if (p->moreFlags&0x01) debugStream << "IRQ ";
     if (p->isFlags&0x80) debugStream << "isForward ";
     if (p->isFlags&0x40) debugStream << "isInIRQ ";
@@ -1352,20 +1354,18 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
     char udp_packet[1024];  // TEMP -- more than needed
 
     while ((numPacketsValid < 1) && (timeDiffSec < 0.5)) {
-        while (1) {  // can probably eliminate this loop
-            if (useUDP_Recv) {
-                int num = UDP_Recv(udp_packet, sizeof(udp_packet), 1.0-timeDiffSec);
-                if (num < 16) { // Needs to be at least 16 bytes
-                    outStr << "UDP_Recv returned " << num << ", numPackets = " << numPackets << std::endl;
-                    break;
-                }
-                packet = reinterpret_cast<unsigned char *>(udp_packet);
-                numPackets++;
+        if (useUDP_Recv) {
+            int num = UDP_Recv(udp_packet, sizeof(udp_packet), 1.0-timeDiffSec);
+            if (num < 16) { // Needs to be at least 16 bytes
+                outStr << "UDP_Recv returned " << num << ", numPackets = " << numPackets << std::endl;
+                break;
             }
-            else {
-                packet = pcap_next(handle, &header);
-                if (packet == NULL)
-                    break;
+            packet = reinterpret_cast<unsigned char *>(udp_packet);
+            numPackets++;
+        }
+        else {
+            packet = pcap_next(handle, &header);
+            if (packet != NULL) {
                 numPackets++;
                 if (headercheck((unsigned char *)packet, true)) {
                     if ((node != 0xff) && (packet[11] != BidBridge_)) {
@@ -1374,12 +1374,14 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                         continue;
                     }
                 }
-                //unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
-                //outStr << "Packet length = " << std::dec << packetLength << std::endl;
-                packet += ETH_HEADER_LEN;  // Skip past Ethernet frame (to FireWire packet)
+               //unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
+               //outStr << "Packet length = " << std::dec << packetLength << std::endl;
+               packet += ETH_HEADER_LEN;  // Skip past Ethernet frame (to FireWire packet)
             }
-            numPacketsValid++;
-            ParseFirewirePacket(packet, length, tcode, buffer);
+        }
+        if (packet) {
+            if (ParseFirewirePacket(packet, length, tcode, buffer))
+                numPacketsValid++;
         }
         timeDiffSec = Amp1394_GetTime() - startTime;
     }
@@ -1404,6 +1406,7 @@ bool Eth1394Port::ParseFirewirePacket(const unsigned char *packet, size_t length
     if (tl_recv != fw_tl) {
         outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
                << ", received tl = " << tl_recv << std::endl;
+        return false;  // PK TEMP?
     }
     int tcode_recv = packet[3] >> 4;
     if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {

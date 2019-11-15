@@ -179,7 +179,8 @@ void  ContinuousReadTest(BasePort *port, unsigned char boardNum)
 {
     bool done = false;
     quadlet_t read_data;
-    char buf[5] = "QLA1";
+    //char buf[5] = "QLA1";
+    char buf[5] = "1ALQ";
     size_t success = 0;
     size_t readFailures = 0;
     size_t compareFailures = 0;
@@ -359,8 +360,9 @@ int main(int argc, char **argv)
 
         bool UDP_recv = EthPort.GetUDP_Recv();
         bool UDP_send = EthPort.GetUDP_Send();
-        std::string RecvMode = (UDP_recv ? "UDP" : "PCAP");
-        std::string SendMode = (UDP_send ? "UDP" : "PCAP");
+        bool UDP_broadcast = EthPort.GetUDP_Broadcast();
+        std::string RecvMode = (UDP_recv ? (UDP_broadcast ? "UDP-broadcast" : "UDP") : "PCAP");
+        std::string SendMode = (UDP_send ? (UDP_broadcast ? "UDP-broadcast" : "UDP") : "PCAP");
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         std::cout << "  0) Quit" << std::endl;
         std::cout << "  1) Quadlet write to board via " << SendMode << std::endl;
@@ -377,6 +379,7 @@ int main(int argc, char **argv)
         std::cout << "  f) Print Firewire PHY registers" << std::endl;
         std::cout << "  r) Toggle receive mode (PCAP/UDP)" << std::endl;
         std::cout << "  s) Toggle send model (PCAP/UDP)" << std::endl;
+        std::cout << "  b) Toggle UDP broadcast (on/off)" << std::endl;
         std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
         std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
         std::cout << "  x) Read Ethernet data via FireWire" << std::endl;
@@ -521,6 +524,10 @@ int main(int argc, char **argv)
 
         case 's':
             EthPort.SetUDP_Send(!EthPort.GetUDP_Send());
+            break;
+
+        case 'b':
+            EthPort.SetUDP_Broadcast(!EthPort.GetUDP_Broadcast());
             break;
 
         case 'i':

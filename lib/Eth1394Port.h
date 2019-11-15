@@ -135,6 +135,8 @@ public:
     bool GetUDP_Send() const { return useUDP_Send; }
     void SetUDP_Recv(bool flag) { useUDP_Recv = flag; }
     bool GetUDP_Recv() const { return useUDP_Recv; }
+    void SetUDP_Broadcast(bool flag) { useUDP_Broadcast = flag; }
+    bool GetUDP_Broadcast() const { return useUDP_Broadcast; }
 
     // Returns the destination MAC address (6 bytes)
     // The first 3 characters are FA:61:OE, which is the CID assigned to LCSR by IEEE
