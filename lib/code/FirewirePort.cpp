@@ -829,12 +829,13 @@ void FirewirePort::PrintPacket(std::ostream &out, const quadlet_t *packet, unsig
         << ", node: " << std::dec << ((packet[1]&0x003f0000)>>16);
 
     if ((tcode == QRESPONSE) || (tcode == BRESPONSE)) {
-        out << ", rcode: " << std::dec << ((packet[1]&0x0000f0000)>>12) << std::endl;
+        out << ", rcode: " << std::dec << ((packet[1]&0x0000f0000)>>12);
     }
     else if ((tcode == QWRITE) || (tcode == QREAD) || (tcode == BWRITE) || (tcode == BREAD)) {
         out << ", dest_off: " << std::hex << (packet[1]&0x0000ffff) << std::endl;
-        out << "dest_off: " << std::hex << packet[2] << std::endl;
+        out << "dest_off: " << std::hex << packet[2];
     }
+    out << std::endl;
 
     if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
         data_length = (packet[3]&0xffff0000) >> 16;

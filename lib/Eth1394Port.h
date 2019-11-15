@@ -46,6 +46,7 @@ protected:
 
     bool useUDP_Send;
     bool useUDP_Recv;
+    bool useUDP_Broadcast;
     int  socketFD;          // UDP socket
     union {                 // IP address of server (FPGA)
         unsigned long asULong;

@@ -98,6 +98,7 @@ Eth1394Port::Eth1394Port(int portNum, std::ostream &debugStream, Eth1394Callback
     BasePort(portNum, debugStream),
     useUDP_Send(false),
     useUDP_Recv(false),
+    useUDP_Broadcast(false),
     socketFD(INVALID_SOCKET),
     BidBridge_(0xFF),
     fw_tl(0),
@@ -179,29 +180,32 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  nextState;
         uint8_t  state;
         uint16_t RegISROther;      // Quad 5
-        //        uint8_t  count;
-        //        uint8_t  FrameCount;
         uint16_t RegISR;
-        uint8_t  destMac[6];       // Quad 6,7
-        uint8_t  srcMac[6];        // Quad 7,8
-        uint16_t LengthFW;         // Quad 9
+        uint8_t  count;            // Quad 6
+        uint8_t  FrameCount;
+        uint16_t unused2233;
+        uint8_t  destMac[6];       // Quad 7,8
+        uint8_t  srcMac[6];        // Quad 8,9
+        uint16_t LengthFW;         // Quad 10
         uint8_t  maxCount;
         uint8_t  unused11;
-        uint8_t  hostIP[4];        // Quad 10
-        uint8_t  fpgaIP[4];        // Quad 11
-        uint16_t txPktWords;       // Quad 12
+        uint8_t  hostIP[4];        // Quad 11
+        uint8_t  fpgaIP[4];        // Quad 12
+        uint16_t rxPktWords;       // Quad 13
         uint16_t ipv4_length;
-        uint16_t numPacketValid;   // Quad 13
+        uint16_t txPktWords;       // Quad 14
+        uint16_t unused4455;
+        uint16_t numPacketValid;   // Quad 15
         uint16_t numPacketInvalid;
-        uint16_t numIPv4;          // Quad 14
+        uint16_t numIPv4;          // Quad 16
         uint16_t numUDP;
-        uint16_t numARP;           // Quad 15
+        uint16_t numARP;           // Quad 17
         uint16_t numICMP;
-        uint16_t numPacketError;   // Quad 16
-        uint16_t unused2233;
-        uint32_t timestampEnd;     // Quad 17
+        uint16_t numPacketError;   // Quad 18
+        uint16_t numIPv4Mismatch;
+        uint32_t timestampEnd;     // Quad 19
     };
-    if (sizeof(DebugData) != 17*sizeof(quadlet_t)) {
+    if (sizeof(DebugData) != 19*sizeof(quadlet_t)) {
         debugStream << "PrintDebugData: structure packing problem" << std::endl;
         return;
     }
@@ -221,7 +225,7 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     if (p->moreFlags&0x01) debugStream << "IRQ ";
     if (p->isFlags&0x80) debugStream << "isForward ";
     if (p->isFlags&0x40) debugStream << "isInIRQ ";
-    if (p->isFlags&0x20) debugStream << "isARP ";
+    if (p->isFlags&0x20) debugStream << "sendARP ";
     if (p->isFlags&0x10) debugStream << "isUDP ";
     if (p->isFlags&0x08) debugStream << "isICMP  ";
     if (p->isFlags&0x04) debugStream << "isEcho ";
@@ -230,8 +234,9 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << std::endl;
     debugStream << "RegISR: " << std::hex << p->RegISR << std::endl;
     debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
-//    debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
-//    debugStream << "Count: " << std::dec << static_cast<uint16_t>(p->count) << std::endl;
+    debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
+    debugStream << "Count: " << std::dec << static_cast<uint16_t>(p->count) << std::endl;
+    debugStream << "Unused2233: " << std::hex << p->unused2233 << std::endl;
     print_mac(debugStream, "DestMac", p->destMac);
     print_mac(debugStream, "SrcMac", p->srcMac);
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
@@ -239,8 +244,10 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "MaxCount: " << std::dec << static_cast<uint16_t>(p->maxCount) << std::endl;
     print_ip(debugStream, "HostIP", p->hostIP);
     print_ip(debugStream, "FpgaIP", p->fpgaIP);
-    debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
+    debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "ipv4_length: " << std::dec << p->ipv4_length << std::endl;
+    debugStream << "Unused4455: " << std::hex << p->unused4455 << std::endl;
+    debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
     debugStream << "numPacketInvalid: " << std::dec << p->numPacketInvalid << std::endl;
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
@@ -248,7 +255,7 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numARP: " << std::dec << p->numARP << std::endl;
     debugStream << "numICMP: " << std::dec << p->numICMP << std::endl;
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
-    debugStream << "Unused2233: " << std::hex << p->unused2233 << std::endl;
+    debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
@@ -265,16 +272,16 @@ void Eth1394Port::BoardInUseIntegerUpdate(void)
 
 bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
 {
-    int addr[4];
-    int n = sscanf(host.data(), "%d.%d.%d.%d", &addr[0], &addr[1], &addr[2], &addr[3]);
-    if (n == 4) {
-        for (int i = 0; i < 4; i++)
-            IP_addr.asBytes[i] = static_cast<unsigned char>(addr[i]);
-    }
-    else {
-        outStr << "Failed to parse IP address: " << host << ", n = " << n << std::endl;
+#ifdef _MSC_VER
+    // Windows does not provide inet_pton prior to Vista, so we use inet_addr.
+    IP_addr.asULong = inet_addr(IPaddr.c_str());
+#else
+    if (sizeof(struct in_addr) != sizeof(IP_addr.asULong)) {
+        outStr << "UDP_Init: structure size problem" << std::endl;
         return false;
     }
+    inet_pton(AF_INET, host.c_str(), reinterpret_cast<struct in_addr *>(&IP_addr.asULong));
+#endif
 
     UDP_port = port;
 #if 0
@@ -326,6 +333,23 @@ bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
         return false;
     }
 #endif
+    int broadcastEnable = 1;
+    if (setsockopt(socketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
+        outStr << "UDP_Init: Failed to set broadcast option" << std::endl;
+        return false;
+    }
+
+#if 0  // PK TEMP
+    useUDP_Send = true;
+    useUDP_Recv = true;
+    useUDP_Broadcast = true;
+    bool ret = this->ScanNodes();
+    useUDP_Send = false;
+    useUDP_Recv = false;
+    useUDP_Broadcast = false;
+#else
+    bool ret = true;
+#endif
 
 #if 0
     int retval = bind(socketFD, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
@@ -335,7 +359,7 @@ bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
         return false;
     }
 #endif
-    return true;
+    return ret;
 }
 
 bool Eth1394Port::UDP_Close()
@@ -365,11 +389,11 @@ int Eth1394Port::UDP_Send(const char *bufsend, size_t msglen)
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(UDP_port);
-    serverAddr.sin_addr.s_addr = IP_addr.asULong;
+    serverAddr.sin_addr.s_addr = useUDP_Broadcast ? INADDR_BROADCAST : IP_addr.asULong;
     int retval = sendto(socketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
 
     if (retval == SOCKET_ERROR) {
-        outStr << "Send: failed to send" << std::endl;
+        outStr << "Send: failed to send: " << strerror(errno) << std::endl;
         return -1;
     }
     else if (retval != static_cast<int>(msglen)) {
@@ -458,7 +482,7 @@ bool Eth1394Port::Init(void)
     }
 
     // Hard-coded IP and port for now
-    UDP_Init("169.254.101.100", 1394);
+    bool udp_ok = UDP_Init("169.254.101.100", 1394);
 
     // Open pcap handle
     handle = NULL;
@@ -558,7 +582,16 @@ bool Eth1394Port::Init(void)
     frame_hdr[12] = 0;   // length field
     frame_hdr[13] = 0;   // length field
 
+#if 0  // PK TEMP
+    bool ret = udp_ok;
+    if (!udp_ok) {
+        outStr << "Scanning nodes with PCAP" << std::endl;
+        ret = this->ScanNodes();
+    }
+#else
     bool ret = this->ScanNodes();
+#endif
+
     if (!ret) {
         pcap_close(handle);
         handle = 0;
@@ -587,6 +620,9 @@ bool Eth1394Port::ScanNodes(void)
     NumOfNodes_ = 0;
     quadlet_t data = 0x0;   // initialize data to 0
 
+#ifdef BYPASS_INIT
+    BidBridge_ = 0;
+#else
     // Find board id for first board (i.e., one connected by Ethernet)
     int rc = eth1394_read(0xff, 0x00, 4, &data);
     // One retry
@@ -604,6 +640,7 @@ bool Eth1394Port::ScanNodes(void)
     std::cout << "data = 0x" << std::hex << data << "\n";
 
     BidBridge_ = (data & BOARD_ID_MASK) >> 24;
+#endif
     outStr << "BidBridge_ = " << (int)BidBridge_ << "\n";
 
     // Now scan all nodes
@@ -655,6 +692,12 @@ bool Eth1394Port::ScanNodes(void)
         if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
         NumOfNodes_++;
     }
+#ifdef BYPASS_INIT
+    Node2Board[0] = 0;
+    FirmwareVersion[0] = 7;
+    BoardExistMask_[0] = 1;
+    NumOfNodes_ = 1;
+#endif
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
