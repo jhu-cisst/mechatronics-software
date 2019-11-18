@@ -292,25 +292,6 @@ bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
 #endif
 
     UDP_port = port;
-#if 0
-    // Can probably hard-code following
-    hostent *he = gethostbyname(host.c_str());
-    if (!he) {
-        outStr << "Failed to find host entry " << host << std::endl;
-        return false;
-    }
-    if (!(he->h_addr_list && he->h_addr_list[0])) {
-        outStr << "Failed to find host " << host << std::endl;
-        return false;
-    }
-
-    // Set host and port
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(port);
-    serverAddr.sin_addr.s_addr = *reinterpret_cast<unsigned long *>(he->h_addr_list[0]);
-#endif
 
 #ifdef _MSC_VER
     WSADATA wsaData;
@@ -341,11 +322,29 @@ bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
         return false;
     }
 #endif
+
+    // Enable broadcasts
     int broadcastEnable = 1;
     if (setsockopt(socketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
         outStr << "UDP_Init: Failed to set SOCKET broadcast option: " << strerror(errno) << std::endl;
         return false;
     }
+
+#if 0
+    // Set host and port
+    struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(1395);
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    int retval = bind(socketFD, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
+    if (retval == SOCKET_ERROR) {
+        outStr << "Failed to set UDP host:port to " << host << ":" << port << std::endl;
+        UDP_Close();
+        return false;
+    }
+#endif
 
 #if 0  // PK TEMP
     useUDP_Send = true;
@@ -359,14 +358,6 @@ bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
     bool ret = true;
 #endif
 
-#if 0
-    int retval = bind(socketFD, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
-    if (retval == SOCKET_ERROR) {
-        outStr << "Failed to set UDP host:port to " << host << ":" << port << std::endl;
-        UDP_Close();
-        return false;
-    }
-#endif
     return ret;
 }
 
@@ -397,9 +388,11 @@ int Eth1394Port::UDP_Send(const char *bufsend, size_t msglen)
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(UDP_port);
-    //serverAddr.sin_addr.s_addr = useUDP_Broadcast ? INADDR_BROADCAST : IP_addr.asULong;
+    // INADDR_BROADCAST (255.255.255.255) does not work when adapter configured as "Link-Local Only"
+    // serverAddr.sin_addr.s_addr = useUDP_Broadcast ? htonl(INADDR_BROADCAST) : IP_addr.asULong;
+    // PK TEMP: Hard-code broadcast address (assuming Link-Local configuration)
     if (useUDP_Broadcast)
-        inet_pton(AF_INET, "10.1.0.255", &(serverAddr.sin_addr));
+        inet_pton(AF_INET, "169.254.255.255", &(serverAddr.sin_addr));
     else
         serverAddr.sin_addr.s_addr = IP_addr.asULong;
     int retval = sendto(socketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
@@ -463,6 +456,9 @@ bool Eth1394Port::Init(void)
         return false;
     }
 
+    // Hard-coded IP and port for now
+    bool udp_ok = UDP_Init("169.254.0.100", 1394);
+
     // Put Ethernet initialization here
     pcap_if_t* alldevs;
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -492,9 +488,6 @@ bool Eth1394Port::Init(void)
         }
         return false;
     }
-
-    // Hard-coded IP and port for now
-    bool udp_ok = UDP_Init("10.1.0.100", 1394);
 
     // Open pcap handle
     handle = NULL;
