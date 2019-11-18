@@ -544,7 +544,7 @@ int main(int argc, char **argv)
         case 'x':
             if (board1.ReadEthernetData(buffer, 0, 64))
                 FirewirePort::PrintPacket(std::cout, buffer, 64);
-            if (board1.ReadEthernetData(buffer, 0x80, 19))
+            if (board1.ReadEthernetData(buffer, 0x80, 20))
                 Eth1394Port::PrintDebugData(std::cout, buffer);
             break;
 

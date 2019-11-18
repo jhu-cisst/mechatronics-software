@@ -813,9 +813,9 @@ void FirewirePort::PrintPacket(std::ostream &out, const quadlet_t *packet, unsig
                                           "stream", "lockresp", "", "", "", "" };
     unsigned char tcode = (packet[0]&0x000000F0)>>4;
     unsigned int data_length = 0;
-    // No point in printing anything if less than 5
-    if (max_quads < 5) {
-        out << "PrintPacket: should print more than 5 quadlets (max_quads = "
+    // No point in printing anything if less than 4
+    if (max_quads < 4) {
+        out << "PrintPacket: should print more than 4 quadlets (max_quads = "
             << max_quads << ")" << std::endl;
         return;
     }
@@ -848,6 +848,8 @@ void FirewirePort::PrintPacket(std::ostream &out, const quadlet_t *packet, unsig
 
     if (tcode == QREAD)
         out << "header_crc: " << std::hex << packet[3] << std::endl;
+    else if (max_quads < 5)  // Nothing else to do for short packets
+        return;
     else
         out << "header_crc: " << std::hex << packet[4] << std::endl;
 

@@ -17,6 +17,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "Eth1394Port.h"
 #include "Amp1394Time.h"
+#include "FirewirePort.h"  // PK TEMP
 
 // For UDP support (maybe not all are needed)
 #ifdef _MSC_VER
@@ -174,7 +175,8 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     struct DebugData {
         char     header[4];        // Quad 1
         uint32_t timestampBegin;   // Quad 2
-        uint32_t eth_status;       // Quad 3
+        uint16_t eth_status;       // Quad 3
+        uint16_t node_id;
         uint8_t  isFlags;          // Quad 4
         uint8_t  moreFlags;
         uint8_t  nextState;
@@ -203,9 +205,11 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t numICMP;
         uint16_t numPacketError;   // Quad 18
         uint16_t numIPv4Mismatch;
-        uint32_t timestampEnd;     // Quad 19
+        uint16_t numStateInvalid;  // Quad 19
+        uint16_t unused0000;
+        uint32_t timestampEnd;     // Quad 20
     };
-    if (sizeof(DebugData) != 19*sizeof(quadlet_t)) {
+    if (sizeof(DebugData) != 20*sizeof(quadlet_t)) {
         debugStream << "PrintDebugData: structure packing problem" << std::endl;
         return;
     }
@@ -216,12 +220,13 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         return;
     }
     debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::endl;
-    debugStream << "Raw status: " << std::hex << p->eth_status << std::endl;
+    debugStream << "FireWire node_id: " << std::dec << p->node_id << std::endl;
     unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
     Eth1394Port::PrintDebug(debugStream, status);
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
     debugStream << "Flags: ";
+    if (p->moreFlags&0x08) debugStream << "fwPacketFresh ";
     if (p->moreFlags&0x04) debugStream << "isBroadcast ";
     if (p->moreFlags&0x02) debugStream << "isMulticast ";
     if (p->moreFlags&0x01) debugStream << "IRQ ";
@@ -258,6 +263,7 @@ void Eth1394Port::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numICMP: " << std::dec << p->numICMP << std::endl;
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
+    debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
@@ -337,7 +343,7 @@ bool Eth1394Port::UDP_Init(const std::string & host, unsigned short port)
 #endif
     int broadcastEnable = 1;
     if (setsockopt(socketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
-        outStr << "UDP_Init: Failed to set broadcast option" << std::endl;
+        outStr << "UDP_Init: Failed to set SOCKET broadcast option: " << strerror(errno) << std::endl;
         return false;
     }
 
@@ -391,7 +397,11 @@ int Eth1394Port::UDP_Send(const char *bufsend, size_t msglen)
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(UDP_port);
-    serverAddr.sin_addr.s_addr = useUDP_Broadcast ? INADDR_BROADCAST : IP_addr.asULong;
+    //serverAddr.sin_addr.s_addr = useUDP_Broadcast ? INADDR_BROADCAST : IP_addr.asULong;
+    if (useUDP_Broadcast)
+        inet_pton(AF_INET, "10.1.0.255", &(serverAddr.sin_addr));
+    else
+        serverAddr.sin_addr.s_addr = IP_addr.asULong;
     int retval = sendto(socketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr));
 
     if (retval == SOCKET_ERROR) {
@@ -484,7 +494,7 @@ bool Eth1394Port::Init(void)
     }
 
     // Hard-coded IP and port for now
-    bool udp_ok = UDP_Init("169.254.101.100", 1394);
+    bool udp_ok = UDP_Init("10.1.0.100", 1394);
 
     // Open pcap handle
     handle = NULL;
@@ -1406,6 +1416,10 @@ bool Eth1394Port::ParseFirewirePacket(const unsigned char *packet, size_t length
     if (tl_recv != fw_tl) {
         outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
                << ", received tl = " << tl_recv << std::endl;
+        quadlet_t packet_swap[50];
+        for (unsigned int i = 0; i < length; i++)
+            packet_swap[i] = bswap_32(reinterpret_cast<const quadlet_t *>(packet)[i]);
+        FirewirePort::PrintPacket(outStr, packet_swap, length);
         return false;  // PK TEMP?
     }
     int tcode_recv = packet[3] >> 4;
