@@ -17,8 +17,9 @@
 #include "FirewirePort.h"
 #endif
 #if Amp1394_HAS_PCAP
-#include "Eth1394Port.h"
+#include "EthRawPort.h"
 #endif
+#include "EthUdpPort.h"
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 
@@ -308,37 +309,27 @@ int main(int argc, char** argv)
 {
     int i;
 #if Amp1394_HAS_RAW1394
-    bool useFireWire = true;
+    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
 #else
-    bool useFireWire = false;
+    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
 #endif
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
     std::string mcsName;
     std::string sn;
     bool auto_mode = false;
+    std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
     std::cout << "Started " << argv[0]
               << ", using AmpIO version " << Amp1394_VERSION << std::endl;
     int args_found = 0;
     for (i = 1; i < argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            std::cerr << "Selecting port " << port << std::endl;
-            // -p option can be -pN, -pfwN, or -pethN, where N
-            // is the port number. -pN is equivalent to -pfwN
-            // for backward compatibility.
-            if (strncmp(argv[i]+2, "fw", 2) == 0)
-                port = atoi(argv[i]+4);
-            else if (strncmp(argv[i]+2, "eth", 3) == 0) {
-                useFireWire = false;
-                port = atoi(argv[i]+5);
+            if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                std::cerr << "Failed to parse option: " << argv[i] << std::endl;
+                return 0;
             }
-            else
-                port = atoi(argv[i]+2);
-            if (useFireWire)
-                std::cerr << "Selecting FireWire port " << port << std::endl;
-            else
-                std::cerr << "Selecting Ethernet port " << port << std::endl;
+            std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
         }
         else if ((argv[i][0] == '-') && (argv[i][1] == 'a')) {
             std::cerr << "Running in auto mode" << std::endl;
@@ -355,35 +346,35 @@ int main(int argc, char** argv)
     if (args_found < 1) {
         std::cerr << "Usage: pgm1394 <board-num> [<mcs-file>] [-pP]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
-                  << "       can also specify -pfwP or -pethP" << std::endl;
+                  << "       can also specify -pfwP, -pethP or -pudp" << std::endl;
         return 0;
     }
 
     BasePort *Port;
-    if (useFireWire) {
+    if (desiredPort == BasePort::PORT_FIREWIRE) {
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, std::cerr);
-        if (!Port->IsOK()) {
-            std::cerr << "Failed to initialize firewire port " << port << std::endl;
-            return -1;
-        }
 #else
         std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
         return -1;
 #endif
     }
-    else {
+    else if (desiredPort == BasePort::PORT_ETH_UDP) {
+        Port = new EthUdpPort(port, IPaddr, std::cerr);
+        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+    }
+    else if (desiredPort == BasePort::PORT_ETH_RAW) {
 #if Amp1394_HAS_PCAP
-        Port = new Eth1394Port(port, std::cerr);
-        if (!Port->IsOK()) {
-            std::cerr << "Failed to initialize ethernet port " << port << std::endl;
-            return -1;
-        }
+        Port = new EthRawPort(port, std::cerr);
         Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 #else
-        std::cerr << "Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
+        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
         return -1;
 #endif
+    }
+    if (!Port->IsOK()) {
+        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        return -1;
     }
     AmpIO Board(board);
     Port->AddBoard(&Board);
@@ -450,4 +441,5 @@ int main(int argc, char** argv)
 cleanup:
     promFile.CloseFile();
     Port->RemoveBoard(board);
+    delete Port;
 }

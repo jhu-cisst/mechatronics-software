@@ -30,37 +30,15 @@ typedef int (*bus_reset_handler_t)(raw1394handle_t, unsigned int generation);
 
 class FirewirePort : public BasePort {
 public:
-    enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
-
-    //! FireWire tcode
-    enum TCODE {
-        QWRITE = 0,
-        BWRITE = 1,
-        QREAD = 4,
-        BREAD = 5,
-        QRESPONSE = 6,
-        BRESPONSE = 7
-    };
-
 protected:
 
     raw1394handle_t handle;   // normal read/write handle
     raw1394handle_t handle_bc;  // broadcasting handle
     nodeid_t baseNodeId;
 
-    unsigned char Node2Board[MAX_NODES];
-    unsigned char Board2Node[BoardIO::MAX_BOARDS];
-    unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
-
     size_t ReadErrorCounter_;
 
     int max_board;  // highest index of used (non-zero) entry in BoardList
-    BoardIO *HubBoard_;
-    int NumOfBoards_;    // number of boards
-    int NumOfNodes_;     // number of nodes on the bus (exclude PC node)
-
-    // Broadcast Related
-    unsigned int BoardExistMask_;   // mask indicating whether board exists
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
@@ -87,31 +65,22 @@ public:
     FirewirePort(int portNum, std::ostream &debugStream = std::cerr);
     ~FirewirePort();
 
+    //****************** BasePort pure virtual methods ***********************
+
+    PortType GetPortType(void) const { return PORT_FIREWIRE; }
+
     // Call lsof to count the number of users, assumes /dev/fw<port-number>
     int NumberOfUsers(void);
-
-    // Getter
-    int GetNumOfBoards(void){return NumOfBoards_;}
-    int GetNumOfNodes(void){return NumOfNodes_;}
-    unsigned char* GetNode2Board(void){return Node2Board;}
 
     void Reset(void);
 
     bool IsOK(void) { return (handle != NULL); }
-
-    // Set hub board
-    bool SetHubBoard(BoardIO *hubboard);
 
     // Adds board(s)
     bool AddBoard(BoardIO *board);
 
     // Removes board
     bool RemoveBoard(unsigned char boardId);
-
-    BoardIO *GetBoard(unsigned char boardId) const;
-
-    int GetNodeId(unsigned char boardId) const;
-    unsigned long GetFirmwareVersion(unsigned char boardId) const;
 
     // Read all boards
     bool ReadAllBoards(void);
@@ -131,11 +100,6 @@ public:
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
-    // Write a No-op quadlet to reset watchdog counters on boards.
-    // This is used by WriteAllBoards if no other valid command is written
-    bool WriteNoOp(unsigned char boardId);
-
-    //
     /*!
      \brief Write a quadlet to all boards using broadcasting
 
@@ -169,11 +133,15 @@ public:
     */
     void PromDelay(void) const {}
 
+    //****************** FireWire specific methods ***********************
+
+    // Getter (OBSOLETE?)
+    //int GetNumOfNodes(void) const {return NumOfNodes_;}
+    //unsigned char* GetNode2Board(void) {return Node2Board;}
+
     // Stop Cycle Start Packets
     void StopCycleStartPacket(void);
 
-    // Print FireWire packet
-    static void PrintPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads);
 };
 
 #endif // __FirewirePort_H__

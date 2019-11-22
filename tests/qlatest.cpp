@@ -26,8 +26,9 @@
 #include "FirewirePort.h"
 #endif
 #if Amp1394_HAS_PCAP
-#include "Eth1394Port.h"
+#include "EthRawPort.h"
 #endif
+#include "EthUdpPort.h"
 #include "AmpIO.h"
 
 /*!
@@ -789,34 +790,25 @@ int main(int argc, char** argv)
 {
     int i;
 #if Amp1394_HAS_RAW1394
-    bool useFireWire = true;
+    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
 #else
-    bool useFireWire = false;
+    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
 #endif
     int port = 0;
     int board = 0;
     bool requireQLA_SN = true;
+    std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
     if (argc > 1) {
         int args_found = 0;
         for (i = 1; i < argc; i++) {
             if (argv[i][0] == '-') {
                 if (argv[i][1] == 'p') {
-                    // -p option can be -pN, -pfwN, or -pethN, where N
-                    // is the port number. -pN is equivalent to -pfwN
-                    // for backward compatibility.
-                    if (strncmp(argv[i]+2, "fw", 2) == 0)
-                        port = atoi(argv[i]+4);
-                    else if (strncmp(argv[i]+2, "eth", 3) == 0) {
-                        useFireWire = false;
-                        port = atoi(argv[i]+5);
+                    if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                        std::cerr << "Failed to parse option: " << argv[i] << std::endl;
+                        return 0;
                     }
-                    else
-                        port = atoi(argv[i]+2);
-                    if (useFireWire)
-                        std::cerr << "Selecting FireWire port " << port << std::endl;
-                    else
-                        std::cerr << "Selecting Ethernet port " << port << std::endl;
+                    std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
                 }
                 else if (argv[i][1] == 'k')  {
                     requireQLA_SN = false;
@@ -825,7 +817,8 @@ int main(int argc, char** argv)
                     std::cerr << "Usage: qlatest [<board-num>] [-pP] [-k]" << std::endl
                     << "       where <board-num> = rotary switch setting (0-15, default 0)" << std::endl
                     << "             P = port number (default 0)" << std::endl
-                    << "             -k option means to continue test even if QLA serial number not found" << std::endl;
+                    << "                 can also specify -pfwP, -pethP or -pudp" << std::endl
+                    << "            -k option means to continue test even if QLA serial number not found" << std::endl;
                     return 0;
                 }
             }
@@ -841,32 +834,31 @@ int main(int argc, char** argv)
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
     BasePort *Port;
-    if (useFireWire) {
+    if (desiredPort == BasePort::PORT_FIREWIRE) {
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
-        if (!Port->IsOK()) {
-            PrintDebugStream(debugStream);
-            std::cerr << "Failed to initialize firewire port " << port << std::endl;
-            return -1;
-        }
 #else
         std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
         return -1;
 #endif
     }
-    else {
+    else if (desiredPort == BasePort::PORT_ETH_UDP) {
+        Port = new EthUdpPort(port, IPaddr, debugStream);
+        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+    }
+    else if (desiredPort == BasePort::PORT_ETH_RAW) {
 #if Amp1394_HAS_PCAP
-        Port = new Eth1394Port(port, debugStream);
-        if (!Port->IsOK()) {
-            PrintDebugStream(debugStream);
-            std::cerr << "Failed to initialize ethernet port " << port << std::endl;
-            return -1;
-        }
+        Port = new EthRawPort(port, debugStream);
         Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 #else
-        std::cerr << "Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
+        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
         return -1;
 #endif
+    }
+    if (!Port->IsOK()) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        return -1;
     }
     AmpIO Board(board);
     Port->AddBoard(&Board);
@@ -909,7 +901,7 @@ int main(int argc, char** argv)
     mvprintw(6, 9, "3) Test analog feedback:");
     mvprintw(7, 9, "4) Test motor power control:");
     mvprintw(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
-    if (useFireWire && Board.HasEthernet())
+    if ((desiredPort == BasePort::PORT_FIREWIRE) && Board.HasEthernet())
         mvprintw(9, 9, "6) Test Ethernet controller:");
 
     refresh();
@@ -985,7 +977,7 @@ int main(int argc, char** argv)
                 break;
 
             case '6':
-                if (useFireWire && Board.HasEthernet()) {
+                if ((desiredPort == BasePort::PORT_FIREWIRE) && Board.HasEthernet()) {
                     ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                     if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
                         mvprintw(9, 46, "PASS");
@@ -1000,4 +992,5 @@ int main(int argc, char** argv)
 
     Port->RemoveBoard(board);
     endwin();
+    delete Port;
 }

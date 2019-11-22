@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -14,12 +14,18 @@ project (Amp1394Lib)
 set (HEADERS
      BoardIO.h
      AmpIO.h
+     Amp1394Time.h
      BasePort.h
-     Amp1394Time.h)
+     EthBasePort.h
+     EthUdpPort.h)
 
 set (SOURCE_FILES
      code/AmpIO.cpp
-     code/Amp1394Time.cpp)
+     code/Amp1394Time.cpp
+     code/BasePort.cpp
+     code/EthBasePort.cpp
+     code/EthUdpPort.cpp)
+
 
 if (Amp1394_HAS_RAW1394)
   set (HEADERS ${HEADERS} FirewirePort.h)
@@ -27,8 +33,8 @@ if (Amp1394_HAS_RAW1394)
 endif (Amp1394_HAS_RAW1394)
 
 if (Amp1394_HAS_PCAP)
-  set (HEADERS ${HEADERS} Eth1394Port.h)
-  set (SOURCE_FILES ${SOURCE_FILES} code/Eth1394Port.cpp)
+  set (HEADERS ${HEADERS} EthRawPort.h)
+  set (SOURCE_FILES ${SOURCE_FILES} code/EthRawPort.cpp)
 endif (Amp1394_HAS_PCAP)
 
 include_directories(${Amp1394_INCLUDE_DIR} ${Amp1394_EXTRA_INCLUDE_DIR})

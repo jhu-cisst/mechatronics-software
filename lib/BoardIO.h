@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -37,7 +37,9 @@ typedef uint16_t nodeid_t;
 
 class BasePort;
 class FirewirePort;
-class Eth1394Port;
+class EthBasePort;
+class EthRawPort;
+class EthUdpPort;
 
 class BoardIO
 {
@@ -61,7 +63,9 @@ protected:
 
     friend class BasePort;
     friend class FirewirePort;
-    friend class Eth1394Port;
+    friend class EthBasePort;
+    friend class EthRawPort;
+    friend class EthUdpPort;
 
     void SetReadValid(bool flag) { readValid = flag; }
     unsigned int GetReadNumBytes() const { return ReadBufferSize; }

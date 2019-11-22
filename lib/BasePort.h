@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -21,9 +21,49 @@ http://www.cisst.org/cisst/license.txt.
 #include <iostream>
 #include "BoardIO.h"
 
+/*
+ * BasePort
+ *
+ * The original intent of BasePort was to abstract the port so that it would not be
+ * dependent on a particular bus, such as FireWire (IEEE-1394). However, the protocol
+ * is based on FireWire; for example, reading/writing of quadlets and blocks.
+ * Thus, this class still maintains an abstraction about the physical port, but now
+ * assumes that FireWire packets will be sent via that port.
+ *
+ * BasePort assumes that some number of boards will be connected, and that each board
+ * may have a node number assigned by the underlying bus (this is true for FireWire).
+ * The maximum number of boards is given by BoardIO::MAX_BOARDS (16) and we set the
+ * maximum number of nodes (MAX_NODES) to 64, which corresponds to the FireWire limit.
+ *
+ * There are three concrete derived classes:
+ *     FirewirePort:  sends FireWire packets via FireWire
+ *     EthUdpPort:    sends FireWire packets via Ethernet UDP
+ *     EthRawPort:    sends FireWire packets via raw Ethernet frames (using PCAP)
+ */
+
+// Some useful constants
+const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
+const unsigned long QLA1_String = 0x514C4131;
+
+// The FireWire node number is represented by an unsigned char (8 bits), but only 6
+// bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
+// uses the upper two bits as flags to indicate whether the packet should be sent
+// via Ethernet broadcast (0x80) and whether the Ethernet/FireWire bridge should
+// not forward (0x40) the received packet to other boards via FireWire.
+const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast
+const unsigned char FW_NODE_NOFORWARD_MASK     = 0x40;   // Mask to prevent forwarding by Ethernet/FireWire bridge
+const unsigned char FW_NODE_MASK               = 0x3f;   // Mask for valid FireWire node numbers (0-63)
+const unsigned char FW_NODE_BROADCAST          = 0x3f;   // Value for FireWire broadcast
+
+const unsigned char FW_TL_MASK                 = 0x3f;
+
 class BasePort
 {
 public:
+
+    enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
+
+    enum PortType { PORT_FIREWIRE, PORT_ETH_UDP, PORT_ETH_RAW };
 
     // Protocol types:
     //   PROTOCOL_SEQ_RW      sequential (individual) read and write to each board
@@ -42,70 +82,79 @@ protected:
 
     // Port Index, e.g. eth0 -> PortNum = 0
     int PortNum;
-    BoardIO *BoardList[BoardIO::MAX_BOARDS];
 
+    // Indicates whether board exists in network (might not be used in current configuration)
+    bool BoardExists[BoardIO::MAX_BOARDS];
+    int NumOfNodes_;                // number of nodes (boards) on bus
+
+    // Indicates which boards are used in the current configuration
+    BoardIO *BoardList[BoardIO::MAX_BOARDS];
+    int NumOfBoards_;               // number of boards in use
+    unsigned int BoardInUseMask_;   // mask indicating whether board in use
+    unsigned char HubBoard;         // board number of hub/bridge
+
+    // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
-    virtual bool ScanNodes(void) = 0;
+    // Mappings between board numbers and node numbers
+    unsigned char Node2Board[MAX_NODES];
+    unsigned char Board2Node[BoardIO::MAX_BOARDS];
 
 public:
 
     // Constructor
-    BasePort(int portNum, std::ostream &ostr = std::cerr):
-        outStr(ostr),
-        Protocol_(BasePort::PROTOCOL_SEQ_RW),
-        IsAllBoardsBroadcastCapable_(false),
-        IsAllBoardsBroadcastShorterWait_(false),
-        IsNoBoardsBroadcastShorterWait_(true),
-        ReadSequence_(0),
-        PortNum(portNum)
-    {
-        memset(BoardList, 0, sizeof(BoardList));
-    }
+    BasePort(int portNum, std::ostream &ostr = std::cerr);
 
     virtual ~BasePort() {}
+
+    // Set protocol type
+    void SetProtocol(ProtocolType prot);
+
+    // Add board to list of boards in use
+    virtual bool AddBoard(BoardIO *board);
+
+    // Remove board from list of boards in use
+    virtual bool RemoveBoard(unsigned char boardId);
+    inline bool RemoveBoard(BoardIO *board) { return RemoveBoard(board->BoardId); }
+
+    int GetNumOfBoards(void) const { return NumOfBoards_; }
+
+    BoardIO *GetBoard(unsigned char boardId) const
+    { return (boardId < BoardIO::MAX_BOARDS) ? BoardList[boardId] : 0; }
+
+    int GetNodeId(unsigned char boardId) const
+    { return (boardId < BoardIO::MAX_BOARDS) ? Board2Node[boardId] : static_cast<int>(MAX_NODES); }
+
+    /*!
+     \brief Get board firmware version
+
+     \param boardId: board ID (rotary switch value)
+     \return unsigned long: firmware version number
+    */
+    unsigned long GetFirmwareVersion(unsigned char boardId) const
+    { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
+
+    // Return string version of PortType
+    static std::string PortTypeString(PortType portType);
+
+    // Helper function for parsing command line options.
+    // In particular, this is typically called after a certain option, such as -p, is
+    // recognized and it parses the rest of that option string:
+    // N               for FireWire, where N is the port number (backward compatibility)
+    // fwN             for FireWire, where N is the port number
+    // ethN            for raw Ethernet (PCAP), where N is the port number
+    // udpxx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr);
+
+    //*********************** Pure virtual methods **********************************
+
+    virtual PortType GetPortType(void) const = 0;
 
     virtual int NumberOfUsers(void) = 0;
 
     virtual bool IsOK(void) = 0;
 
     virtual void Reset(void) = 0;
-
-    virtual int GetNodeId(unsigned char boardId) const = 0;
-    virtual unsigned long GetFirmwareVersion(unsigned char boardId) const = 0;
-
-    // Adds board(s)
-    virtual bool AddBoard(BoardIO *board) = 0;
-
-    // Removes board
-    virtual bool RemoveBoard(unsigned char boardId) = 0;
-    inline bool RemoveBoard(BoardIO *board) { return RemoveBoard(board->BoardId); }
-
-    // Set protocol type
-    void SetProtocol(ProtocolType prot) {
-        if (!IsAllBoardsBroadcastCapable_ && (prot != BasePort::PROTOCOL_SEQ_RW)) {
-            outStr << "***Error: not all boards support broadcasting, " << std::endl
-                   << "          please upgrade your firmware"  << std::endl;
-        } else {
-            switch (prot) {
-            case BasePort::PROTOCOL_SEQ_RW:
-                outStr << "System running in NON broadcast mode" << std::endl;
-                Protocol_ = prot;
-                break;
-            case BasePort::PROTOCOL_SEQ_R_BC_W:
-                outStr << "System running with broadcast write" << std::endl;
-                Protocol_ = prot;
-                break;
-            case BasePort::PROTOCOL_BC_QRW:
-                outStr << "System running with broadcast query, read, and write" << std::endl;
-                Protocol_ = prot;
-                break;
-            default:
-                outStr << "Unknown protocol (ignored): " << prot << std::endl;
-                break;
-            }
-        }
-    }
 
     // Read all boards
     virtual bool ReadAllBoards(void) = 0;
@@ -125,7 +174,11 @@ public:
     // Write a quadlet to the specified board
     virtual bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data) = 0;
 
-    //
+    // Write a No-op quadlet to reset watchdog counters on boards.
+    // This is used by WriteAllBoards if no other valid command is written
+    virtual bool WriteNoOp(unsigned char boardId)
+    { return WriteQuadlet(boardId, 0x00, 0); }
+
     /*!
      \brief Write a quadlet to all boards using broadcasting
 

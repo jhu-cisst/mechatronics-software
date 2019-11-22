@@ -5,7 +5,7 @@
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
   Created on: 2012
 
-  (C) Copyright 2012-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -40,8 +40,9 @@ http://www.cisst.org/cisst/license.txt.
 #include "FirewirePort.h"
 #endif
 #if Amp1394_HAS_PCAP
-#include "Eth1394Port.h"
+#include "EthRawPort.h"
 #endif
+#include "EthUdpPort.h"
 
 #include "AmpIO.h"
 
@@ -88,11 +89,12 @@ int main(int argc, char** argv)
     const unsigned int lm = 5; // left margin
     unsigned int i, j;
 #if Amp1394_HAS_RAW1394
-    bool useFireWire = true;
+    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
 #else
-    bool useFireWire = false;
+    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
 #endif
     int port = 0;
+    std::string IPaddr(ETH_UDP_DEFAULT_IP);
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
 
@@ -103,21 +105,11 @@ int main(int argc, char** argv)
     int args_found = 0;
     for (i = 1; i < (unsigned int)argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            // -p option can be -pN, -pfwN, or -pethN, where N
-            // is the port number. -pN is equivalent to -pfwN
-            // for backward compatibility.
-            if (strncmp(argv[i]+2, "fw", 2) == 0)
-                port = atoi(argv[i]+4);
-            else if (strncmp(argv[i]+2, "eth", 3) == 0) {
-                useFireWire = false;
-                port = atoi(argv[i]+5);
+            if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                std::cerr << "Failed to parse option: " << argv[i] << std::endl;
+                return 0;
             }
-            else
-                port = atoi(argv[i]+2);
-            if (useFireWire)
-                std::cerr << "Selecting FireWire port " << port << std::endl;
-            else
-                std::cerr << "Selecting Ethernet port " << port << std::endl;
+            std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
         }
         else {
             if (args_found == 0) {
@@ -136,16 +128,19 @@ int main(int argc, char** argv)
         // usage
         std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
-                  << std::endl
-                  << "Trying to detect board on default port:" << std::endl;
+                  << "                 can also specify -pfwP, -pethP or -pudp" << std::endl
+                  << std::endl;
 
-        if (useFireWire) {
+#if Amp1394_HAS_RAW1394
+        std::cerr << "Trying to detect board on default port:" << std::endl;
+        if (desiredPort == BasePort::PORT_FIREWIRE) {
             // try to locate all boards available on default port
-            FirewirePort Port(port, std::cerr);
-            if (!Port.IsOK()) {
+            FirewirePort testPort(port, std::cerr);
+            if (!testPort.IsOK()) {
                 std::cerr << "Failed to initialize FireWire port " << port << std::endl;
             }
         }
+#endif
 
         // keys
         std::cerr << std::endl << "Keys:" << std::endl
@@ -164,35 +159,31 @@ int main(int argc, char** argv)
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
     BasePort *Port;
-    if (useFireWire) {
-        std::cerr << "Attempting to connect using FireWire" << std::endl;
+    if (desiredPort == BasePort::PORT_FIREWIRE) {
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
-        if (!Port->IsOK()) {
-            PrintDebugStream(debugStream);
-            std::cerr << "Failed to initialize FireWire port " << port << std::endl;
-            return -1;
-        }
-        std::cerr << "FireWire port properly initialized" << std::endl;
 #else
         std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
         return -1;
 #endif
     }
-    else {
-        std::cerr << "Attempting to connect using Ethernet/PCAP" << std::endl;
+    else if (desiredPort == BasePort::PORT_ETH_UDP) {
+        Port = new EthUdpPort(port, IPaddr, debugStream);
+        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+    }
+    else if (desiredPort == BasePort::PORT_ETH_RAW) {
 #if Amp1394_HAS_PCAP
-        Port = new Eth1394Port(port, debugStream);
-        if (!Port->IsOK()) {
-            PrintDebugStream(debugStream);
-            std::cerr << "Failed to initialize ethernet port " << port << std::endl;
-            return -1;
-        }
+        Port = new EthRawPort(port, debugStream);
         Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 #else
-        std::cerr << "Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
+        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
         return -1;
 #endif
+    }
+    if (!Port->IsOK()) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        return -1;
     }
 
     // Currently hard-coded for up to 2 boards; initialize at mid-range
@@ -376,7 +367,7 @@ int main(int argc, char** argv)
 
         if (BoardList.size() > 1) {
             node = Port->GetNodeId(board2);
-            if (node < FirewirePort::MAX_NODES)
+            if (node < BasePort::MAX_NODES)
                 sprintf(nodeStr[1], "%4d", node);
             else
                 strcpy(nodeStr[1], "none");

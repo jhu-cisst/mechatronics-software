@@ -24,11 +24,9 @@ http://www.cisst.org/cisst/license.txt.
 
 #ifdef _MSC_VER
 #include <stdlib.h>
-#include <ws2tcpip.h>
 inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
 #else
 #include <byteswap.h>
-#include <arpa/inet.h>  // for inet_ntop and inet_pton
 #endif
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
@@ -718,32 +716,16 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
     return false;
 }
 
-std::string AmpIO::ReadIPv4Address(void) const
+AmpIO_UInt32 AmpIO::ReadIPv4Address(void) const
 {
-    std::string retString;
     if (GetFirmwareVersion() < 7) {
         std::cerr << "AmpIO::ReadIPv4Address: requires firmware 7 or above" << std::endl;
-        return retString;
-    }
-    if (sizeof(struct in_addr) != sizeof(AmpIO_UInt32)) {
-        std::cout << "AmpIO:ReadIPv4Address: inconsistent data sizes" << std::endl;
-        return retString;
+        return 0;
     }
     AmpIO_UInt32 read_data = 0;
-    if (port && port->ReadQuadlet(BoardId, 11, read_data)) {
-        std::cout << "IP RAW = " << std::hex << read_data << std::endl;
-        struct sockaddr_in sa;
-        sa.sin_addr = *reinterpret_cast<const struct in_addr *>(&read_data);
-        char IPstr[INET_ADDRSTRLEN];
-#ifdef _MSC_VER
-        // Windows does not provide inet_ntop prior to Vista, so we use inet_ntoa.
-        strncpy(IPstr, inet_ntoa(sa.sin_addr), INET_ADDRSTRLEN);
-#else
-        inet_ntop(AF_INET, &(sa.sin_addr), IPstr, INET_ADDRSTRLEN);
-#endif
-        retString.assign(IPstr);
-    }
-    return retString;
+    if (port)
+        port->ReadQuadlet(BoardId, 11, read_data);
+    return read_data;
 }
 
 /*******************************************************************************
@@ -860,25 +842,13 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
     return ret;
 }
 
-bool AmpIO::WriteIPv4Address(const std::string &IPaddr)
+bool AmpIO::WriteIPv4Address(AmpIO_UInt32 IPaddr)
 {
     if (GetFirmwareVersion() < 7) {
         std::cerr << "AmpIO::WriteIPv4Address: requires firmware 7 or above" << std::endl;
-        return "";
-    }
-#ifdef _MSC_VER
-    // Windows does not provide inet_pton prior to Vista, so we use inet_addr.
-    AmpIO_UInt32 write_data = inet_addr(IPaddr.c_str());
-#else
-    struct sockaddr_in sa;
-    inet_pton(AF_INET, IPaddr.c_str(), &(sa.sin_addr));
-    if (sizeof(sa.sin_addr) != sizeof(AmpIO_UInt32)) {
-        std::cout << "AmpIO:WriteIPv4Address: inconsistent data sizes" << std::endl;
         return false;
     }
-    AmpIO_UInt32 write_data = *reinterpret_cast<AmpIO_UInt32 *>(&sa.sin_addr);
-#endif
-    return (port ? port->WriteQuadlet(BoardId, 11, write_data) : false);
+    return (port ? port->WriteQuadlet(BoardId, 11, IPaddr) : false);
 }
 
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const

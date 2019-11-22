@@ -213,9 +213,9 @@ public:
     bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
 
     /*! Read IPv4 address (only relevant for FPGA boards with Ethernet support)
-        \returns IPv4 address as string (e.g., 192.168.0.1) or empty string if error
+        \returns IPv4 address (uint32) or 0 if error
      */
-    std::string ReadIPv4Address(void) const;
+    AmpIO_UInt32 ReadIPv4Address(void) const;
 
     // ********************** WRITE Methods **********************************
 
@@ -287,10 +287,10 @@ public:
     bool WritePWM(unsigned int index, double freq, double duty);
 
     /*! Write IPv4 address.
-        \param IP address to write (e.g., 192.168.0.1)
+        \param IP address to write, as uint32
         \returns true if successful; false otherwise
     */
-    bool WriteIPv4Address(const std::string &IPaddr);
+    bool WriteIPv4Address(AmpIO_UInt32 IPaddr);
 
     /*! \brief Get digital output time (in counts) corresponding to specified time in seconds.
 
@@ -440,7 +440,7 @@ protected:
     // Internal write buffer; the base class WriteBuffer and WriteBufferData pointers are
     // initialized to this buffer in the constructor, so that they always point to valid memory.
     // WriteBuffer and WriteBufferData can be changed by calling InitWriteBuffer
-    // (see Eth1394Port).
+    // (see EthRawPort and EthUdpPort).
     quadlet_t write_buffer_internal[WriteBufSize];
 
     // Virtual method

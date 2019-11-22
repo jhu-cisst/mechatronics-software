@@ -36,18 +36,13 @@ http://www.cisst.org/cisst/license.txt.
 
 #define FAKEBC 1    // fake broadcast mode
 
-const unsigned long QLA1_String = 0x514C4131;
-const unsigned long BOARD_ID_MASK    = 0x0f000000;  /*!< Mask for board_id */
-
 FirewirePort::PortListType FirewirePort::PortList;
 
 FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
     BasePort(portNum, debugStream),
     ReadErrorCounter_(0),
     max_board(0),
-    NumOfBoards_(0),
-    NumOfNodes_(0),
-    BoardExistMask_(0)
+    NumOfNodes_(0)
 {
     Init();
 }
@@ -323,97 +318,44 @@ bool FirewirePort::ScanNodes(void)
 }
 
 
-bool FirewirePort::SetHubBoard(BoardIO *hubboard)
-{
-    int id = hubboard->BoardId;
-    if ((id < 0) || (id >= BoardIO::MAX_BOARDS)) {
-        outStr << "FirewirePort::SetHubBoard: board number out of range: " << id << std::endl;
-        return false;
-    }
-    HubBoard_ = hubboard;
-    hubboard->port = this;
-    return true;
-}
-
-
 bool FirewirePort::AddBoard(BoardIO *board)
 {
-    int id = board->BoardId;
-    if ((id < 0) || (id >= BoardIO::MAX_BOARDS)) {
-        outStr << "FirewirePort::AddBoard: board number out of range: " << id << std::endl;
-        return false;
+    bool ret = BasePort::AddBoard(board);
+    if (ret) {
+        int id = board->BoardId;
+        if (id >= max_board)
+            max_board = id+1;
+        HubBoard = id;  // last added board would be hub board
     }
-    BoardList[id] = board;
-    if (id >= max_board)
-        max_board = id+1;
-    board->port = this;
-
-    // update BoardExistMask_
-    BoardExistMask_ = (BoardExistMask_ | (1 << id));
-
-    NumOfBoards_++;   // increment board counts
-    SetHubBoard(board);  // last added board would be hub board
-    return true;
+    return ret;
 }
 
 bool FirewirePort::RemoveBoard(unsigned char boardId)
 {
-    if (boardId >= BoardIO::MAX_BOARDS) {
-        outStr << "FirewirePort::RemoveBoard: board number out of range: " << boardId << std::endl;
-        return false;
+    bool ret = BasePort::RemoveBoard(boardId);
+    if (ret) {
+        if (boardId >= max_board-1) {
+            // If max_board was just removed, find the new max_board
+            max_board = 0;
+            for (int bd = 0; bd < boardId; bd++)
+                if (BoardList[bd]) max_board = bd+1;
+        }
     }
-    BoardIO *board = BoardList[boardId];
-    if (!board) {
-        outStr << "FirewirePort::RemoveBoard: board not found: " << boardId << std::endl;
-        return false;
-    }
-
-    // update BoardExistMask_
-    BoardExistMask_ = (BoardExistMask_ & (~(1 << boardId)));
-
-    BoardList[boardId] = 0;
-    if (boardId >= max_board-1) {
-        // If max_board was just removed, find the new max_board
-        max_board = 0;
-        for (int bd = 0; bd < boardId; bd++)
-            if (BoardList[bd]) max_board = bd+1;
-    }
-    board->port = 0;
-    NumOfBoards_--;
-    return true;
+    return ret;
 }
 
-BoardIO *FirewirePort::GetBoard(unsigned char boardId) const
-{
-    return BoardList[boardId];
-}
-
-int FirewirePort::GetNodeId(unsigned char boardId) const
-{
-    if (boardId < BoardIO::MAX_BOARDS)
-        return Board2Node[boardId];
-    else
-        return MAX_NODES;
-}
-
-unsigned long FirewirePort::GetFirmwareVersion(unsigned char boardId) const
-{
-    if (boardId < BoardIO::MAX_BOARDS)
-        return FirmwareVersion[boardId];
-    else
-        return 0;
-}
-
+// CAN BE MERGED WITH ETHBASEPORT
 bool FirewirePort::ReadAllBoards(void)
 {
-    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
-        return ReadAllBoardsBroadcast();
-    }
-
     if (!handle) {
         outStr << "FirewirePort::ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
     }
+
+    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
+        return ReadAllBoardsBroadcast();
+    }
+
     bool allOK = true;
     bool noneRead = true;
     for (int board = 0; board < max_board; board++) {
@@ -460,7 +402,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     bool ret;
     bool allOK = true;
     bool noneRead = true;
-    int hub_node_id = GetNodeId(HubBoard_->BoardId);   //  ZC: NOT USE PLACEHOLDER
+    int hub_node_id = GetNodeId(HubBoard);   //  ZC: NOT USE PLACEHOLDER
 
     //--- send out broadcast read request -----
 
@@ -488,7 +430,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
     quadlet_t bcReqData = (ReadSequence_ << 16);
     if (IsAllBoardsBroadcastShorterWait_ || IsNoBoardsBroadcastShorterWait_)
-        bcReqData += BoardExistMask_;
+        bcReqData += BoardInUseMask_;
     else
         // For a mixed set of boards, disable the shorter wait capability by "tricking" the system into thinking
         // that all nodes are used in this configuration. Otherwise, boards with the shorter wait capability may
@@ -588,16 +530,18 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 }
 
 
+// CAN BE MERGED WITH ETHBASEPORT
 bool FirewirePort::WriteAllBoards(void)
 {
-    if ((Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == BasePort::PROTOCOL_BC_QRW)) {
-        return WriteAllBoardsBroadcast();
-    }
-
     if (!handle) {
         outStr << "FirewirePort::WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
     }
+
+    if ((Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == BasePort::PROTOCOL_BC_QRW)) {
+        return WriteAllBoardsBroadcast();
+    }
+
     bool allOK = true;
     bool noneWritten = true;
     for (int board = 0; board < max_board; board++) {
@@ -606,7 +550,7 @@ bool FirewirePort::WriteAllBoards(void)
             quadlet_t *buf = BoardList[board]->GetWriteBuffer();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
             unsigned int numQuads = numBytes/4;
-            // Currently (Rev 1 firmware), the last quadlet (Status/Control register)
+            // Currently (Rev 1-6 firmware), the last quadlet (Status/Control register)
             // is done as a separate quadlet write.
             bool ret = WriteBlock(board, 0, buf, numBytes-4);
             if (ret) { noneWritten = false; noneWrittenThisBoard = false; }
@@ -716,32 +660,26 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     return allOK;
 }
 
-bool FirewirePort::WriteNoOp(unsigned char boardId)
-{
-    return WriteQuadlet(boardId, 0x00, 0);
-}
-
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
     int node = GetNodeId(boardId);
+    bool ret = false;
     if (node < MAX_NODES) {
-        bool ret = raw1394_read(handle, baseNodeId+node, addr, 4, &data);
+        ret = (raw1394_read(handle, baseNodeId+node, addr, 4, &data) != 0);
         data = bswap_32(data);
-        return (!ret);
     }
-    else
-        return false;
+    return ret;
 }
 
 bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
     int node = GetNodeId(boardId);
+    bool ret = false;
     if (node < MAX_NODES) {
         data = bswap_32(data);
-        return !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
+        ret = (raw1394_write(handle, baseNodeId+node, addr, 4, &data) != 0);
     }
-    else
-        return false;
+    return ret;
 }
 
 bool FirewirePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
@@ -804,58 +742,4 @@ bool FirewirePort::WriteBlockBroadcast(
     } else {
         return true;
     }
-}
-
-void FirewirePort::PrintPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
-{
-    static const char *tcode_name[16] = { "qwrite", "bwrite", "wresponse", "", "qread", "bread",
-                                          "qresponse", "bresponse", "cycstart", "lockreq",
-                                          "stream", "lockresp", "", "", "", "" };
-    unsigned char tcode = (packet[0]&0x000000F0)>>4;
-    unsigned int data_length = 0;
-    // No point in printing anything if less than 4
-    if (max_quads < 4) {
-        out << "PrintPacket: should print more than 4 quadlets (max_quads = "
-            << max_quads << ")" << std::endl;
-        return;
-    }
-    out << "dest: " << std::hex << ((packet[0]&0xffc00000)>>20)
-        << ", node: " << std::dec << ((packet[0]&0x003f0000)>>16)
-        << ", tl: " << std::hex << ((packet[0]&0x0000fc00)>>10)
-        << ", rt: " << ((packet[0]&0x00000300)>>8)
-        << ", tcode: " << static_cast<unsigned int>(tcode) << " (" << tcode_name[tcode] << ")"
-        << ", pri: " << (packet[0]&0x0000000F) << std::endl;
-    out << "src: " << std::hex << ((packet[1]&0xffc00000)>>20)
-        << ", node: " << std::dec << ((packet[1]&0x003f0000)>>16);
-
-    if ((tcode == QRESPONSE) || (tcode == BRESPONSE)) {
-        out << ", rcode: " << std::dec << ((packet[1]&0x0000f0000)>>12);
-    }
-    else if ((tcode == QWRITE) || (tcode == QREAD) || (tcode == BWRITE) || (tcode == BREAD)) {
-        out << ", dest_off: " << std::hex << (packet[1]&0x0000ffff) << std::endl;
-        out << "dest_off: " << std::hex << packet[2];
-    }
-    out << std::endl;
-
-    if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
-        data_length = (packet[3]&0xffff0000) >> 16;
-        out << "data_length: " << std::dec << data_length
-            << ", ext_tcode: " << std::hex << (packet[3]&0x0000ffff) << std::endl;
-    }
-    else if ((tcode == QWRITE) || (tcode == QRESPONSE)) {
-        out << "data: " << std::hex << packet[3] << std::endl;
-    }
-
-    if (tcode == QREAD)
-        out << "header_crc: " << std::hex << packet[3] << std::endl;
-    else if (max_quads < 5)  // Nothing else to do for short packets
-        return;
-    else
-        out << "header_crc: " << std::hex << packet[4] << std::endl;
-
-    unsigned int lim = (data_length <= max_quads-5) ? data_length : max_quads-5;
-    for (unsigned int i = 0; i < lim; i++)
-        out << "data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
-    if ((data_length > 0) && (data_length < max_quads-5))
-        out << "data_crc: " << std::hex << packet[5+data_length] << std::endl;
 }
