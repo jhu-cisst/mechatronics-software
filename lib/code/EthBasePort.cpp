@@ -288,7 +288,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
 
 bool EthBasePort::ScanNodes(void)
 {
-    int node, board;  // loop counters
+    unsigned int node, board;  // loop counters
 
     // Clear any existing Node2Board
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
@@ -327,7 +327,7 @@ bool EthBasePort::ScanNodes(void)
             continue;
         }
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
-        int board = (data & BOARD_ID_MASK) >> 24;
+        board = (data & BOARD_ID_MASK) >> 24;
         outStr << "  Node " << node << ", BoardId = " << board
                << ", Firmware Version = " << fver << std::endl;
 

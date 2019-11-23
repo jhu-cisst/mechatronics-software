@@ -135,10 +135,6 @@ public:
 
     //****************** FireWire specific methods ***********************
 
-    // Getter (OBSOLETE?)
-    //int GetNumOfNodes(void) const {return NumOfNodes_;}
-    //unsigned char* GetNode2Board(void) {return Node2Board;}
-
     // Stop Cycle Start Packets
     void StopCycleStartPacket(void);
 

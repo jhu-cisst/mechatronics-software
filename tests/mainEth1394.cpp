@@ -491,11 +491,11 @@ int main(int argc, char **argv)
                 break;
 
         case 'c':
-            ContinuousReadTest(&EthPort, boardNum);
+            ContinuousReadTest(EthPort, boardNum);
             break;
 
         case 'd':
-            ContinuousWriteTest(&EthPort, &FwPort, boardNum);
+            ContinuousWriteTest(EthPort, &FwPort, boardNum);
             break;
 
         case 'e':
@@ -512,7 +512,7 @@ int main(int argc, char **argv)
             std::cout << "Firewire PHY data via FireWire:" << std::endl;
             PrintFirewirePHY(&FwPort, boardNum);
             std::cout << "Firewire PHY data via Ethernet:" << std::endl;
-            PrintFirewirePHY(&EthPort, boardNum);
+            PrintFirewirePHY(EthPort, boardNum);
             break;
 
         case 'i':
@@ -528,7 +528,7 @@ int main(int argc, char **argv)
 
         case 'x':
             if (board1.ReadEthernetData(buffer, 0, 64))
-                FirewirePort::PrintPacket(std::cout, buffer, 64);
+                EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
             if (board1.ReadEthernetData(buffer, 0x80, 20))
                 EthBasePort::PrintDebugData(std::cout, buffer);
             break;

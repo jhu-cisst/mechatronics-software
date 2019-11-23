@@ -85,11 +85,11 @@ protected:
 
     // Indicates whether board exists in network (might not be used in current configuration)
     bool BoardExists[BoardIO::MAX_BOARDS];
-    int NumOfNodes_;                // number of nodes (boards) on bus
+    unsigned int NumOfNodes_;       // number of nodes (boards) on bus
 
     // Indicates which boards are used in the current configuration
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
-    int NumOfBoards_;               // number of boards in use
+    unsigned int NumOfBoards_;      // number of boards in use
     unsigned int BoardInUseMask_;   // mask indicating whether board in use
     unsigned char HubBoard;         // board number of hub/bridge
 
@@ -117,13 +117,23 @@ public:
     virtual bool RemoveBoard(unsigned char boardId);
     inline bool RemoveBoard(BoardIO *board) { return RemoveBoard(board->BoardId); }
 
-    int GetNumOfBoards(void) const { return NumOfBoards_; }
+    // Get number of boards that were added to BoardList
+    unsigned int GetNumOfBoards(void) const { return NumOfBoards_; }
 
     BoardIO *GetBoard(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? BoardList[boardId] : 0; }
 
-    int GetNodeId(unsigned char boardId) const
-    { return (boardId < BoardIO::MAX_BOARDS) ? Board2Node[boardId] : static_cast<int>(MAX_NODES); }
+    // Get total number of nodes on bus
+    unsigned int GetNumOfNodes(void) const
+    { return NumOfNodes_; }
+
+    // Return node id given board id (number)
+    unsigned int GetNodeId(unsigned char boardId) const
+    { return (boardId < BoardIO::MAX_BOARDS) ? Board2Node[boardId] : static_cast<unsigned int>(MAX_NODES); }
+
+    // Return board number given node id
+    unsigned int GetBoardId(unsigned char nodeId) const
+    { return (nodeId < MAX_NODES) ? Node2Board[nodeId] : static_cast<unsigned int>(BoardIO::MAX_BOARDS); }
 
     /*!
      \brief Get board firmware version

@@ -1,16 +1,28 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
+/* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
+
 /******************************************************************************
  *
+ * This is a variation of block1394.c that relies on the Amp1394 library.
+ * Thus, it probably should not be in this directory, which otherwise contains
+ * low-level utility programs that do not depend on Amp1394. Also, it could
+ * be used for Firewire, with the caveat that it would duplicate the block1394.c
+ * functionality in that case.
  *
  ******************************************************************************/
 
 #include <sstream>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <byteswap.h>
 #include <stdlib.h>
 #include <stdio.h>
-
-#include <Eth1394Port.h>
+#include <Amp1394/AmpIORevision.h>
+#if Amp1394_HAS_PCAP
+#include "EthRawPort.h"
+#endif
+#include "EthUdpPort.h"
 #include <AmpIO.h>
 
 void PrintDebugStream(std::stringstream &debugStream)
@@ -36,10 +48,19 @@ int main(int argc, char** argv)
     int i,j;
     int bid = BoardIO::MAX_BOARDS;
     bool verbose = false;
+    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
+    int port = 0;
+    std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
     for (i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
-            if (argv[i][1] == 'b') {
+            if (argv[i][1] == 'p') {
+                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                    std::cerr << "Failed to parse option: " << argv[i] << std::endl;
+                    return 0;
+                }
+            }
+            else if (argv[i][1] == 'b') {
                 bid = atoi(argv[i]+2);
                 std::cout << "Selecting board " << bid << "\n";
             }
@@ -73,19 +94,27 @@ int main(int argc, char** argv)
 
     if (args_found < 1) {
         if (isQuad1394)
-            printf("Usage: %s [-pP] [-nN] [-v] <address in hex> [value to write in hex]\n", argv[0]);
+            std::cout << "Usage: " << argv[0] << " [-pP] [-nN] [-v] <address in hex> [value to write in hex]" << std::endl;
         else
-            printf("Usage: %s [-pP] [-nN] [-v] <address in hex> <size in quadlets> [write data quadlets in hex]\n", argv[0]);
-        printf("       where P = port number, N = node number\n");
+            std::cout << "Usage: " << argv[0] << " [-pP] [-nN] [-v] <address in hex> <size in quadlets> [write data quadlets in hex]" << std::endl;
+         std::cout << "       where P = port number, N = node number" << std::endl
+                   << "                 can also specify -pethP or -pudp[xx.xx.xx.xx]" << std::endl;
         exit(0);
     }
 
 
     BasePort* Port = NULL;
-    int port = 0;
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
-    Port = new Eth1394Port(port, debugStream);
+#if Amp1394_HAS_PCAP
+    if (desiredPort == BasePort::PORT_ETH_RAW)
+        Port = new EthRawPort(port, debugStream);
+    else
+        Port = new EthUdpPort(port, IPaddr, debugStream);
+#else
+     Port = new EthUdpPort(port, IPaddr, debugStream);
+#endif
+
     if (!Port->IsOK()) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to initialize ethernet port " << port << std::endl;
@@ -122,7 +151,7 @@ int main(int argc, char** argv)
     {
         if (Port->ReadBlock(bid, addr, data, size * 4)) {
             for (j=0; j<size; j++)
-                printf("0x%08X\n", bswap_32(data[j]));
+                std::cout << "0x" << std::hex << std::setfill('0') << std::setw(8) << bswap_32(data[j]) << std::endl;
         }
         else
             std::cerr << "ReadBlock Failed \n";
@@ -137,4 +166,3 @@ int main(int argc, char** argv)
     delete Port;
     return 0;
 }
-

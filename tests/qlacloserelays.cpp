@@ -5,7 +5,7 @@
   Author(s):  Zihan Chen, Anton Deguet
   Created on: 2015
 
-  (C) Copyright 2015 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2015-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -43,11 +43,14 @@ int main(int argc, char** argv)
     }
 
     std::vector<AmpIO *> BoardList;
-    unsigned char * node2board = Port.GetNode2Board();
     for (i = 0; i < Port.GetNumOfNodes(); i++) {
-        std::cout << "Adding firewire Node " << i << ", BoardID " << static_cast<int>(node2board[i]) << std::endl;
-        BoardList.push_back(new AmpIO(node2board[i]));
-        Port.AddBoard(BoardList[i]);
+        int boardId = Port.GetBoardId(i);
+        if (boardId != BoardIO::MAX_BOARDS) {
+            std::cout << "Adding firewire Node " << i << ", BoardID " << boardId << std::endl;
+            AmpIO *board = new AmpIO(boardId);
+            BoardList.push_back(board);
+            Port.AddBoard(board);
+        }
     }
 
     for (j = 0; j < BoardList.size(); j++) {

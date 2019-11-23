@@ -473,7 +473,7 @@ bool EthUdpPort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &
     // Build FireWire packet
     make_qread_packet(sendPacket, node, addr, fw_tl, doNotForward);
     int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_QREAD_SIZE, useEthernetBroadcast);
-    if (nSent != FW_QREAD_SIZE) {
+    if (nSent != static_cast<int>(FW_QREAD_SIZE)) {
         outStr << "ReadQuadlet: failed to send read request via UDP: return value = " << nSent << ", expected = " << FW_QREAD_SIZE << std::endl;
         return false;
     }
@@ -488,7 +488,7 @@ bool EthUdpPort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &
 
     quadlet_t recvPacket[FW_QRESPONSE_SIZE/sizeof(quadlet_t)];
     int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), FW_QRESPONSE_SIZE, ReceiveTimeout);
-    if (nRecv != FW_QRESPONSE_SIZE) {
+    if (nRecv != static_cast<int>(FW_QRESPONSE_SIZE)) {
         outStr << "ReadQuadlet: failed to receive read response via UDP: return value = " << nRecv << ", expected = " << FW_QRESPONSE_SIZE << std::endl;
         return false;
     }
@@ -520,7 +520,7 @@ bool EthUdpPort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t 
 
 
     int nSent = sockPtr->Send(reinterpret_cast<const char *>(buffer), FW_QWRITE_SIZE, useEthernetBroadcast);
-    return (nSent == FW_QWRITE_SIZE);
+    return (nSent == static_cast<int>(FW_QWRITE_SIZE));
 }
 
 bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
@@ -554,7 +554,7 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     // Build FireWire packet
     make_bread_packet(sendPacket, node, addr, nbytes, fw_tl, doNotForward);
     int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_BREAD_SIZE, useEthernetBroadcast);
-    if (nSent != FW_BREAD_SIZE) {
+    if (nSent != static_cast<int>(FW_BREAD_SIZE)) {
         outStr << "ReadBlock: failed to send read request via UDP: return value = " << nSent << ", expected = " << FW_BREAD_SIZE << std::endl;
         return false;
     }
@@ -570,7 +570,7 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     size_t packetSize = FW_BRESPONSE_HEADER_SIZE + nbytes + FW_CRC_SIZE;   // PK TEMP
     quadlet_t *recvPacket = new quadlet_t[packetSize/sizeof(quadlet_t)];
     int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), packetSize, ReceiveTimeout);
-    if (nRecv != packetSize) {
+    if (nRecv != static_cast<int>(packetSize)) {
         outStr << "ReadBlock: failed to receive read response via UDP: return value = " << nRecv << ", expected = " << packetSize << std::endl;
         return false;
     }
@@ -623,7 +623,7 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
     // Build FireWire packet
     make_bwrite_packet(packet, node, addr, wdata, nbytes, fw_tl, doNotForward);
     int nSent = sockPtr->Send(reinterpret_cast<const char *>(packet), packetSize, useEthernetBroadcast);
-    if (nSent != packetSize) {
+    if (nSent != static_cast<int>(packetSize)) {
         outStr << "WriteBlock: failed to send write via UDP: return value = " << nSent << ", expected = " << packetSize << std::endl;
         return false;
     }

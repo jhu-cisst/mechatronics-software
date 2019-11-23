@@ -41,8 +41,7 @@ FirewirePort::PortListType FirewirePort::PortList;
 FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
     BasePort(portNum, debugStream),
     ReadErrorCounter_(0),
-    max_board(0),
-    NumOfNodes_(0)
+    max_board(0)
 {
     Init();
 }

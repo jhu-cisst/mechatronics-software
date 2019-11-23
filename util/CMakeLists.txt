@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2012-2018 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2012-2019 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -39,15 +39,11 @@ if (Amp1394_HAS_RAW1394)
 endif (Amp1394_HAS_RAW1394)
 
 
-# For PCAP
-if (Amp1394_HAS_PCAP)
-  add_executable (blocketh1394 blocketh1394.cpp)
-  target_link_libraries (blocketh1394 raw1394 Amp1394)
+add_executable (blocketh1394 blocketh1394.cpp)
+target_link_libraries (blocketh1394 raw1394 Amp1394)
 
-  add_custom_command (TARGET blocketh1394 POST_BUILD
-                      COMMAND ${CMAKE_COMMAND} -E copy
-                         ${EXECUTABLE_OUTPUT_PATH}/blocketh1394
-                         ${EXECUTABLE_OUTPUT_PATH}/quadeth1394
-                      COMMENT "Generating quad1394eth")
-
-endif (Amp1394_HAS_PCAP)
+add_custom_command (TARGET blocketh1394 POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy
+                       ${EXECUTABLE_OUTPUT_PATH}/blocketh1394
+                       ${EXECUTABLE_OUTPUT_PATH}/quadeth1394
+                    COMMENT "Generating quad1394eth")

@@ -15,6 +15,7 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
+#include <stdio.h>
 #include "BasePort.h"
 
 
@@ -26,6 +27,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         IsNoBoardsBroadcastShorterWait_(true),
         ReadSequence_(0),
         PortNum(portNum),
+        NumOfNodes_(0),
         NumOfBoards_(0),
         BoardInUseMask_(0),
         HubBoard(BoardIO::MAX_BOARDS)
