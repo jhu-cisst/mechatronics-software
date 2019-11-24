@@ -464,19 +464,6 @@ void EthBasePort::PromDelay(void) const
 // Protected
 // ---------------------------------------------------------
 
-int EthBasePort::ConvertBoardToNode(unsigned char boardId, bool &useEthernetBroadcast, bool &doNotForward) const
-{
-    int node = MAX_NODES;                  // Invalid value
-    useEthernetBroadcast = (boardId&FW_NODE_ETH_BROADCAST_MASK) ? true : false;
-    doNotForward = (boardId&FW_NODE_NOFORWARD_MASK) ? true : false;
-    boardId = boardId&FW_NODE_MASK;
-    if (boardId < BoardIO::MAX_BOARDS)
-        node = GetNodeId(boardId);
-    else if (boardId == FW_NODE_BROADCAST)
-        node = FW_NODE_BROADCAST;
-    return node;
-}
-
 // The first 3 quadlets in a FireWire request packet are the same, and we only need to create request packets.
 // Quadlet 0:  | Destination bus (10) | Destination node (6) | TL (6) | RT (2) | TCODE (4) | PRI (4) |
 // Quadlet 1:  | Source bus (10)      | Source node (6)      | Destination offset MSW (16)           |

@@ -130,13 +130,17 @@ public:
     unsigned int GetNumOfNodes(void) const
     { return NumOfNodes_; }
 
-    // Return node id given board id (number)
+    // Return node id given board id (number). See also ConvertBoardToNode.
     unsigned int GetNodeId(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? Board2Node[boardId] : static_cast<unsigned int>(MAX_NODES); }
 
     // Return board number given node id
     unsigned int GetBoardId(unsigned char nodeId) const
     { return (nodeId < MAX_NODES) ? Node2Board[nodeId] : static_cast<unsigned int>(BoardIO::MAX_BOARDS); }
+
+    // Return node number given board id. This function first masks boardId with FW_NODE_MASK and also
+    // checks for the FireWire broadcast (0x3f).
+    unsigned int ConvertBoardToNode(unsigned char boardId) const;
 
     /*!
      \brief Get board firmware version

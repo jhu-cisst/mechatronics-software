@@ -56,8 +56,6 @@ protected:
     // Default implementation may be sufficient (may not need to override)
     virtual bool ScanNodes(void);
 
-    virtual int ConvertBoardToNode(unsigned char boardId, bool &useEthernetBroadcast, bool &doNotForward) const;
-
     static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl,
                                  bool doNotForward = false);
 

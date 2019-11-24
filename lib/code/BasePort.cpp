@@ -145,3 +145,14 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     portType = PORT_FIREWIRE;
     return (sscanf(arg, "%d", &portNum) == 1);
 }
+
+unsigned int BasePort::ConvertBoardToNode(unsigned char boardId) const
+{
+    int node = MAX_NODES;                  // Invalid value
+    boardId = boardId&FW_NODE_MASK;
+    if (boardId < BoardIO::MAX_BOARDS)
+        node = GetNodeId(boardId);
+    else if (boardId == FW_NODE_BROADCAST)
+        node = FW_NODE_BROADCAST;
+    return node;
+}

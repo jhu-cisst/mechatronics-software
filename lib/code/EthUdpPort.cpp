@@ -317,6 +317,7 @@ bool EthUdpPort::RemoveBoard(unsigned char boardId)
     }
     else
         outStr << "RemoveBoard: board " << static_cast<unsigned int>(boardId) << " not in use" << std::endl;
+    return ret;
 }
 
 bool EthUdpPort::ReadAllBoardsBroadcast(void)
@@ -457,9 +458,7 @@ bool EthUdpPort::WriteAllBoardsBroadcast(void)
 bool EthUdpPort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
     // Note: Reading Ethernet broadcast does not seem to work
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "ReadQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
@@ -477,8 +476,8 @@ bool EthUdpPort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     // Build FireWire packet
-    make_qread_packet(sendPacket, node, addr, fw_tl, doNotForward);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_QREAD_SIZE, useEthernetBroadcast);
+    make_qread_packet(sendPacket, node, addr, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
+    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_QREAD_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK);
     if (nSent != static_cast<int>(FW_QREAD_SIZE)) {
         outStr << "ReadQuadlet: failed to send read request via UDP: return value = " << nSent << ", expected = " << FW_QREAD_SIZE << std::endl;
         return false;
@@ -507,9 +506,7 @@ bool EthUdpPort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &
 
 bool EthUdpPort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "WriteQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
@@ -522,10 +519,10 @@ bool EthUdpPort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t 
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     // Build FireWire packet
-    make_qwrite_packet(buffer, node, addr, data, fw_tl, doNotForward);
+    make_qwrite_packet(buffer, node, addr, data, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
 
 
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(buffer), FW_QWRITE_SIZE, useEthernetBroadcast);
+    int nSent = sockPtr->Send(reinterpret_cast<const char *>(buffer), FW_QWRITE_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK);
     return (nSent == static_cast<int>(FW_QWRITE_SIZE));
 }
 
@@ -538,9 +535,7 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         return false;
     }
 
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
@@ -558,8 +553,8 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     // Build FireWire packet
-    make_bread_packet(sendPacket, node, addr, nbytes, fw_tl, doNotForward);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_BREAD_SIZE, useEthernetBroadcast);
+    make_bread_packet(sendPacket, node, addr, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
+    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_BREAD_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK);
     if (nSent != static_cast<int>(FW_BREAD_SIZE)) {
         outStr << "ReadBlock: failed to send read request via UDP: return value = " << nSent << ", expected = " << FW_BREAD_SIZE << std::endl;
         return false;
@@ -596,9 +591,7 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         return false;
     }
 
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "WriteBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
@@ -627,8 +620,8 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
     quadlet_t temp_saved = wdata[nbytes/sizeof(quadlet_t)];
 
     // Build FireWire packet
-    make_bwrite_packet(packet, node, addr, wdata, nbytes, fw_tl, doNotForward);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(packet), packetSize, useEthernetBroadcast);
+    make_bwrite_packet(packet, node, addr, wdata, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
+    int nSent = sockPtr->Send(reinterpret_cast<const char *>(packet), packetSize, boardId&FW_NODE_ETH_BROADCAST_MASK);
     if (nSent != static_cast<int>(packetSize)) {
         outStr << "WriteBlock: failed to send write via UDP: return value = " << nSent << ", expected = " << packetSize << std::endl;
         return false;

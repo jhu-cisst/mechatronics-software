@@ -275,6 +275,7 @@ bool EthRawPort::RemoveBoard(unsigned char boardId)
     }
     else
         outStr << "RemoveBoard: board " << static_cast<unsigned int>(boardId) << " not in use" << std::endl;
+    return ret;
 }
 
 bool EthRawPort::ReadAllBoardsBroadcast(void)
@@ -431,15 +432,13 @@ bool EthRawPort::WriteAllBoardsBroadcast(void)
 bool EthRawPort::ReadQuadlet(unsigned char boardId,
                               nodeaddr_t addr, quadlet_t &data)
 {
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "ReadQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
     }
 
-    bool ret = eth1394_read(node, addr, 4, &data, useEthernetBroadcast);
+    bool ret = eth1394_read(node, addr, 4, &data, boardId&FW_NODE_ETH_BROADCAST_MASK);
     data = bswap_32(data);
     return (!ret);
 }
@@ -447,9 +446,7 @@ bool EthRawPort::ReadQuadlet(unsigned char boardId,
 
 bool EthRawPort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "WriteQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
@@ -468,7 +465,7 @@ bool EthRawPort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t 
     packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, FW_QWRITE_SIZE-FW_CRC_SIZE)));
 
     size_t length_fw = FW_QWRITE_SIZE/sizeof(quadlet_t);
-    return eth1394_write(node, buffer, length_fw, useEthernetBroadcast);
+    return eth1394_write(node, buffer, length_fw, boardId&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
@@ -480,15 +477,13 @@ bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         return false;
     }
 
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
     }
 
-    return !eth1394_read(node, addr, nbytes, rdata, useEthernetBroadcast);
+    return !eth1394_read(node, addr, nbytes, rdata, boardId&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
@@ -501,9 +496,7 @@ bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         return false;
     }
 
-    bool useEthernetBroadcast;
-    bool doNotForward;
-    int node = ConvertBoardToNode(boardId, useEthernetBroadcast, doNotForward);
+    int node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "WriteBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
@@ -553,7 +546,7 @@ bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
     *fw_crc = bswap_32(BitReverse32(crc32(0U, (void*)fw_data, nbytes)));
 
     size_t length_fw = (FW_BWRITE_HEADER_SIZE + nbytes + FW_CRC_SIZE)/sizeof(quadlet_t);  // size in quadlets
-    bool ret = eth1394_write(node, frame, length_fw, useEthernetBroadcast);
+    bool ret = eth1394_write(node, frame, length_fw, boardId&FW_NODE_ETH_BROADCAST_MASK);
     *fw_crc = temp_saved;   // PK TEMP for real-time writes
     if (!realTimeWrite)
         delete [] frame;
