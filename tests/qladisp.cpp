@@ -128,7 +128,7 @@ int main(int argc, char** argv)
         // usage
         std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
-                  << "                 can also specify -pfwP, -pethP or -pudp" << std::endl
+                  << "                 can also specify -pfwP, -pethP or -pudp[xx.xx.xx.xx]" << std::endl
                   << std::endl;
 
 #if Amp1394_HAS_RAW1394

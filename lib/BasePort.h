@@ -34,6 +34,9 @@ http://www.cisst.org/cisst/license.txt.
  * may have a node number assigned by the underlying bus (this is true for FireWire).
  * The maximum number of boards is given by BoardIO::MAX_BOARDS (16) and we set the
  * maximum number of nodes (MAX_NODES) to 64, which corresponds to the FireWire limit.
+ * Note, however, that FireWire assigns nodes sequentially, starting with 0, so there
+ * should not be more than MAX_BOARDS+1 nodes on the bus (+1 for PC) unless other
+ * FireWire device are connected.
  *
  * There are three concrete derived classes:
  *     FirewirePort:  sends FireWire packets via FireWire

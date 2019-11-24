@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -50,18 +50,31 @@ if (Amp1394_HAS_RAW1394)
            RUNTIME DESTINATION bin)
 endif (Amp1394_HAS_RAW1394)
 
-if (Amp1394_HAS_PCAP)
-  add_executable(eth1394Test mainEth1394.cpp)
-  target_link_libraries(eth1394Test ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
-  install (TARGETS eth1394Test
-           COMPONENT Amp1394-utils
-           RUNTIME DESTINATION bin)
-endif (Amp1394_HAS_PCAP)
+add_executable(eth1394Test mainEth1394.cpp)
+target_link_libraries(eth1394Test ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+install (TARGETS eth1394Test
+         COMPONENT Amp1394-utils
+         RUNTIME DESTINATION bin)
 
-if (Amp1394_HAS_RAW1394 OR Amp1394_HAS_PCAP)
-  add_executable(instrument instrument.cpp)
-  target_link_libraries(instrument ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
-  install (TARGETS instrument
-           COMPONENT Amp1394-utils
-           RUNTIME DESTINATION bin)
-endif (Amp1394_HAS_RAW1394 OR Amp1394_HAS_PCAP)
+add_executable(instrument instrument.cpp)
+target_link_libraries(instrument ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+install (TARGETS instrument
+         COMPONENT Amp1394-utils
+         RUNTIME DESTINATION bin)
+
+add_executable (block1394eth block1394eth.cpp)
+target_link_libraries (block1394eth raw1394 Amp1394)
+
+add_custom_command (TARGET block1394eth POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy
+                       ${EXECUTABLE_OUTPUT_PATH}/block1394eth
+                       ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
+                    COMMENT "Generating quad1394eth")
+
+install (TARGETS block1394eth
+         COMPONENT Amp1394-utils
+         RUNTIME DESTINATION bin)
+
+install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
+         COMPONENT Amp1394-utils
+         DESTINATION bin)

@@ -3,11 +3,8 @@
 
 /******************************************************************************
  *
- * This is a variation of block1394.c that relies on the Amp1394 library.
- * Thus, it probably should not be in this directory, which otherwise contains
- * low-level utility programs that do not depend on Amp1394. Also, it could
- * be used for Firewire, with the caveat that it would duplicate the block1394.c
- * functionality in that case.
+ * This is a variation of util/block1394.c that relies on the Amp1394 library,
+ * thus it can support connecting via Firewire, Ethernet Raw (PCAP) or UDP.
  *
  ******************************************************************************/
 
@@ -19,6 +16,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <Amp1394/AmpIORevision.h>
+#if Amp1394_HAS_RAW1394
+#include "FirewirePort.h"
+#endif
 #if Amp1394_HAS_PCAP
 #include "EthRawPort.h"
 #endif
@@ -48,7 +48,11 @@ int main(int argc, char** argv)
     int i,j;
     int bid = BoardIO::MAX_BOARDS;
     bool verbose = false;
+#if Amp1394_HAS_RAW1394
+    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
+#else
     BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
+#endif
     int port = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
@@ -98,7 +102,7 @@ int main(int argc, char** argv)
         else
             std::cout << "Usage: " << argv[0] << " [-pP] [-nN] [-v] <address in hex> <size in quadlets> [write data quadlets in hex]" << std::endl;
          std::cout << "       where P = port number, N = node number" << std::endl
-                   << "                 can also specify -pethP or -pudp[xx.xx.xx.xx]" << std::endl;
+                   << "                 can also specify -pfwP, -pethP or -pudp[xx.xx.xx.xx]" << std::endl;
         exit(0);
     }
 
@@ -106,14 +110,27 @@ int main(int argc, char** argv)
     BasePort* Port = NULL;
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
-#if Amp1394_HAS_PCAP
-    if (desiredPort == BasePort::PORT_ETH_RAW)
-        Port = new EthRawPort(port, debugStream);
-    else
-        Port = new EthUdpPort(port, IPaddr, debugStream);
+    if (desiredPort == BasePort::PORT_FIREWIRE) {
+#if Amp1394_HAS_RAW1394
+        Port = new FirewirePort(port, debugStream);
 #else
-     Port = new EthUdpPort(port, IPaddr, debugStream);
+        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
+        return -1;
 #endif
+    }
+    else if (desiredPort == BasePort::PORT_ETH_UDP) {
+        Port = new EthUdpPort(port, IPaddr, debugStream);
+        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+    }
+    else if (desiredPort == BasePort::PORT_ETH_RAW) {
+#if Amp1394_HAS_PCAP
+        Port = new EthRawPort(port, debugStream);
+        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
+#else
+        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
+        return -1;
+#endif
+    }
 
     if (!Port->IsOK()) {
         PrintDebugStream(debugStream);
