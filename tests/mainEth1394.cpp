@@ -516,7 +516,7 @@ int main(int argc, char **argv)
             break;
 
         case 'i':
-            std::cout << "IP Address = " << std::hex << board1.ReadIPv4Address() << std::endl;
+            std::cout << "IP Address = " << EthUdpPort::IP_String(board1.ReadIPv4Address()) << std::endl;
             break;
 
         case 'I':
@@ -542,8 +542,10 @@ int main(int argc, char **argv)
     }
 
     tcsetattr(0, TCSANOW, &oldTerm);  // Restore terminal I/O settings
-    FwPort.RemoveBoard(boardNum);
+    if (FwPort.IsOK())
+        FwPort.RemoveBoard(boardNum);
 #endif
-    EthPort->RemoveBoard(boardNum);
+    if (EthPort->IsOK())
+        EthPort->RemoveBoard(boardNum);
     return 0;
 }

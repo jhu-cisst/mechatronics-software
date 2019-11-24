@@ -127,9 +127,9 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
         ServerAddrBroadcast.sin_addr.s_addr = ServerAddr.sin_addr.s_addr|0xff000000;
     else
         ServerAddrBroadcast.sin_addr.s_addr = 0xffffffff;
-    outStr << "Server IP: " << host << ", Port: " << port << std::endl;
+    outStr << "Server IP: " << host << ", Port: " << std::dec << port << std::endl;
     outStr << "Broadcast IP: " << EthUdpPort::IP_String(ServerAddrBroadcast.sin_addr.s_addr)
-           << ", Port: " << port << std::endl;
+           << ", Port: " << std::dec << port << std::endl;
     return true;
 }
 
@@ -307,10 +307,16 @@ bool EthUdpPort::AddBoard(BoardIO *board)
 
 bool EthUdpPort::RemoveBoard(unsigned char boardId)
 {
-    // Free up the memory that was allocated in AddBoard
-    delete [] BoardList[boardId]->GetWriteBuffer();
-    BoardList[boardId]->InitWriteBuffer(0, 0);
-    return BasePort::RemoveBoard(boardId);
+    bool ret = false;
+    BoardIO *board = BoardList[boardId];
+    if (board) {
+        // Free up the memory that was allocated in AddBoard
+        delete [] BoardList[boardId]->GetWriteBuffer();
+        BoardList[boardId]->InitWriteBuffer(0, 0);
+        ret = BasePort::RemoveBoard(boardId);
+    }
+    else
+        outStr << "RemoveBoard: board " << static_cast<unsigned int>(boardId) << " not in use" << std::endl;
 }
 
 bool EthUdpPort::ReadAllBoardsBroadcast(void)

@@ -265,10 +265,16 @@ bool EthRawPort::AddBoard(BoardIO *board)
 
 bool EthRawPort::RemoveBoard(unsigned char boardId)
 {
-    // Free up the memory that was allocated in AddBoard
-    delete [] BoardList[boardId]->GetWriteBuffer();
-    BoardList[boardId]->InitWriteBuffer(0, 0);
-    return BasePort::RemoveBoard(boardId);
+    bool ret = false;
+    BoardIO *board = BoardList[boardId];
+    if (board) {
+        // Free up the memory that was allocated in AddBoard
+        delete [] BoardList[boardId]->GetWriteBuffer();
+        BoardList[boardId]->InitWriteBuffer(0, 0);
+        ret = BasePort::RemoveBoard(boardId);
+    }
+    else
+        outStr << "RemoveBoard: board " << static_cast<unsigned int>(boardId) << " not in use" << std::endl;
 }
 
 bool EthRawPort::ReadAllBoardsBroadcast(void)
