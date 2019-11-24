@@ -245,6 +245,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
     debugStream << "Flags: ";
+    if (p->moreFlags&0x20) debugStream << "isLocal ";
+    if (p->moreFlags&0x10) debugStream << "isRemote ";
     if (p->moreFlags&0x08) debugStream << "fwPacketFresh ";
     if (p->moreFlags&0x04) debugStream << "isBroadcast ";
     if (p->moreFlags&0x02) debugStream << "isMulticast ";
@@ -475,6 +477,10 @@ int EthBasePort::ConvertBoardToNode(unsigned char boardId, bool &useEthernetBroa
     return node;
 }
 
+// The first 3 quadlets in a FireWire request packet are the same, and we only need to create request packets.
+// Quadlet 0:  | Destination bus (10) | Destination node (6) | TL (6) | RT (2) | TCODE (4) | PRI (4) |
+// Quadlet 1:  | Source bus (10)      | Source node (6)      | Destination offset MSW (16)           |
+// Quadlet 2:  | Destination offset (32)                                                             |
 void EthBasePort::make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
                                    unsigned int tl, bool doNotForward)
 {
@@ -489,6 +495,8 @@ void EthBasePort::make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t 
     packet[2] = bswap_32(addr&0xFFFFFFFF);
 }
 
+//  Create a quadlet read request packet.
+// In addition to the header, it contains the CRC in Quadlet 3.
 void EthBasePort::make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl, bool doNotForward)
 {
     make_1394_header(packet, node, addr, EthBasePort::QREAD, tl, doNotForward);
@@ -496,6 +504,8 @@ void EthBasePort::make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t
     packet[3] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_QREAD_SIZE-FW_CRC_SIZE)));
 }
 
+// Create a quadlet write packet.
+// In addition to the header, it contains the 32-bit data (Quadlet 3) and the CRC (Quadlet 4).
 void EthBasePort::make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned int tl, bool doNotForward)
 {
     make_1394_header(packet, node, addr, EthBasePort::QWRITE, tl, doNotForward);
@@ -505,6 +515,10 @@ void EthBasePort::make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_
     packet[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_QWRITE_SIZE-FW_CRC_SIZE)));
 }
 
+// Create a block read request packet.
+// In addition to the header, it contains the following:
+// Quadlet 3:  | Data length (16) | Extended tcode (16) |
+// Quadlet 4:  | CRC (32)                               |
 void EthBasePort::make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl, bool doNotForward)
 {
     make_1394_header(packet, node, addr, EthBasePort::BREAD, tl, doNotForward);
@@ -513,6 +527,12 @@ void EthBasePort::make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t
     packet[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_BREAD_SIZE-FW_CRC_SIZE)));
 }
 
+// Create a block write packet.
+// In addition to the header, it contains the following:
+// Quadlet 3:  | Data length (16) | Extended tcode (16) |
+// Quadlet 4:  | Header CRC (32)                        |
+// Quadlet 5 to 5+N | Data block (N quadlets)           |
+// Quadlet 5+N+1:   | Data CRC (32)                     |
 void EthBasePort::make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl, bool doNotForward)
 {
     make_1394_header(packet, node, addr, EthBasePort::BWRITE, tl, doNotForward);
@@ -520,10 +540,11 @@ void EthBasePort::make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_
     // header CRC
     packet[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_BWRITE_HEADER_SIZE-FW_CRC_SIZE)));
     // Now, copy the data. We first check if the copy is needed.
-    size_t data_offset = FW_BWRITE_HEADER_SIZE/sizeof(quadlet_t);
+    size_t data_offset = FW_BWRITE_HEADER_SIZE/sizeof(quadlet_t);  // data_offset = 20/4 = 5
+    // Only copy data if it is not already in packet (i.e., if addresses are not equal).
     if (data != &packet[data_offset])
         memcpy(&packet[data_offset], data, nBytes);
-    // Now, compute the data CRC
+    // Now, compute the data CRC (assumes nBytes is a multiple of 4 because this is checked in WriteBlock)
     size_t data_crc_offset = data_offset + nBytes/sizeof(quadlet_t);
     packet[data_crc_offset] = bswap_32(BitReverse32(crc32(0U, static_cast<void *>(packet+data_offset), nBytes)));
 }

@@ -620,7 +620,7 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
     memcpy(frame, frame_hdr, 14);
     if (useEthernetBroadcast) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
-        frame[5] = node;     // keep multicast address
+        frame[5] = 0xff;     // keep multicast address
     } else {
         frame[5] = HubBoard;   // last byte of dest address is bridge board id
     }
@@ -665,7 +665,7 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
             numPackets++;
             if (headercheck((unsigned char *)packet, true)) {
                 if ((node != 0xff) && (packet[11] != HubBoard)) {
-                    outStr << "Packet not from node " << HubBoard << " (src lsb is "
+                    outStr << "Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
                            << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
                     continue;
                 }
@@ -735,7 +735,7 @@ bool EthRawPort::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_f
     memcpy(frame, frame_hdr, 12);
     if (useEthernetBroadcast) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
-        frame[5] = node;     // keep multicast address
+        frame[5] = 0xff;     // keep multicast address
     }
     frame[5] = HubBoard;     // last byte of dest address is board id
 

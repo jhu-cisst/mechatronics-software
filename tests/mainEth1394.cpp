@@ -297,18 +297,42 @@ bool QuadletReadCallback(EthBasePort &, unsigned char boardId, std::ostream &deb
 
 int main(int argc, char **argv)
 {
-    bool useUDP = true;
+    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
+    int port = 0;
+    std::string IPaddr(ETH_UDP_DEFAULT_IP);
+
     unsigned char boardNum = 0;
     if (argc > 1) {
-        int boardNumInt;
-        if (sscanf(argv[1], "%d", &boardNumInt) == 1)
-            boardNum = static_cast<unsigned char>(boardNumInt);
-        else
-            std::cout << "Invalid board number: " << argv[1] << std::endl;
-#ifdef AMP1349_HAS_PCAP
-        if (argv[2][0] == 'p')
-            useUDP = false;
-#endif
+        int args_found = 0;
+        for (int i = 1; i < argc; i++) {
+            if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
+                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                    std::cerr << "Failed to parse option: " << argv[i] << std::endl;
+                    return 0;
+                }
+                if (desiredPort == BasePort::PORT_FIREWIRE) {
+                    std::cerr << "Please select Ethernet raw (-pethP) or UDP (-pudp[xx.xx.xx.xx])" << std::endl;
+                    return 0;
+                }
+            }
+            else if (args_found == 0) {
+                int boardNumInt;
+                if (sscanf(argv[i], "%d", &boardNumInt) == 1) {
+                    boardNum = static_cast<unsigned char>(boardNumInt);
+                    args_found++;
+                }
+                else
+                    std::cout << "Invalid board number: " << argv[i] << " (ignored)" << std::endl;
+            }
+            else {
+                    std::cerr << "Usage: eth1394test [<board-num>] [-pP]" << std::endl
+                    << "       where <board-num> = rotary switch setting (0-15, default 0)" << std::endl
+                    << "             P = port number (default 0)" << std::endl
+                    << "                 can also specify -pethP or -pudp" << std::endl;
+                    return 0;
+            }
+
+        }
     }
     std::cout << "Testing board " << (int)boardNum << std::endl;
 
@@ -337,14 +361,14 @@ int main(int argc, char **argv)
     //QuadletReadCallbackBoardId = board1.GetBoardId();
 #endif
     EthBasePort *EthPort = 0;
-    if (useUDP) {
+    if (desiredPort == BasePort::PORT_ETH_UDP) {
         std::cout << "Creating Ethernet UDP port" << std::endl;
-        EthPort = new EthUdpPort(0, ETH_UDP_DEFAULT_IP, std::cout);
+        EthPort = new EthUdpPort(port, IPaddr, std::cout);
     }
-#if AMP1394_HAS_PCAP
-    else {
+#if Amp1394_HAS_PCAP
+    else if (desiredPort == BasePort::PORT_ETH_RAW) {
         std::cout << "Creating Ethernet raw (PCAP) port" << std::endl;
-        EthPort = new EthRawPort(0, std::cout);
+        EthPort = new EthRawPort(port, std::cout);
     }
 #endif
     if (!EthPort) {
