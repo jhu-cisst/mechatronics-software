@@ -56,6 +56,12 @@ protected:
     // Default implementation may be sufficient (may not need to override)
     virtual bool ScanNodes(void);
 
+    //! Read quadlet from node (internal method called by ReadQuadlet)
+    virtual bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0) = 0;
+
+    //! Write quadlet to node (internal method called by WriteQuadlet)
+    virtual bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0) = 0;
+
     static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl,
                                  bool doNotForward = false);
 
@@ -88,6 +94,12 @@ public:
 
     // Write to all boards
     bool WriteAllBoards(void);
+
+    // Read a quadlet from the specified board
+    bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
+
+    // Write a quadlet to the specified board
+    bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
     /*!
      \brief Write a quadlet to all boards using broadcasting

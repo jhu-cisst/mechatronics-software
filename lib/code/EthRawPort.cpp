@@ -220,11 +220,11 @@ bool EthRawPort::InitNodes(void)
 {
     // Find board id for first board (i.e., one connected by Ethernet)
     quadlet_t data = 0x0;   // initialize data to 0
-    bool ret = ReadQuadlet((FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK|FW_NODE_BROADCAST), 0, data);
+    bool ret = ReadQuadletNode(FW_NODE_BROADCAST, 0, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK));
     // One retry
     if (!ret) {
         outStr << "ScanNodes: multicast failed, retrying" << std::endl;
-        ret = ReadQuadlet((FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK|FW_NODE_BROADCAST), 0, data);
+        ret = ReadQuadletNode(FW_NODE_BROADCAST, 0, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK));
     }
     if (!ret) {
         outStr << "InitNodes: no response via multicast" << std::endl;
@@ -429,29 +429,16 @@ bool EthRawPort::WriteAllBoardsBroadcast(void)
     return allOK;
 }
 
-bool EthRawPort::ReadQuadlet(unsigned char boardId,
-                              nodeaddr_t addr, quadlet_t &data)
+bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
-    int node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "ReadQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
-    bool ret = eth1394_read(node, addr, 4, &data, boardId&FW_NODE_ETH_BROADCAST_MASK);
+    bool ret = eth1394_read(node, addr, 4, &data, flags&FW_NODE_ETH_BROADCAST_MASK);
     data = bswap_32(data);
     return (!ret);
 }
 
 
-bool EthRawPort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
+bool EthRawPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
 {
-    int node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "WriteQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
     // Create buffer that is large enough for Ethernet header and Firewire packet
     quadlet_t buffer[(ETH_ALIGN32+ETH_HEADER_LEN+FW_QWRITE_SIZE)/sizeof(quadlet_t)];
     quadlet_t *packet_FW = buffer + (ETH_ALIGN32+ETH_HEADER_LEN)/sizeof(quadlet_t);
@@ -465,7 +452,7 @@ bool EthRawPort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t 
     packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, FW_QWRITE_SIZE-FW_CRC_SIZE)));
 
     size_t length_fw = FW_QWRITE_SIZE/sizeof(quadlet_t);
-    return eth1394_write(node, buffer, length_fw, boardId&FW_NODE_ETH_BROADCAST_MASK);
+    return eth1394_write(node, buffer, length_fw, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
@@ -477,7 +464,7 @@ bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         return false;
     }
 
-    int node = ConvertBoardToNode(boardId);
+    nodeid_t node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;
@@ -496,7 +483,7 @@ bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         return false;
     }
 
-    int node = ConvertBoardToNode(boardId);
+    nodeid_t node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "WriteBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
         return false;

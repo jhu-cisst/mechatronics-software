@@ -67,6 +67,12 @@ protected:
     //! Initialize nodes on the bus
     bool InitNodes(void);
 
+    //! Read quadlet from node (internal method called by ReadQuadlet)
+    bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
+
+    //! Write quadlet to node (internal method called by WriteQuadlet)
+    bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
+
 public:
     EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
@@ -92,11 +98,9 @@ public:
     // Write to all boards using broadcasting
     bool WriteAllBoardsBroadcast(void);
 
-    // Read a quadlet from the specified board
-    bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
+    // ReadQuadlet in EthBasePort
 
-    // Write a quadlet to the specified board
-    bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
+    // WriteQuadlet in EthBasePort
 
     // Read a block from the specified board
     bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,

@@ -146,9 +146,9 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     return (sscanf(arg, "%d", &portNum) == 1);
 }
 
-unsigned int BasePort::ConvertBoardToNode(unsigned char boardId) const
+nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
 {
-    int node = MAX_NODES;                  // Invalid value
+    nodeid_t node = MAX_NODES;                  // Invalid value
     boardId = boardId&FW_NODE_MASK;
     if (boardId < BoardIO::MAX_BOARDS)
         node = GetNodeId(boardId);

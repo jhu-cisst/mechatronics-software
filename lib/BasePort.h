@@ -55,6 +55,7 @@ const unsigned long QLA1_String = 0x514C4131;
 // not forward (0x40) the received packet to other boards via FireWire.
 const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast
 const unsigned char FW_NODE_NOFORWARD_MASK     = 0x40;   // Mask to prevent forwarding by Ethernet/FireWire bridge
+const unsigned char FW_NODE_FLAGS_MASK         = 0xc0;   // Mask for above flags
 const unsigned char FW_NODE_MASK               = 0x3f;   // Mask for valid FireWire node numbers (0-63)
 const unsigned char FW_NODE_BROADCAST          = 0x3f;   // Value for FireWire broadcast
 
@@ -101,7 +102,7 @@ protected:
 
     // Mappings between board numbers and node numbers
     unsigned char Node2Board[MAX_NODES];
-    unsigned char Board2Node[BoardIO::MAX_BOARDS];
+    nodeid_t Board2Node[BoardIO::MAX_BOARDS];
 
 public:
 
@@ -131,8 +132,8 @@ public:
     { return NumOfNodes_; }
 
     // Return node id given board id (number). See also ConvertBoardToNode.
-    unsigned int GetNodeId(unsigned char boardId) const
-    { return (boardId < BoardIO::MAX_BOARDS) ? Board2Node[boardId] : static_cast<unsigned int>(MAX_NODES); }
+    nodeid_t GetNodeId(unsigned char boardId) const
+    { return (boardId < BoardIO::MAX_BOARDS) ? Board2Node[boardId] : static_cast<nodeid_t>(MAX_NODES); }
 
     // Return board number given node id
     unsigned int GetBoardId(unsigned char nodeId) const
@@ -140,7 +141,7 @@ public:
 
     // Return node number given board id. This function first masks boardId with FW_NODE_MASK and also
     // checks for the FireWire broadcast (0x3f).
-    unsigned int ConvertBoardToNode(unsigned char boardId) const;
+    nodeid_t ConvertBoardToNode(unsigned char boardId) const;
 
     /*!
      \brief Get board firmware version

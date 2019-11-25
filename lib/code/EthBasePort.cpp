@@ -290,7 +290,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
 
 bool EthBasePort::ScanNodes(void)
 {
-    unsigned int node, board;  // loop counters
+    unsigned int board;
+    nodeid_t node;
 
     // Clear any existing Node2Board
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
@@ -302,10 +303,10 @@ bool EthBasePort::ScanNodes(void)
 
     quadlet_t data;
     outStr << "ScanNodes: building node map" << std::endl;
-    for (int node = 0; node < BoardIO::MAX_BOARDS; node++)
+    for (node = 0; node < BoardIO::MAX_BOARDS; node++)
     {
         // check hardware version
-        if (!ReadQuadlet(node, 4, data))
+        if (!ReadQuadletNode(node, 4, data))
             continue;
 
         if (data != QLA1_String) {
@@ -316,7 +317,7 @@ bool EthBasePort::ScanNodes(void)
 
         // read firmware version
         unsigned long fver = 0;
-        if (!ReadQuadlet(node, 7, data)) {
+        if (!ReadQuadletNode(node, 7, data)) {
             outStr << "ScanNodes: unable to read firmware version from node "
                    << node << std::endl;
             continue;
@@ -324,7 +325,7 @@ bool EthBasePort::ScanNodes(void)
         fver = data;
 
         // read board id
-        if (!ReadQuadlet(node, 0, data)) {
+        if (!ReadQuadletNode(node, 0, data)) {
             outStr << "ScanNodes: unable to read status from node " << node << std::endl;
             continue;
         }
@@ -444,6 +445,27 @@ bool EthBasePort::WriteAllBoards()
     if (noneWritten)
         outStr << "Failed to write any board, check Ethernet physical connection" << std::endl;
     return allOK;
+}
+
+bool EthBasePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
+{
+    nodeid_t node = ConvertBoardToNode(boardId);
+    if (node == static_cast<nodeid_t>(MAX_NODES)) {
+        outStr << "ReadQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
+        return false;
+    }
+    return ReadQuadletNode(node, addr, data, boardId&FW_NODE_FLAGS_MASK);
+}
+
+bool EthBasePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
+{
+    nodeid_t node = ConvertBoardToNode(boardId);
+    if (node == static_cast<nodeid_t>(MAX_NODES)) {
+        outStr << "WriteQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
+        return false;
+    }
+
+    return WriteQuadletNode(node, addr, data, boardId&FW_NODE_FLAGS_MASK);
 }
 
 bool EthBasePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)

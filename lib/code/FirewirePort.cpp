@@ -226,7 +226,8 @@ void FirewirePort::PollEvents(void)
 bool FirewirePort::ScanNodes(void)
 {
 
-    int node, board;  // loop counters
+    int board;
+    nodeid_t node;
 
     // Clear any existing Node2Board
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
@@ -661,7 +662,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
-    int node = GetNodeId(boardId);
+    nodeid_t node = GetNodeId(boardId);
     bool ret = false;
     if (node < MAX_NODES) {
         ret = !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
@@ -672,7 +673,7 @@ bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
 
 bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
-    int node = GetNodeId(boardId);
+    nodeid_t node = GetNodeId(boardId);
     bool ret = false;
     if (node < MAX_NODES) {
         data = bswap_32(data);
@@ -693,7 +694,7 @@ bool FirewirePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
 bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                              unsigned int nbytes)
 {
-    int node = GetNodeId(boardId);
+    nodeid_t node = GetNodeId(boardId);
     if (node < MAX_NODES)
         return !raw1394_read(handle, baseNodeId+node, addr, nbytes, rdata);
     else
@@ -703,7 +704,7 @@ bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
 bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                               unsigned int nbytes)
 {
-    int node = GetNodeId(boardId);
+    nodeid_t node = GetNodeId(boardId);
     if (node < MAX_NODES)
         return !raw1394_write(handle, baseNodeId+node, addr, nbytes, wdata);
     else
