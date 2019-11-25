@@ -136,7 +136,7 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     }
     out << std::endl;
 
-    if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
+    if ((tcode == BWRITE) || (tcode == BRESPONSE) || (tcode == BREAD)) {
         data_length = (packet[3]&0xffff0000) >> 16;
         out << "data_length: " << std::dec << data_length
             << ", ext_tcode: " << std::hex << (packet[3]&0x0000ffff) << std::endl;
@@ -152,11 +152,13 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     else
         out << "header_crc: " << std::hex << packet[4] << std::endl;
 
-    unsigned int lim = (data_length <= max_quads-5) ? data_length : max_quads-5;
-    for (unsigned int i = 0; i < lim; i++)
-        out << "data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
-    if ((data_length > 0) && (data_length < max_quads-5))
-        out << "data_crc: " << std::hex << packet[5+data_length] << std::endl;
+    if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
+        unsigned int lim = (data_length <= max_quads-5) ? data_length : max_quads-5;
+        for (unsigned int i = 0; i < lim; i++)
+            out << "data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
+        if ((data_length > 0) && (data_length < max_quads-5))
+            out << "data_crc: " << std::hex << packet[5+data_length] << std::endl;
+    }
 }
 
 void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)

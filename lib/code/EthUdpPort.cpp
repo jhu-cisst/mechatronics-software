@@ -489,12 +489,17 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
     quadlet_t recvPacket[FW_QRESPONSE_SIZE/sizeof(quadlet_t)];
     int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), FW_QRESPONSE_SIZE, ReceiveTimeout);
     if (nRecv != static_cast<int>(FW_QRESPONSE_SIZE)) {
-        outStr << "ReadQuadlet: failed to receive read response via UDP: return value = " << nRecv << ", expected = " << FW_QRESPONSE_SIZE << std::endl;
+        unsigned int boardId = Node2Board[node];
+        if (boardId < BoardIO::MAX_BOARDS) {
+            // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
+            outStr << "ReadQuadlet: failed to receive read response from board " << boardId << " via UDP: return value = "
+                   << nRecv << ", expected = " << FW_QRESPONSE_SIZE << std::endl;
+        }
         return false;
     }
     if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), 0, EthBasePort::QRESPONSE, fw_tl))
         return false;
-    data = bswap_32(data);
+    data = bswap_32(recvPacket[3]);
     return true;
 }
 
