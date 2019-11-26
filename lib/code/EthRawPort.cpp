@@ -637,16 +637,21 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
     unsigned int numPacketsValid = 0;
     double timeDiffSec = 0.0;
 
-    while ((numPacketsValid < 1) && (timeDiffSec < 0.5)) {
+    while ((numPacketsValid < 1) && (timeDiffSec < 0.1)) {
         while (1) {  // can probably eliminate this loop
             packet = pcap_next(handle, &header);
             if (packet == NULL)
                 break;
             numPackets++;
             if (headercheck((unsigned char *)packet, true)) {
-                if ((node != 0xff) && (packet[11] != HubBoard)) {
+                if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
                     outStr << "Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
                            << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
+                    continue;
+                }
+                nodeid_t src_node = packet[18]&FW_NODE_MASK;
+                if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
+                    outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
                     continue;
                 }
                 //unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
@@ -693,8 +698,12 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
     }
 
     if (numPacketsValid < 1) {
-        outStr << "Error: Receive failed, addr = " << std::hex << addr
-               << ", nbytes = " << length << ", time = " << timeDiffSec << " sec" << ", num pkt = " << numPackets << std::endl;
+        unsigned int boardId = Node2Board[node];
+        if (boardId < BoardIO::MAX_BOARDS) {
+            // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
+            outStr << "Error: Receive failed, addr = " << std::hex << addr
+                   << ", nbytes = " << length << ", time = " << timeDiffSec << " sec" << ", num pkt = " << numPackets << std::endl;
+        }
         return -1;
     }
 #if 0

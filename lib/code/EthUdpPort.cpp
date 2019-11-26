@@ -497,7 +497,7 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
         }
         return false;
     }
-    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), 0, EthBasePort::QRESPONSE, fw_tl))
+    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), 0, node, EthBasePort::QRESPONSE, fw_tl))
         return false;
     data = bswap_32(recvPacket[3]);
     return true;
@@ -569,7 +569,7 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         outStr << "ReadBlock: failed to receive read response via UDP: return value = " << nRecv << ", expected = " << packetSize << std::endl;
         return false;
     }
-    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), packetSize, EthBasePort::BRESPONSE, fw_tl))
+    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), nbytes, node, EthBasePort::BRESPONSE, fw_tl))
         return false;
     memcpy(rdata, &recvPacket[5], nbytes);   // PK TEMP
     return true;

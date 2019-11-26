@@ -137,10 +137,11 @@ public:
 
     // Check if FireWire packet valid
     //   length:  length of data sectio (for BRESPONSE)
+    //   node:    expected source node
     //   tcode:   expected tcode (e.g., QRESPONSE or BRESPONSE)
     //   tl:      transaction label
     // PK TODO: Make it static? Need to handle outStr
-    bool CheckFirewirePacket(const unsigned char *packet, size_t length, unsigned int tcode, unsigned int tl);
+    bool CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl);
 
     static bool checkCRC(const unsigned char *packet);
 

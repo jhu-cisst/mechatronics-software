@@ -78,7 +78,7 @@ void EthBasePort::PrintIP(std::ostream &outStr, const char* name, const uint8_t 
 }
 
 //TODO: fix for byteswapping
-bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, unsigned int tcode, unsigned int tl)
+bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl)
 {
     if (!checkCRC(packet)) {
         outStr << "CheckFirewirePacket: CRC error" << std::endl;
@@ -87,6 +87,11 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
     int tcode_recv = packet[3] >> 4;
     if (tcode_recv != tcode) {
         outStr << "Unexpected tcode: received = " << tcode_recv << ", expected = " << tcode << std::endl;
+        return false;
+    }
+    nodeid_t src_node = packet[4]&FW_NODE_MASK;
+    if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
+        outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
         return false;
     }
     // TODO: could also check QRESPONSE length
@@ -500,13 +505,14 @@ void EthBasePort::make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t 
     // Finally, we use the PRI field to indicate when a packet should not be forwarded (PRI=1).
     unsigned char fw_pri = doNotForward ? 1 : 0;
     packet[0] = bswap_32((0xFFC0 | (node&FW_NODE_MASK)) << 16 | (tl & 0x003F) << 10 | (tcode & 0x000F) << 4 | (fw_pri & 0x000F));
-    // FFFF is used as source ID (most significant 16 bits); not sure if this is needed.
+    // FFD0 is used as source ID (most significant 16 bits); this sets source node to 0x10 (16).
+    // Previously, FFFF was used, which set the source node to 0x3f (63), which is the broadcast address.
     // This is followed by the destination address, which is 48-bits long
-    packet[1] = bswap_32(0xFFFF << 16 | ((addr & 0x0000FFFF00000000) >> 32));
+    packet[1] = bswap_32((0xFFD0 << 16) | ((addr & 0x0000FFFF00000000) >> 32));
     packet[2] = bswap_32(addr&0xFFFFFFFF);
 }
 
-//  Create a quadlet read request packet.
+// Create a quadlet read request packet.
 // In addition to the header, it contains the CRC in Quadlet 3.
 void EthBasePort::make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl, bool doNotForward)
 {
