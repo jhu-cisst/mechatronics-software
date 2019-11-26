@@ -145,6 +145,8 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
         data_length = (packet[3]&0xffff0000) >> 16;
         out << "data_length: " << std::dec << data_length
             << ", ext_tcode: " << std::hex << (packet[3]&0x0000ffff) << std::endl;
+        if (data_length%4 != 0)
+            out << "WARNING: data_length is not a multiple of 4" << std::endl;
     }
     else if ((tcode == QWRITE) || (tcode == QRESPONSE)) {
         out << "data: " << std::hex << packet[3] << std::endl;
@@ -158,6 +160,7 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
         out << "header_crc: " << std::hex << packet[4] << std::endl;
 
     if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
+        data_length /= sizeof(quadlet_t);   // data_length in quadlets
         unsigned int lim = (data_length <= max_quads-5) ? data_length : max_quads-5;
         for (unsigned int i = 0; i < lim; i++)
             out << "data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
