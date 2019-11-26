@@ -347,6 +347,8 @@ int main(int argc, char **argv)
 
     AmpIO board1(boardNum);
     AmpIO board2(boardNum);
+    unsigned int hub_num = boardNum;  // may get assigned later
+    AmpIO *hub_board = &board1;       // may get assigned later
 
 #if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
@@ -355,8 +357,8 @@ int main(int argc, char **argv)
         return 0;
     }
     FwPort.AddBoard(&board1);
-    // Read the Chip ID (16-bit read)
-    AmpIO_UInt16 chipID = board1.ReadKSZ8851ChipID();
+    // Read the Chip ID (16-bit read) -- might fail if not an Ethernet board
+    AmpIO_UInt16 chipID = hub_board->ReadKSZ8851ChipID();
     std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
     //QuadletReadCallbackBoardId = board1.GetBoardId();
 #endif
@@ -377,8 +379,18 @@ int main(int argc, char **argv)
     }
     if (!EthPort->IsOK())
         std::cout << "Failed to initialize Ethernet port" << std::endl;
-    else
+    else {
         EthPort->AddBoard(&board2);
+        hub_num = EthPort->GetHubBoardId();
+    }
+#if Amp1394_HAS_RAW1394
+    // Add Ethernet hub_board to Firewire port if different than test board (boardNum)
+    if (hub_num != boardNum) {
+        std::cout << "Adding hub board: " << hub_num << std::endl;
+        hub_board = new AmpIO(hub_num);
+        FwPort.AddBoard(hub_board);
+    }
+#endif
 
     // For now, nothing more can be done without FireWire (RAW1394)
 #if Amp1394_HAS_RAW1394
@@ -494,15 +506,15 @@ int main(int argc, char **argv)
                 break;
 
         case '5':
-                PrintEthernetStatus(board1);
+                PrintEthernetStatus(*hub_board);
                 break;
 
         case '6':
-                InitEthernet(board1);
+                InitEthernet(*hub_board);
                 break;
 
         case '7':
-                PrintEthernetDebug(board1);
+                PrintEthernetDebug(*hub_board);
                 break;
 
         case '8':   // Read request via Ethernet multicast
@@ -524,11 +536,11 @@ int main(int argc, char **argv)
 
         case 'e':
             AmpIO_UInt16 reg;
-            board1.ReadKSZ8851Reg(0x92, reg);
+            hub_board->ReadKSZ8851Reg(0x92, reg);
             std::cout << "ISR    = 0x" << std::hex << reg << "  ";
-            board1.ReadKSZ8851Reg(0x9C, reg);
+            hub_board->ReadKSZ8851Reg(0x9C, reg);
             std::cout << "RXFCTR = 0x" << std::hex << reg << "  ";
-            board1.ReadKSZ8851Reg(0x7C, reg);
+            hub_board->ReadKSZ8851Reg(0x7C, reg);
             std::cout << "RXFHSR = 0x" << std::hex << reg << "\n";
             break;
 
@@ -540,20 +552,20 @@ int main(int argc, char **argv)
             break;
 
         case 'i':
-            std::cout << "IP Address = " << EthUdpPort::IP_String(board1.ReadIPv4Address()) << std::endl;
+            std::cout << "IP Address = " << EthUdpPort::IP_String(hub_board->ReadIPv4Address()) << std::endl;
             break;
 
         case 'I':
-            if (board1.WriteIPv4Address(0xffffffff))
+            if (hub_board->WriteIPv4Address(0xffffffff))
                 std::cout << "Write IP address 255.255.255.255" << std::endl;
             else
                 std::cout << "Failed to write IP address" << std::endl;
             break;
 
         case 'x':
-            if (board1.ReadEthernetData(buffer, 0, 64))
+            if (hub_board->ReadEthernetData(buffer, 0, 64))
                 EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-            if (board1.ReadEthernetData(buffer, 0x80, 20))
+            if (hub_board->ReadEthernetData(buffer, 0x80, 20))
                 EthBasePort::PrintDebugData(std::cout, buffer);
             break;
 
@@ -566,8 +578,13 @@ int main(int argc, char **argv)
     }
 
     tcsetattr(0, TCSANOW, &oldTerm);  // Restore terminal I/O settings
-    if (FwPort.IsOK())
+    if (FwPort.IsOK()) {
         FwPort.RemoveBoard(boardNum);
+        if (hub_num != boardNum) {
+            FwPort.RemoveBoard(hub_num);
+            delete hub_board;
+        }
+    }
 #endif
     if (EthPort->IsOK())
         EthPort->RemoveBoard(boardNum);

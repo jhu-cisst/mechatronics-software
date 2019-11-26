@@ -139,6 +139,9 @@ public:
     unsigned int GetBoardId(unsigned char nodeId) const
     { return (nodeId < MAX_NODES) ? Node2Board[nodeId] : static_cast<unsigned int>(BoardIO::MAX_BOARDS); }
 
+    // Returns board id of hub board
+    unsigned int GetHubBoardId(void) const { return static_cast<unsigned int>(HubBoard); }
+
     // Return node number given board id. This function first masks boardId with FW_NODE_MASK and also
     // checks for the FireWire broadcast (0x3f).
     nodeid_t ConvertBoardToNode(unsigned char boardId) const;
