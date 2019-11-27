@@ -649,7 +649,7 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
                            << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
                     continue;
                 }
-                nodeid_t src_node = packet[18]&FW_NODE_MASK;
+                nodeid_t src_node = packet[19]&FW_NODE_MASK;
                 if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
                     outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
                     continue;

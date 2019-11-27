@@ -89,7 +89,7 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
         outStr << "Unexpected tcode: received = " << tcode_recv << ", expected = " << tcode << std::endl;
         return false;
     }
-    nodeid_t src_node = packet[4]&FW_NODE_MASK;
+    nodeid_t src_node = packet[5]&FW_NODE_MASK;
     if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
         outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
         return false;
@@ -298,7 +298,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
-bool EthBasePort::ScanNodes(void)
+bool EthBasePort::ScanNodes(nodeid_t max_nodes)
 {
     unsigned int board;
     nodeid_t node;
@@ -313,7 +313,7 @@ bool EthBasePort::ScanNodes(void)
 
     quadlet_t data;
     outStr << "ScanNodes: building node map" << std::endl;
-    for (node = 0; node < BoardIO::MAX_BOARDS; node++)
+    for (node = 0; node < max_nodes; node++)
     {
         // check hardware version
         if (!ReadQuadletNode(node, 4, data))
@@ -368,8 +368,10 @@ bool EthBasePort::ScanNodes(void)
 
     // update Board2Node
     for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
-        Board2Node[board] = BoardIO::MAX_BOARDS;
-        for (node = 0; node < NumOfNodes_; node++) {
+        Board2Node[board] = MAX_NODES;
+        // search up to max_nodes (not NumOfNodes_) in case nodes are not sequential (i.e., if some nodes
+        // are not associated with valid boards).
+        for (node = 0; node < max_nodes; node++) {
             if (Node2Board[node] == board) {
                 if (Board2Node[board] < BoardIO::MAX_BOARDS)
                     outStr << "Warning: GetNodeId detected duplicate board id for " << board << std::endl;
