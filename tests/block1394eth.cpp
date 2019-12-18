@@ -43,10 +43,10 @@ int main(int argc, char** argv)
     int size = 1;
     quadlet_t data1;
     quadlet_t *data = &data1;
-    bool isQuad1394 = (strstr(argv[0], "quadeth1394") != 0);
+    bool isQuad1394 = (strstr(argv[0], "quad1394eth") != 0);
 
     int i,j;
-    int bid = BoardIO::MAX_BOARDS;
+    int bid = 0;
     bool verbose = false;
 #if Amp1394_HAS_RAW1394
     BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
@@ -98,11 +98,12 @@ int main(int argc, char** argv)
 
     if (args_found < 1) {
         if (isQuad1394)
-            std::cout << "Usage: " << argv[0] << " [-pP] [-nN] [-v] <address in hex> [value to write in hex]" << std::endl;
+            std::cout << "Usage: " << argv[0] << " [-pP] [-bN] [-v] <address in hex> [value to write in hex]" << std::endl;
         else
-            std::cout << "Usage: " << argv[0] << " [-pP] [-nN] [-v] <address in hex> <size in quadlets> [write data quadlets in hex]" << std::endl;
-         std::cout << "       where P = port number, N = node number" << std::endl
-                   << "                 can also specify -pfwP, -pethP or -pudp[xx.xx.xx.xx]" << std::endl;
+            std::cout << "Usage: " << argv[0] << " [-pP] [-bN] [-v] <address in hex> <size in quadlets> [write data quadlets in hex]" << std::endl;
+         std::cout << "       where P = port number, N = board number" << std::endl
+                   << "                 can also specify -pfwP, -pethP or -pudp[xx.xx.xx.xx]" << std::endl
+                   << "             v specifies verbose mode" << std::endl;
         exit(0);
     }
 
@@ -134,31 +135,31 @@ int main(int argc, char** argv)
 
     if (!Port->IsOK()) {
         PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize ethernet port " << port << std::endl;
+        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
         return -1;
     }
     else if (verbose) {
         PrintDebugStream(debugStream);
     }
-    Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 
-    std::vector<AmpIO*> BoardList;
-    BoardList.push_back(new AmpIO(bid));
-    Port->AddBoard(BoardList[0]);
-
+    AmpIO Board(bid);
+    Port->AddBoard(&Board);
 
     // Quadlet R/W
     if (isQuad1394 && (args_found == 1))
     {
         if (Port->ReadQuadlet(bid, addr, (*data)))
             std::cout << "0x" << std::hex << data[0] << "\n";
-        else
+        else {
+            PrintDebugStream(debugStream);
             std::cerr << "ReadQuadlet Failed \n";
+        }
     }
     else if (isQuad1394 && (args_found == 2))
     {
         std::cout << "WriteQuadlet\n";
         if (!Port->WriteQuadlet(bid, addr, (*data) )) {
+            PrintDebugStream(debugStream);
             std::cerr << "WriteQuadlet Failed\n";
         }
     }
@@ -170,16 +171,21 @@ int main(int argc, char** argv)
             for (j=0; j<size; j++)
                 std::cout << "0x" << std::hex << std::setfill('0') << std::setw(8) << bswap_32(data[j]) << std::endl;
         }
-        else
+        else {
+            PrintDebugStream(debugStream);
             std::cerr << "ReadBlock Failed \n";
+        }
     }
     else
     {
         if (!Port->WriteBlock(bid, addr, data, size * 4)) {
+            PrintDebugStream(debugStream);
             std::cerr << "WriteBlock Failed \n";
         }
     }
 
+    if (Port->IsOK())
+        Port->RemoveBoard(bid);
     delete Port;
     return 0;
 }
