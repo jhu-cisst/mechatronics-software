@@ -148,7 +148,7 @@ public:
 
     /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
         encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
-        This method is provided for internal use and testing. */
+        This method is provided for internal use and testing in firmware Rev 6 and deprecated in >6. */
     AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
     
     // GetPowerStatus: returns true if motor power supply voltage
@@ -405,7 +405,7 @@ protected:
     enum { NUM_CHANNELS = 4 };
 
     // Sizes of real-time read and write buffers (see below for offsets into these buffers)
-    enum { ReadBufSize = 4+4*NUM_CHANNELS,
+    enum { ReadBufSize = 4+6*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
     // The (internal) read buffer; the base class ReadBuffer pointer
@@ -437,12 +437,18 @@ protected:
     bool GetEncoderDir(unsigned int index) const;
 
     /*! Returns the latched period of five encoder quarter cycles
-        ago. Used internally to calculate acceleration. */
+      ago. Used internally to calculate acceleration in firmware Rev 6
+      and deprecated in >6. */
     AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
 
     /*! Returns the latched period of the most recent encoder
-      quarter cycle. Used internally to calculate acceleration. */
+      quarter cycle. Used internally to calculate acceleration 
+      in firmware Rev 6 and deprecated in >6. */
     AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
+
+    /*! Returns the latched quarter cycle periods.
+      Used internally to calculate acceleration in firmware Rev >6. */
+    AmpIO_Int32 GetEncoderQtr(unsigned int index, unsigned int offset) const;
 
     // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
     // Note that there are two velocity measurements. The first one (ENC_VEL_OFFSET)
@@ -459,7 +465,10 @@ protected:
         ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
         ENC_POS_OFFSET    = 4+NUM_CHANNELS,    // one quadlet per channel
         ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS,  // one quadlet per channel
-        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS   // one quadlet per channel
+        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS,   // one quadlet per channel
+        ENC_QTR1_OFFSET   = 4+3*NUM_CHANNELS,  // one quadlet per channel
+        ENC_QTR5_OFFSET   = 4+4*NUM_CHANNELS,  // one quadlet per channel
+        ENC_RUN_OFFSET    = 4+5*NUM_CHANNELS   // one quadlet per channel
     };
 
     // offsets of real-time write buffer contents
