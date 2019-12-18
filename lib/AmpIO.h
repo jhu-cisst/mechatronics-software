@@ -146,6 +146,11 @@ public:
         effectively disables this feature. */
     double GetEncoderAcceleration(unsigned int index, double percent_threshold = 1.0) const;
 
+    /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
+        encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
+        This method is provided for internal use and testing in firmware Rev 6 and deprecated in >6. */
+    AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
+    
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.
@@ -191,6 +196,8 @@ public:
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
 
     bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
+
+    AmpIO_UInt32 ReadDigitalIO(void) const;
 
     /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
 
@@ -347,6 +354,7 @@ public:
 
     // Program a page (up to 256 bytes) at the specified address.
     // This command calls PromWriteEnable.
+    // nbytes must be a multiple of 4.
     // If non-zero, the callback (cb) is called while the software is waiting
     // for the PROM to be programmed, or if there is an error.
     // Returns the number of bytes programmed (-1 if error).
@@ -360,6 +368,12 @@ public:
     bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data);
     bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
     bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
+
+    // ********************** Dallas DS2505 (1-wire) Methods **************************
+    bool DallasWriteControl(AmpIO_UInt32 ctrl);
+    bool DallasReadStatus(AmpIO_UInt32 &status);
+    bool DallasWaitIdle();
+    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
 
     // ************************ Ethernet Methods *************************************
     // Following functions enable access to the KSZ8851 Ethernet controller on the
@@ -418,8 +432,18 @@ protected:
     /*! Returns the direction the encoder is moving in. */
     bool GetEncoderDir(unsigned int index) const;
 
+    /*! Returns the latched period of five encoder quarter cycles
+      ago. Used internally to calculate acceleration in firmware Rev 6
+      and deprecated in >6. */
+    AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
+
+    /*! Returns the latched period of the most recent encoder
+      quarter cycle. Used internally to calculate acceleration 
+      in firmware Rev 6 and deprecated in >6. */
+    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
+
     /*! Returns the latched quarter cycle periods.
-      Used internally to calculate acceleration. */
+      Used internally to calculate acceleration in firmware Rev >6. */
     AmpIO_Int32 GetEncoderQtr(unsigned int index, unsigned int offset) const;
 
     // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
@@ -437,6 +461,7 @@ protected:
         ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
         ENC_POS_OFFSET    = 4+NUM_CHANNELS,    // one quadlet per channel
         ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS,  // one quadlet per channel
+        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS,   // one quadlet per channel
         ENC_QTR1_OFFSET   = 4+3*NUM_CHANNELS,  // one quadlet per channel
         ENC_QTR5_OFFSET   = 4+4*NUM_CHANNELS,  // one quadlet per channel
         ENC_RUN_OFFSET    = 4+5*NUM_CHANNELS   // one quadlet per channel

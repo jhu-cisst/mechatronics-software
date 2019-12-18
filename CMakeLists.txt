@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2017 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -9,13 +9,13 @@
 #
 # --- end cisst license ---
 
-project (Mechatronics)
+project (Amp1394)
 
 cmake_minimum_required (VERSION 2.6)
 
 # Set the version number
 set (Amp1394_VERSION_MAJOR "1")
-set (Amp1394_VERSION_MINOR "3")
+set (Amp1394_VERSION_MINOR "5")
 set (Amp1394_VERSION_PATCH "0")
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
@@ -26,7 +26,7 @@ if (NOT LIBRARY_OUTPUT_PATH)
 endif (NOT LIBRARY_OUTPUT_PATH)
 
 # TODO: Move include files to Amp1394 subdirectory, i.e., lib/Amp1394 or lib/include/Amp1394.
-set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Mechatronics_BINARY_DIR}")
+set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Amp1394_BINARY_DIR}")
 set (Amp1394_LIBRARY_DIR ${LIBRARY_OUTPUT_PATH})
 set (Amp1394_LIBRARIES   Amp1394)
 
@@ -79,7 +79,7 @@ set (CONF_INCLUDE_DIR ${Amp1394_INCLUDE_DIR})
 set (CONF_LIBRARY_DIR ${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 set (CONF_LIBRARIES   ${Amp1394_LIBRARIES}   ${Amp1394_EXTRA_LIBRARIES})
 configure_file (Amp1394Config.cmake.in
-                "${Mechatronics_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
+                "${Amp1394_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
 
 if (UNIX)
   # Add some warnings

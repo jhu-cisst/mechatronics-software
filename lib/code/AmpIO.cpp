@@ -53,6 +53,11 @@ const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocit
 const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder freq/acc) for lower 8 bits of most recent quarter-cycle period */
 const AmpIO_UInt32 ENC_VEL_SUM_MASK     = 0x03ffffff;   /*!< Mask (into encoder freq/acc) for all 20 bits of previous quarter-cycle period */
 
+// Following masks are a refactored version to read ther most recent quarter-cycle period and the previous on eof the same type.
+// This is simplified for Firmware Rev >6 by increasing the packet size and putting the bits together
+const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder freq/acc) for lower 8 bits of most recent quarter-cycle period */
+const AmpIO_UInt32 ENC_VEL_SUM_MASK   = 0x03ffffff;   /*!< Mask (into encoder freq/acc) for all 20 bits of previous quarter-cycle period */
+
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
 // (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
 const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
@@ -61,7 +66,8 @@ const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velo
 const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
 
 const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
-const double VEL_PERD               = 1.0/49152000;    /* Clock period for velocity measurements (Rev 6 firmware) */
+const double VEL_PERD               = 1.0/49152000;    /* Clock period for velocity measurements (Rev >6 firmware) */
+const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
 const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
@@ -133,46 +139,49 @@ AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
 
 std::string AmpIO::GetFPGASerialNumber(void)
 {
-    // Format: FPGA 1234-56 (12 bytes)
+    // Format: FPGA 1234-56 (12 bytes) or FPGA 1234-567 (13 bytes).
+    // Note that on PROM, the string is terminated by 0xff because the sector
+    // is first erased (all bytes set to 0xff) before the string is written.
     AmpIO_UInt32 address = 0x001FFF00;
-    AmpIO_UInt8 data[20];
-    std::string sn; sn.clear();
-    const size_t FPGASNSize = 12;
+    char data[20];
+    std::string sn;
+    const size_t FPGASNSize = 13;
+    const size_t bytesToRead = (FPGASNSize+3)&0xFC;  // must be multiple of 4
 
-    PromReadData(address, data, FPGASNSize);
-    for (size_t i = 0; i < FPGASNSize; i++) {
-        sn.push_back(data[i]);
+    data[FPGASNSize] = 0;    // Make sure null-terminated
+    if (PromReadData(address, (AmpIO_UInt8 *)data, bytesToRead)) {
+        if (strncmp(data, "FPGA ", 5) == 0) {
+            char *p = strchr(data+5, 0xff);
+            if (p) *p = 0;      // Null terminate at first 0xff
+            sn.assign(data+5);
+        }
     }
-
-    if (sn.substr(0,5) == "FPGA ")
-        sn.erase(0,5);
-    else {
-        sn.clear();
-    }
+    else
+        std::cerr << "AmpIO::GetFPGASerialNumber: failed to read FPGA Serial Number" << std::endl;
     return sn;
 }
 
 std::string AmpIO::GetQLASerialNumber(void)
 {
-    // Format: QLA 1234-56
-    std::string sn; sn.clear();
+    // Format: QLA 1234-56 or QLA 1234-567.
+    // String is terminated by 0 or 0xff.
     AmpIO_UInt16 address = 0x0000;
-    AmpIO_UInt8 data;
-    const size_t QLASNSize = 11;
+    AmpIO_UInt8 data[20];
+    const size_t QLASNSize = 12;
+    std::string sn;
+
+    data[QLASNSize] = 0;  // make sure null-terminated
     for (size_t i = 0; i < QLASNSize; i++) {
-        if (!PromReadByte25AA128(address, data)) {
+        if (!PromReadByte25AA128(address, data[i])) {
             std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+            break;
         }
-        else {
-            sn.push_back(data);
-            address += 1;
-        }
+        if (data[i] == 0xff)
+            data[i] = 0;
+        address += 1;
     }
-    if (sn.substr(0,4) == "QLA ")
-        sn.erase(0,4);
-    else {
-        sn.clear();
-    }
+    if (strncmp((char *)data, "QLA ", 4) == 0)
+        sn.assign((char *)data+4);
     return sn;
 }
 
@@ -361,15 +370,34 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
                 cnter |= 0xffff0000;
             vel = 4.0 * ((double)cnter*VEL_PERD_OLD);
         }
-    } else if (fver == 6) {
+    } else if (fver >= 6) {
+        // buff[31] = whether full cycle period has overflowed
+        // buff[30] = direction of the encoder
+
+        if (fver == 6) {
+            // buff[29:22] = upper 8 bits of most recent quarter-cycle period (for acceleration)
+            // buff[21:0] = velocity (22 bits)
+            // Clock = 3.072 MHz
+        
+            // mask and convert to signed
+            cnter = buff & ENC_VEL_MASK_22;
+        
+        if (GetEncoderVelocityOverflow(index)) {
+            vel = 0.0;
+        } else if (!GetEncoderDir(index)) {
+            vel = -4.0/((double)cnter*VEL_PERD_REV6);
+        } else {
+            vel = 4.0/((double)cnter*VEL_PERD_REV6);
+        }
+    } else if (fver >= 6) {
         // buff[31] = whether full cycle period has overflowed
         // buff[30] = direction of the encoder
         // buff[25:0] = velocity (26 bits)
         // Clock = 49.152 MHz
-        
+
         // mask and convert to signed
         cnter = buff & ENC_VEL_SUM_MASK;
-        
+
         if (GetEncoderVelocityOverflow(index)) {
             vel = 0.0;
         } else if (!GetEncoderDir(index)) {
@@ -377,10 +405,6 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         } else {
             vel = 4.0/((double)cnter*VEL_PERD);
         }
-    }
-    else {
-        // Not sure what later firmware versions will do
-        vel = 0.0;
     }
     return vel;
 }
@@ -403,8 +427,12 @@ double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
         delay = ((double)cnter * VEL_PERD_OLD)/2.0;
     }
     else if (fver == 6) {
+        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
+        delay = ((double)cnter * VEL_PERD_REV6)/2.0;
+    }
+    else if (fver >= 7) {
         cnter = GetEncoderVelocityRaw(index) & ENC_VEL_SUM_MASK;
-        delay = ((double)cnter * VEL_PERD)/2.0 + GetEncoderQtr(index, ENC_RUN_OFFSET);
+        delay = ((double)cnter * VEL_PERD)/2.0  + GetEncoderQtr(index, ENC_RUN_OFFSET);
     }
     return delay;
 }
@@ -437,9 +465,15 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
 
         return  cnter;
     }
-    else {
-        // Not sure what later firmware versions will do
-        return buff;
+    else if (fver >= 7) {
+        AmpIO_Int32 cnter;
+
+        // mask and convert to signed
+        cnter = buff & ENC_VEL_MASK_SUM_MASK;
+        if (!(buff & ENC_DIR_MASK))
+            cnter = -cnter;
+
+        return  cnter;
     }
 }
 
@@ -453,7 +487,6 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
 
     double acc = 0.0;
     if ((GetFirmwareVersion() == 6)) {
-        // Not sure how later firmware versions will work
 
         if (!GetEncoderVelocityOverflow(index)) {
             AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
@@ -464,12 +497,28 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
             AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
                 
             if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
+                acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD_REV6 * (double) prev_cnter * VEL_PERD_REV6);
+                if (!GetEncoderDir(index))
+                    acc = -acc;
+            }
+        }
+    } else {
+        if (!GetEncoderVelocityOverflow(index)) {
+            AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
+            AmpIO_Int32 rec_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
+            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_SUM_MASK;
+            // subtract the most recent quarter and add the statequarter 5 cycles ago to calculate
+            // the last full-cycle period (over 4 quarters) 
+            AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
+
+            if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
                 acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD * (double) prev_cnter * VEL_PERD);
                 if (!GetEncoderDir(index))
                     acc = -acc;
             }
         }
     }
+
     return acc;
 }
 
@@ -491,13 +540,32 @@ bool AmpIO::GetEncoderDir(unsigned int index) const
 // Valid for firmware version 6.
 AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
 {
+    quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    AmpIO_Int32 prev_perd = buff & ENC_ACC_PREV_MASK;
+    return prev_perd;
+}
+
+// Latch from quarter cycles for accleration calculation
+// Valid for firmware version >6.
+AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
+{
     quadlet_t buff = bswap_32(read_buffer[index+offset]);
     AmpIO_Int32 perd = buff & ENC_VEL_QTR_MASK;
     return perd;
 }
 
+// Latch last quarter cycle for acceleration calculation
+// Valid for firmware version 6.
+AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
+{
+    AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
+    AmpIO_Int32 cur_perd = (((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
+    return cur_perd;
+}
+
 // Raw velocity field; includes period of velocity and other data, depending on firmware version.
-// For firmware version 6
+// For firmware version 6, includes part of AccRec. For later firmware versions, no AccRec
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
@@ -645,6 +713,13 @@ bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
         if (ret) sdata = static_cast<AmpIO_Int32>(read_data);
     }
     return ret;
+}
+
+AmpIO_UInt32 AmpIO::ReadDigitalIO(void) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port) port->ReadQuadlet(BoardId, 0x0a, read_data);
+    return read_data;
 }
 
 bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow)
@@ -948,8 +1023,12 @@ int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     nodeaddr_t address;
     if (fver >= 4) {address = 0x2000;}
     else {address = 0xc0;}
-    if (!port->WriteBlock(BoardId, address, data_ptr, nbytes+sizeof(quadlet_t)))
+    if (!port->WriteBlock(BoardId, address, data_ptr, nbytes+sizeof(quadlet_t))) {
+        std::ostringstream msg;
+        msg << "AmpIO::PromProgramPage: failed to write block, nbytes = " << nbytes;
+        ERROR_CALLBACK(cb, msg);
         return -1;
+    }
     // Read FPGA status register; if 4 LSB are 0, command has finished
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
@@ -1096,6 +1175,68 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
     nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
     return port->WriteQuadlet(BoardId, address, write_data);
+}
+
+// ********************** Dallas DS2505 (1-wire) Methods ****************************************
+bool AmpIO::DallasWriteControl(AmpIO_UInt32 ctrl)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    return port->WriteQuadlet(BoardId, 13, ctrl);
+}
+
+
+bool AmpIO::DallasReadStatus(AmpIO_UInt32 &status)
+{
+    status = 0;
+    if (GetFirmwareVersion() < 7) return false;
+    return port->ReadQuadlet(BoardId, 13, status);
+}
+
+bool AmpIO::DallasWaitIdle()
+{
+    int i;
+    AmpIO_UInt32 status;
+    // Wait up to 500 msec. Based on measurements, approximate wait time is 250-300 msec.
+    for (i = 0; i < 500; i++) {
+        // Wait 1 msec
+        Amp1394_Sleep(0.001);
+        if (!DallasReadStatus(status)) return false;
+        // Done when in idle state
+        if ((status&0x000000F0) == 0)
+            break;
+    }
+    //std::cerr << "Wait time = " << i << " milliseconds" << std::endl;
+    return (i < 500);
+}
+
+bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    AmpIO_UInt32 status = ReadStatus();
+    // Check whether bi-directional I/O is available
+    if ((status & 0x00300000) != 0x00300000) return false;
+    if (!DallasWriteControl((addr<<16)|2)) return false;
+    if (!DallasWaitIdle()) return false;
+    if (!DallasReadStatus(status)) return false;
+    // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
+    if ((status & 0xFF00000F) != 0x0B00000B) return false;
+    nodeaddr_t address = 0x6000;
+    unsigned char *ptr = data;
+    // Read first block of data (up to 256 bytes)
+    unsigned int nb = (nbytes>256) ? 256 : nbytes;
+    if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
+    ptr += nb;
+    nbytes -= nb;
+    // Read additional blocks of data if necessary
+    while (nbytes > 0) {
+        if (!DallasWriteControl(3)) return false;
+        if (!DallasWaitIdle()) return false;
+        nb = (nbytes>256) ? 256 : nbytes;
+        if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
+        ptr += nb;
+        nbytes -= nb;
+    }
+    return true;
 }
 
 // ********************** KSZ8851 Ethernet Controller Methods ***********************************

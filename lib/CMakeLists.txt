@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2016 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -9,7 +9,7 @@
 #
 # --- end cisst license ---
 
-project(Amp1394)
+project (Amp1394Lib)
 
 set (HEADERS
      BoardIO.h
@@ -70,7 +70,7 @@ endif (Amp1394_BUILD_SWIG)
 
 # revision file
 configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/AmpIORevision.h.in"
-                "${Mechatronics_BINARY_DIR}/Amp1394/AmpIORevision.h")
+                "${Amp1394_BINARY_DIR}/Amp1394/AmpIORevision.h")
 
 # Install files
 install (TARGETS Amp1394 COMPONENT Amp1394

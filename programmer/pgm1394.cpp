@@ -34,8 +34,9 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 
     int c = 0;
     while ((c < '0') || (c > '7')) {
-        if (c)
+        if (c) {
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
+        }
         std::cout << std::endl
                   << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
                   << "MCS file: " << mcsName << std::endl;
@@ -73,7 +74,7 @@ bool PromProgramCallback(const char *msg)
             std::cout << "." << std::flush;
             Callback_StartTime = t;
         }
-    }        
+    }
     return true;   // continue
 }
 
@@ -179,25 +180,38 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     }
 
     // ==== FPGA Serial ===
-    // FPGA 1234-56
+    // FPGA 1234-56 or 1234-567
     // - FPGA: board type
-    // - 1234-56: serial number
+    // - 1234-56 or 1234-567: serial number
     BoardType = "FPGA";
-    std::string FPGASN = "0000-00";
+    std::string FPGASN;
+    FPGASN.reserve(8);  // reserve at least 8 characters
     std::cout << "Please Enter FPGA Serial Number: " << std::endl;
     std::cin >> FPGASN;
     std::cin.ignore(20,'\n');
     ss << BoardType << " " << FPGASN;
     str = ss.str();
     char buffer[20];
-    for (size_t i = 0; i < str.length(); i++) {
-        buffer[i] = str.at(i);
+    size_t len = str.length();
+    if (len > 20) {
+        std::cerr << "FPGA Serial Number too long" << std::endl;
+        return false;
     }
+    size_t i;
+    for (i = 0; i < len; i++)
+        buffer[i] = str.at(i);
+
+    // bytesToWrite must be a multiple of 4
+    unsigned int bytesToWrite = (static_cast<unsigned int>(len)+3)&0xFC;
+    // pad with 0xff
+    for (i = len; i < bytesToWrite; i++)
+        buffer[i] = 0xff;
 
     int ret;
     Callback_StartTime = Amp1394_GetTime();
     Board.PromSectorErase(0x1F0000, PromProgramCallback);
-    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)&buffer, static_cast<unsigned int>(str.length()));
+    std::cout << std::endl;
+    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)buffer, bytesToWrite, PromProgramCallback);
     if (ret < 0) {
         std::cerr << "Can't program FPGA Serial Number";
         return false;
@@ -241,11 +255,12 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
     }
 
     // ==== QLA Serial ===
-    // QLA 9876-54
+    // QLA 9876-54 or 9876-543
     // - QLA: board type
-    // - 9876-54: serial number
+    // - 9876-54 or 9876-543: serial number
     BoardType = "QLA";
-    std::string BoardSN = "0000-00";
+    std::string BoardSN;
+    BoardSN.reserve(8);  // reserve at least 8 characters
     AmpIO_UInt8 wbyte;
     AmpIO_UInt16 address;
 
@@ -253,11 +268,8 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
     std::cout << "Please Enter QLA Serial Number: " << std::endl;
     std::cin >> BoardSN;
     std::cin.ignore(20,'\n');
-    BoardSN = BoardSN.substr(0, BoardSN.length()); // remove '\n' at the end
     ss << BoardType << " " << BoardSN;
     str = ss.str();
-
-//    std::cout << "DATA = " << ss.str().c_str() << std::endl;
 
     // S1: program to QLA PROM
     address = 0x0000;
@@ -269,12 +281,16 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
         }
         address += 1;  // inc to next byte
     }
+    // Terminating byte can be 0 or 0xff
+    wbyte = 0;
+    if (!Board.PromWriteByte25AA128(address, wbyte)) {
+        std::cerr << "Failed to write terminating byte" << std::endl;
+        return false;
+    }
 
     // S2: read back and verify
     BoardSNRead.clear();
     BoardSNRead = Board.GetQLASerialNumber();
-//    std::cout << "SN = " << BoardSNRead << " length = " << BoardSNRead.length() << std::endl;
-//    std::cout << "st = " << str << " length = " << str.length() << std::endl;
 
     if (BoardSN == BoardSNRead) {
         std::cout << "Programmed QLA " << BoardSN << " Serial Number" << std::endl;
@@ -302,6 +318,8 @@ int main(int argc, char** argv)
     std::string sn;
     bool auto_mode = false;
 
+    std::cout << "Started " << argv[0]
+              << ", using AmpIO version " << Amp1394_VERSION << std::endl;
     int args_found = 0;
     for (i = 1; i < argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
