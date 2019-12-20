@@ -48,15 +48,15 @@ const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mas
 const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <=5 (16 bits) */
 const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >=6 (22 bits) */
 
-// Following masks are for the most recent quarter-cycle period and the previous one of the same type (i.e., four cycles ago).
-// These are used for estimating acceleration using Firmware Rev 6.
-const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder freq/acc) for lower 8 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_VEL_SUM_MASK     = 0x03ffffff;   /*!< Mask (into encoder freq/acc) for all 20 bits of previous quarter-cycle period */
-
 // Following masks are a refactored version to read ther most recent quarter-cycle period and the previous on eof the same type.
 // This is simplified for Firmware Rev >6 by increasing the packet size and putting the bits together
 const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder freq/acc) for lower 8 bits of most recent quarter-cycle period */
 const AmpIO_UInt32 ENC_VEL_SUM_MASK   = 0x03ffffff;   /*!< Mask (into encoder freq/acc) for all 20 bits of previous quarter-cycle period */
+
+
+const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder freq/acc) for upper 12 bits of most recent quarter-cycle period */
+const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
+const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */ 
 
 // Following offsets are for FPGA Firmware Version 6+ (22 bits)
 // (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
@@ -373,14 +373,12 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
     } else if (fver >= 6) {
         // buff[31] = whether full cycle period has overflowed
         // buff[30] = direction of the encoder
-
-        if (fver == 6) {
-            // buff[29:22] = upper 8 bits of most recent quarter-cycle period (for acceleration)
-            // buff[21:0] = velocity (22 bits)
-            // Clock = 3.072 MHz
+        // buff[29:22] = upper 8 bits of most recent quarter-cycle period (for acceleration)
+        // buff[21:0] = velocity (22 bits)
+        // Clock = 3.072 MHz
         
-            // mask and convert to signed
-            cnter = buff & ENC_VEL_MASK_22;
+        // mask and convert to signed
+        cnter = buff & ENC_VEL_MASK_22;
         
         if (GetEncoderVelocityOverflow(index)) {
             vel = 0.0;
@@ -469,7 +467,7 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         AmpIO_Int32 cnter;
 
         // mask and convert to signed
-        cnter = buff & ENC_VEL_MASK_SUM_MASK;
+        cnter = buff & ENC_VEL_SUM_MASK;
         if (!(buff & ENC_DIR_MASK))
             cnter = -cnter;
 
@@ -537,20 +535,17 @@ bool AmpIO::GetEncoderDir(unsigned int index) const
 }
 
 // Latch from quarter cycles for accleration calculation
-// Valid for firmware version 6.
 AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
 {
-    quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-    AmpIO_Int32 prev_perd = buff & ENC_ACC_PREV_MASK;
-    return prev_perd;
-}
+    AmpIO_Int32 perd = 0;
+    if (GetFirmwareVersion() == 6) {
+        quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+        perd = buff & ENC_ACC_PREV_MASK;
+    } else if (GetFirmwareVersion() >= 7) {
+        quadlet_t buff = bswap_32(read_buffer[index+offset]);
+        perd = buff & ENC_VEL_QTR_MASK;
 
-// Latch from quarter cycles for accleration calculation
-// Valid for firmware version >6.
-AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
-{
-    quadlet_t buff = bswap_32(read_buffer[index+offset]);
-    AmpIO_Int32 perd = buff & ENC_VEL_QTR_MASK;
+    }
     return perd;
 }
 
