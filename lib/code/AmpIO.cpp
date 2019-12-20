@@ -467,20 +467,6 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
     return cnter;
 }
 
-// Returns previous encoder period counter (previous full cycle period);
-// Valid for firmware version 6.
-AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
-{
-    if (index >= NUM_CHANNELS)
-        return 0L;
-
-    AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
-    AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
-    AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
-    
-    return cnter - rec_perd + prev_perd;
-}
-
 // Estimate acceleration from two quarters of the same type; units are counts/second**2
 // Valid for firmware version 6.
 double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshold) const
@@ -493,19 +479,18 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
     if ((GetFirmwareVersion() == 6)) {
 
         if (!GetEncoderVelocityOverflow(index)) {
-            AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
-            AmpIO_Int32 rec_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
-            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_SUM_MASK;
-            // subtract the most recent quarter and add the statequarter 5 cycles ago to calculate
-            // the last full-cycle period (over 4 quarters) 
+            AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
+            AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
+            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
+            
             AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
-                
+            
             if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
                 acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD_REV6 * (double) prev_cnter * VEL_PERD_REV6);
                 if (!GetEncoderDir(index))
                     acc = -acc;
             }
-        }
+       } 
     } else {
         if (!GetEncoderVelocityOverflow(index)) {
             AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
@@ -522,7 +507,6 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
             }
         }
     }
-
     return acc;
 }
 
@@ -544,32 +528,20 @@ bool AmpIO::GetEncoderDir(unsigned int index) const
 AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
 {
     AmpIO_Int32 perd = 0;
+    quadlet_t buff = bswap_32(read_buffer[index+offset]);
     if (GetFirmwareVersion() == 6) {
-        quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
         perd = buff & ENC_ACC_PREV_MASK;
     } else if (GetFirmwareVersion() >= 7) {
-        quadlet_t buff = bswap_32(read_buffer[index+offset]);
         perd = buff & ENC_VEL_QTR_MASK;
-
     }
     return perd;
-}
-
-
-// Latch from 5 quarter cycles ago for accleration calculation
-// Valid for firmware version 6.
-AmpIO_Int32 AmpIO::GetEncoderAccPrev(unsigned int index) const
-{
-    quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
-    AmpIO_Int32 prev_perd = buff & ENC_ACC_PREV_MASK;
-    return prev_perd;
 }
 
 // Latch last quarter cycle for acceleration calculation
 // Valid for firmware version 6.
 AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
 {
-    AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_QTR1_OFFSET]);
     AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
     AmpIO_Int32 cur_perd = (((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
     return cur_perd;

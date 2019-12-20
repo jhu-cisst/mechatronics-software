@@ -427,20 +427,11 @@ protected:
     // there's any valid bit on the 4 requested currents.
     bool WriteBufferResetsWatchdog(void) const;
 
-    /*! Returns the encoder period (counter) of the previous full cycle.
-        Used internally to calculate acceleration in firmware Rev6. */
-    AmpIO_Int32 GetEncoderPrevCounter(unsigned int index) const;
-    
     /*! Returns whether the full cycle counter has overflows (22 bits) */
     bool GetEncoderVelocityOverflow(unsigned int index) const;
 
     /*! Returns the direction the encoder is moving in. */
     bool GetEncoderDir(unsigned int index) const;
-
-    /*! Returns the latched period of five encoder quarter cycles
-      ago. Used internally to calculate acceleration in firmware Rev 6
-      and deprecated in >6. */
-    AmpIO_Int32 GetEncoderAccPrev(unsigned int index) const;
 
     /*! Returns the latched period of the most recent encoder
       quarter cycle. Used internally to calculate acceleration 
@@ -466,7 +457,7 @@ protected:
         ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
         ENC_POS_OFFSET    = 4+NUM_CHANNELS,    // one quadlet per channel
         ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS,  // one quadlet per channel
-        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS,   // one quadlet per channel
+        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS,  // one quadlet per channel
         ENC_QTR1_OFFSET   = 4+3*NUM_CHANNELS,  // one quadlet per channel
         ENC_QTR5_OFFSET   = 4+4*NUM_CHANNELS,  // one quadlet per channel
         ENC_RUN_OFFSET    = 4+5*NUM_CHANNELS   // one quadlet per channel
