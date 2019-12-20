@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -376,10 +376,10 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         // buff[29:22] = upper 8 bits of most recent quarter-cycle period (for acceleration)
         // buff[21:0] = velocity (22 bits)
         // Clock = 3.072 MHz
-        
+
         // mask and convert to signed
         cnter = buff & ENC_VEL_MASK_22;
-        
+
         if (GetEncoderVelocityOverflow(index)) {
             vel = 0.0;
         } else if (!GetEncoderDir(index)) {
@@ -424,7 +424,7 @@ double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
         }
         delay = ((double)cnter * VEL_PERD_OLD)/2.0;
     }
-    else if (fver == 6) {
+    else if (fver >= 6) {
         cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
         delay = ((double)cnter * VEL_PERD_REV6)/2.0;
     }
@@ -453,33 +453,36 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         //                  to 32 bits (backward compatible behavior)
         return (buff & ENC_VEL_MASK_16);
     }
-    else if (fver == 6) {
-        AmpIO_Int32 cnter;
+    // all other cases, fver >= 6
+    AmpIO_Int32 cnter;    
+    // mask and convert to signed
+    cnter = buff & ENC_VEL_MASK_22;
+    if (!(buff & ENC_DIR_MASK)) {
+        cnter = -cnter;
+    }
+    return cnter;
+}
+
+// Returns previous encoder period counter (previous full cycle period);
+// Valid for firmware version 6.
+AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
+{
+    if (index >= NUM_CHANNELS)
+        return 0L;
 
         // mask and convert to signed
         cnter = buff & ENC_VEL_SUM_MASK;
         if (!(buff & ENC_DIR_MASK))
             cnter = -cnter;
 
-        return  cnter;
-    }
-    else if (fver >= 7) {
-        AmpIO_Int32 cnter;
-
-        // mask and convert to signed
-        cnter = buff & ENC_VEL_SUM_MASK;
-        if (!(buff & ENC_DIR_MASK))
-            cnter = -cnter;
-
-        return  cnter;
-    }
+    return cnter - rec_perd + prev_perd;
 }
 
 // Estimate acceleration from two quarters of the same type; units are counts/second**2
 // Valid for firmware version 6.
 double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshold) const
 {
-    
+
     if (index >= NUM_CHANNELS)
         return 0L;
 
@@ -677,6 +680,14 @@ AmpIO_UInt32 AmpIO::ReadStatus(void) const
     AmpIO_UInt32 read_data = 0;
     if (port) port->ReadQuadlet(BoardId, 0, read_data);
     return read_data;
+}
+
+bool AmpIO::ReadBlock(nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
+{
+    if (!port) {
+        return false;
+    }
+    return port->ReadBlock(BoardId, addr, rdata, nbytes);
 }
 
 bool AmpIO::ReadPowerStatus(void) const

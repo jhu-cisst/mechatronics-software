@@ -18,6 +18,7 @@
 inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
 inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #else
+#include <unistd.h>
 #include <byteswap.h>
 #endif
 
@@ -434,7 +435,7 @@ int main(int argc, char **argv)
                     std::cout << "Failed to read block data via Ethernet port" << std::endl;
                     break;
                 }
-                for (i = 0; i < sizeof(fw_block_data)/sizeof(quadlet_t); i++)
+                for (i = 0; static_cast<size_t>(i) < sizeof(fw_block_data)/sizeof(quadlet_t); i++)
                     std::cout << std::dec << i << ": " << std::hex << bswap_32(fw_block_data[i])
                               << ", " << bswap_32(eth_block_data[i]) << std::endl;
                 break;

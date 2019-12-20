@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2017 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -18,6 +18,10 @@ http://www.cisst.org/cisst/license.txt.
 #include "Eth1394Port.h"
 #include "Amp1394Time.h"
 
+#ifdef _MSC_VER
+// Following seems to be necessary on Windows, at least with Npcap
+#define PCAP_DONT_INCLUDE_PCAP_BPF_H
+#endif
 #include <pcap.h>
 #include <iomanip>
 #include <sstream>
@@ -39,6 +43,7 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
+#include <unistd.h>
 #include <byteswap.h>
 #endif
 
@@ -204,9 +209,9 @@ bool Eth1394Port::Init(void)
     }
 
     // initialize ethernet header (FA-61-OE is CID assigned to LCSR by IEEE)
-    u_int8_t eth_dst[6];
+    uint8_t eth_dst[6];
     GetDestMacAddr(eth_dst);
-    u_int8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
+    uint8_t eth_src[6];   // Ethernet source address (local MAC address, see below)
 
     // Get local MAC address. There doesn't seem to be a better (portable) way to do this.
 #ifdef _MSC_VER
@@ -1034,7 +1039,7 @@ int Eth1394Port::eth1394_read(nodeid_t node, nodeaddr_t addr,
                     }
                 }
                 else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
-                    if (length == ((packet[26] << 8) | packet[27])) {
+                    if (length == static_cast<size_t>((packet[26] << 8) | packet[27])) {
                         if (checkCRC(packet))
                             memcpy(buffer, &packet[34], length);
                         else {
@@ -1154,7 +1159,7 @@ int Eth1394Port::eth1394_write_nodeidmode(int mode)// mode: 1: board_id, 0: fw_n
 
         // Ethernet frame
         const int ethlength = length_fw * 4 + 14;
-        u_int8_t frame[ethlength];
+        uint8_t frame[ethlength];
         memcpy(frame, frame_hdr, 14);
         memcpy(frame + 14, packet_FW, length_fw * 4);
 

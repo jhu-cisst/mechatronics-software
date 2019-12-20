@@ -3,7 +3,7 @@
 
 /******************************************************************************
  *
- * (C) Copyright 2018 Johns Hopkins University (JHU), All Rights Reserved.
+ * (C) Copyright 2018-2019 Johns Hopkins University (JHU), All Rights Reserved.
  *
  * This program is used to read the Dallas DS2505 chip inside a da Vinci instrument
  * via its 1-wire interface. The 1-wire interface is implemented in the FPGA,
@@ -154,7 +154,8 @@ int main(int argc, char** argv)
     }
     unsigned char family_code = static_cast<unsigned char>((status&0xFF000000)>>24);
     if (family_code != 0x0B) {
-        std::cerr << "Unknown device family code: 0x" << std::hex << family_code << " (DS2505 should be 0x0B)" << std::endl;
+        std::cerr << "Unknown device family code: 0x" << std::hex << static_cast<unsigned int>(family_code)
+                  << " (DS2505 should be 0x0B)" << std::endl;
         return -1;
     }
     unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);

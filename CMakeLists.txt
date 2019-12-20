@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2018 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -32,13 +32,16 @@ set (Amp1394_LIBRARIES   Amp1394)
 
 if (WIN32)
 
-  # On Windows, can build with winpcap (Ethernet support)
-  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap)" ON)
+  # On Windows, can build with WinPcap or Npcap (Ethernet support)
+  #    Use WinPcap for Windows XP and earlier (no longer maintained)
+  #    Use Npcap for Windows 7 and higher (use Npcap SDK)
+  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap or npcap)" ON)
 
-  # Need to specify where WinPcap Developer's Pack is installed
+  # Need to specify where WinPcap Developer's Pack or Npcap SDK is installed
   find_path (PCAP_INCLUDE_DIR pcap.h)
   # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
-  find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap wpcap and Packet libraries")
+  # Make sure to use correct version (32 or 64 bit)
+  find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap/Npcap wpcap and Packet libraries")
   set (PCAP_LIBRARIES "wpcap" "Packet")
 
 else (WIN32)
@@ -48,6 +51,7 @@ else (WIN32)
   option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
 
   # For now, assume pcap is installed somewhere standard
+  # To install:  sudo apt-get install libpcap-dev
   set (PCAP_INCLUDE_DIR "")
   set (PCAP_LIBRARIES "pcap")
 
