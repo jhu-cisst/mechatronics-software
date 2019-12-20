@@ -456,7 +456,11 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
     // all other cases, fver >= 6
     AmpIO_Int32 cnter;    
     // mask and convert to signed
-    cnter = buff & ENC_VEL_MASK_22;
+    if (fver == 6) {
+        cnter = buff & ENC_VEL_MASK_22;
+    } else {
+        cnter = buff & ENC_VEL_SUM_MASK;
+    }
     if (!(buff & ENC_DIR_MASK)) {
         cnter = -cnter;
     }
@@ -470,11 +474,10 @@ AmpIO_Int32 AmpIO::GetEncoderPrevCounter(unsigned int index) const
     if (index >= NUM_CHANNELS)
         return 0L;
 
-        // mask and convert to signed
-        cnter = buff & ENC_VEL_SUM_MASK;
-        if (!(buff & ENC_DIR_MASK))
-            cnter = -cnter;
-
+    AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
+    AmpIO_Int32 prev_perd = GetEncoderAccPrev(index);
+    AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
+    
     return cnter - rec_perd + prev_perd;
 }
 
@@ -552,6 +555,16 @@ AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
     return perd;
 }
 
+
+// Latch from 5 quarter cycles ago for accleration calculation
+// Valid for firmware version 6.
+AmpIO_Int32 AmpIO::GetEncoderAccPrev(unsigned int index) const
+{
+    quadlet_t buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    AmpIO_Int32 prev_perd = buff & ENC_ACC_PREV_MASK;
+    return prev_perd;
+}
+
 // Latch last quarter cycle for acceleration calculation
 // Valid for firmware version 6.
 AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
@@ -568,6 +581,17 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
     buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    return buff;
+}
+
+// Raw acceleration field; for firmware prior to Version 6, this was actually the encoder "frequency"
+// (i.e., number of pulses in specified time period, which can be used to estimate velocity), but was never used.
+// Starting with Firmware Version 6, it has been reused to return some data that can be used to estimate
+// the acceleration. For testing only.
+AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
+{
+    quadlet_t buff;
+    buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
     return buff;
 }
 

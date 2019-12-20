@@ -427,6 +427,10 @@ protected:
     // there's any valid bit on the 4 requested currents.
     bool WriteBufferResetsWatchdog(void) const;
 
+    /*! Returns the encoder period (counter) of the previous full cycle.
+        Used internally to calculate acceleration in firmware Rev6. */
+    AmpIO_Int32 GetEncoderPrevCounter(unsigned int index) const;
+    
     /*! Returns whether the full cycle counter has overflows (22 bits) */
     bool GetEncoderVelocityOverflow(unsigned int index) const;
 
