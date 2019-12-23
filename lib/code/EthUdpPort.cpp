@@ -254,8 +254,8 @@ bool EthUdpPort::Init(void)
     bool ret = InitNodes();
     if (ret)
         ret = ScanNodes();
-    if (!ret)
-        sockPtr->Close();
+    //if (!ret)
+    //    sockPtr->Close();
     return ret;
 }
 

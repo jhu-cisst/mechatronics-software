@@ -88,12 +88,12 @@ bool BasePort::AddBoard(BoardIO *board)
 bool BasePort::RemoveBoard(unsigned char boardId)
 {
     if (boardId >= BoardIO::MAX_BOARDS) {
-        outStr << "BasePort::RemoveBoard: board number out of range: " << boardId << std::endl;
+        outStr << "BasePort::RemoveBoard: board number out of range: " << static_cast<unsigned int>(boardId) << std::endl;
         return false;
     }
     BoardIO *board = BoardList[boardId];
     if (!board) {
-        outStr << "BasePort::RemoveBoard: board not found: " << boardId << std::endl;
+        outStr << "BasePort::RemoveBoard: board not found: " << static_cast<unsigned int>(boardId) << std::endl;
         return false;
     }
 

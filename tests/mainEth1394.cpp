@@ -385,7 +385,7 @@ int main(int argc, char **argv)
     }
 #if Amp1394_HAS_RAW1394
     // Add Ethernet hub_board to Firewire port if different than test board (boardNum)
-    if (hub_num != boardNum) {
+    if ((hub_num < BoardIO::MAX_BOARDS) && (hub_num != boardNum)) {
         std::cout << "Adding hub board: " << hub_num << std::endl;
         hub_board = new AmpIO(hub_num);
         FwPort.AddBoard(hub_board);
@@ -565,8 +565,22 @@ int main(int argc, char **argv)
         case 'x':
             if (hub_board->ReadEthernetData(buffer, 0, 64))
                 EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-            if (hub_board->ReadEthernetData(buffer, 0x80, 20))
+            if (hub_board->ReadEthernetData(buffer, 0x80, 21))
                 EthBasePort::PrintDebugData(std::cout, buffer);
+#if 0
+            if (hub_board->ReadEthernetData(buffer, 0xc0, 17)) {
+                std::cout << "Initialization Program: " << std::endl;
+                for (int i = 0; i < 17; i++) {
+                    if (buffer[i]&0x02000000) std::cout << "   Write ";
+                    else std::cout << "   Read  ";
+                    std::cout << std::hex << std::setw(2) << std::setfill('0')
+                              << ((buffer[i]&0x00ff0000)>>16) << " ";       // address
+                    if (buffer[i]&0x01000000) std::cout << "OR ";
+                    std::cout << std::hex << std::setw(4) << std::setfill('0')
+                              << (buffer[i]&0x0000ffff) << std::endl;       // data
+                }
+            }
+#endif
             break;
 
         case 'z':
@@ -580,7 +594,7 @@ int main(int argc, char **argv)
     tcsetattr(0, TCSANOW, &oldTerm);  // Restore terminal I/O settings
     if (FwPort.IsOK()) {
         FwPort.RemoveBoard(boardNum);
-        if (hub_num != boardNum) {
+        if ((hub_num < BoardIO::MAX_BOARDS) && (hub_num != boardNum)) {
             FwPort.RemoveBoard(hub_num);
             delete hub_board;
         }

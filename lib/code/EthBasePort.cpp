@@ -202,43 +202,45 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
 {
     // Following structure must match DebugData in EthernetIO.v
     struct DebugData {
-        char     header[4];        // Quad 1
-        uint32_t timestampBegin;   // Quad 2
-        uint16_t eth_status;       // Quad 3
+        char     header[4];        // Quad 0
+        uint32_t timestampBegin;   // Quad 1
+        uint16_t eth_status;       // Quad 2
         uint16_t node_id;
-        uint8_t  isFlags;          // Quad 4
+        uint8_t  isFlags;          // Quad 3
         uint8_t  moreFlags;
         uint8_t  nextState;
         uint8_t  state;
-        uint16_t RegISROther;      // Quad 5
+        uint16_t RegISROther;      // Quad 4
         uint16_t RegISR;
-        uint8_t  count;            // Quad 6
+        uint8_t  count;            // Quad 5
         uint8_t  FrameCount;
         uint16_t unused2233;
-        uint8_t  destMac[6];       // Quad 7,8
-        uint8_t  srcMac[6];        // Quad 8,9
-        uint16_t LengthFW;         // Quad 10
+        uint8_t  Eth_destMac[6];   // Quad 6,7
+        uint8_t  Eth_srcMac[6];    // Quad 7,8
+        uint16_t LengthFW;         // Quad 9
         uint8_t  maxCount;
         uint8_t  unused11;
-        uint8_t  hostIP[4];        // Quad 11
-        uint8_t  fpgaIP[4];        // Quad 12
-        uint16_t rxPktWords;       // Quad 13
-        uint16_t ipv4_length;
-        uint16_t txPktWords;       // Quad 14
+        uint8_t  IPv4_hostIP[4];   // Quad 10
+        uint8_t  IPv4_fpgaIP[4];   // Quad 11
+        uint16_t rxPktWords;       // Quad 12
+        uint16_t IPv4_Length;
+        uint16_t txPktWords;       // Quad 13
         uint16_t unused4455;
-        uint16_t numPacketValid;   // Quad 15
+        uint16_t numPacketValid;   // Quad 14
         uint16_t numPacketInvalid;
-        uint16_t numIPv4;          // Quad 16
+        uint16_t numIPv4;          // Quad 15
         uint16_t numUDP;
-        uint16_t numARP;           // Quad 17
+        uint16_t numARP;           // Quad 16
         uint16_t numICMP;
-        uint16_t numPacketError;   // Quad 18
+        uint16_t numPacketError;   // Quad 17
         uint16_t numIPv4Mismatch;
-        uint16_t numStateInvalid;  // Quad 19
+        uint16_t numStateInvalid;  // Quad 18
         uint16_t unused0000;
+        uint16_t UDP_destPort;     // Quad 19
+        uint16_t UDP_hostPort;
         uint32_t timestampEnd;     // Quad 20
     };
-    if (sizeof(DebugData) != 20*sizeof(quadlet_t)) {
+    if (sizeof(DebugData) != 21*sizeof(quadlet_t)) {
         debugStream << "PrintDebugData: structure packing problem" << std::endl;
         return;
     }
@@ -275,15 +277,15 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
     debugStream << "Count: " << std::dec << static_cast<uint16_t>(p->count) << std::endl;
     debugStream << "Unused2233: " << std::hex << p->unused2233 << std::endl;
-    EthBasePort::PrintMAC(debugStream, "DestMac", p->destMac);
-    EthBasePort::PrintMAC(debugStream, "SrcMac", p->srcMac);
+    EthBasePort::PrintMAC(debugStream, "DestMac", p->Eth_destMac);
+    EthBasePort::PrintMAC(debugStream, "SrcMac", p->Eth_srcMac);
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
     debugStream << "Unused11: " << std::hex << static_cast<uint16_t>(p->unused11) << std::endl;
     debugStream << "MaxCount: " << std::dec << static_cast<uint16_t>(p->maxCount) << std::endl;
-    EthBasePort::PrintIP(debugStream, "HostIP", p->hostIP);
-    EthBasePort::PrintIP(debugStream, "FpgaIP", p->fpgaIP);
+    EthBasePort::PrintIP(debugStream, "IPv4_hostIP", p->IPv4_hostIP);
+    EthBasePort::PrintIP(debugStream, "IPv4_fpgaIP", p->IPv4_fpgaIP);
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
-    debugStream << "ipv4_length: " << std::dec << p->ipv4_length << std::endl;
+    debugStream << "IPv4_Length: " << std::dec << p->IPv4_Length << std::endl;
     debugStream << "Unused4455: " << std::hex << p->unused4455 << std::endl;
     debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
@@ -295,6 +297,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
     debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << std::endl;
+    debugStream << "UDP_hostPort: " << std::dec << p->UDP_hostPort << std::endl;
+    debugStream << "UDP_destPort: " << std::dec << p->UDP_destPort << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
