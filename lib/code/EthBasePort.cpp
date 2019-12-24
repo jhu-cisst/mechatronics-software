@@ -205,7 +205,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         char     header[4];        // Quad 0
         uint32_t timestampBegin;   // Quad 1
         uint16_t eth_status;       // Quad 2
-        uint16_t node_id;
+        uint8_t  node_id;
+        uint8_t  eth_errors;
         uint8_t  isFlags;          // Quad 3
         uint8_t  moreFlags;
         uint8_t  nextState;
@@ -225,7 +226,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t rxPktWords;       // Quad 12
         uint16_t IPv4_Length;
         uint16_t txPktWords;       // Quad 13
-        uint16_t unused4455;
+        uint16_t unusedPattern;
         uint16_t numPacketValid;   // Quad 14
         uint16_t numPacketInvalid;
         uint16_t numIPv4;          // Quad 15
@@ -235,7 +236,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t numPacketError;   // Quad 17
         uint16_t numIPv4Mismatch;
         uint16_t numStateInvalid;  // Quad 18
-        uint16_t unused0000;
+        uint16_t UDP_Length;
         uint16_t UDP_destPort;     // Quad 19
         uint16_t UDP_hostPort;
         uint32_t timestampEnd;     // Quad 20
@@ -251,9 +252,14 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         return;
     }
     debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::endl;
-    debugStream << "FireWire node_id: " << std::dec << p->node_id << std::endl;
+    debugStream << "FireWire node_id: " << std::dec << static_cast<unsigned int>(p->node_id) << std::endl;
     unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
     EthBasePort::PrintDebug(debugStream, status);
+    debugStream << "Eth errors: ";
+    if (p->eth_errors &0x01) debugStream << "IPV4Error ";
+    if (p->eth_errors &0x02) debugStream << "IPV4Unsupported ";
+    if (p->eth_errors &0x04) debugStream << "UDPError ";
+    debugStream << std::endl;
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
     debugStream << "Flags: ";
@@ -286,7 +292,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     EthBasePort::PrintIP(debugStream, "IPv4_fpgaIP", p->IPv4_fpgaIP);
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "IPv4_Length: " << std::dec << p->IPv4_Length << std::endl;
-    debugStream << "Unused4455: " << std::hex << p->unused4455 << std::endl;
+    debugStream << "UnusedPattern: " << std::hex << p->unusedPattern << std::endl;
     debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
     debugStream << "numPacketInvalid: " << std::dec << p->numPacketInvalid << std::endl;
@@ -299,6 +305,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << std::endl;
     debugStream << "UDP_hostPort: " << std::dec << p->UDP_hostPort << std::endl;
     debugStream << "UDP_destPort: " << std::dec << p->UDP_destPort << std::endl;
+    debugStream << "UDP_Length: " << std::dec << p->UDP_Length << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
