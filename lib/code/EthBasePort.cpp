@@ -174,21 +174,16 @@ void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)
     debugStream << "Status: ";
     if (status&0x4000) debugStream << "error ";
     if (status&0x2000) debugStream << "initOK ";
-    if (status&0x1000) debugStream << "initReq ";
-    if (status&0x0800) debugStream << "ethIoErr ";
-    if (status&0x0400) debugStream << "PacketErr ";
+    if (status&0x1000) debugStream << "local ";
+    if (status&0x0800) debugStream << "remote ";
+    if (status&0x0400) debugStream << "FrameErr ";
     if (status&0x0200) debugStream << "DestErr ";
-    //if (status&0x0400) debugStream << "cmdReq ";
-    //if (status&0x0200) debugStream << "cmdAck ";
-    //if (status&0x0400) debugStream << "local ";
-    //if (status&0x0200) debugStream << "remote ";
     if (status&0x0100) debugStream << "qRead ";
     if (status&0x0080) debugStream << "qWrite ";
     if (status&0x0040) debugStream << "bRead ";
     if (status&0x0020) debugStream << "bWrite ";
-    //if ((status&0x0010)) debugStream << "multicast ";
-    if ((status&0x0010)) debugStream << "UDP ";
-    if (status&0x0008) debugStream << "KSZ-idle ";
+    if (status&0x0010) debugStream << "UDP ";
+    if (status&0x0008) debugStream << "multicast ";
     if (status&0x0004) debugStream << "ETH-idle ";
     int waitInfo = status&0x0003;
     if (waitInfo == 0) debugStream << "wait-none";
@@ -257,7 +252,6 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     EthBasePort::PrintDebug(debugStream, status);
     debugStream << "Eth errors: ";
     if (p->eth_errors &0x01) debugStream << "IPV4Error ";
-    if (p->eth_errors &0x02) debugStream << "IPV4Unsupported ";
     if (p->eth_errors &0x04) debugStream << "UDPError ";
     debugStream << std::endl;
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)

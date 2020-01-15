@@ -102,10 +102,10 @@ bool CheckEthernet(AmpIO &Board)
     ret &= CheckRegister(Board, 0x12, 0xffff, 0x0E13);  // MAC address middle = 0xOE13
     ret &= CheckRegister(Board, 0x14, 0xffff, 0xFA61);  // MAC address high = 0xFA61
     ret &= CheckRegister(Board, 0x84, 0x4000, 0x4000);  // Enable QMU transmit frame data pointer auto increment
-    ret &= CheckRegister(Board, 0x70, 0x01fe, 0x00EE);  // Enable QMU transmit flow control, CRC, and padding
+    ret &= CheckRegister(Board, 0x70, 0x01ff, 0x01EF);  // Enable QMU transmit flow control, CRC, padding, and transmit module
     ret &= CheckRegister(Board, 0x86, 0x4000, 0x4000);  // Enable QMU receive frame data pointer auto increment
     ret &= CheckRegister(Board, 0x9C, 0x00ff, 0x0001);  // Configure receive frame threshold for 1 frame
-    ret &= CheckRegister(Board, 0x74, 0xfffe, 0x7CE0);
+    ret &= CheckRegister(Board, 0x74, 0xffff, 0x7CE1);  // Enable checksums, MAC address filtering, and receive module
     // Check multicast hash table
     unsigned char MulticastMAC[6];
     EthBasePort::GetDestMulticastMacAddr(MulticastMAC);
@@ -116,8 +116,6 @@ bool CheckEthernet(AmpIO &Board)
     ret &= CheckRegister(Board, 0x82, 0x03f7, 0x0020);  // Enable QMU frame count threshold (1), no auto-dequeue
     ret &= CheckRegister(Board, 0x90, 0xffff, 0x2000);  // Enable receive interrupts (TODO: also consider link change interrupt)
     // ret &= CheckRegister(Board, 0x90, 0xffff, 0xe000);  // Enable receive interrupts (TODO: also consider link change interrupt)
-    ret &= CheckRegister(Board, 0x70, 0x0001, 0x0001);
-    ret &= CheckRegister(Board, 0x74, 0x0001, 0x0001);
     std::cout << "Checking ---- end ----" << "\n";
     return ret;
 }
@@ -541,7 +539,9 @@ int main(int argc, char **argv)
             hub_board->ReadKSZ8851Reg(0x9C, reg);
             std::cout << "RXFCTR = 0x" << std::hex << reg << "  ";
             hub_board->ReadKSZ8851Reg(0x7C, reg);
-            std::cout << "RXFHSR = 0x" << std::hex << reg << "\n";
+            std::cout << "RXFHSR = 0x" << std::hex << reg << "  ";
+            hub_board->ReadKSZ8851Reg(0x80, reg);
+            std::cout << "TXQCR = 0x" << std::hex << reg << std::endl;
             break;
 
         case 'f':
