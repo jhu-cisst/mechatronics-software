@@ -430,8 +430,8 @@ int main(int argc, char **argv)
         std::cout << std::endl << std::endl;
 
         nodeaddr_t addr;
-        quadlet_t fw_block_data[16];
-        quadlet_t eth_block_data[16];
+        quadlet_t fw_block_data[20];
+        quadlet_t eth_block_data[20];
         quadlet_t write_block[4] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444 };
         int i;
         char buf[5];
@@ -462,17 +462,22 @@ int main(int argc, char **argv)
                 break;
 
         case '3':
+                memset(fw_block_data, 0, sizeof(fw_block_data));
                 if (!FwPort.ReadBlock(boardNum, 0, fw_block_data, sizeof(fw_block_data))) {
                     std::cout << "Failed to read block data via FireWire port" << std::endl;
                     break;
                 }
+                memset(eth_block_data, 0, sizeof(eth_block_data));
                 if (!EthPort->ReadBlock(boardNum, 0, eth_block_data, sizeof(eth_block_data))) {
                     std::cout << "Failed to read block data via Ethernet port" << std::endl;
                     break;
                 }
+                std::cout << "     Firewire   Ethernet" << std::endl;
                 for (i = 0; static_cast<size_t>(i) < sizeof(fw_block_data)/sizeof(quadlet_t); i++)
-                    std::cout << std::dec << i << ": " << std::hex << bswap_32(fw_block_data[i])
-                              << ", " << bswap_32(eth_block_data[i]) << std::endl;
+                    std::cout << std::setw(2) << std::setfill(' ') << std::dec << i << ":  "
+                              << std::setw(8) << std::setfill('0') <<  std::hex
+                              << bswap_32(fw_block_data[i]) << "   " << std::setw(8) << std::setfill('0')
+                              << bswap_32(eth_block_data[i]) << std::endl;
                 break;
 
         case '4':
