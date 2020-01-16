@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -19,7 +19,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <sstream>
 
 #include "AmpIO.h"
-#include "FirewirePort.h"
+#include "BasePort.h"
 #include "Amp1394Time.h"
 
 #ifdef _MSC_VER
@@ -100,7 +100,8 @@ AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), Nu
 AmpIO::~AmpIO()
 {
     if (port) {
-        std::cerr << "Warning: AmpIO being destroyed while still in use by FirewirePort" << std::endl;
+        std::cerr << "Warning: AmpIO being destroyed while still in use by "
+                  << BasePort::PortTypeString(port->GetPortType()) <<" Port" << std::endl;
         port->RemoveBoard(this);
     }
 }
