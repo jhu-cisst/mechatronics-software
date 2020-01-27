@@ -539,6 +539,8 @@ int main(int argc, char **argv)
 
         case 'e':
             AmpIO_UInt16 reg;
+            hub_board->ReadKSZ8851Reg(0x90, reg);
+            std::cout << "IER    = 0x" << std::hex << reg << "  ";
             hub_board->ReadKSZ8851Reg(0x92, reg);
             std::cout << "ISR    = 0x" << std::hex << reg << "  ";
             hub_board->ReadKSZ8851Reg(0x9C, reg);
@@ -572,7 +574,7 @@ int main(int argc, char **argv)
                 EthBasePort::PrintEthernetPacket(std::cout, buffer, 23);
             if (hub_board->ReadEthernetData(buffer, 0, 64))
                 EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-            if (hub_board->ReadEthernetData(buffer, 0x80, 21))
+            if (hub_board->ReadEthernetData(buffer, 0x80, 16))
                 EthBasePort::PrintDebugData(std::cout, buffer);
 #if 0
             if (hub_board->ReadEthernetData(buffer, 0xa0, 17)) {

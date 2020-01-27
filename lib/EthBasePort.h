@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -132,10 +132,10 @@ public:
     static void GetDestMulticastMacAddr(unsigned char *macAddr);
 
     // Print MAC address
-    static void PrintMAC(std::ostream &outStr, const char* name, const uint8_t *addr);
+    static void PrintMAC(std::ostream &outStr, const char* name, const uint8_t *addr, bool swap16 = false);
 
     // Print IP address
-    static void PrintIP(std::ostream &outStr, const char* name, const uint8_t *addr);
+    static void PrintIP(std::ostream &outStr, const char* name, const uint8_t *addr, bool swap16 = false);
 
     // Check if FireWire packet valid
     //   length:  length of data sectio (for BRESPONSE)

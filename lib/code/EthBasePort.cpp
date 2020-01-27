@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -64,18 +64,32 @@ void EthBasePort::GetDestMulticastMacAddr(unsigned char *macAddr)
     macAddr[5] = 0xFF;
 }
 
-void EthBasePort::PrintMAC(std::ostream &outStr, const char* name, const uint8_t *addr)
+void EthBasePort::PrintMAC(std::ostream &outStr, const char* name, const uint8_t *addr, bool swap16)
 {
-    outStr << name << ": " << std::hex
-           << (int)addr[0] << ":" << (int)addr[1] << ":" << (int)addr[2] << ":"
-           << (int)addr[3] << ":" << (int)addr[4] << ":" << (int)addr[5] << std::endl;
+    if (swap16) {
+        outStr << name << ": " << std::hex << std::setw(2) << std::setfill('0')
+               << (int)addr[1] << ":" << (int)addr[0] << ":" << (int)addr[3] << ":"
+               << (int)addr[2] << ":" << (int)addr[5] << ":" << (int)addr[4] << std::endl;
+    }
+    else {
+        outStr << name << ": " << std::hex << std::setw(2) << std::setfill('0')
+               << (int)addr[0] << ":" << (int)addr[1] << ":" << (int)addr[2] << ":"
+               << (int)addr[3] << ":" << (int)addr[4] << ":" << (int)addr[5] << std::endl;
+    }
 }
 
-void EthBasePort::PrintIP(std::ostream &outStr, const char* name, const uint8_t *addr)
+void EthBasePort::PrintIP(std::ostream &outStr, const char* name, const uint8_t *addr, bool swap16)
 {
-    outStr << name << ": " << std::dec
-           << (int)addr[0] << "." << (int)addr[1] << "." << (int)addr[2] << "." << (int)addr[3]
-           << std::endl;
+    if (swap16) {
+        outStr << name << ": " << std::dec
+               << (int)addr[1] << "." << (int)addr[0] << "." << (int)addr[3] << "." << (int)addr[2]
+               << std::endl;
+    }
+    else {
+        outStr << name << ": " << std::dec
+               << (int)addr[0] << "." << (int)addr[1] << "." << (int)addr[2] << "." << (int)addr[3]
+               << std::endl;
+    }
 }
 
 //TODO: fix for byteswapping
@@ -125,13 +139,13 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
         return;
     }
     out << "Firewire Packet:" << std::endl;
-    out << "dest: " << std::hex << ((packet[0]&0xffc00000)>>20)
+    out << "  dest: " << std::hex << ((packet[0]&0xffc00000)>>20)
         << ", node: " << std::dec << ((packet[0]&0x003f0000)>>16)
         << ", tl: " << std::hex << ((packet[0]&0x0000fc00)>>10)
         << ", rt: " << ((packet[0]&0x00000300)>>8)
         << ", tcode: " << static_cast<unsigned int>(tcode) << " (" << tcode_name[tcode] << ")"
         << ", pri: " << (packet[0]&0x0000000F) << std::endl;
-    out << "src: " << std::hex << ((packet[1]&0xffc00000)>>20)
+    out << "  src: " << std::hex << ((packet[1]&0xffc00000)>>20)
         << ", node: " << std::dec << ((packet[1]&0x003f0000)>>16);
 
     if ((tcode == QRESPONSE) || (tcode == BRESPONSE)) {
@@ -139,35 +153,35 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     }
     else if ((tcode == QWRITE) || (tcode == QREAD) || (tcode == BWRITE) || (tcode == BREAD)) {
         out << ", dest_off: " << std::hex << (packet[1]&0x0000ffff) << std::endl;
-        out << "dest_off: " << std::hex << packet[2];
+        out << "  dest_off: " << std::hex << packet[2];
     }
     out << std::endl;
 
     if ((tcode == BWRITE) || (tcode == BRESPONSE) || (tcode == BREAD)) {
         data_length = (packet[3]&0xffff0000) >> 16;
-        out << "data_length: " << std::dec << data_length
+        out << "  data_length: " << std::dec << data_length
             << ", ext_tcode: " << std::hex << (packet[3]&0x0000ffff) << std::endl;
         if (data_length%4 != 0)
             out << "WARNING: data_length is not a multiple of 4" << std::endl;
     }
     else if ((tcode == QWRITE) || (tcode == QRESPONSE)) {
-        out << "data: " << std::hex << packet[3] << std::endl;
+        out << "  data: " << std::hex << packet[3] << std::endl;
     }
 
     if (tcode == QREAD)
-        out << "header_crc: " << std::hex << packet[3] << std::endl;
+        out << "  header_crc: " << std::hex << packet[3] << std::endl;
     else if (max_quads < 5)  // Nothing else to do for short packets
         return;
     else
-        out << "header_crc: " << std::hex << packet[4] << std::endl;
+        out << "  header_crc: " << std::hex << packet[4] << std::endl;
 
     if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
         data_length /= sizeof(quadlet_t);   // data_length in quadlets
         unsigned int lim = (data_length <= max_quads-5) ? data_length : max_quads-5;
         for (unsigned int i = 0; i < lim; i++)
-            out << "data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
+            out << "  data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
         if ((data_length > 0) && (data_length < max_quads-5))
-            out << "data_crc: " << std::hex << packet[5+data_length] << std::endl;
+            out << "  data_crc: " << std::hex << packet[5+data_length] << std::endl;
     }
 }
 
@@ -213,32 +227,27 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  count;            // Quad 5
         uint8_t  FrameCount;
         uint16_t Host_FW_Addr;
-        uint8_t  Eth_destMac[6];   // Quad 6,7
-        uint8_t  Eth_srcMac[6];    // Quad 7,8
-        uint16_t LengthFW;         // Quad 9
+        uint16_t LengthFW;         // Quad 6
         uint8_t  maxCount;
         uint8_t  unused11;
-        uint8_t  IPv4_hostIP[4];   // Quad 10
-        uint8_t  IPv4_fpgaIP[4];   // Quad 11
-        uint16_t rxPktWords;       // Quad 12
-        uint16_t IPv4_Length;
-        uint16_t txPktWords;       // Quad 13
+        uint16_t rxPktWords;       // Quad 7
+        uint16_t txPktWords;
+        uint16_t unused00;         // Quad 8
         uint16_t unusedPattern;
-        uint16_t numPacketValid;   // Quad 14
+        uint16_t numPacketValid;   // Quad 9
         uint16_t numPacketInvalid;
-        uint16_t numIPv4;          // Quad 15
+        uint16_t numIPv4;          // Quad 10
         uint16_t numUDP;
-        uint16_t numARP;           // Quad 16
+        uint16_t numARP;           // Quad 11
         uint16_t numICMP;
-        uint16_t numPacketError;   // Quad 17
+        uint16_t numPacketError;   // Quad 12
         uint16_t numIPv4Mismatch;
-        uint16_t numStateInvalid;  // Quad 18
-        uint16_t UDP_Length;
-        uint16_t UDP_destPort;     // Quad 19
-        uint16_t UDP_hostPort;
-        uint32_t timestampEnd;     // Quad 20
+        uint16_t numStateInvalid;  // Quad 13
+        uint16_t unused00b;
+        uint32_t unused0000;       // Quad 14
+        uint32_t timestampEnd;     // Quad 15
     };
-    if (sizeof(DebugData) != 21*sizeof(quadlet_t)) {
+    if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
         debugStream << "PrintDebugData: structure packing problem" << std::endl;
         return;
     }
@@ -279,17 +288,12 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
     debugStream << "Count: " << std::dec << static_cast<uint16_t>(p->count) << std::endl;
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
-    EthBasePort::PrintMAC(debugStream, "DestMac", p->Eth_destMac);
-    EthBasePort::PrintMAC(debugStream, "SrcMac", p->Eth_srcMac);
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
     debugStream << "Unused11: " << std::hex << static_cast<uint16_t>(p->unused11) << std::endl;
     debugStream << "MaxCount: " << std::dec << static_cast<uint16_t>(p->maxCount) << std::endl;
-    EthBasePort::PrintIP(debugStream, "IPv4_hostIP", p->IPv4_hostIP);
-    EthBasePort::PrintIP(debugStream, "IPv4_fpgaIP", p->IPv4_fpgaIP);
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
-    debugStream << "IPv4_Length: " << std::dec << p->IPv4_Length << std::endl;
-    debugStream << "UnusedPattern: " << std::hex << p->unusedPattern << std::endl;
     debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
+    debugStream << "UnusedPattern: " << std::hex << p->unusedPattern << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
     debugStream << "numPacketInvalid: " << std::dec << p->numPacketInvalid << std::endl;
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
@@ -299,9 +303,6 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
     debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << std::endl;
-    debugStream << "UDP_hostPort: " << std::dec << p->UDP_hostPort << std::endl;
-    debugStream << "UDP_destPort: " << std::dec << p->UDP_destPort << std::endl;
-    debugStream << "UDP_Length: " << std::dec << p->UDP_Length << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
@@ -345,8 +346,8 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
 
     const FrameHeader *frame = reinterpret_cast<const FrameHeader *>(packetw);
     out << "Ethernet Frame:" << std::endl;
-    EthBasePort::PrintMAC(out, "  Dest MAC", frame->destMac);
-    EthBasePort::PrintMAC(out, "  Src MAC", frame->srcMac);
+    EthBasePort::PrintMAC(out, "  Dest MAC", frame->destMac, true);
+    EthBasePort::PrintMAC(out, "  Src MAC", frame->srcMac, true);
     out << "  Ethertype/Length: " << std::hex << std::setw(4) << std::setfill('0') << frame->etherType;
     if (frame->etherType == 0x0800) out << " (IPv4)";
     else if (frame->etherType == 0x0806) out << " (ARP)";
@@ -364,8 +365,8 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
         if (ipv4->protocol == 1) out << " (ICMP)";
         else if (ipv4->protocol == 17) out << " (UDP)";
         out << std::endl;
-        EthBasePort::PrintIP(out, "    Host IP", ipv4->hostIP);
-        EthBasePort::PrintIP(out, "    Dest IP", ipv4->destIP);
+        EthBasePort::PrintIP(out, "    Host IP", ipv4->hostIP, true);
+        EthBasePort::PrintIP(out, "    Dest IP", ipv4->destIP, true);
         if (ipv4->protocol == 1) {
             const uint8_t *icmp = reinterpret_cast<const uint8_t *>(packetw+17);
             out << "    ICMP:" << std::endl;
@@ -389,9 +390,9 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
             << ", hlen:" << static_cast<unsigned int>(arp->hlen)
             << ", plen: " << static_cast<unsigned int>(arp->plen)
             << ", oper:" << arp->oper << std::endl;
-        EthBasePort::PrintMAC(out, "    Src MAC", arp->srcMac);
-        EthBasePort::PrintIP(out, "    Src IP", arp->srcIP);
-        EthBasePort::PrintIP(out, "    Dest IP", arp->destIP);
+        EthBasePort::PrintMAC(out, "    Src MAC", arp->srcMac, true);
+        EthBasePort::PrintIP(out, "    Src IP", arp->srcIP, true);
+        EthBasePort::PrintIP(out, "    Dest IP", arp->destIP, true);
     }
     else {
         out << "  Raw frame (len = " << std::dec << frame->etherType << ")" << std::endl;
