@@ -17,6 +17,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EthBasePort.h"
 #include "Amp1394Time.h"
+#include <iomanip>
 
 #ifdef _MSC_VER
 #include <stdlib.h>   // for byteswap functions
@@ -84,7 +85,7 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
         outStr << "CheckFirewirePacket: CRC error" << std::endl;
         return false;
     }
-    int tcode_recv = packet[3] >> 4;
+    unsigned int tcode_recv = packet[3] >> 4;
     if (tcode_recv != tcode) {
         outStr << "Unexpected tcode: received = " << tcode_recv << ", expected = " << tcode << std::endl;
         return false;
@@ -102,7 +103,7 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
             return false;
         }
     }
-    int tl_recv = packet[2] >> 2;
+    unsigned int tl_recv = packet[2] >> 2;
     if (tl_recv != tl) {
         outStr << "WARNING: received tl = " << tl_recv
                << ", expected tl = " << tl << std::endl;
@@ -123,6 +124,7 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
             << max_quads << ")" << std::endl;
         return;
     }
+    out << "Firewire Packet:" << std::endl;
     out << "dest: " << std::hex << ((packet[0]&0xffc00000)>>20)
         << ", node: " << std::dec << ((packet[0]&0x003f0000)>>16)
         << ", tl: " << std::hex << ((packet[0]&0x0000fc00)>>10)
@@ -210,7 +212,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t RegISR;
         uint8_t  count;            // Quad 5
         uint8_t  FrameCount;
-        uint16_t unused2233;
+        uint16_t Host_FW_Addr;
         uint8_t  Eth_destMac[6];   // Quad 6,7
         uint8_t  Eth_srcMac[6];    // Quad 7,8
         uint16_t LengthFW;         // Quad 9
@@ -251,8 +253,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
     EthBasePort::PrintDebug(debugStream, status);
     debugStream << "Eth errors: ";
-    if (p->eth_errors &0x01) debugStream << "IPV4Error ";
     if (p->eth_errors &0x04) debugStream << "UDPError ";
+    if (p->eth_errors &0x01) debugStream << "IPV4Error ";
     debugStream << std::endl;
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
@@ -276,7 +278,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
     debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
     debugStream << "Count: " << std::dec << static_cast<uint16_t>(p->count) << std::endl;
-    debugStream << "Unused2233: " << std::hex << p->unused2233 << std::endl;
+    debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
     EthBasePort::PrintMAC(debugStream, "DestMac", p->Eth_destMac);
     EthBasePort::PrintMAC(debugStream, "SrcMac", p->Eth_srcMac);
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
@@ -301,6 +303,99 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "UDP_destPort: " << std::dec << p->UDP_destPort << std::endl;
     debugStream << "UDP_Length: " << std::dec << p->UDP_Length << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
+}
+
+void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
+{
+    struct FrameHeader {
+        uint8_t  destMac[6];
+        uint8_t  srcMac[6];
+        uint16_t etherType;
+    };
+    struct IPv4Header {
+        uint16_t word0;
+        uint16_t length;
+        uint16_t ident;
+        uint16_t flags;
+        uint8_t  protocol;
+        uint8_t  ttl;
+        uint16_t checksum;
+        uint8_t  hostIP[4];
+        uint8_t  destIP[4];
+    };
+    struct UDPHeader {
+        uint16_t hostPort;
+        uint16_t destPort;
+        uint16_t length;
+        uint16_t checksum;
+    };
+    struct ARPHeader {
+        uint16_t htype;
+        uint16_t ptype;
+        uint8_t  plen;
+        uint8_t  hlen;
+        uint16_t oper;
+        uint8_t  srcMac[6];
+        uint8_t  srcIP[4];
+        uint8_t  destMac[6];  // ignored
+        uint8_t  destIP[4];
+    };
+    // Easier to work with 16-bit data, since that is how it is stored on FPGA.
+    const uint16_t *packetw = reinterpret_cast<const uint16_t *>(packet);
+
+    const FrameHeader *frame = reinterpret_cast<const FrameHeader *>(packetw);
+    out << "Ethernet Frame:" << std::endl;
+    EthBasePort::PrintMAC(out, "  Dest MAC", frame->destMac);
+    EthBasePort::PrintMAC(out, "  Src MAC", frame->srcMac);
+    out << "  Ethertype/Length: " << std::hex << std::setw(4) << std::setfill('0') << frame->etherType;
+    if (frame->etherType == 0x0800) out << " (IPv4)";
+    else if (frame->etherType == 0x0806) out << " (ARP)";
+    out << std::endl;
+    if (frame->etherType == 0x0800) {
+        const IPv4Header *ipv4 = reinterpret_cast<const IPv4Header *>(packetw+7);
+        out << "  IPv4:" << std::endl;
+        out << "    Version: " << std::dec << ((ipv4->word0&0xf000)>>12) << ", IHL: " << ((ipv4->word0&0x0f00)>>8) << std::endl;
+        out << "    Length: " << std::dec << ipv4->length << std::endl;
+        unsigned int flags = (ipv4->flags&0xc0)>>13;
+        out << "    Flags: " << std::dec << flags;
+        if (flags == 2) out << " (DF)";
+        out << ", TTL: " << static_cast<unsigned int>(ipv4->ttl) << std::endl;
+        out << "    Protocol: " << static_cast<unsigned int>(ipv4->protocol);
+        if (ipv4->protocol == 1) out << " (ICMP)";
+        else if (ipv4->protocol == 17) out << " (UDP)";
+        out << std::endl;
+        EthBasePort::PrintIP(out, "    Host IP", ipv4->hostIP);
+        EthBasePort::PrintIP(out, "    Dest IP", ipv4->destIP);
+        if (ipv4->protocol == 1) {
+            const uint8_t *icmp = reinterpret_cast<const uint8_t *>(packetw+17);
+            out << "    ICMP:" << std::endl;
+            out << "      Type: " << static_cast<unsigned int>(icmp[1])
+                << ", Code: " << static_cast<unsigned int>(icmp[0]);
+            if ((icmp[1] == 8) && (icmp[0] == 0)) out << " (Echo Request)";
+            out << std::endl;
+        }
+        else if (ipv4->protocol == 17) {
+            const UDPHeader *udp = reinterpret_cast<const UDPHeader *>(packetw+17);
+            out << "    UDP:" << std::endl;
+            out << std::dec << "      Host Port: " << udp->hostPort << std::endl;
+            out << std::dec << "      Dest Port: " << udp->destPort << std::endl;
+            out << std::dec << "      Length: " << udp->length << std::endl;
+        }
+    }
+    else if (frame->etherType == 0x0806) {
+        const ARPHeader *arp = reinterpret_cast<const ARPHeader *>(packetw+17);
+        out << "  ARP:" << std::endl;
+        out << std::hex << "    htype:" << arp->htype << ", ptype:" << arp->ptype
+            << ", hlen:" << static_cast<unsigned int>(arp->hlen)
+            << ", plen: " << static_cast<unsigned int>(arp->plen)
+            << ", oper:" << arp->oper << std::endl;
+        EthBasePort::PrintMAC(out, "    Src MAC", arp->srcMac);
+        EthBasePort::PrintIP(out, "    Src IP", arp->srcIP);
+        EthBasePort::PrintIP(out, "    Dest IP", arp->destIP);
+    }
+    else {
+        out << "  Raw frame (len = " << std::dec << frame->etherType << ")" << std::endl;
+    }
 }
 
 bool EthBasePort::ScanNodes(nodeid_t max_nodes)

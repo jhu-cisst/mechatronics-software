@@ -150,6 +150,8 @@ public:
     // Print FireWire packet
     static void PrintFirewirePacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads);
 
+    static void PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads);
+
     static void PrintDebug(std::ostream &debugStream, unsigned short status);
 
     static void PrintDebugData(std::ostream &debugStream, const quadlet_t *data);

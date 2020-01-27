@@ -269,9 +269,19 @@ bool EthUdpPort::InitNodes(void)
         outStr << "InitNodes: failed to write IP address" << std::endl;
         return false;
     }
-        
-    // Find board id for first board (i.e., one connected by Ethernet) by FireWire broadcast
     quadlet_t data = 0x0;   // initialize data to 0
+        
+    // Check hardware version of hub board
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, 4, data, FW_NODE_NOFORWARD_MASK)) {
+        outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
+        return false;
+    }
+    if (data != QLA1_String) {
+        outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
+        return false;
+    }
+
+    // Find board id for first board (i.e., one connected by Ethernet) by FireWire broadcast
     if (!ReadQuadletNode(FW_NODE_BROADCAST, 0, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
         return false;
@@ -279,6 +289,7 @@ bool EthUdpPort::InitNodes(void)
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
+
     return true;
 }
 

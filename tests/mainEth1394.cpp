@@ -568,12 +568,14 @@ int main(int argc, char **argv)
             break;
 
         case 'x':
+            if (hub_board->ReadEthernetData(buffer, 0xc0, 23))
+                EthBasePort::PrintEthernetPacket(std::cout, buffer, 23);
             if (hub_board->ReadEthernetData(buffer, 0, 64))
                 EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
             if (hub_board->ReadEthernetData(buffer, 0x80, 21))
                 EthBasePort::PrintDebugData(std::cout, buffer);
 #if 0
-            if (hub_board->ReadEthernetData(buffer, 0xc0, 17)) {
+            if (hub_board->ReadEthernetData(buffer, 0xa0, 17)) {
                 std::cout << "Initialization Program: " << std::endl;
                 for (int i = 0; i < 17; i++) {
                     if (buffer[i]&0x02000000) std::cout << "   Write ";
@@ -584,6 +586,12 @@ int main(int argc, char **argv)
                     std::cout << std::hex << std::setw(4) << std::setfill('0')
                               << (buffer[i]&0x0000ffff) << std::endl;       // data
                 }
+            }
+            if (hub_board->ReadEthernetData(buffer, 0xe0, 21)) {
+                const uint16_t *packetw = reinterpret_cast<const uint16_t *>(buffer);
+                std::cout << "ReplyIndex: " << std::endl;
+                for (int i = 0; i < 41; i++)
+                    std::cout << std::dec << i << ":  " << packetw[i] << std::endl;
             }
 #endif
             break;
