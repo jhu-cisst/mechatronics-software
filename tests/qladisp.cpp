@@ -3,9 +3,8 @@
 
 /*
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
-  Created on: 2012
 
-  (C) Copyright 2012-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -22,9 +21,11 @@ http://www.cisst.org/cisst/license.txt.
  * board. It relies on the curses library and the AmpIO library (which
  * depends on libraw1394 and/or pcap).
  *
- * Usage: sensor [-pP] <board num>
+ * Usage: qladisp [-pP] [-b<r|w>] [-v] <board num> [<board_num>]
  *        where P is the Firewire port number (default 0),
  *        or a string such as ethP and fwP, where P is the port number
+ *        -br or -bw specify to use a broadcast protocol
+ *        -v specifies to display full velocity feedback
  *
  ******************************************************************************/
 
@@ -97,6 +98,8 @@ int main(int argc, char** argv)
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
+    BasePort::ProtocolType protocol = BasePort::PROTOCOL_SEQ_RW;
+    bool fullvel = false;  // whether to display full velocity feedback
 
     // measure time between reads
     AmpIO_UInt32 maxTime = 0;
@@ -104,12 +107,24 @@ int main(int argc, char** argv)
 
     int args_found = 0;
     for (i = 1; i < (unsigned int)argc; i++) {
-        if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                return 0;
+        if (argv[i][0] == '-') {
+            if (argv[i][1] == 'p') {
+                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                    std::cerr << "Failed to parse option: " << argv[i] << std::endl;
+                    return 0;
+                }
+                std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
             }
-            std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
+            else if (argv[i][1] == 'b') {
+                // -br -- enable broadcast read/write
+                // -bw -- enable broadcast write (sequential read)
+                if (argv[i][2] == 'r')
+                    protocol = BasePort::PROTOCOL_BC_QRW;
+                else if (argv[i][2] == 'w')
+                    protocol = BasePort::PROTOCOL_SEQ_R_BC_W;
+            }
+            else if (argv[i][1] == 'v')
+                fullvel = true;
         }
         else {
             if (args_found == 0) {
@@ -126,9 +141,12 @@ int main(int argc, char** argv)
 
     if (args_found < 1) {
         // usage
-        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP]" << std::endl
+        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
                   << "                 can also specify -pfwP, -pethP or -pudp[xx.xx.xx.xx]" << std::endl
+                  << "            -br enables broadcast read/write" << std::endl
+                  << "            -bw enables broadcast write" << std::endl
+                  << "            -v  displays full velocity feedback" << std::endl
                   << std::endl;
 
 #if Amp1394_HAS_RAW1394
@@ -186,6 +204,14 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    // Set protocol; default is PROTOCOL_SEQ_RW (not broadcast), but can be changed to
+    // one of the broadcast protocols by specifying -br or -bw command line parameter.
+    if (protocol == BasePort::PROTOCOL_BC_QRW)
+        std::cerr << "Setting protocol to broadcast read/write" << std::endl;
+    else if (protocol == BasePort::PROTOCOL_SEQ_R_BC_W)
+        std::cerr << "Setting protocol to broadcast write" << std::endl;
+    Port->SetProtocol(protocol);
+
     // Currently hard-coded for up to 2 boards; initialize at mid-range
     AmpIO_UInt32 MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
@@ -242,20 +268,19 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 8, lm, "Vel:");
     mvwprintw(stdscr, 9, lm, "Cur:");
     mvwprintw(stdscr, 10, lm, "DAC:");
+    if (fullvel) mvwprintw(stdscr, 11, lm, "Acc:");
 
     wrefresh(stdscr);
 
     unsigned char dig_out = 0x0f;
 
     int loop_cnt = 0;
-    const int DEBUG_START_LINE = 19;
+    const int DEBUG_START_LINE = fullvel ? 20 : 19;
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
 
     // control loop
-    // Port->WriteAllBoardsBroadcast(); // dummy write to start the pipeline
-
     while ((c = getch()) != ESC_CHAR) {
         if (c == 'r') Port->Reset();
         else if ((c >= '0') && (c <= '3')) {
@@ -373,7 +398,6 @@ int main(int argc, char** argv)
                 strcpy(nodeStr[1], "none");
         }
 
-//        Port->ReadAllBoardsBroadcast();
         Port->ReadAllBoards();
         unsigned int j = 0;
         for (j = 0; j < BoardList.size(); j++) {
@@ -381,8 +405,13 @@ int main(int argc, char** argv)
                 for (i = 0; i < 4; i++) {
                     mvwprintw(stdscr, 6, lm+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i)+0x800000);
                     mvwprintw(stdscr, 7, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogInput(i));
-                    mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
+                    if (fullvel)
+                        mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocityRaw(i));
+                    else
+                        mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
                     mvwprintw(stdscr, 9, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
+                    if (fullvel)
+                        mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderAccelerationRaw(i));
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
                 mvwprintw(stdscr, 13, lm+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X",
@@ -414,7 +443,6 @@ int main(int argc, char** argv)
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
         }
-//        Port->WriteAllBoardsBroadcast();
         Port->WriteAllBoards();
 
         mvwprintw(stdscr, 1, lm+41, "dt: %f",  (1.0 / 49125.0) * maxTime);

@@ -687,6 +687,16 @@ bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
     return ret;
 }
 
+bool AmpIO::IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const
+{
+    AmpIO_Int32 encoderPreload;
+    bool ret = ReadEncoderPreload(index, encoderPreload);
+    if (ret) {
+        isMidrange = (encoderPreload == ENC_MIDRANGE);
+    }
+    return ret;
+}
+
 AmpIO_UInt32 AmpIO::ReadDigitalIO(void) const
 {
     AmpIO_UInt32 read_data = 0;

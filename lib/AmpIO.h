@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -197,6 +197,7 @@ public:
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
 
     bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
+    bool IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const;
 
     AmpIO_UInt32 ReadDigitalIO(void) const;
 
