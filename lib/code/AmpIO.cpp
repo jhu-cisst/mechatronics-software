@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -682,6 +682,16 @@ bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
         unsigned int channel = (index+1) << 4;
         ret = port->ReadQuadlet(BoardId, channel | ENC_LOAD_OFFSET, read_data);
         if (ret) sdata = static_cast<AmpIO_Int32>(read_data);
+    }
+    return ret;
+}
+
+bool AmpIO::IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const
+{
+    AmpIO_Int32 encoderPreload;
+    bool ret = ReadEncoderPreload(index, encoderPreload);
+    if (ret) {
+        isMidrange = (encoderPreload == ENC_MIDRANGE);
     }
     return ret;
 }
