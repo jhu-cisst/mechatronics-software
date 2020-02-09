@@ -433,7 +433,8 @@ protected:
     // Sizes of real-time read and write buffers (see below for offsets into these buffers)
     // Firmware Rev 1-6 had ReadBufSize=4+4*NUM_CHANNELS. Using the larger buffer here
     // still retains compatibility with older firmware.
-    enum { ReadBufSize = 4+6*NUM_CHANNELS,
+    enum { ReadBufSize_Old = 4+4*NUM_CHANNELS,
+           ReadBufSize = 4+6*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
     // The (internal) read buffer; the base class ReadBuffer pointer
@@ -445,6 +446,9 @@ protected:
     // WriteBuffer and WriteBufferData can be changed by calling InitWriteBuffer
     // (see EthRawPort and EthUdpPort).
     quadlet_t write_buffer_internal[WriteBufSize];
+
+    // Virtual method
+    unsigned int GetReadNumBytes() const;
 
     // Virtual method
     void InitWriteBuffer(quadlet_t *buf, size_t data_offset);

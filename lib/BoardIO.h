@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -55,7 +55,6 @@ protected:
     bool writeValid;
 
     // Following set in derived classes (in the future, by FirewirePort)
-    unsigned int ReadBufferSize;
     quadlet_t *ReadBuffer;     // buffer for real-time reads
     unsigned int WriteBufferSize;
     quadlet_t *WriteBuffer;     // buffer for real-time writes
@@ -68,7 +67,7 @@ protected:
     friend class EthUdpPort;
 
     void SetReadValid(bool flag) { readValid = flag; }
-    unsigned int GetReadNumBytes() const { return ReadBufferSize; }
+    virtual unsigned int GetReadNumBytes() const = 0;
     quadlet_t *GetReadBuffer() { return ReadBuffer; }
 
     void SetWriteValid(bool flag)
@@ -83,7 +82,7 @@ public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards
 
     BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
-                                      ReadBufferSize(0), ReadBuffer(0), WriteBufferSize(0), WriteBuffer(0) {}
+                                      ReadBuffer(0), WriteBufferSize(0), WriteBuffer(0) {}
     virtual ~BoardIO() {}
 
     inline unsigned char GetBoardId() const { return BoardId; }

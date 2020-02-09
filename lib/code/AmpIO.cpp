@@ -94,7 +94,6 @@ AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), Nu
     memset(write_buffer_internal, 0, sizeof(write_buffer_internal));
 
     // Set members in base class.
-    ReadBufferSize = sizeof(read_buffer);
     ReadBuffer = read_buffer;
     WriteBufferSize = sizeof(write_buffer_internal);
     InitWriteBuffer(0, 0);
@@ -107,6 +106,11 @@ AmpIO::~AmpIO()
                   << BasePort::PortTypeString(port->GetPortType()) <<" Port" << std::endl;
         port->RemoveBoard(this);
     }
+}
+
+unsigned int AmpIO::GetReadNumBytes() const
+{
+    return (GetFirmwareVersion() < 7) ? ReadBufSize_Old : ReadBufSize;
 }
 
 void AmpIO::InitWriteBuffer(quadlet_t *buf, size_t data_offset)
@@ -197,9 +201,8 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     //   - motor current and analog pot per channel
     //   - encoder position per channel
     //   - encoder velocity per channel
-    //   - encoder frequency per channel
-    // TODO: ReadBufSize depends on firmware version
-    for (int i=4; i<ReadBufSize; i++) {
+    //   - encoder acceleration data (depends on firmware version)
+    for (unsigned int i=4; i < GetReadNumBytes(); i++) {
         out << std::hex << bswap_32(read_buffer[i]) << " ";
         if (!((i-1)%NUM_CHANNELS)) out << std::endl;
     }
