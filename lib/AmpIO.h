@@ -131,7 +131,7 @@ public:
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
-    
+
     /*! Returns midrange value of encoder position. */
     AmpIO_Int32 GetEncoderMidRange(void) const;
 
@@ -406,6 +406,8 @@ protected:
     enum { NUM_CHANNELS = 4 };
 
     // Sizes of real-time read and write buffers (see below for offsets into these buffers)
+    // Firmware Rev 1-6 had ReadBufSize=4+4*NUM_CHANNELS. Using the larger buffer here
+    // still retains compatibility with older firmware.
     enum { ReadBufSize = 4+6*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
