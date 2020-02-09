@@ -457,7 +457,7 @@ protected:
 
     quadlet_t *GetWriteBuffer() const { return WriteBuffer; }
     quadlet_t *GetWriteBufferData() const { return WriteBufferData; }
-    unsigned int GetWriteNumBytes() const { return WriteBufSize; }
+    unsigned int GetWriteNumBytes() const { return WriteBufSize*sizeof(quadlet_t); }
     void SetWriteBuffer(quadlet_t *buf, size_t data_offset);
 
     // Test if the current write buffer contains commands that will

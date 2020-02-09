@@ -430,8 +430,8 @@ int main(int argc, char **argv)
         std::cout << std::endl << std::endl;
 
         nodeaddr_t addr;
-        quadlet_t fw_block_data[20];
-        quadlet_t eth_block_data[20];
+        quadlet_t fw_block_data[28];
+        quadlet_t eth_block_data[28];
         quadlet_t write_block[4] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444 };
         int i;
         char buf[5];

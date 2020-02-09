@@ -107,7 +107,7 @@ AmpIO::~AmpIO()
 
 unsigned int AmpIO::GetReadNumBytes() const
 {
-    return (GetFirmwareVersion() < 7) ? ReadBufSize_Old : ReadBufSize;
+    return (GetFirmwareVersion() < 7) ? (ReadBufSize_Old*sizeof(quadlet_t)) : (ReadBufSize*sizeof(quadlet_t));
 }
 
 void AmpIO::SetReadBuffer(quadlet_t *buf)
@@ -120,7 +120,7 @@ void AmpIO::SetWriteBuffer(quadlet_t *buf, size_t data_offset)
     if (buf) {
         WriteBuffer = buf;
         WriteBufferData = buf + data_offset;
-        memset(WriteBufferData, 0, WriteBufSize*sizeof(quadlet_t));
+        memset(WriteBufferData, 0, GetWriteNumBytes());
     }
     else {
         WriteBuffer = write_buffer_internal;
@@ -204,7 +204,7 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     //   - encoder position per channel
     //   - encoder velocity per channel
     //   - encoder acceleration data (depends on firmware version)
-    for (unsigned int i=4; i < GetReadNumBytes(); i++) {
+    for (unsigned int i=4; i < GetReadNumBytes()/sizeof(quadlet_t); i++) {
         out << std::hex << bswap_32(ReadBuffer[i]) << " ";
         if (!((i-1)%NUM_CHANNELS)) out << std::endl;
     }

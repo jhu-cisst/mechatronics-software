@@ -263,11 +263,14 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     EthBasePort::PrintDebug(debugStream, status);
     debugStream << "Eth errors: ";
     if (p->eth_errors &0x04) debugStream << "UDPError ";
+    if (p->eth_errors &0x02) debugStream << "AccessError ";
     if (p->eth_errors &0x01) debugStream << "IPV4Error ";
     debugStream << std::endl;
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
     debugStream << "Flags: ";
+    if (p->moreFlags&0x80) debugStream << "doSample ";
+    if (p->moreFlags&0x40) debugStream << "inSample ";
     if (p->moreFlags&0x20) debugStream << "isLocal ";
     if (p->moreFlags&0x10) debugStream << "isRemote ";
     if (p->moreFlags&0x08) debugStream << "fwPacketFresh ";
@@ -461,11 +464,13 @@ bool EthBasePort::ScanNodes(nodeid_t max_nodes)
     }
     outStr << "ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
 
+#if 0  // PK TEMP
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
         Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
         outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
     }
+#endif
 
     // update Board2Node
     for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
