@@ -90,13 +90,10 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
 
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes)
 {
-    memset(read_buffer, 0, sizeof(read_buffer));
+    memset(read_buffer_internal, 0, sizeof(read_buffer_internal));
     memset(write_buffer_internal, 0, sizeof(write_buffer_internal));
-
-    // Set members in base class.
-    ReadBuffer = read_buffer;
-    WriteBufferSize = sizeof(write_buffer_internal);
-    InitWriteBuffer(0, 0);
+    SetReadBuffer(0);
+    SetWriteBuffer(0,0);
 }
 
 AmpIO::~AmpIO()
@@ -113,7 +110,12 @@ unsigned int AmpIO::GetReadNumBytes() const
     return (GetFirmwareVersion() < 7) ? ReadBufSize_Old : ReadBufSize;
 }
 
-void AmpIO::InitWriteBuffer(quadlet_t *buf, size_t data_offset)
+void AmpIO::SetReadBuffer(quadlet_t *buf)
+{
+    ReadBuffer = buf ? buf : read_buffer_internal;
+}
+
+void AmpIO::SetWriteBuffer(quadlet_t *buf, size_t data_offset)
 {
     if (buf) {
         WriteBuffer = buf;
@@ -191,11 +193,11 @@ std::string AmpIO::GetQLASerialNumber(void)
 void AmpIO::DisplayReadBuffer(std::ostream &out) const
 {
     // first two quadlets are timestamp and status, resp.
-    out << std::hex << bswap_32(read_buffer[0]) << std::endl;
-    out << std::hex << bswap_32(read_buffer[1]) << std::endl;
+    out << std::hex << bswap_32(ReadBuffer[0]) << std::endl;
+    out << std::hex << bswap_32(ReadBuffer[1]) << std::endl;
     // next two quadlets are digital I/O and amplifier temperature
-    out << std::hex << bswap_32(read_buffer[2]) << std::endl;
-    out << std::hex << bswap_32(read_buffer[3]) << std::endl;
+    out << std::hex << bswap_32(ReadBuffer[2]) << std::endl;
+    out << std::hex << bswap_32(ReadBuffer[3]) << std::endl;
 
     // remaining quadlets are in 4 groups of NUM_CHANNELS as follows:
     //   - motor current and analog pot per channel
@@ -203,7 +205,7 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     //   - encoder velocity per channel
     //   - encoder acceleration data (depends on firmware version)
     for (unsigned int i=4; i < GetReadNumBytes(); i++) {
-        out << std::hex << bswap_32(read_buffer[i]) << " ";
+        out << std::hex << bswap_32(ReadBuffer[i]) << " ";
         if (!((i-1)%NUM_CHANNELS)) out << std::endl;
     }
     out << std::dec;
@@ -221,17 +223,17 @@ bool AmpIO::HasEthernet(void) const
 
 AmpIO_UInt32 AmpIO::GetStatus(void) const
 {
-    return bswap_32(read_buffer[STATUS_OFFSET]);
+    return bswap_32(ReadBuffer[STATUS_OFFSET]);
 }
 
 AmpIO_UInt32 AmpIO::GetTimestamp(void) const
 {
-    return bswap_32(read_buffer[TIMESTAMP_OFFSET]);
+    return bswap_32(ReadBuffer[TIMESTAMP_OFFSET]);
 }
 
 AmpIO_UInt32 AmpIO::GetDigitalInput(void) const
 {
-    return bswap_32(read_buffer[DIGIO_OFFSET]);
+    return bswap_32(ReadBuffer[DIGIO_OFFSET]);
 }
 
 AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
@@ -240,7 +242,7 @@ AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
     // before being returned to the caller because they are inverted in hardware and/or firmware.
     // This way, the digital output state matches the hardware state (i.e., 0 means digital output
     // is at 0V).
-    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((~(bswap_32(read_buffer[DIGIO_OFFSET])>>12))&0x000f);
+    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((~(bswap_32(ReadBuffer[DIGIO_OFFSET])>>12))&0x000f);
     // Firmware versions < 5 have bits in reverse order with respect to schematic
     if (GetFirmwareVersion() < 5)
         dout = BitReverse4[dout];
@@ -292,7 +294,7 @@ AmpIO_UInt8 AmpIO::GetEncoderIndex(void) const
 bool AmpIO::GetEncoderOverflow(unsigned int index) const
 {
     if (index < NUM_CHANNELS) {
-        return bswap_32(read_buffer[index+ENC_POS_OFFSET]) & ENC_OVER_MASK;
+        return bswap_32(ReadBuffer[index+ENC_POS_OFFSET]) & ENC_OVER_MASK;
     }
     else {
         std::cerr << "AmpIO::GetEncoderOverflow: index out of range " << index
@@ -305,9 +307,9 @@ AmpIO_UInt8 AmpIO::GetAmpTemperature(unsigned int index) const
 {
     AmpIO_UInt8 temp = 0;
     if (index == 0)
-        temp = (bswap_32(read_buffer[TEMP_OFFSET])>>8) & 0x000000ff;
+        temp = (bswap_32(ReadBuffer[TEMP_OFFSET])>>8) & 0x000000ff;
     else if (index == 1)
-        temp = bswap_32(read_buffer[TEMP_OFFSET]) & 0x000000ff;
+        temp = bswap_32(ReadBuffer[TEMP_OFFSET]) & 0x000000ff;
     return temp;
 }
 
@@ -317,7 +319,7 @@ AmpIO_UInt32 AmpIO::GetMotorCurrent(unsigned int index) const
         return 0L;
 
     quadlet_t buff;
-    buff = bswap_32(read_buffer[index+MOTOR_CURR_OFFSET]);
+    buff = bswap_32(ReadBuffer[index+MOTOR_CURR_OFFSET]);
     buff &= MOTOR_CURR_MASK;       // mask for applicable bits
 
     return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
@@ -329,7 +331,7 @@ AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
         return 0L;
 
     quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ANALOG_POS_OFFSET]);
+    buff = bswap_32(ReadBuffer[index+ANALOG_POS_OFFSET]);
     buff &= ANALOG_POS_MASK;       // mask for applicable bits
     buff >>= 16;                   // shift to lsb alignment
 
@@ -339,7 +341,7 @@ AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
 AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 {
     if (index < NUM_CHANNELS) {
-        return static_cast<AmpIO_Int32>(bswap_32(read_buffer[index + ENC_POS_OFFSET]) & ENC_POS_MASK) - ENC_MIDRANGE;
+        return static_cast<AmpIO_Int32>(bswap_32(ReadBuffer[index + ENC_POS_OFFSET]) & ENC_POS_MASK) - ENC_MIDRANGE;
     }
     return 0;
 }
@@ -531,7 +533,7 @@ bool AmpIO::GetEncoderDir(unsigned int index) const
 AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
 {
     AmpIO_Int32 perd = 0;
-    quadlet_t buff = bswap_32(read_buffer[index+offset]);
+    quadlet_t buff = bswap_32(ReadBuffer[index+offset]);
     if (GetFirmwareVersion() == 6) {
         perd = buff & ENC_ACC_PREV_MASK;
     } else if (GetFirmwareVersion() >= 7) {
@@ -544,7 +546,7 @@ AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
 // Valid for firmware version 6.
 AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
 {
-    AmpIO_UInt32 ms_buff = bswap_32(read_buffer[index+ENC_QTR1_OFFSET]);
+    AmpIO_UInt32 ms_buff = bswap_32(ReadBuffer[index+ENC_QTR1_OFFSET]);
     AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
     AmpIO_Int32 cur_perd = (((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
     return cur_perd;
@@ -555,7 +557,7 @@ AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_VEL_OFFSET]);
+    buff = bswap_32(ReadBuffer[index+ENC_VEL_OFFSET]);
     return buff;
 }
 
@@ -566,7 +568,7 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
 {
     quadlet_t buff;
-    buff = bswap_32(read_buffer[index+ENC_FRQ_OFFSET]);
+    buff = bswap_32(ReadBuffer[index+ENC_FRQ_OFFSET]);
     return buff;
 }
 

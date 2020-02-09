@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -471,6 +471,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     }
 
     // initialize max buffer
+    // TODO: need to update following
     const int hubReadSize = 272;     // 16 * 17 = 272 max
     quadlet_t hubReadBuffer[hubReadSize];
     memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
@@ -498,6 +499,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 
     for (int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
+            // TODO: Need to update following
             const int readSize = 17;  // 1 seq + 16 data, unit quadlet
             quadlet_t readBuffer[readSize];
 

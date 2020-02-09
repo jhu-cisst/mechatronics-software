@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -313,7 +313,7 @@ bool EthUdpPort::AddBoard(BoardIO *board)
         quadlet_t * buf = new quadlet_t[block_write_len];
         // Offset into the data part of the buffer
         size_t offset = FW_BWRITE_HEADER_SIZE/sizeof(quadlet_t);
-        board->InitWriteBuffer(buf, offset);
+        board->SetWriteBuffer(buf, offset);
     }
     return ret;
 }
@@ -325,7 +325,7 @@ bool EthUdpPort::RemoveBoard(unsigned char boardId)
     if (board) {
         // Free up the memory that was allocated in AddBoard
         delete [] BoardList[boardId]->GetWriteBuffer();
-        BoardList[boardId]->InitWriteBuffer(0, 0);
+        BoardList[boardId]->SetWriteBuffer(0, 0);
         ret = BasePort::RemoveBoard(boardId);
     }
     else

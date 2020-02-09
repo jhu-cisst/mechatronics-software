@@ -54,35 +54,38 @@ protected:
     bool readValid;
     bool writeValid;
 
-    // Following set in derived classes (in the future, by FirewirePort)
-    quadlet_t *ReadBuffer;     // buffer for real-time reads
-    unsigned int WriteBufferSize;
-    quadlet_t *WriteBuffer;     // buffer for real-time writes
-    quadlet_t *WriteBufferData; // buffer for data part
-
     friend class BasePort;
     friend class FirewirePort;
     friend class EthBasePort;
     friend class EthRawPort;
     friend class EthUdpPort;
 
+    // DESIGN APPROACH (IN PROCESS):
+    // For real-time block reads and writes, the board class (i.e., derived classes from BoardIO)
+    // determines the data size (NumBytes), but the port class (i.e., derived classes from BasePort)
+    // allocate the memory and call SetReadBuffer/SetWriteBuffer.
+
+    // Following methods are for real-time block reads
     void SetReadValid(bool flag) { readValid = flag; }
     virtual unsigned int GetReadNumBytes() const = 0;
-    quadlet_t *GetReadBuffer() { return ReadBuffer; }
+    virtual quadlet_t *GetReadBuffer() const = 0;
+    virtual void SetReadBuffer(quadlet_t *buf) = 0;
 
+    // Following methods are for real-time block writes
+    // TODO: Consolidate Buffer and BufferData
     void SetWriteValid(bool flag)
-    { writeValid = flag; if (writeValid) memset(WriteBufferData, 0, WriteBufferSize); }
-    unsigned int GetWriteNumBytes() const { return WriteBufferSize; }
-    quadlet_t *GetWriteBuffer() { return WriteBuffer; }
-    quadlet_t *GetWriteBufferData() { return WriteBufferData; }
-    virtual void InitWriteBuffer(quadlet_t *buf, size_t data_offset) = 0;
+    { writeValid = flag; if (writeValid) memset(GetWriteBufferData(), 0, GetWriteNumBytes()); }
+    virtual unsigned int GetWriteNumBytes() const = 0;
+    virtual quadlet_t *GetWriteBuffer() const = 0;
+    virtual quadlet_t *GetWriteBufferData() const = 0;
+    virtual void SetWriteBuffer(quadlet_t *buf, size_t data_offset) = 0;
+
     virtual bool WriteBufferResetsWatchdog(void) const = 0;
 
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards
 
-    BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
-                                      ReadBuffer(0), WriteBufferSize(0), WriteBuffer(0) {}
+    BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false) {}
     virtual ~BoardIO() {}
 
     inline unsigned char GetBoardId() const { return BoardId; }

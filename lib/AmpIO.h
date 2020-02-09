@@ -437,21 +437,28 @@ protected:
            ReadBufSize = 4+6*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
-    // The (internal) read buffer; the base class ReadBuffer pointer
-    // is initialized to this buffer in the constructor.
-    quadlet_t read_buffer[ReadBufSize];     // buffer for real-time reads
+    // Buffer for real-time block reads. The constructor sets this to read_buffer_internal
+    // so that it is always valid, but the Port may set it differently, e.g., to point to
+    // the appropriate offset within a larger broadcast buffer.
+    quadlet_t *ReadBuffer;
+    quadlet_t read_buffer_internal[ReadBufSize];
 
-    // Internal write buffer; the base class WriteBuffer and WriteBufferData pointers are
-    // initialized to this buffer in the constructor, so that they always point to valid memory.
-    // WriteBuffer and WriteBufferData can be changed by calling InitWriteBuffer
-    // (see EthRawPort and EthUdpPort).
+    // Buffer for real-time block writes. The constructor sets this to write_buffer_internal
+    // so that it is always valid, but the Port may set it differently, e.g., to point to
+    // the appropriate offset within a larger broadcast buffer.
+    quadlet_t *WriteBuffer;     // buffer for real-time writes
+    quadlet_t *WriteBufferData; // buffer for data part
     quadlet_t write_buffer_internal[WriteBufSize];
 
-    // Virtual method
+    // Virtual methods
+    quadlet_t *GetReadBuffer() const { return ReadBuffer; }
     unsigned int GetReadNumBytes() const;
+    void SetReadBuffer(quadlet_t *buf);
 
-    // Virtual method
-    void InitWriteBuffer(quadlet_t *buf, size_t data_offset);
+    quadlet_t *GetWriteBuffer() const { return WriteBuffer; }
+    quadlet_t *GetWriteBufferData() const { return WriteBufferData; }
+    unsigned int GetWriteNumBytes() const { return WriteBufSize; }
+    void SetWriteBuffer(quadlet_t *buf, size_t data_offset);
 
     // Test if the current write buffer contains commands that will
     // reset the watchdog on the board.  In practice, checks if
