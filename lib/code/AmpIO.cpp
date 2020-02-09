@@ -63,8 +63,6 @@ const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder QT
 const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
 const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
 
-const AmpIO_UInt32 DAC_WR_A         = 0x00300000;  /*!< Command to write DAC channel A */
-
 const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
 const double VEL_PERD               = 1.0/49152000;    /* Clock period for velocity measurements (Rev 7+ firmware) */
 const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
@@ -659,7 +657,7 @@ void AmpIO::SetSafetyRelay(bool state)
 bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 {
     quadlet_t data = 0x00;
-    data = VALID_BIT | ((BoardId & 0x0F) << 24) | DAC_WR_A | (sdata & DAC_MASK);
+    data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
 
     if (index < NUM_CHANNELS) {
         WriteBufferData[index+WB_CURR_OFFSET] = bswap_32(data);
