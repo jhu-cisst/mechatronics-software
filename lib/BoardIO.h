@@ -81,6 +81,7 @@ protected:
     virtual void SetWriteBuffer(quadlet_t *buf, size_t data_offset) = 0;
 
     virtual bool WriteBufferResetsWatchdog(void) const = 0;
+    virtual void CheckCollectCallback() = 0;
 
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards

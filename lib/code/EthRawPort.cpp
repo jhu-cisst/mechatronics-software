@@ -420,6 +420,8 @@ bool EthRawPort::WriteAllBoardsBroadcast(void)
                 ret2 = WriteQuadlet(bid, 0x00, ctrl);
                 if (!ret2) allOK = false;
             }
+            // Check for data collection callback
+            BoardList[bid]->CheckCollectCallback();
             // SetWriteValid clears the buffer if the write was valid
             BoardList[bid]->SetWriteValid(ret&&ret2);
         }

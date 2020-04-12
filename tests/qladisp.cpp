@@ -34,6 +34,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <curses.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <vector>
 
 #include <Amp1394/AmpIORevision.h>
@@ -83,6 +84,50 @@ void PrintDebugStream(std::stringstream &debugStream)
     }
     debugStream.clear();
     debugStream.str("");
+}
+
+unsigned int collectFileNum = 0;
+std::ofstream collectFile;
+bool isCollecting = false;
+
+bool CollectCB(quadlet_t *buffer, short nquads, unsigned short readSize)
+{
+    collectFile.write(reinterpret_cast<const char *>(buffer), nquads*sizeof(quadlet_t));
+    if (isCollecting)
+        mvwprintw(stdscr, 1, 76, "%4d,%4u", nquads, readSize);
+    else {
+        collectFile.close();
+        mvwprintw(stdscr, 1, 76, "         ");
+    }
+    return true;
+}
+
+bool CollectFileConvert(const char *inFilename, const char *outFilename)
+{
+    std::cerr << "Converting data collection file " << inFilename << " to " << outFilename << std::endl;
+    std::ifstream inFile(inFilename, std::ifstream::binary);
+    if (!inFile.good()) {
+        std::cerr << "Failed to open input data collection file " << inFilename << std::endl;
+        return false;
+    }
+    std::ofstream outFile(outFilename, std::ofstream::trunc);
+    if (!outFile.good()) {
+        std::cerr << "Failed to open output data collection file " << outFilename << std::endl;
+        return false;
+    }
+    quadlet_t value;
+    while (inFile.good()) {
+        inFile.read(reinterpret_cast<char *>(&value), sizeof(quadlet_t));
+        outFile << std::dec
+                << ((value&0xC0000000)>>30) << ", "    // flag
+                << ((value&0x3FF00000)>>20) << ", "    // write index
+                << ((value&0x000F0000)>>16) << ", "    // channel
+                << std::hex << (value&0x0000FFFF)      // data
+                << std::endl;
+    }
+    inFile.close();
+    outFile.close();
+    return true;
 }
 
 int main(int argc, char** argv)
@@ -170,7 +215,8 @@ int main(int argc, char** argv)
                   << "'w': increment encoders" << std::endl
                   << "'s': decrement encoders" << std::endl
                   << "'=': increase motor current by about 50mA" << std::endl
-                  << "'-': increase motor current by about 50mA" << std::endl << std::endl;
+                  << "'-': increase motor current by about 50mA" << std::endl
+                  << "'c': start/stop data collection" << std::endl;
         return 0;
     }
 
@@ -273,6 +319,7 @@ int main(int argc, char** argv)
     wrefresh(stdscr);
 
     unsigned char dig_out = 0x0f;
+    unsigned char collect_axis = 1;
 
     int loop_cnt = 0;
     const int DEBUG_START_LINE = fullvel ? 20 : 19;
@@ -363,6 +410,29 @@ int main(int argc, char** argv)
                     MotorCurrents[j][i] -= 0x100;   // 0x100 is about 50 mA
             }
         }
+        else if (c == 'c') {
+            int collect_board = (collect_axis <= 4) ? 0 : 1;
+            if (BoardList[collect_board]->IsCollecting()) {
+                BoardList[collect_board]->DataCollectionStop();
+                mvwprintw(stdscr, 1, 62, "             ");
+                if (collect_axis > collectFileNum)
+                    collectFileNum = collect_axis;
+                collect_axis = (collect_axis == numAxes) ? 1 : collect_axis+1;
+                isCollecting = false;
+            }
+            else {
+                char fileName[20];
+                sprintf(fileName, "Collect%d.raw", collect_axis);
+                collectFile.open(fileName, std::ofstream::binary|std::ofstream::trunc);
+                if (!collectFile.good())
+                    std::cerr << "Failed to open data collection file " << fileName << std::endl;
+                unsigned char collect_chan = collect_axis-4*collect_board;
+                if (BoardList[collect_board]->DataCollectionStart(collect_chan, CollectCB)) {
+                    isCollecting = true;
+                    mvwprintw(stdscr, 1, 62, "Collecting %d:", collect_axis);
+                }
+            }
+        }
 
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
@@ -451,7 +521,7 @@ int main(int argc, char** argv)
         usleep(500);
     }
 
-    for (j= 0; j < BoardList.size(); j++) {
+    for (j = 0; j < BoardList.size(); j++) {
         BoardList[j]->WritePowerEnable(false);      // Turn power off
         BoardList[j]->WriteAmpEnable(0x0f, 0x00);   // Turn power off
         BoardList[j]->WriteSafetyRelay(false);
@@ -460,5 +530,13 @@ int main(int argc, char** argv)
 
     endwin();
     delete Port;
+    // Process any data collection files (convert from binary to text)
+    for (j = 1; j <= collectFileNum; j++) {
+        char inFile[20];
+        char outFile[20];
+        sprintf(inFile,  "Collect%d.raw", j);
+        sprintf(outFile, "Collect%d.csv", j);
+        CollectFileConvert(inFile, outFile);
+    }
     return 0;
 }

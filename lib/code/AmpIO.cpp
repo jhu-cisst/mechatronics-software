@@ -30,6 +30,7 @@ inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
 #endif
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
+const AmpIO_UInt32 COLLECT_BIT      = 0x40000000;  /*!< Enable data collection on FPGA */
 const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
 const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
 const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
@@ -88,7 +89,8 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
                                 0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
-AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes)
+AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes),
+                                                           collect_state(false), collect_cb(0)
 {
     memset(read_buffer_internal, 0, sizeof(read_buffer_internal));
     memset(write_buffer_internal, 0, sizeof(write_buffer_internal));
@@ -663,6 +665,8 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 {
     quadlet_t data = 0x00;
     data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
+    if (collect_state && (collect_chan == (index+1)))
+        data |= COLLECT_BIT;
 
     if (index < NUM_CHANNELS) {
         WriteBufferData[index+WB_CURR_OFFSET] = bswap_32(data);
@@ -1411,4 +1415,74 @@ bool AmpIO::ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned in
             buffer[i] = bswap_32(buffer[i]);
     }
     return ret;
+}
+
+bool AmpIO::DataCollectionStart(unsigned char chan, CollectCallback collectCB)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    if ((chan < 1) || (chan > NUM_CHANNELS)) return false;
+    collect_state = true;
+    collect_chan = chan;
+    collect_rindex = 0;
+    collect_rquads = COLLECT_MIN;
+    collect_cb = collectCB;
+    return true;
+}
+
+void AmpIO::DataCollectionStop()
+{
+    collect_state = false;
+}
+
+bool AmpIO::IsCollecting() const
+{
+    return collect_state;
+}
+
+bool AmpIO::ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    // Firmware currently cannot read more than 1024 quadlets.
+    if (nquads > 1024) return false;
+    nodeaddr_t address = 0x7000 + offset;   // ADDR_DATA_BUF = 0x7000
+    bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
+    if (ret) {
+        for (unsigned short i = 0; i < nquads; i++)
+            buffer[i] = bswap_32(buffer[i]);
+    }
+    return ret;
+}
+
+void AmpIO::CheckCollectCallback()
+{
+    if (collect_cb == 0) return;
+    short numQuads = -1;
+    unsigned short collect_rquads_saved = collect_rquads;
+    if (ReadCollectedData(collect_data, collect_rindex, collect_rquads)) {
+        // Get current write index
+        unsigned short collect_windex = (collect_data[collect_rquads-1]&0x3ff00000) >> 20;
+        // Figure out how much data is available (even if we have not read all of it)
+        unsigned short numAvail = (collect_windex >= collect_rindex) ? (collect_windex-collect_rindex)
+                                                                     : (COLLECT_BUFSIZE +collect_windex-collect_rindex);
+        // Set numQuads and update collect_rquads for next time
+        if (numAvail < collect_rquads) {
+            numQuads = numAvail;
+            // Read more than was available, so decrease for next read
+            if (collect_rquads > COLLECT_MIN)
+                collect_rquads--;
+        }
+        else {
+            numQuads = collect_rquads;
+            // Read less than was available, so increase for next read.
+            if (collect_rquads == COLLECT_MIN)
+                collect_rquads = (numAvail > COLLECT_MAX) ? COLLECT_MAX : numAvail;
+            else if (collect_rquads < COLLECT_MAX)
+                collect_rquads++;
+        }
+        collect_rindex += numQuads;
+        if (collect_rindex >= COLLECT_BUFSIZE)
+            collect_rindex -= COLLECT_BUFSIZE;
+    }
+    if (!(*collect_cb)(collect_data, numQuads, collect_rquads_saved))
+        DataCollectionStop();
 }

@@ -570,6 +570,8 @@ bool FirewirePort::WriteAllBoards(void)
                 bool ret3 = WriteNoOp(board);
                 if (ret3) noneWritten = false;
             }
+            // Check for data collection callback
+            BoardList[board]->CheckCollectCallback();
             // SetWriteValid clears the buffer if the write was valid
             BoardList[board]->SetWriteValid(ret&&ret2);
         }
@@ -648,6 +650,8 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
                 if (ret3) noneWritten = false;
             }
 
+            // Check for data collection callback
+            BoardList[board]->CheckCollectCallback();
             // SetWriteValid clears the buffer if the write was valid
             BoardList[board]->SetWriteValid(ret&&ret2);
         }

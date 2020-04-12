@@ -424,6 +424,30 @@ public:
     // Note: This is not yet fully implemented in firmware (e.g., need to edit FPGA1394Eth-QLA.v)
     bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
 
+    // *********************** Data Collection Methods *******************************
+
+    /*! \brief User-supplied callback function for data collection
+        \param buffer pointer to collected data
+        \param nquads number of elements in buffer (-1 if error)
+        \param readSize size of most recent block read request (informational)
+        \returns returning false stops data collection (same as calling DataCollectionStop)
+    */
+    typedef bool (*CollectCallback)(quadlet_t *buffer, short nquads, unsigned short readSize);
+
+    /*! \brief Start data collection on FPGA (Firmware Rev 7+)
+        \param chan which channel to collect (1-4)
+        \param collectCB optional callback function
+        \returns true   if data collection available (Firmware Rev 7+) and parameters are valid
+        \note  If callback not specified, must call ReadCollectedData to read data
+    */
+    bool DataCollectionStart(unsigned char chan, CollectCallback collectCB = 0);
+    /*! \brief Stop data collection on FPGA */
+    void DataCollectionStop();
+    /*! \brief Returns true if data collection is active */
+    bool IsCollecting() const;
+    /*! \brief Read collected data from FPGA memory buffer */
+    bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
+
 protected:
     unsigned int NumAxes;   // not currently used
 
@@ -450,6 +474,21 @@ protected:
     quadlet_t *WriteBufferData; // buffer for data part
     quadlet_t write_buffer_internal[WriteBufSize];
 
+    // Data collection
+    // The FPGA firmware contains a data collection buffer of 1024 quadlets.
+    // Data collection is enabled by setting the COLLECT_BIT when writing the desired motor current.
+    // Data can only be collected on one channel, specified by collect_chan.
+    enum { COLLECT_BUFSIZE = 1024,     // must match firmware buffer size
+           COLLECT_MAX = 512,          // maximum read request size (at 400 MBit/sec)
+           COLLECT_MIN = 16            // minimum read request size (arbitrary)
+         };
+    quadlet_t collect_data[COLLECT_MAX];
+    bool collect_state;                // true if collecting data
+    unsigned char collect_chan;        // which channel is being collected
+    CollectCallback collect_cb;        // user-supplied callback (if non-zero)
+    unsigned short collect_rindex;     // current read index
+    unsigned short collect_rquads;     // current block read request size (in quadlets)
+    
     // Virtual methods
     quadlet_t *GetReadBuffer() const { return ReadBuffer; }
     unsigned int GetReadNumBytes() const;
@@ -479,6 +518,11 @@ protected:
     /*! Returns the latched quarter cycle periods.
       Used internally to calculate acceleration in firmware Rev >6. */
     AmpIO_Int32 GetEncoderQtr(unsigned int index, unsigned int offset) const;
+
+    /*! \brief If user-supplied callback is not NULL, read data collection buffer and then call callback.
+        \note Called by relevant Port class.
+    */
+    void CheckCollectCallback();
 
     // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
     // Note that there are two velocity measurements. The first one (ENC_VEL_OFFSET)

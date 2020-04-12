@@ -556,6 +556,8 @@ bool EthBasePort::WriteAllBoards()
                 bool ret3 = WriteNoOp(bid);
                 if (ret3) noneWritten = false;
             }
+            // Check for data collection callback
+            BoardList[bid]->CheckCollectCallback();
             // SetWriteValid clears the buffer if the write was valid
             BoardList[bid]->SetWriteValid(ret&&ret2);
         }
