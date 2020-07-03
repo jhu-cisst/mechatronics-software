@@ -220,6 +220,9 @@ public:
 
     // ********************** WRITE Methods **********************************
 
+    // Reboot FPGA
+    bool WriteReboot(void);
+
     // Enable motor power to the entire board (it is still necessary
     // to enable power to the individual amplifiers).
     bool WritePowerEnable(bool state);

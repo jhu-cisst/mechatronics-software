@@ -33,8 +33,10 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     tcsetattr(STDIN_FILENO, TCSANOW, &newTerm);  // change terminal settings
 #endif
 
+    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
     int c = 0;
-    while ((c < '0') || (c > '7')) {
+    int maxChar = (fver >= 7) ? '8' : '7';
+    while ((c < '0') || (c > maxChar)) {
         if (c) {
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
         }
@@ -51,7 +53,10 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
                   << "4) Program FPGA SN" << std::endl
                   << "5) Program QLA SN" << std::endl
                   << "6) Read FPGA SN" << std::endl
-                  << "7) Read QLA SN" << std::endl  << std::endl;
+                  << "7) Read QLA SN" << std::endl;
+        if (fver >= 7)
+            std::cout << "8) Reboot FPGA" << std::endl;
+        std::cout << std::endl;
 
         std::cout << "Select option: ";
         c = getchar();
@@ -432,6 +437,10 @@ int main(int argc, char** argv)
             sn = Board.GetQLASerialNumber();
             if (!sn.empty())
                 std::cout << "QLA serial number: " << sn << std::endl;
+            break;
+        case 8:
+            Board.WriteReboot();
+            std::cout << "Rebooting FPGA ..." << std::endl;
             break;
         default:
             std::cout << "Not yet implemented" << std::endl;

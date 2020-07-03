@@ -35,6 +35,7 @@ const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bi
 const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
 const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
 
+const AmpIO_UInt32 REBOOT_FPGA      = 0x00300000;  /*!< Reboot FPGA (Rev 7+)       */
 const AmpIO_UInt32 PWR_ENABLE       = 0x000c0000;  /*!< Turn pwr_en on             */
 const AmpIO_UInt32 PWR_DISABLE      = 0x00080000;  /*!< Turn pwr_en off            */
 const AmpIO_UInt32 RELAY_ON         = 0x00030000;  /*!< Turn safety relay on       */
@@ -781,6 +782,18 @@ AmpIO_UInt32 AmpIO::ReadIPv4Address(void) const
 /*******************************************************************************
  * Write commands
  */
+
+bool AmpIO::WriteReboot(void)
+{
+    if (GetFirmwareVersion() < 7) {
+        // Could instead allow this to be used with older firmware, where the "reboot"
+        // flag was instead used as a "soft reset".
+        std::cerr << "AmpIO::WriteReboot: requires firmware 7 or above" << std::endl;
+        return false;
+    }
+    AmpIO_UInt32 write_data = REBOOT_FPGA;
+    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+}
 
 bool AmpIO::WritePowerEnable(bool state)
 {

@@ -224,11 +224,11 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  state;
         uint16_t RegISROther;      // Quad 4
         uint16_t RegISR;
-        uint8_t  count;            // Quad 5
+        uint8_t  fw_count;         // Quad 5
         uint8_t  FrameCount;
         uint16_t Host_FW_Addr;
         uint16_t LengthFW;         // Quad 6
-        uint8_t  maxCount;
+        uint8_t  maxCountFW;
         uint8_t  unused11;
         uint16_t rxPktWords;       // Quad 7
         uint16_t txPktWords;
@@ -243,7 +243,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t numPacketError;   // Quad 12
         uint16_t numIPv4Mismatch;
         uint16_t numStateInvalid;  // Quad 13
-        uint16_t unused00b;
+        uint8_t  numReset;
+        uint8_t  unused0;
         uint32_t unused0000;       // Quad 14
         uint32_t timestampEnd;     // Quad 15
     };
@@ -266,7 +267,25 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     if (p->eth_errors &0x02) debugStream << "AccessError ";
     if (p->eth_errors &0x01) debugStream << "IPV4Error ";
     debugStream << std::endl;
-    debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
+    std::string stateName;
+    switch (p->state) {
+    case 0:  stateName.assign("0");
+             break;
+    case 1:  stateName.assign("IDLE");
+             break;
+    case 2:  stateName.assign("RESET");
+             break;
+    case 4:  stateName.assign("IRQ");
+             break;
+    case 8:  stateName.assign("RECEIVE");
+             break;
+    case 16: stateName.assign("SEND");
+             break;
+    case 32: stateName.assign("KSZIO");
+             break;
+    default: stateName.assign("???");
+    }
+    debugStream << "State: " << stateName << std::dec
                 << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
     debugStream << "Flags: ";
     if (p->moreFlags&0x80) debugStream << "doSample ";
@@ -289,11 +308,11 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "RegISR: " << std::hex << p->RegISR << std::endl;
     debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
     debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
-    debugStream << "Count: " << std::dec << static_cast<uint16_t>(p->count) << std::endl;
+    debugStream << "fw_count: " << std::dec << static_cast<uint16_t>(p->fw_count) << std::endl;
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
     debugStream << "Unused11: " << std::hex << static_cast<uint16_t>(p->unused11) << std::endl;
-    debugStream << "MaxCount: " << std::dec << static_cast<uint16_t>(p->maxCount) << std::endl;
+    debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW) << std::endl;
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
     debugStream << "UnusedPattern: " << std::hex << p->unusedPattern << std::endl;
@@ -306,6 +325,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
     debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << std::endl;
+    debugStream << "numReset: " << std::dec << static_cast<uint16_t>(p->numReset) << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 
