@@ -554,32 +554,42 @@ bool EthBasePort::WriteAllBoards()
     bool noneWritten = true;
     for (unsigned char bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
         if (BoardList[bid]) {
-            bool noneWrittenThisBoard = true;
             quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
             unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
             unsigned int numQuads = numBytes/4;
-            // Currently (Rev 1-6 firmware), the last quadlet (Status/Control register)
-            // is done as a separate quadlet write.
-            bool ret = WriteBlock(bid, 0, buf, numBytes-4);
-            if (ret) { noneWritten = false; noneWrittenThisBoard = false; }
-            else allOK = false;
-            quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
-            bool ret2 = true;
-            if (ctrl) {    // if anything non-zero, write it
-                ret2 = WriteQuadlet(bid, 0x00, ctrl);
-                if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
+            if (FirmwareVersion[bid] < 7) {
+                // Rev 1-6 firmware: the last quadlet (Status/Control register)
+                // is done as a separate quadlet write.
+                bool noneWrittenThisBoard = true;
+                bool ret = WriteBlock(bid, 0, buf, numBytes-4);
+                if (ret) { noneWritten = false; noneWrittenThisBoard = false; }
                 else allOK = false;
+                quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
+                bool ret2 = true;
+                if (ctrl) {    // if anything non-zero, write it
+                    ret2 = WriteQuadlet(bid, 0x00, ctrl);
+                    if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
+                    else allOK = false;
+                }
+                if (noneWrittenThisBoard
+                    || !(BoardList[bid]->WriteBufferResetsWatchdog())) {
+                    // send no-op to reset watchdog
+                    bool ret3 = WriteNoOp(bid);
+                    if (ret3) noneWritten = false;
+                }
+                // SetWriteValid clears the buffer if the write was valid
+                BoardList[bid]->SetWriteValid(ret&&ret2);
             }
-            if (noneWrittenThisBoard
-                || !(BoardList[bid]->WriteBufferResetsWatchdog())) {
-                // send no-op to reset watchdog
-                bool ret3 = WriteNoOp(bid);
-                if (ret3) noneWritten = false;
+            else {
+                // Rev 7 firmware: write DAC (x4) and Status/Control register
+                bool ret = WriteBlock(bid, 0, buf, numBytes);
+                if (ret) noneWritten = false;
+                else allOK = false;
+                // SetWriteValid clears the buffer if the write was valid
+                BoardList[bid]->SetWriteValid(ret);
             }
             // Check for data collection callback
             BoardList[bid]->CheckCollectCallback();
-            // SetWriteValid clears the buffer if the write was valid
-            BoardList[bid]->SetWriteValid(ret&&ret2);
         }
     }
     if (noneWritten)
