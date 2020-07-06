@@ -38,8 +38,6 @@ protected:
 
     size_t ReadErrorCounter_;
 
-    int max_board;  // highest index of used (non-zero) entry in BoardList
-
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
     static PortListType PortList;
@@ -88,8 +86,8 @@ public:
     // Read all boards broadcasting
     bool ReadAllBoardsBroadcast(void);
 
-    // Write to all boards
-    bool WriteAllBoards(void);
+    // Handle NoneWritten in WriteAllBoards
+    void HandleNoneWritten(void);
 
     // Write to all boards using broadcasting
     bool WriteAllBoardsBroadcast(void);

@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -95,6 +95,7 @@ protected:
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
     unsigned int NumOfBoards_;      // number of boards in use
     unsigned int BoardInUseMask_;   // mask indicating whether board in use
+    unsigned int max_board;         // highest index of used (non-zero) entry in BoardList
     unsigned char HubBoard;         // board number of hub/bridge
 
     // Firmware versions
@@ -184,7 +185,10 @@ public:
     virtual bool ReadAllBoardsBroadcast(void) = 0;
 
     // Write to all boards
-    virtual bool WriteAllBoards(void) = 0;
+    virtual bool WriteAllBoards(void);
+
+    // Method called when no data written in WriteAllBoards
+    virtual void HandleNoneWritten(void) = 0;
 
     // Write to all boards using broadcasting
     virtual bool WriteAllBoardsBroadcast(void) = 0;

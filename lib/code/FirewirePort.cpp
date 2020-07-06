@@ -40,8 +40,7 @@ FirewirePort::PortListType FirewirePort::PortList;
 
 FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
     BasePort(portNum, debugStream),
-    ReadErrorCounter_(0),
-    max_board(0)
+    ReadErrorCounter_(0)
 {
     Init();
 }
@@ -323,8 +322,6 @@ bool FirewirePort::AddBoard(BoardIO *board)
     bool ret = BasePort::AddBoard(board);
     if (ret) {
         int id = board->BoardId;
-        if (id >= max_board)
-            max_board = id+1;
         HubBoard = id;  // last added board would be hub board
     }
     return ret;
@@ -332,16 +329,7 @@ bool FirewirePort::AddBoard(BoardIO *board)
 
 bool FirewirePort::RemoveBoard(unsigned char boardId)
 {
-    bool ret = BasePort::RemoveBoard(boardId);
-    if (ret) {
-        if (boardId >= max_board-1) {
-            // If max_board was just removed, find the new max_board
-            max_board = 0;
-            for (int bd = 0; bd < boardId; bd++)
-                if (BoardList[bd]) max_board = bd+1;
-        }
-    }
-    return ret;
+    return BasePort::RemoveBoard(boardId);
 }
 
 // CAN BE MERGED WITH ETHBASEPORT
@@ -531,70 +519,14 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     return allOK;
 }
 
-
-// CAN BE MERGED WITH ETHBASEPORT
-bool FirewirePort::WriteAllBoards(void)
+void FirewirePort::HandleNoneWritten(void)
 {
-    if (!handle) {
-        outStr << "FirewirePort::WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
-        return false;
-    }
-
-    if ((Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == BasePort::PROTOCOL_BC_QRW)) {
-        return WriteAllBoardsBroadcast();
-    }
-
-    bool allOK = true;
-    bool noneWritten = true;
-    for (int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
-            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
-            if (FirmwareVersion[board] < 7) {
-                // Rev 1-6 firmware: the last quadlet (Status/Control register)
-                // is done as a separate quadlet write.
-                bool noneWrittenThisBoard = true;
-                bool ret = WriteBlock(board, 0, buf, numBytes-4);
-                if (ret) { noneWritten = false; noneWrittenThisBoard = false; }
-                else allOK = false;
-                quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
-                bool ret2 = true;
-                if (ctrl) {    // if anything non-zero, write it
-                    ret2 = WriteQuadlet(board, 0, ctrl);
-                    if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
-                    else allOK = false;
-                }
-                if (noneWrittenThisBoard
-                    || !(BoardList[board]->WriteBufferResetsWatchdog())) {
-                    // send no-op to reset watchdog
-                    bool ret3 = WriteNoOp(board);
-                    if (ret3) noneWritten = false;
-                }
-                // SetWriteValid clears the buffer if the write was valid
-                BoardList[board]->SetWriteValid(ret&&ret2);
-            }
-            else {
-                // Rev 7 firmware: write DAC (x4) and Status/Control register
-                bool ret = WriteBlock(board, 0, buf, numBytes);
-                if (ret) noneWritten = false;
-                else allOK = false;
-                // SetWriteValid clears the buffer if the write was valid
-                BoardList[board]->SetWriteValid(ret);
-            }
-            // Check for data collection callback
-            BoardList[board]->CheckCollectCallback();
-        }
-    }
-    if (noneWritten) {
-        PollEvents();
-    }
-    return allOK;
+    PollEvents();
 }
 
 bool FirewirePort::WriteAllBoardsBroadcast(void)
 {
-    // check hanle
+    // check handle
     if (!handle) {
         outStr << "FirewirePort::WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
         return false;

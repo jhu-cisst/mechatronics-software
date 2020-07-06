@@ -94,8 +94,8 @@ public:
     // Read all boards
     bool ReadAllBoards(void);
 
-    // Write to all boards
-    bool WriteAllBoards(void);
+    // Handle NoneWritten in WriteAllBoards
+    void HandleNoneWritten(void);
 
     // Read a quadlet from the specified board
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
