@@ -1488,7 +1488,7 @@ void AmpIO::CheckCollectCallback()
             numQuads = collect_rquads;
             // Read less than was available, so increase for next read.
             if (collect_rquads == COLLECT_MIN)
-                collect_rquads = (numAvail > COLLECT_MAX) ? COLLECT_MAX : numAvail;
+                collect_rquads = (numAvail > COLLECT_MAX) ? static_cast<unsigned short>(COLLECT_MAX) : numAvail;
             else if (collect_rquads < COLLECT_MAX)
                 collect_rquads++;
         }

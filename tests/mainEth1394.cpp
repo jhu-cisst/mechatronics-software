@@ -206,6 +206,10 @@ void  ContinuousReadTest(BasePort *port, unsigned char boardNum)
                       << compareFailures << std::endl;
         }
     }
+    if (count % 1000 != 0) {
+        std::cout << "Success = " << std::dec << success << ", read failures = " << readFailures << ", compare failures = "
+                  << compareFailures << std::endl;
+    }
 }
 
 void  ContinuousWriteTest(BasePort *ethPort, BasePort *fwPort, unsigned char boardNum)
@@ -225,15 +229,14 @@ void  ContinuousWriteTest(BasePort *ethPort, BasePort *fwPort, unsigned char boa
         if (!ethPort->WriteQuadlet(boardNum, 0x0F, write_data))   // 0x0F is REG_DEBUG
             writeFailures++;
         else {
-//            usleep(50);  // sleep 1ms
-//            fwPort->ReadQuadlet(boardNum, 0x0F, read_data);
-//            read_data = bswap_32(read_data);
-//            if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
-//                success++;
-//            else {
-//                compareFailures++;
-//                std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
-//            }
+            usleep(50);  // sleep 50 us
+            fwPort->ReadQuadlet(boardNum, 0x0F, read_data);
+            if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
+                success++;
+            else {
+                compareFailures++;
+                std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
+            }
         }
         if (writeFailures + compareFailures > 200) done = true;
 
@@ -401,7 +404,8 @@ int main(int argc, char **argv)
     tcsetattr(0, TCSANOW, &newTerm);
 
     bool done = false;
-    quadlet_t read_data, write_data;
+    quadlet_t read_data;
+    quadlet_t write_data = 0L;
     quadlet_t buffer[128];
 
     while (!done) {

@@ -26,6 +26,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         IsAllBoardsBroadcastShorterWait_(false),
         IsNoBoardsBroadcastShorterWait_(true),
         ReadSequence_(0),
+        ReadErrorCounter_(0),
         PortNum(portNum),
         NumOfNodes_(0),
         NumOfBoards_(0),
@@ -71,8 +72,8 @@ void BasePort::SetProtocol(ProtocolType prot) {
 
 bool BasePort::AddBoard(BoardIO *board)
 {
-    int id = board->BoardId;
-    if ((id < 0) || (id >= BoardIO::MAX_BOARDS)) {
+    unsigned int id = board->BoardId;
+    if (id >= BoardIO::MAX_BOARDS) {
         outStr << "BasePort::AddBoard: board number out of range: " << id << std::endl;
         return false;
     }
@@ -167,6 +168,53 @@ nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
     return node;
 }
 
+bool BasePort::ReadAllBoards(void)
+{
+    if (!IsOK()) {
+        outStr << "BasePort::ReadAllBoards: port not initialized" << std::endl;
+        return false;
+    }
+
+    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
+        return ReadAllBoardsBroadcast();
+    }
+
+    bool allOK = true;
+    bool noneRead = true;
+    for (unsigned int board = 0; board < max_board; board++) {
+        if (BoardList[board]) {
+            bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(),
+                                 BoardList[board]->GetReadNumBytes());
+            if (ret) {
+                noneRead = false;
+            } else {
+                allOK = false;
+            }
+            BoardList[board]->SetReadValid(ret);
+
+            if (!ret) {
+                if (ReadErrorCounter_ == 0) {
+                    outStr << "BasePort::ReadAllBoards: read failed on port "
+                           << PortNum << ", board " << board << std::endl;
+                }
+                ReadErrorCounter_++;
+                if (ReadErrorCounter_ == 10000) {
+                    outStr << "BasePort::ReadAllBoards: read failed on port "
+                           << PortNum << ", board " << board << " occurred 10,000 times" << std::endl;
+                    ReadErrorCounter_ = 0;
+                }
+            } else {
+                ReadErrorCounter_ = 0;
+            }
+        }
+    }
+    if (noneRead) {
+        OnNoneRead();
+    }
+    return allOK;
+}
+
+
 bool BasePort::WriteAllBoards(void)
 {
     if (!IsOK()) {
@@ -180,7 +228,7 @@ bool BasePort::WriteAllBoards(void)
 
     bool allOK = true;
     bool noneWritten = true;
-    for (int board = 0; board < max_board; board++) {
+    for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             quadlet_t *buf = BoardList[board]->GetWriteBufferData();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
@@ -221,7 +269,7 @@ bool BasePort::WriteAllBoards(void)
         }
     }
     if (noneWritten) {
-        HandleNoneWritten();
+        OnNoneWritten();
     }
     return allOK;
 }

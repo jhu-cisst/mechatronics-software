@@ -36,8 +36,6 @@ protected:
     raw1394handle_t handle_bc;  // broadcasting handle
     nodeid_t baseNodeId;
 
-    size_t ReadErrorCounter_;
-
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
     static PortListType PortList;
@@ -45,6 +43,12 @@ protected:
     bus_reset_handler_t old_reset_handler_bc;
     // callback for 1394 bus reset event
     static int reset_handler(raw1394handle_t hdl, unsigned int gen);
+
+    // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
+    void OnNoneRead(void);
+
+    // Method called by WriteAllBoards/WriteAllBoardsBroadcast if no data written
+    void OnNoneWritten(void);
 
     // Poll for IEEE 1394 events, such as bus reset.
     void PollEvents(void);
@@ -80,14 +84,8 @@ public:
     // Removes board
     bool RemoveBoard(unsigned char boardId);
 
-    // Read all boards
-    bool ReadAllBoards(void);
-
     // Read all boards broadcasting
     bool ReadAllBoardsBroadcast(void);
-
-    // Handle NoneWritten in WriteAllBoards
-    void HandleNoneWritten(void);
 
     // Write to all boards using broadcasting
     bool WriteAllBoardsBroadcast(void);

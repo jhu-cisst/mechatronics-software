@@ -64,6 +64,12 @@ protected:
     //! Write quadlet to node (internal method called by WriteQuadlet)
     virtual bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0) = 0;
 
+    // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
+    void OnNoneRead(void);
+
+    // Method called by WriteAllBoards/WriteAllBoardsBroadcast if no data written
+    void OnNoneWritten(void);
+
     static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl,
                                  bool doNotForward = false);
 
@@ -90,12 +96,6 @@ public:
 
     // For now, always returns 1
     int NumberOfUsers(void) { return 1; }
-
-    // Read all boards
-    bool ReadAllBoards(void);
-
-    // Handle NoneWritten in WriteAllBoards
-    void HandleNoneWritten(void);
 
     // Read a quadlet from the specified board
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);

@@ -39,8 +39,7 @@ http://www.cisst.org/cisst/license.txt.
 FirewirePort::PortListType FirewirePort::PortList;
 
 FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
-    BasePort(portNum, debugStream),
-    ReadErrorCounter_(0)
+    BasePort(portNum, debugStream)
 {
     Init();
 }
@@ -321,7 +320,7 @@ bool FirewirePort::AddBoard(BoardIO *board)
 {
     bool ret = BasePort::AddBoard(board);
     if (ret) {
-        int id = board->BoardId;
+        unsigned int id = board->BoardId;
         HubBoard = id;  // last added board would be hub board
     }
     return ret;
@@ -333,53 +332,6 @@ bool FirewirePort::RemoveBoard(unsigned char boardId)
 }
 
 // CAN BE MERGED WITH ETHBASEPORT
-bool FirewirePort::ReadAllBoards(void)
-{
-    if (!handle) {
-        outStr << "FirewirePort::ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
-        return false;
-    }
-
-    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
-        return ReadAllBoardsBroadcast();
-    }
-
-    bool allOK = true;
-    bool noneRead = true;
-    for (int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(),
-                                 BoardList[board]->GetReadNumBytes());
-            if (ret) {
-                noneRead = false;
-            } else {
-                allOK = false;
-            }
-            BoardList[board]->SetReadValid(ret);
-
-            if (!ret) {
-                if (ReadErrorCounter_ == 0) {
-                    outStr << "FirewirePort::ReadAllBoards: read failed on port "
-                           << PortNum << ", board " << board << std::endl;
-                }
-                ReadErrorCounter_++;
-                if (ReadErrorCounter_ == 10000) {
-                    outStr << "FirewirePort::ReadAllBoards: read failed on port "
-                           << PortNum << ", board " << board << " occurred 10,000 times" << std::endl;
-                    ReadErrorCounter_ = 0;
-                }
-            } else {
-                ReadErrorCounter_ = 0;
-            }
-        }
-    }
-    if (noneRead) {
-        PollEvents();
-    }
-    return allOK;
-}
-
-
 bool FirewirePort::ReadAllBoardsBroadcast(void)
 {
     if (!handle || !handle_bc) {
@@ -485,7 +437,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     }
     // -----------------------
 
-    for (int board = 0; board < max_board; board++) {
+    for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             // TODO: Need to update following
             const int readSize = 17;  // 1 seq + 16 data, unit quadlet
@@ -513,13 +465,18 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
 #endif
 
     if (noneRead) {
-        PollEvents();
+        OnNoneRead();
     }
 
     return allOK;
 }
 
-void FirewirePort::HandleNoneWritten(void)
+void FirewirePort::OnNoneRead(void)
+{
+    PollEvents();
+}
+
+void FirewirePort::OnNoneWritten(void)
 {
     PollEvents();
 }
@@ -545,7 +502,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
     int numOfBoards = 0;
 
-    for (int board = 0; board < max_board; board++) {
+    for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             numOfBoards++;
             quadlet_t *buf = BoardList[board]->GetWriteBuffer();
@@ -572,7 +529,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 #endif
 
     // loop 2: send out control quadlet if necessary
-    for (int board = 0; board < max_board; board++) {
+    for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             bool noneWrittenThisBoard = true;
             quadlet_t *buf = BoardList[board]->GetWriteBuffer();
@@ -601,7 +558,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
     // pullEvents
     if (noneWritten) {
-        PollEvents();
+        OnNoneWritten();
     }
 
     // return

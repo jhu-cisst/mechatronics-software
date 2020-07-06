@@ -84,6 +84,8 @@ protected:
     bool IsNoBoardsBroadcastShorterWait_;   // TRUE if no nodes support the shorter wait
     unsigned int ReadSequence_;   // sequence number for WABB
 
+    size_t ReadErrorCounter_;
+
     // Port Index, e.g. eth0 -> PortNum = 0
     int PortNum;
 
@@ -104,6 +106,12 @@ protected:
     // Mappings between board numbers and node numbers
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
+
+    // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
+    virtual void OnNoneRead(void) {}
+
+    // Method called by WriteAllBoards/WriteAllBoardsBroadcast if no data written
+    virtual void OnNoneWritten(void) {}
 
 public:
 
@@ -179,16 +187,13 @@ public:
     virtual void Reset(void) = 0;
 
     // Read all boards
-    virtual bool ReadAllBoards(void) = 0;
+    virtual bool ReadAllBoards(void);
 
     // Read all boards broadcasting
     virtual bool ReadAllBoardsBroadcast(void) = 0;
 
     // Write to all boards
     virtual bool WriteAllBoards(void);
-
-    // Method called when no data written in WriteAllBoards
-    virtual void HandleNoneWritten(void) = 0;
 
     // Write to all boards using broadcasting
     virtual bool WriteAllBoardsBroadcast(void) = 0;

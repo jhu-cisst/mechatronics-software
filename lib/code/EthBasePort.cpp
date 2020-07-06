@@ -508,37 +508,12 @@ bool EthBasePort::ScanNodes(nodeid_t max_nodes)
     return (NumOfNodes_ > 0);
 }
 
-// CAN BE MERGED WITH FIREWIREPORT
-bool EthBasePort::ReadAllBoards(void)
+void EthBasePort::OnNoneRead(void)
 {
-    if (!IsOK()) {
-        outStr << "ReadAllBoards: port is not initialized" << std::endl;
-        return false;
-    }
-
-    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
-        return ReadAllBoardsBroadcast();
-    }
-
-    bool allOK = true;
-    bool noneRead = true;
-    for (unsigned char bid = 0; bid < BoardIO::MAX_BOARDS; bid++)
-    {
-        if (BoardList[bid]) {
-            bool ret = ReadBlock(bid, 0, BoardList[bid]->GetReadBuffer(),
-                                 BoardList[bid]->GetReadNumBytes());
-            if (ret) noneRead = false;
-            else allOK = false;
-            BoardList[bid]->SetReadValid(ret);
-        }
-    }
-    if (noneRead) {
-        outStr << "Failed to read any board, check Ethernet physical connection" << std::endl;
-    }
-    return allOK;
+    outStr << "Failed to read any board, check Ethernet physical connection" << std::endl;
 }
 
-void EthBasePort::HandleNoneWritten(void)
+void EthBasePort::OnNoneWritten(void)
 {
     outStr << "Failed to write any board, check Ethernet physical connection" << std::endl;
 }
