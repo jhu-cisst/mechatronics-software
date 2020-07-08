@@ -133,6 +133,9 @@ public:
     // Get number of boards that were added to BoardList
     unsigned int GetNumOfBoards(void) const { return NumOfBoards_; }
 
+    // Get highest board number present in BoardList
+    unsigned int GetMaxBoardNum(void) const { return max_board; }
+
     BoardIO *GetBoard(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? BoardList[boardId] : 0; }
 

@@ -424,7 +424,6 @@ public:
     //    buffer  buffer for storing data
     //    offset  address offset (in quadlets)
     //    nquads  number of quadlets to read (not more than 64)
-    // Note: This is not yet fully implemented in firmware (e.g., need to edit FPGA1394Eth-QLA.v)
     bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
 
     // *********************** Data Collection Methods *******************************

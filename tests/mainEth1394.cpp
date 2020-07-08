@@ -176,6 +176,27 @@ bool InitEthernet(AmpIO &Board)
     return true;
 }
 
+AmpIO *SelectBoard(const std::string &portName, std::vector<AmpIO *> boardList, AmpIO *curBoard)
+{
+    AmpIO *newBoard = curBoard;
+    if (boardList.size() > 1) {
+        size_t i;
+        std::cout << "Select " << portName << " Board: ";
+        for (i = 0; i < boardList.size(); i++)
+            std::cout << static_cast<unsigned int>(boardList[i]->GetBoardId()) << " ";
+        std::cout << "(any other key to keep current board " << static_cast<unsigned int>(curBoard->GetBoardId()) << ")" << std::endl;
+        int num = (getchar() - '0');
+        std::cout << std::endl;
+        for (i = 0; i < boardList.size(); i++) {
+            if (num == boardList[i]->GetBoardId()) {
+                newBoard = boardList[i];
+                break;
+            }
+        }
+    }
+    return newBoard;
+}
+
 void  ContinuousReadTest(BasePort *port, unsigned char boardNum)
 {
     bool done = false;
@@ -302,7 +323,6 @@ int main(int argc, char **argv)
     int port = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
-    unsigned char boardNum = 0;
     if (argc > 1) {
         int args_found = 0;
         for (int i = 1; i < argc; i++) {
@@ -317,25 +337,17 @@ int main(int argc, char **argv)
                 }
             }
             else if (args_found == 0) {
-                int boardNumInt;
-                if (sscanf(argv[i], "%d", &boardNumInt) == 1) {
-                    boardNum = static_cast<unsigned char>(boardNumInt);
-                    args_found++;
-                }
-                else
-                    std::cout << "Invalid board number: " << argv[i] << " (ignored)" << std::endl;
+                // Could parse additional args here
             }
             else {
-                    std::cerr << "Usage: eth1394test [<board-num>] [-pP]" << std::endl
-                    << "       where <board-num> = rotary switch setting (0-15, default 0)" << std::endl
-                    << "             P = port number (default 0)" << std::endl
+                    std::cerr << "Usage: eth1394test [-pP]" << std::endl
+                    << "       where P = port number (default 0)" << std::endl
                     << "                 can also specify -pethP or -pudp" << std::endl;
                     return 0;
             }
 
         }
     }
-    std::cout << "Testing board " << (int)boardNum << std::endl;
 
     // Compute the hash table values used by the KSZ8851 chip to filter for multicast packets.
     // The results (RegAddr and RegData) are hard-coded in the FPGA code (EthernetIO.v).
@@ -346,10 +358,11 @@ int main(int argc, char **argv)
     ComputeMulticastHash(MulticastMAC, RegAddr, RegData);
     std::cout << "Multicast hash table: register " << std::hex << (int)RegAddr << ", data = " << RegData << std::endl;
 
-    AmpIO board1(boardNum);
-    AmpIO board2(boardNum);
-    unsigned int hub_num = boardNum;  // may get assigned later
-    AmpIO *hub_board = &board1;       // may get assigned later
+    std::vector<AmpIO *> FwBoardList;
+    std::vector<AmpIO *> EthBoardList;
+
+    AmpIO *curBoardFw = 0;   // Current board via Firewire
+    AmpIO *curBoardEth = 0;  // Current board via Ethernet (sets boardNum)
 
 #if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
@@ -357,11 +370,16 @@ int main(int argc, char **argv)
         std::cout << "Failed to initialize firewire port" << std::endl;
         return 0;
     }
-    FwPort.AddBoard(&board1);
-    // Read the Chip ID (16-bit read) -- might fail if not an Ethernet board
-    AmpIO_UInt16 chipID = hub_board->ReadKSZ8851ChipID();
-    std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
-    //QuadletReadCallbackBoardId = board1.GetBoardId();
+    for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
+        if (FwPort.GetNodeId(bnum) != BasePort::MAX_NODES) {
+            std::cout << "Found Firewire board: " << bnum << std::endl;
+            AmpIO *board = new AmpIO(bnum);
+            FwPort.AddBoard(board);
+            FwBoardList.push_back(board);
+        }
+    }
+    if (FwBoardList.size() > 0)
+        curBoardFw = FwBoardList[0];
 #endif
     EthBasePort *EthPort = 0;
     if (desiredPort == BasePort::PORT_ETH_UDP) {
@@ -378,20 +396,20 @@ int main(int argc, char **argv)
         std::cout << "Failed to create Ethernet port" << std::endl;
         return 0;
     }
-    if (!EthPort->IsOK())
+    if (EthPort->IsOK()) {
+        for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
+            if (EthPort->GetNodeId(bnum) != BasePort::MAX_NODES) {
+                std::cout << "Found Ethernet board: " << bnum << std::endl;
+                AmpIO *board = new AmpIO(bnum);
+                EthPort->AddBoard(board);
+                EthBoardList.push_back(board);
+             }
+        }
+        if (EthBoardList.size() > 0)
+            curBoardEth = EthBoardList[0];
+    }
+    else
         std::cout << "Failed to initialize Ethernet port" << std::endl;
-    else {
-        EthPort->AddBoard(&board2);
-        hub_num = EthPort->GetHubBoardId();
-    }
-#if Amp1394_HAS_RAW1394
-    // Add Ethernet hub_board to Firewire port if different than test board (boardNum)
-    if ((hub_num < BoardIO::MAX_BOARDS) && (hub_num != boardNum)) {
-        std::cout << "Adding hub board: " << hub_num << std::endl;
-        hub_board = new AmpIO(hub_num);
-        FwPort.AddBoard(hub_board);
-    }
-#endif
 
     // For now, nothing more can be done without FireWire (RAW1394)
 #if Amp1394_HAS_RAW1394
@@ -411,8 +429,12 @@ int main(int argc, char **argv)
     while (!done) {
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
+        if (curBoardFw)
+            std::cout << "  Firewire board: " << static_cast<unsigned int>(curBoardFw->GetBoardId()) << std::endl;
+        if (curBoardEth)
+            std::cout << "  Ethernet board: " << static_cast<unsigned int>(curBoardEth->GetBoardId()) << std::endl;
         std::cout << "  0) Quit" << std::endl;
-        std::cout << "  1) Quadlet write to board via Ethernet" << std::endl;
+        std::cout << "  1) Quadlet write (power/relay toggle) to board via Ethernet" << std::endl;
         std::cout << "  2) Quadlet read from board via Ethernet" << std::endl;
         std::cout << "  3) Block read from board via Ethernet" << std::endl;
         std::cout << "  4) Block write to board via Ethernet" << std::endl;
@@ -420,6 +442,7 @@ int main(int argc, char **argv)
         std::cout << "  6) Initialize Ethernet port" << std::endl;
         std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "  8) Multicast quadlet read" << std::endl;
+        std::cout << "  b) Change Firewire/Ethernet board" << std::endl;
         std::cout << "  c) Continuous test (quadlet reads)" << std::endl;
         std::cout << "  d) Continuous write test (quadlet write)" << std::endl;
         std::cout << "  e) Read RXFCTR packet count" << std::endl;
@@ -427,6 +450,7 @@ int main(int argc, char **argv)
         std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
         std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
         std::cout << "  x) Read Ethernet data via FireWire" << std::endl;
+        std::cout << "  y) Read Firewire data via Ethernet" << std::endl;
         std::cout << "  z) Check Ethernet initialization" << std::endl;
         std::cout << "Select option: ";
         
@@ -440,14 +464,21 @@ int main(int argc, char **argv)
         int i;
         char buf[5];
 
+        unsigned char boardNum = 0;
+        if (curBoardEth)
+            boardNum = curBoardEth->GetBoardId();
+
         switch (c) {
         case '0':   // Quit
                 done = true;
                 break;
 
         case '1':   // Write quadlet from PC to FPGA
-            write_data++;
-            if (!EthPort->WriteQuadlet(boardNum, 0x0F, write_data ))
+            if (write_data == 0x000f0000)
+                write_data = 0x000a0000;   // power/relay off
+            else
+                write_data = 0x000f0000;   // power/relay on
+            if (!EthPort->WriteQuadlet(boardNum, 0x0, write_data ))
                 std::cout << "Failed to write quadlet via Ethernet port" << std::endl;
             else
                 std::cout << "Write data = 0x" << std::hex << write_data << "\n";
@@ -513,15 +544,15 @@ int main(int argc, char **argv)
                 break;
 
         case '5':
-                PrintEthernetStatus(*hub_board);
+                PrintEthernetStatus(*curBoardFw);
                 break;
 
         case '6':
-                InitEthernet(*hub_board);
+                InitEthernet(*curBoardFw);
                 break;
 
         case '7':
-                PrintEthernetDebug(*hub_board);
+                PrintEthernetDebug(*curBoardFw);
                 break;
 
         case '8':   // Read request via Ethernet multicast
@@ -533,6 +564,11 @@ int main(int argc, char **argv)
                     std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
                 break;
 
+        case 'b':
+            curBoardFw = SelectBoard("Firewire", FwBoardList, curBoardFw);
+            curBoardEth = SelectBoard("Ethernet", EthBoardList, curBoardEth);
+            break;
+
         case 'c':
             ContinuousReadTest(EthPort, boardNum);
             break;
@@ -543,16 +579,16 @@ int main(int argc, char **argv)
 
         case 'e':
             AmpIO_UInt16 reg;
-            hub_board->ReadKSZ8851Reg(0x90, reg);
-            std::cout << "IER    = 0x" << std::hex << reg << "  ";
-            hub_board->ReadKSZ8851Reg(0x92, reg);
-            std::cout << "ISR    = 0x" << std::hex << reg << "  ";
-            hub_board->ReadKSZ8851Reg(0x9C, reg);
-            std::cout << "RXFCTR = 0x" << std::hex << reg << "  ";
-            hub_board->ReadKSZ8851Reg(0x7C, reg);
-            std::cout << "RXFHSR = 0x" << std::hex << reg << "  ";
-            hub_board->ReadKSZ8851Reg(0x80, reg);
-            std::cout << "TXQCR = 0x" << std::hex << reg << std::endl;
+            if (curBoardFw->ReadKSZ8851Reg(0x90, reg))
+                std::cout << "IER    = 0x" << std::hex << reg << "  ";
+            if (curBoardFw->ReadKSZ8851Reg(0x92, reg))
+                std::cout << "ISR    = 0x" << std::hex << reg << "  ";
+            if (curBoardFw->ReadKSZ8851Reg(0x9C, reg))
+                std::cout << "RXFCTR = 0x" << std::hex << reg << "  ";
+            if (curBoardFw->ReadKSZ8851Reg(0x7C, reg))
+                std::cout << "RXFHSR = 0x" << std::hex << reg << "  ";
+            if (curBoardFw->ReadKSZ8851Reg(0x80, reg))
+                std::cout << "TXQCR = 0x" << std::hex << reg << std::endl;
             break;
 
         case 'f':
@@ -563,25 +599,25 @@ int main(int argc, char **argv)
             break;
 
         case 'i':
-            std::cout << "IP Address = " << EthUdpPort::IP_String(hub_board->ReadIPv4Address()) << std::endl;
+            std::cout << "IP Address = " << EthUdpPort::IP_String(curBoardFw->ReadIPv4Address()) << std::endl;
             break;
 
         case 'I':
-            if (hub_board->WriteIPv4Address(0xffffffff))
+            if (curBoardFw->WriteIPv4Address(0xffffffff))
                 std::cout << "Write IP address 255.255.255.255" << std::endl;
             else
                 std::cout << "Failed to write IP address" << std::endl;
             break;
 
         case 'x':
-            if (hub_board->ReadEthernetData(buffer, 0xc0, 23))
+            if (curBoardFw->ReadEthernetData(buffer, 0xc0, 23))
                 EthBasePort::PrintEthernetPacket(std::cout, buffer, 23);
-            if (hub_board->ReadEthernetData(buffer, 0, 64))
+            if (curBoardFw->ReadEthernetData(buffer, 0, 64))
                 EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-            if (hub_board->ReadEthernetData(buffer, 0x80, 16))
+            if (curBoardFw->ReadEthernetData(buffer, 0x80, 16))
                 EthBasePort::PrintDebugData(std::cout, buffer);
 #if 0
-            if (hub_board->ReadEthernetData(buffer, 0xa0, 17)) {
+            if (curBoardFw->ReadEthernetData(buffer, 0xa0, 17)) {
                 std::cout << "Initialization Program: " << std::endl;
                 for (int i = 0; i < 17; i++) {
                     if (buffer[i]&0x02000000) std::cout << "   Write ";
@@ -593,7 +629,7 @@ int main(int argc, char **argv)
                               << (buffer[i]&0x0000ffff) << std::endl;       // data
                 }
             }
-            if (hub_board->ReadEthernetData(buffer, 0xe0, 21)) {
+            if (curBoardFw->ReadEthernetData(buffer, 0xe0, 21)) {
                 const uint16_t *packetw = reinterpret_cast<const uint16_t *>(buffer);
                 std::cout << "ReplyIndex: " << std::endl;
                 for (int i = 0; i < 41; i++)
@@ -602,24 +638,28 @@ int main(int argc, char **argv)
 #endif
             break;
 
+        case 'y':
+            if (curBoardEth && (curBoardEth->ReadFirewireData(buffer, 0, 64)))
+                EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
+            break;
+
         case 'z':
             // Check that KSZ8851 registers are as expected
-            if (!CheckEthernet(board1))
-                PrintEthernetDebug(board1);
+            if (!CheckEthernet(*curBoardFw))
+                PrintEthernetDebug(*curBoardFw);
             break;
         }
     }
 
     tcsetattr(0, TCSANOW, &oldTerm);  // Restore terminal I/O settings
-    if (FwPort.IsOK()) {
-        FwPort.RemoveBoard(boardNum);
-        if ((hub_num < BoardIO::MAX_BOARDS) && (hub_num != boardNum)) {
-            FwPort.RemoveBoard(hub_num);
-            delete hub_board;
-        }
+    for (unsigned int bd = 0; bd < FwBoardList.size(); bd++) {
+        FwPort.RemoveBoard(FwBoardList[bd]->GetBoardId());
+        delete FwBoardList[bd];
     }
 #endif
-    if (EthPort->IsOK())
-        EthPort->RemoveBoard(boardNum);
+    for (unsigned int bd = 0; bd < EthBoardList.size(); bd++) {
+        EthPort->RemoveBoard(EthBoardList[bd]->GetBoardId());
+        delete EthBoardList[bd];
+    }
     return 0;
 }
