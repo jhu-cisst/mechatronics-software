@@ -209,7 +209,7 @@ void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)
     debugStream << std::endl;
 }
 
-void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *data)
+void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
 {
     // Following structure must match DebugData in EthernetIO.v
     struct DebugData {
@@ -232,8 +232,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  unused11;
         uint16_t rxPktWords;       // Quad 7
         uint16_t txPktWords;
-        uint16_t unused00;         // Quad 8
-        uint16_t unusedPattern;
+        uint16_t timeReceive;      // Quad 8
+        uint16_t timeSend;
         uint16_t numPacketValid;   // Quad 9
         uint16_t numPacketInvalid;
         uint16_t numIPv4;          // Quad 10
@@ -245,7 +245,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t numStateInvalid;  // Quad 13
         uint8_t  numReset;
         uint8_t  unused0;
-        uint32_t unused0000;       // Quad 14
+        uint16_t timeFwdFromFw;    // Quad 14
+        uint16_t timeFwdToFw;
         uint32_t timestampEnd;     // Quad 15
     };
     if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
@@ -286,7 +287,10 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     default: stateName.assign("???");
     }
     debugStream << "State: " << stateName << std::dec
-                << ", nextState: " << static_cast<uint16_t> (p->nextState) << std::endl;
+                << ", nextState: " << static_cast<uint16_t> (p->nextState&0x07) << std::endl;
+    unsigned int eth_send_fw_req = (p->nextState&0x08) ? 1 : 0;
+    unsigned int eth_send_fw_ack = (p->nextState&0x10) ? 1 : 0;
+    debugStream << "eth_send_fw req " << eth_send_fw_req << ", ack " << eth_send_fw_ack << std::endl;
     debugStream << "Flags: ";
     if (p->moreFlags&0x80) debugStream << "doSample ";
     if (p->moreFlags&0x40) debugStream << "inSample ";
@@ -315,7 +319,6 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW) << std::endl;
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
-    debugStream << "UnusedPattern: " << std::hex << p->unusedPattern << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
     debugStream << "numPacketInvalid: " << std::dec << p->numPacketInvalid << std::endl;
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
@@ -326,6 +329,11 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
     debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << std::endl;
     debugStream << "numReset: " << std::dec << static_cast<uint16_t>(p->numReset) << std::endl;
+    double bits2uS = clockPeriod*1e6;
+    debugStream << "timeReceive (us): " << p->timeReceive*bits2uS << std::endl;
+    debugStream << "timeSend (us): " << p->timeSend*bits2uS << std::endl;
+    debugStream << "timeFwdToFw (us): " << p->timeFwdToFw*bits2uS << std::endl;
+    debugStream << "timeFwdFromFw (us): " << p->timeFwdFromFw*bits2uS << std::endl;
     debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
 }
 

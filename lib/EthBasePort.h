@@ -154,7 +154,8 @@ public:
 
     static void PrintDebug(std::ostream &debugStream, unsigned short status);
 
-    static void PrintDebugData(std::ostream &debugStream, const quadlet_t *data);
+    // Print Ethernet debug data; clockPeriod is in seconds
+    static void PrintDebugData(std::ostream &debugStream, const quadlet_t *data, double clockPeriod);
 };
 
 #endif  // __EthBasePort_H__

@@ -615,7 +615,7 @@ int main(int argc, char **argv)
             if (curBoardFw->ReadEthernetData(buffer, 0, 64))
                 EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
             if (curBoardFw->ReadEthernetData(buffer, 0x80, 16))
-                EthBasePort::PrintDebugData(std::cout, buffer);
+                EthBasePort::PrintDebugData(std::cout, buffer, curBoardFw->GetFPGAClockPeriod());
 #if 0
             if (curBoardFw->ReadEthernetData(buffer, 0xa0, 17)) {
                 std::cout << "Initialization Program: " << std::endl;

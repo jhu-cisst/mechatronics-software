@@ -214,6 +214,11 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     out << std::dec;
 }
 
+double AmpIO::GetFPGAClockPeriod(void) const
+{
+    return (1.0e-6/FPGA_sysclk_MHz);
+}
+
 bool AmpIO::HasEthernet(void) const
 {
     if (GetFirmwareVersion() < 5) return false;

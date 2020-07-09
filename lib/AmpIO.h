@@ -53,6 +53,9 @@ public:
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
+    // Returns FPGA clock period in seconds
+    double GetFPGAClockPeriod(void) const;
+
     // Returns true if FPGA has Ethernet (Rev 2.0+)
     bool HasEthernet(void) const;
 
