@@ -370,67 +370,6 @@ bool EthRawPort::ReadAllBoardsBroadcast(void)
     return allOK;
 }
 
-bool EthRawPort::WriteAllBoardsBroadcast(void)
-{
-    // check handle
-    if (!handle) {
-        outStr << "WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
-        return false;
-    }
-
-    // sanity check vars
-    bool allOK = true;
-
-    // loop 1: broadcast write block
-
-    // construct broadcast write buffer
-    const int numOfChannel = 4;
-    quadlet_t bcBuffer[numOfChannel * BoardIO::MAX_BOARDS];
-    memset(bcBuffer, 0, sizeof(bcBuffer));
-    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
-    int numOfBoards = 0;
-
-    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
-        if (BoardList[bid]) {
-            numOfBoards++;
-            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
-            unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
-            // bcBufferOffset equals total numBytes to write, when the loop ends
-            bcBufferOffset = bcBufferOffset + numBytes - 4;
-        }
-    }
-
-    // now broadcast out the huge packet
-    bool ret = true;
-
-    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
-                              bcBuffer,
-                              bcBufferOffset);
-
-    // loop 2: send out control quadlet if necessary
-    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
-        if (BoardList[bid]) {
-            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
-            unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
-            quadlet_t ctrl = buf[numQuads-1];  // Get last quedlet
-            bool ret2 = true;
-            if (ctrl) {  // if anything non-zero, write it
-                ret2 = WriteQuadlet(bid, 0x00, ctrl);
-                if (!ret2) allOK = false;
-            }
-            // Check for data collection callback
-            BoardList[bid]->CheckCollectCallback();
-            // SetWriteValid clears the buffer if the write was valid
-            BoardList[bid]->SetWriteValid(ret&&ret2);
-        }
-    }
-
-    // return
-    return allOK;
-}
-
 bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
     bool ret = eth1394_read(node, addr, 4, &data, flags&FW_NODE_ETH_BROADCAST_MASK);

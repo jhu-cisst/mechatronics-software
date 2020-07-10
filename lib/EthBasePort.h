@@ -70,6 +70,9 @@ protected:
     // Method called by WriteAllBoards/WriteAllBoardsBroadcast if no data written
     void OnNoneWritten(void);
 
+    // Write to all boards using broadcasting
+    bool WriteAllBoardsBroadcast(void);
+
     static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl,
                                  bool doNotForward = false);
 

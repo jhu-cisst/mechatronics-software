@@ -70,9 +70,6 @@ public:
     // Read all boards broadcasting
     bool ReadAllBoardsBroadcast(void);
 
-    // Write to all boards using broadcasting
-    bool WriteAllBoardsBroadcast(void);
-
     // ReadQuadlet in EthBasePort
 
     // WriteQuadlet in EthBasePort

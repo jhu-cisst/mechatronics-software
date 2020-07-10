@@ -407,22 +407,6 @@ bool EthUdpPort::ReadAllBoardsBroadcast(void)
     return allOK;
 }
 
-bool EthUdpPort::WriteAllBoardsBroadcast(void)
-{
-    if (!IsOK()) {
-        outStr << "WriteAllBoardsBroadcast: not initialized" << std::endl;
-        return false;
-    }
-
-    // sanity check vars
-    bool allOK = true;
-
-    outStr << "WriteAllBoardsBroadcast: not yet implemented" << std::endl;
-
-    // return
-    return allOK;
-}
-
 bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
     // Flush before reading

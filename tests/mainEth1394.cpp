@@ -309,6 +309,15 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
 bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, const std::string &msgType, size_t numIter = 1000)
 {
     size_t i;
+    EthBasePort::TCODE msgCode;
+    if (msgType == "quadlet read")
+        msgCode = EthBasePort::QREAD;
+    else if (msgType == "quadlet write")
+        msgCode = EthBasePort::QWRITE;
+    else {
+        std::cout << "Unsupported message type: " << msgType << std::endl;
+        return false;
+    }
     std::cout << "Measuring " << portName << " " << msgType << " time (" << std::dec << numIter << " iterations)" << std::endl;
     double timeSum = 0.0;
     double minTime = 1.0;   // one second should be much higher than expected readings
@@ -319,9 +328,9 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     unsigned short maxTimeSend = 0;
     double clockPeriod_us = 1.0e6*boardTest->GetFPGAClockPeriod();  // clock period in microseconds
     for (i = 0; i < numIter; i++) {
-        double startTime, deltaTime;
+        double startTime, deltaTime = 0;
         AmpIO_UInt32 status;
-        if (msgType == "quadlet read") {
+        if (msgCode == EthBasePort::QREAD) {
             startTime = Amp1394_GetTime();
             status = boardTest->ReadStatus();
             deltaTime = Amp1394_GetTime()-startTime;
@@ -332,14 +341,10 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
                 break;
             }
         }
-        else if (msgType == "quadlet write") {
+        else if (msgCode == EthBasePort::QWRITE) {
             startTime = Amp1394_GetTime();
             status = boardTest->WriteWatchdogPeriod(0);
             deltaTime = Amp1394_GetTime()-startTime;
-        }
-        else {
-            std::cout << "Unsupported message type: " << msgType << std::endl;
-            return false;
         }
         timeSum += deltaTime;
         if (deltaTime < minTime)
@@ -635,7 +640,7 @@ int main(int argc, char **argv)
                           << write_block[1] << ", " << write_block[2] << ", "
                           << write_block[3] << std::endl;
                 for (i = 0; i < 4; i++) {
-                    write_block[i] = bswap_32(VALID_BIT | (write_block[i]+(i+1)*0x100));
+                    write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
                 }
                 std::cout << "Setting new values" << std::endl;
                 if (!EthPort->WriteBlock(boardNum, 0, write_block, sizeof(write_block))) {
