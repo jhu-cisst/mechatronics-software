@@ -15,6 +15,7 @@
 #endif
 #include "EthUdpPort.h"
 #include "AmpIO.h"
+#include "Amp1394Time.h"
 
 #ifdef _MSC_VER
 #include <stdlib.h>   // for byteswap functions
@@ -303,6 +304,78 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
     std::cout << "Speed = " << speed << ", num_ports = " << (read_data&0x0000001f) << std::endl;
     return true;
 }
+#endif
+
+bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, const std::string &msgType, size_t numIter = 1000)
+{
+    size_t i;
+    std::cout << "Measuring " << portName << " " << msgType << " time (" << std::dec << numIter << " iterations)" << std::endl;
+    double timeSum = 0.0;
+    double minTime = 1.0;   // one second should be much higher than expected readings
+    double maxTime = 0.0;
+    unsigned short minTimeReceive = 65535;
+    unsigned short maxTimeReceive = 0;
+    unsigned short minTimeSend = 65535;
+    unsigned short maxTimeSend = 0;
+    double clockPeriod_us = 1.0e6*boardTest->GetFPGAClockPeriod();  // clock period in microseconds
+    for (i = 0; i < numIter; i++) {
+        double startTime, deltaTime;
+        AmpIO_UInt32 status;
+        if (msgType == "quadlet read") {
+            startTime = Amp1394_GetTime();
+            status = boardTest->ReadStatus();
+            deltaTime = Amp1394_GetTime()-startTime;
+            int boardNum = (status&0x0f000000)>>24;
+            if (boardNum != boardTest->GetBoardId()) {
+                std::cout << "   Iteration " << i << ": board number mismatch, read=" << boardNum
+                          << ", expected=" << static_cast<unsigned int>(boardTest->GetBoardId()) << std::endl;
+                break;
+            }
+        }
+        else if (msgType == "quadlet write") {
+            startTime = Amp1394_GetTime();
+            status = boardTest->WriteWatchdogPeriod(0);
+            deltaTime = Amp1394_GetTime()-startTime;
+        }
+        else {
+            std::cout << "Unsupported message type: " << msgType << std::endl;
+            return false;
+        }
+        timeSum += deltaTime;
+        if (deltaTime < minTime)
+            minTime = deltaTime;
+        if (deltaTime > maxTime)
+            maxTime = deltaTime;
+        if (hubFw) {
+            // Read Ethernet timing from FPGA
+            // TODO: formalize this, rather than hard-coding buffer[8] below
+            quadlet_t buffer[16];
+            if (hubFw->ReadEthernetData(buffer, 0x80, 16)) {
+                unsigned short timeReceive = (buffer[8]&0x0000ffff);
+                unsigned short timeSend = (buffer[8]>>16) - timeReceive;
+                if (timeReceive < minTimeReceive)
+                    minTimeReceive = timeReceive;
+                if (timeReceive > maxTimeReceive)
+                    maxTimeReceive = timeReceive;
+                if (timeSend < minTimeSend)
+                    minTimeSend = timeSend;
+                if (timeSend > maxTimeSend)
+                    maxTimeSend = timeSend;
+            }
+        }
+    }
+    if (i > 0) {
+        std::cout << "   Times (us), " << i << " iterations: mean = " << std::fixed << std::setprecision(2)
+                  << (1.0e6*timeSum/i) << ", min = " << (1.0e6*minTime) << ", max = " << (1.0e6*maxTime) << std::endl;
+        if (hubFw) {
+            std::cout << "      FPGA receive min/max (us) = " << (clockPeriod_us*minTimeReceive) << "/" << (clockPeriod_us*maxTimeReceive);
+            if (msgType == "quadlet read")
+                std::cout << ", send min/max (us) = " << (clockPeriod_us*minTimeSend) << "/" << (clockPeriod_us*maxTimeSend);
+            std::cout << std::endl;
+        }
+    }
+    return true;
+}
 
 static char QuadletReadCallbackBoardId = 0;
 
@@ -315,7 +388,6 @@ bool QuadletReadCallback(EthBasePort &, unsigned char boardId, std::ostream &deb
     }
     return true;
 }
-#endif
 
 int main(int argc, char **argv)
 {
@@ -363,6 +435,7 @@ int main(int argc, char **argv)
 
     AmpIO *curBoardFw = 0;   // Current board via Firewire
     AmpIO *curBoardEth = 0;  // Current board via Ethernet (sets boardNum)
+    AmpIO *HubFw = 0;        // Ethernet Hub board via Firewire
 
 #if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
@@ -407,6 +480,14 @@ int main(int argc, char **argv)
         }
         if (EthBoardList.size() > 0)
             curBoardEth = EthBoardList[0];
+        // Find Firewire board corresponding to Ethernet hub
+        unsigned int hub_num = EthPort->GetHubBoardId();
+        for (size_t i = 0; i < FwBoardList.size(); i++) {
+            if (FwBoardList[i]->GetBoardId() == hub_num) {
+                HubFw = FwBoardList[i];
+                break;
+            }
+        }
     }
     else
         std::cout << "Failed to initialize Ethernet port" << std::endl;
@@ -459,8 +540,11 @@ int main(int argc, char **argv)
         if (curBoardFw) {
             std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
             std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
-            std::cout << "  x) Read Ethernet data via FireWire" << std::endl;
         }
+        if (curBoardEth)
+            std::cout << "  t) Run Ethernet timing analysis" << std::endl;
+        if (curBoardFw)
+            std::cout << "  x) Read Ethernet data via FireWire" << std::endl;
         if (curBoardEth)
             std::cout << "  y) Read Firewire data via Ethernet" << std::endl;
         if (curBoardFw)
@@ -646,6 +730,17 @@ int main(int argc, char **argv)
                 else
                     std::cout << "Failed to write IP address" << std::endl;
             }
+            break;
+
+        case 't':
+            if (curBoardEth)
+                RunTiming("Ethernet", curBoardEth, HubFw, "quadlet read");
+            if (curBoardFw)
+                RunTiming("Firewire", curBoardFw, 0, "quadlet read");
+            if (curBoardEth)
+                RunTiming("Ethernet", curBoardEth, HubFw, "quadlet write");
+            if (curBoardFw)
+                RunTiming("Firewire", curBoardFw, 0, "quadlet write");
             break;
 
         case 'x':
