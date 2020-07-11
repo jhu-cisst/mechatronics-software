@@ -497,7 +497,7 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
 
     // construct broadcast write buffer
     const int numOfChannel = 4;
-    quadlet_t bcBuffer[numOfChannel * MAX_NODES];
+    quadlet_t bcBuffer[(numOfChannel+1) * MAX_NODES];  // +1 for Rev 7
     memset(bcBuffer, 0, sizeof(bcBuffer));
     int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
     int numOfBoards = 0;
@@ -507,9 +507,11 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
             numOfBoards++;
             quadlet_t *buf = BoardList[board]->GetWriteBuffer();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
+            if (FirmwareVersion[board] < 7)
+                numBytes -= 4;   // -4 for ctrl offset
+            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes);
             // bcBufferOffset equals total numBytes to write, when the loop ends
-            bcBufferOffset = bcBufferOffset + numBytes - 4;
+            bcBufferOffset = bcBufferOffset + numBytes;
         }
     }
 
@@ -531,28 +533,34 @@ bool FirewirePort::WriteAllBoardsBroadcast(void)
     // loop 2: send out control quadlet if necessary
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            bool noneWrittenThisBoard = true;
-            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
-            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
-            quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
-            bool ret2 = true;
-            if (ctrl) {  // if anything non-zero, write it
-                ret2 = WriteQuadlet(board, 0x00, ctrl);
-                if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
-                else allOK = false;
+            if (FirmwareVersion[board] < 7) {
+                bool noneWrittenThisBoard = true;
+                quadlet_t *buf = BoardList[board]->GetWriteBuffer();
+                unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
+                unsigned int numQuads = numBytes/4;
+                quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
+                bool ret2 = true;
+                if (ctrl) {  // if anything non-zero, write it
+                    ret2 = WriteQuadlet(board, 0x00, ctrl);
+                    if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
+                    else allOK = false;
+                }
+                if (noneWrittenThisBoard
+                    && !(BoardList[board]->WriteBufferResetsWatchdog())) {
+                    // send no-op to reset watchdog
+                    bool ret3 = WriteNoOp(board);
+                    if (ret3) noneWritten = false;
+                }
+                // SetWriteValid clears the buffer if the write was valid
+                BoardList[board]->SetWriteValid(ret&&ret2);
             }
-            if (noneWrittenThisBoard
-                && !(BoardList[board]->WriteBufferResetsWatchdog())) {
-                // send no-op to reset watchdog
-                bool ret3 = WriteNoOp(board);
-                if (ret3) noneWritten = false;
+            else {
+                // SetWriteValid clears the buffer if the write was valid
+                BoardList[board]->SetWriteValid(ret);
             }
 
             // Check for data collection callback
             BoardList[board]->CheckCollectCallback();
-            // SetWriteValid clears the buffer if the write was valid
-            BoardList[board]->SetWriteValid(ret&&ret2);
         }
     }
 

@@ -62,7 +62,7 @@ protected:
 
     // DESIGN APPROACH (IN PROCESS):
     // For real-time block reads and writes, the board class (i.e., derived classes from BoardIO)
-    // determines the data size (NumBytes), but the port class (i.e., derived classes from BasePort)
+    // determines the data size (NumBytes), but the port classes (i.e., derived classes from BasePort)
     // allocate the memory and call SetReadBuffer/SetWriteBuffer.
 
     // Following methods are for real-time block reads

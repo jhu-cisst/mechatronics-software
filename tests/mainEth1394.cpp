@@ -562,7 +562,7 @@ int main(int argc, char **argv)
         nodeaddr_t addr;
         quadlet_t fw_block_data[28];
         quadlet_t eth_block_data[28];
-        quadlet_t write_block[4] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444 };
+        quadlet_t write_block[5] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444, 0x55555555 };
         int i;
         char buf[5];
 
@@ -635,6 +635,7 @@ int main(int argc, char **argv)
                 for (i = 0; i < 4; i++) {
                     addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
                     EthPort->ReadQuadlet(boardNum, addr, write_block[i]);
+                    write_block[i] &= 0x0000ffff;
                 }
                 std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
                           << write_block[1] << ", " << write_block[2] << ", "
@@ -642,11 +643,13 @@ int main(int argc, char **argv)
                 for (i = 0; i < 4; i++) {
                     write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
                 }
+                write_block[4] = 0;
                 std::cout << "Setting new values" << std::endl;
                 if (!EthPort->WriteBlock(boardNum, 0, write_block, sizeof(write_block))) {
                     std::cout << "Failed to write block data via Ethernet port" << std::endl;
                     break;
                 }
+#if 0
                 for (i = 0; i < 4; i++) {
                     addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
                     EthPort->ReadQuadlet(boardNum, addr, write_block[i]);
@@ -654,6 +657,7 @@ int main(int argc, char **argv)
                 std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
                           << write_block[1] << ", " << write_block[2] << ", "
                           << write_block[3] << std::endl;
+#endif
             }
             break;
 

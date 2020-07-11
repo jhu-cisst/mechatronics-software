@@ -844,12 +844,10 @@ int main(int argc, char** argv)
     }
     else if (desiredPort == BasePort::PORT_ETH_UDP) {
         Port = new EthUdpPort(port, IPaddr, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
     }
     else if (desiredPort == BasePort::PORT_ETH_RAW) {
 #if Amp1394_HAS_PCAP
         Port = new EthRawPort(port, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 #else
         std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
         return -1;

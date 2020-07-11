@@ -232,10 +232,10 @@ bool BasePort::WriteAllBoards(void)
         if (BoardList[board]) {
             quadlet_t *buf = BoardList[board]->GetWriteBufferData();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
             if (FirmwareVersion[board] < 7) {
                 // Rev 1-6 firmware: the last quadlet (Status/Control register)
                 // is done as a separate quadlet write.
+                unsigned int numQuads = numBytes/4;
                 bool noneWrittenThisBoard = true;
                 bool ret = WriteBlock(board, 0, buf, numBytes-4);
                 if (ret) { noneWritten = false; noneWrittenThisBoard = false; }

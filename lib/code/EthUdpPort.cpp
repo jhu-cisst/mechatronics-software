@@ -559,10 +559,6 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         packet = new quadlet_t[packetSize];
     }
 
-    // PK: temporarily save the last quadlet, which is the power control on a real-time write,
-    //     so that it does not get overwritten by the CRC.
-    quadlet_t temp_saved = wdata[nbytes/sizeof(quadlet_t)];
-
     // Build FireWire packet
     make_bwrite_packet(packet, node, addr, wdata, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
     int nSent = sockPtr->Send(reinterpret_cast<const char *>(packet), packetSize, boardId&FW_NODE_ETH_BROADCAST_MASK);
@@ -571,7 +567,6 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         return false;
     }
 
-    wdata[nbytes/sizeof(quadlet_t)] = temp_saved;   // PK TEMP for real-time writes
     if (!realTimeWrite)
         delete [] packet;
     return true;
