@@ -107,6 +107,10 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
 
+    // Write a block to the specified node. Internal method called by WriteBlock and
+    // WriteAllBoardsBroadcast.
+    virtual bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes) = 0;
+
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     virtual void OnNoneRead(void) {}
 
@@ -199,7 +203,7 @@ public:
     virtual bool WriteAllBoards(void);
 
     // Write to all boards using broadcasting
-    virtual bool WriteAllBoardsBroadcast(void) = 0;
+    virtual bool WriteAllBoardsBroadcast(void);
 
     // Read a quadlet from the specified board
     virtual bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data) = 0;

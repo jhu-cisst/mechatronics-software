@@ -514,6 +514,16 @@ bool EthBasePort::ScanNodes(nodeid_t max_nodes)
     return (NumOfNodes_ > 0);
 }
 
+bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
+                                 unsigned int nbytes)
+{
+    unsigned char boardId = Node2Board[node];
+    if (boardId < BoardIO::MAX_BOARDS)
+        return WriteBlock(boardId, addr, wdata, nbytes);
+    else
+        return false;
+}
+
 void EthBasePort::OnNoneRead(void)
 {
     outStr << "Failed to read any board, check Ethernet physical connection" << std::endl;
@@ -522,48 +532,6 @@ void EthBasePort::OnNoneRead(void)
 void EthBasePort::OnNoneWritten(void)
 {
     outStr << "Failed to write any board, check Ethernet physical connection" << std::endl;
-}
-
-bool EthBasePort::WriteAllBoardsBroadcast(void)
-{
-    if (!IsOK()) {
-        outStr << "EthBasePort::WriteAllBoardsBroadcast: port not initialized" << std::endl;
-        return false;
-    }
-
-    // sanity check vars
-    bool allOK = true;
-
-    // construct broadcast write buffer
-    const int numOfChannel = 4;
-    quadlet_t bcBuffer[numOfChannel * BoardIO::MAX_BOARDS];
-    memset(bcBuffer, 0, sizeof(bcBuffer));
-    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
-    int numOfBoards = 0;
-
-    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
-        if (BoardList[bid]) {
-            numOfBoards++;
-            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
-            unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
-            // bcBufferOffset equals total numBytes to write, when the loop ends
-            bcBufferOffset = bcBufferOffset + numBytes - 4;
-        }
-    }
-
-    // now broadcast out the huge packet
-    bool ret = true;
-
-    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
-                              bcBuffer,
-                              bcBufferOffset);
-
-    // For Ethernet, the minimum firmware version is 7, so we do not need to implement
-    // the second loop that separately sends the control quadlet.
-
-    // return
-    return allOK;
 }
 
 bool EthBasePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)

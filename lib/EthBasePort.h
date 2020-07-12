@@ -64,14 +64,15 @@ protected:
     //! Write quadlet to node (internal method called by WriteQuadlet)
     virtual bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0) = 0;
 
+    // Write a block to the specified node. Internal method called by WriteBlock and
+    // WriteAllBoardsBroadcast.
+    bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
+
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     void OnNoneRead(void);
 
     // Method called by WriteAllBoards/WriteAllBoardsBroadcast if no data written
     void OnNoneWritten(void);
-
-    // Write to all boards using broadcasting
-    bool WriteAllBoardsBroadcast(void);
 
     static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl,
                                  bool doNotForward = false);

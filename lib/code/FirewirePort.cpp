@@ -481,98 +481,6 @@ void FirewirePort::OnNoneWritten(void)
     PollEvents();
 }
 
-bool FirewirePort::WriteAllBoardsBroadcast(void)
-{
-    // check handle
-    if (!handle) {
-        outStr << "FirewirePort::WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
-        return false;
-    }
-
-    // sanity check vars
-    bool allOK = true;
-    bool noneWritten = true;
-
-    // loop 1: broadcast write block
-
-    // construct broadcast write buffer
-    const int numOfChannel = 4;
-    quadlet_t bcBuffer[(numOfChannel+1) * MAX_NODES];  // +1 for Rev 7
-    memset(bcBuffer, 0, sizeof(bcBuffer));
-    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
-    int numOfBoards = 0;
-
-    for (unsigned int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            numOfBoards++;
-            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
-            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            if (FirmwareVersion[board] < 7)
-                numBytes -= 4;   // -4 for ctrl offset
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes);
-            // bcBufferOffset equals total numBytes to write, when the loop ends
-            bcBufferOffset = bcBufferOffset + numBytes;
-        }
-    }
-
-    // now broadcast out the huge packet
-    bool ret = true;
-
-#if 1
-    ret = !raw1394_write(handle,
-                         baseNodeId,
-                         0xffffffff0000,
-                         bcBufferOffset,
-                         bcBuffer);
-#else
-    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
-                              bcBuffer,
-                              bcBufferOffset);
-#endif
-
-    // loop 2: send out control quadlet if necessary
-    for (unsigned int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            if (FirmwareVersion[board] < 7) {
-                bool noneWrittenThisBoard = true;
-                quadlet_t *buf = BoardList[board]->GetWriteBuffer();
-                unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-                unsigned int numQuads = numBytes/4;
-                quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
-                bool ret2 = true;
-                if (ctrl) {  // if anything non-zero, write it
-                    ret2 = WriteQuadlet(board, 0x00, ctrl);
-                    if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
-                    else allOK = false;
-                }
-                if (noneWrittenThisBoard
-                    && !(BoardList[board]->WriteBufferResetsWatchdog())) {
-                    // send no-op to reset watchdog
-                    bool ret3 = WriteNoOp(board);
-                    if (ret3) noneWritten = false;
-                }
-                // SetWriteValid clears the buffer if the write was valid
-                BoardList[board]->SetWriteValid(ret&&ret2);
-            }
-            else {
-                // SetWriteValid clears the buffer if the write was valid
-                BoardList[board]->SetWriteValid(ret);
-            }
-
-            // Check for data collection callback
-            BoardList[board]->CheckCollectCallback();
-        }
-    }
-
-    // pullEvents
-    if (noneWritten) {
-        OnNoneWritten();
-    }
-
-    // return
-    return allOK;
-}
-
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
     nodeid_t node = GetNodeId(boardId);
@@ -614,16 +522,21 @@ bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
         return false;
 }
 
+bool FirewirePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
+                                  unsigned int nbytes)
+{
+    return !raw1394_write(handle, baseNodeId+node, addr, nbytes, wdata);
+}
+
 bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                               unsigned int nbytes)
 {
     nodeid_t node = GetNodeId(boardId);
     if (node < MAX_NODES)
-        return !raw1394_write(handle, baseNodeId+node, addr, nbytes, wdata);
+        return WriteBlockNode(baseNodeId+node, addr, wdata, nbytes);
     else
         return false;
 }
-
 
 bool FirewirePort::WriteBlockBroadcast(
         nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)

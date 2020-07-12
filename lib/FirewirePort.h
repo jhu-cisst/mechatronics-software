@@ -62,6 +62,10 @@ protected:
     // Look for nodes on the bus
     bool ScanNodes(void);
 
+    // Write a block to the specified node. Internal method called by WriteBlock and
+    // WriteAllBoardsBroadcast.
+    bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
+
 public:
     // Initialize IEEE-1394 (Firewire) port.
     FirewirePort(int portNum, std::ostream &debugStream = std::cerr);
@@ -86,9 +90,6 @@ public:
 
     // Read all boards broadcasting
     bool ReadAllBoardsBroadcast(void);
-
-    // Write to all boards using broadcasting
-    bool WriteAllBoardsBroadcast(void);
 
     // Read a quadlet from the specified board, true on success
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
