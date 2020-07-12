@@ -153,7 +153,18 @@ public:
         encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
         This method is provided for internal use and testing in firmware Rev 6 and deprecated in >6. */
     AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
-    
+
+    /*! Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+). */
+    AmpIO_UInt32 GetEncoderQtr1(unsigned int index) const;
+
+    /*! Get the encoder quarter cycle period from 5 cycles ago (i.e., 4 cycles prior to the one returned
+        by GetEncoderQtr1) for internal use and testing (Rev 7+). */
+    AmpIO_UInt32 GetEncoderQtr5(unsigned int index) const;
+
+    /*! Get the encoder running counter, which measures the elasped time since the last encoder edge;
+        for internal use and testing (Rev 7+). */
+    AmpIO_UInt32 GetEncoderRunningCounter(unsigned int index) const;
+
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.

@@ -580,6 +580,37 @@ AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
     return buff;
 }
 
+// Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+). */
+AmpIO_UInt32 AmpIO::GetEncoderQtr1(unsigned int index) const
+{
+    AmpIO_UInt32 retVal = 0;
+    // Could also implement for Rev 6
+    if (GetFirmwareVersion() >= 7)
+        retVal = GetEncoderQtr(index, ENC_QTR1_OFFSET);
+    return retVal;
+}
+
+// Get the encoder quarter cycle period from 5 cycles ago (i.e., 4 cycles prior to the one returned
+// by GetEncoderQtr1) for internal use and testing (Rev 7+). */
+AmpIO_UInt32 AmpIO::GetEncoderQtr5(unsigned int index) const
+{
+    AmpIO_UInt32 retVal = 0;
+    // Could also implement for Rev 6
+    if (GetFirmwareVersion() >= 7)
+        retVal = GetEncoderQtr(index, ENC_QTR5_OFFSET);
+    return retVal;
+}
+
+// Get the encoder running counter, which measures the elasped time since the last encoder edge;
+// for internal use and testing (Rev 7+).
+AmpIO_UInt32 AmpIO::GetEncoderRunningCounter(unsigned int index) const
+{
+    AmpIO_UInt32 retVal = 0;
+    if (GetFirmwareVersion() >= 7)
+        retVal = GetEncoderQtr(index, ENC_RUN_OFFSET);
+    return retVal;
+}
+
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
 {
     return ENC_MIDRANGE;

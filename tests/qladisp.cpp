@@ -269,9 +269,12 @@ int main(int argc, char** argv)
         Port->AddBoard(BoardList[1]);
     }
 
+    bool allRev7 = true;
     FirmwareVersionList.clear();
     for (j = 0; j < BoardList.size(); j++) {
-        FirmwareVersionList.push_back(BoardList[j]->GetFirmwareVersion());
+        AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
+        FirmwareVersionList.push_back(fver);
+        if (fver < 7) allRev7 = false;
     }
 
     for (i = 0; i < 4; i++) {
@@ -312,7 +315,15 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 8, lm, "Vel:");
     mvwprintw(stdscr, 9, lm, "Cur:");
     mvwprintw(stdscr, 10, lm, "DAC:");
-    if (fullvel) mvwprintw(stdscr, 11, lm, "Acc:");
+    if (fullvel) {
+        if (allRev7) {
+            mvwprintw(stdscr, 11, lm, "Qtr1:");
+            mvwprintw(stdscr, 12, lm, "Qtr5:");
+            mvwprintw(stdscr, 13, lm, "Run:");
+        }
+        else
+            mvwprintw(stdscr, 11, lm, "Acc:");
+    }
 
     wrefresh(stdscr);
 
@@ -320,7 +331,8 @@ int main(int argc, char** argv)
     unsigned char collect_axis = 1;
 
     int loop_cnt = 0;
-    const int DEBUG_START_LINE = fullvel ? 20 : 19;
+    const int STATUS_LINE = fullvel ? 15 : 13;
+    const int DEBUG_START_LINE = fullvel ? 22 : 19;
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
@@ -478,27 +490,34 @@ int main(int argc, char** argv)
                     else
                         mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
                     mvwprintw(stdscr, 9, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
-                    if (fullvel)
-                        mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                    if (fullvel) {
+                        if (allRev7) {
+                            mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderQtr1(i));
+                            mvwprintw(stdscr, 12, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderQtr5(i));
+                            mvwprintw(stdscr, 13, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderRunningCounter(i));
+                        }
+                        else
+                            mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                    }
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
-                mvwprintw(stdscr, 13, lm+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X",
+                mvwprintw(stdscr, STATUS_LINE, lm+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X",
                           BoardList[j]->GetStatus(), BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
-                mvwprintw(stdscr, 14, lm+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
+                mvwprintw(stdscr, STATUS_LINE+1, lm+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
                           BoardList[j]->GetNegativeLimitSwitches(),
                           BoardList[j]->GetPositiveLimitSwitches(),
                           BoardList[j]->GetHomeSwitches());
-                mvwprintw(stdscr, 15, lm+58*j, "EncA: 0x%01X            EncB: 0x%01X            EncInd: 0x%01X",
+                mvwprintw(stdscr, STATUS_LINE+2, lm+58*j, "EncA: 0x%01X            EncB: 0x%01X            EncInd: 0x%01X",
                           BoardList[j]->GetEncoderChannelA(),
                           BoardList[j]->GetEncoderChannelB(),
                           BoardList[j]->GetEncoderIndex());
 
-                mvwprintw(stdscr, 17, lm+58*j, "Node: %s", nodeStr[j]);
-                mvwprintw(stdscr, 17, lm+18+58*j, "Temp:  0x%02X    0x%02X",
+                mvwprintw(stdscr, STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
+                mvwprintw(stdscr, STATUS_LINE+4, lm+18+58*j, "Temp:  0x%02X    0x%02X",
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
-                mvwprintw(stdscr, 17, lm+40, "Ct: %8d", loop_cnt++);
+                mvwprintw(stdscr, STATUS_LINE+4, lm+40, "Ct: %8d", loop_cnt++);
                 if (loop_cnt > 500) {
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
