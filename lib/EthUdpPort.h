@@ -49,7 +49,7 @@ protected:
 public:
 
     EthUdpPort(int portNum, const std::string &serverIP = ETH_UDP_DEFAULT_IP,
-               std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
+               std::ostream &debugStream = std::cerr, bool isFwMaster = true, EthCallbackType cb = 0);
 
     ~EthUdpPort();
 

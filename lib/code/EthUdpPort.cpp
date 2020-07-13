@@ -228,8 +228,8 @@ int SocketInternals::FlushRecv(void)
     return numFlushed;
 }
 
-EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, cb),
+EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, bool isFwMaster, EthCallbackType cb):
+    EthBasePort(portNum, debugStream, isFwMaster, cb),
     ServerIP(serverIP),
     UDP_port(1394)
 {
@@ -242,6 +242,13 @@ EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &d
 
 EthUdpPort::~EthUdpPort()
 {
+    if (IsOK() && is_fw_master) {
+        // Attempt to clear eth1394 flag on all boards
+        quadlet_t data = 0x00800000;  // Clear eth1394 bit
+        if (WriteQuadletNode(FW_NODE_BROADCAST, 0, data))
+            std::cout << "EthUdpPort destructor: cleared eth1394 mode" << std::endl;
+    }
+
     sockPtr->Close();
     delete sockPtr;
 }
@@ -289,6 +296,17 @@ bool EthUdpPort::InitNodes(void)
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
+
+    if (is_fw_master) {
+        // Set eth1394 flag on all boards, so that they assign the node number based on the board number.
+        // Otherwise, if there is no Firewire bus master, node numbers may not be valid.
+        data = 0x00C00000;  // Set eth1394 bit
+        if (!WriteQuadletNode(FW_NODE_BROADCAST, 0, data)) {
+            outStr << "InitNodes: failed to set eth1394 mode" << std::endl;
+            return false;
+        }
+        outStr << "InitNodes: Set eth1394 mode" << std::endl;
+    }
 
     return true;
 }

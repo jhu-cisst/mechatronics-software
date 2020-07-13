@@ -441,6 +441,7 @@ int main(int argc, char **argv)
     AmpIO *curBoardFw = 0;   // Current board via Firewire
     AmpIO *curBoardEth = 0;  // Current board via Ethernet (sets boardNum)
     AmpIO *HubFw = 0;        // Ethernet Hub board via Firewire
+    bool  Eth1394Mode = true;   // Whether to set Eth1394 mode on FPGA
 
 #if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
@@ -456,18 +457,21 @@ int main(int argc, char **argv)
             FwBoardList.push_back(board);
         }
     }
-    if (FwBoardList.size() > 0)
+    if (FwBoardList.size() > 0) {
         curBoardFw = FwBoardList[0];
+        Eth1394Mode = false;
+    }
+
 #endif
     EthBasePort *EthPort = 0;
     if (desiredPort == BasePort::PORT_ETH_UDP) {
         std::cout << "Creating Ethernet UDP port" << std::endl;
-        EthPort = new EthUdpPort(port, IPaddr, std::cout);
+        EthPort = new EthUdpPort(port, IPaddr, std::cout, Eth1394Mode);
     }
 #if Amp1394_HAS_PCAP
     else if (desiredPort == BasePort::PORT_ETH_RAW) {
         std::cout << "Creating Ethernet raw (PCAP) port" << std::endl;
-        EthPort = new EthRawPort(port, std::cout);
+        EthPort = new EthRawPort(port, std::cout, Eth1394Mode);
     }
 #endif
     if (!EthPort) {
@@ -803,9 +807,12 @@ int main(int argc, char **argv)
         FwPort.RemoveBoard(FwBoardList[bd]->GetBoardId());
         delete FwBoardList[bd];
     }
-    for (unsigned int bd = 0; bd < EthBoardList.size(); bd++) {
-        EthPort->RemoveBoard(EthBoardList[bd]->GetBoardId());
-        delete EthBoardList[bd];
+    if (EthPort) {
+        for (unsigned int bd = 0; bd < EthBoardList.size(); bd++) {
+            EthPort->RemoveBoard(EthBoardList[bd]->GetBoardId());
+            delete EthBoardList[bd];
+        }
+        delete EthPort;
     }
     return 0;
 }

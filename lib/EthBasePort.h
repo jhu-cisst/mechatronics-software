@@ -48,6 +48,7 @@ public:
 
 protected:
 
+    bool is_fw_master;      // Whether bridge board must manage Firewire bus (e.g., Firewire not connected to PC)
     uint8_t fw_tl;          // FireWire transaction label (6 bits)
 
     EthCallbackType eth_read_callback;
@@ -84,7 +85,7 @@ protected:
 
 public:
 
-    EthBasePort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
+    EthBasePort(int portNum, std::ostream &debugStream = std::cerr, bool isFwMaster = true, EthCallbackType cb = 0);
 
     ~EthBasePort();
 
