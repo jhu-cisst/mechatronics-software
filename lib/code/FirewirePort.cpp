@@ -242,6 +242,8 @@ bool FirewirePort::ScanNodes(void)
     IsAllBoardsBroadcastCapable_ = true;
     IsAllBoardsBroadcastShorterWait_ = true;
     IsNoBoardsBroadcastShorterWait_ = true;
+    IsAllBoardsRev7_ = true;
+    IsNoBoardsRev7_ = true;
     // Iterate through all connected nodes (except for last one, which is the PC).
     for (node = 0; node < numNodes-1; node++){
         quadlet_t data;
@@ -287,17 +289,23 @@ bool FirewirePort::ScanNodes(void)
         // on the bus that are not part of the current configuration).
         if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
         else          IsNoBoardsBroadcastShorterWait_ = false;
+        if (fver < 7) IsAllBoardsRev7_ = false;
+        else          IsNoBoardsRev7_ = false;
     }
 
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
-        Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-        if (IsAllBoardsBroadcastShorterWait_)
-            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
-        else if (IsNoBoardsBroadcastShorterWait_)
-            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
+        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
+            Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
+            if (IsAllBoardsBroadcastShorterWait_)
+                outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
+            else if (IsNoBoardsBroadcastShorterWait_)
+                outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
+            else
+                outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
+        }
         else
-            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
+            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
     }
 
     // update Board2Node
@@ -357,8 +365,8 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
                                   &debugData);
     if (!retdebug) {
         raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        std::cerr << "debug read ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-                  << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
+        outStr << "debug read ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
+               << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
     }
 #endif
 
@@ -391,8 +399,8 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
                          &bcReqData);
     if (!ret) {
         raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        std::cerr << "bbbbbbb fake ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-                  << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
+        outStr << "bbbbbbb fake ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
+               << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
     }
 #else
     WriteQuadletBroadcast(bcReqAddr, bcReqData);
@@ -411,17 +419,21 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     }
 
     // initialize max buffer
-    // TODO: need to update following
-    const int hubReadSize = 272;     // 16 * 17 = 272 max
-    quadlet_t hubReadBuffer[hubReadSize];
+    const int hubReadSizeMax = 464;  // 16 * 29 = 464 max
+    quadlet_t hubReadBuffer[hubReadSizeMax];
     memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
+    int hubReadSize;        // Actual read size (depends on firmware version)
+    if (IsNoBoardsRev7_)
+        hubReadSize = 272;             // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
+    else
+        hubReadSize = hubReadSizeMax;  // Rev 7
 
 #if 1
     // raw1394_read 0 = SUCCESS, -1 = FAIL, flip return value
     ret = !raw1394_read(handle,
                         baseNodeId + hub_node_id,
                         0x1000,           // read from hub addr
-                        272 * 4,          // read all 16 boards
+                        hubReadSize * sizeof(quadlet_t),          // read all 16 boards
                         hubReadBuffer);
 #endif
 
@@ -431,17 +443,22 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     if (!ret) {
         raw1394readCounter++;
         raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        std::cerr << "ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
+        outStr << "ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
                   << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
-        std::cerr << "raw1394_read failed " << raw1394readCounter << ": " << strerror(errno) << std::endl;
+        outStr << "raw1394_read failed " << raw1394readCounter << ": " << strerror(errno) << std::endl;
     }
     // -----------------------
 
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            // TODO: Need to update following
-            const int readSize = 17;  // 1 seq + 16 data, unit quadlet
-            quadlet_t readBuffer[readSize];
+            const int readSizeMax = 29;  // 1 seq + 28 data, unit quadlet (Rev 7)
+            quadlet_t readBuffer[readSizeMax];
+
+            int readSize;    // Actual size per board (depends on firmware version)
+            if (IsNoBoardsRev7_)
+                readSize = 17;  // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
+            else
+                readSize = readSizeMax;   // Rev 7
 
             memcpy(readBuffer, &(hubReadBuffer[readSize * board + 0]), readSize * 4);
 
@@ -455,7 +472,7 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
             }
 //            std::cerr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
 
-            memcpy(BoardList[board]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * 4);
+            memcpy(BoardList[board]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * sizeof(quadlet_t));
 
             if (ret) noneRead = false;
             else allOK = false;

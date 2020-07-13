@@ -441,6 +441,8 @@ bool EthBasePort::ScanNodes(nodeid_t max_nodes)
     IsAllBoardsBroadcastCapable_ = true;
     IsAllBoardsBroadcastShorterWait_ = false;    // Not yet supported for Ethernet interface
     IsNoBoardsBroadcastShorterWait_ = true;      // Not yet supported for Ethernet interface
+    IsAllBoardsRev7_ = true;
+    IsNoBoardsRev7_ = true;
     NumOfNodes_ = 0;
 
     quadlet_t data;
@@ -488,6 +490,12 @@ bool EthBasePort::ScanNodes(nodeid_t max_nodes)
         // check firmware version
         // FirmwareVersion >= 4, broadcast capable
         if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
+        // FirmwareVersion >= 6, broadcast with possibly shorter wait (i.e., skipping nodes
+        // on the bus that are not part of the current configuration).
+        if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
+        else          IsNoBoardsBroadcastShorterWait_ = false;
+        if (fver < 7) IsAllBoardsRev7_ = false;
+        else          IsNoBoardsRev7_ = false;
         NumOfNodes_++;
     }
     outStr << "ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
@@ -495,7 +503,17 @@ bool EthBasePort::ScanNodes(nodeid_t max_nodes)
     // Use broadcast by default if all firmware are bc capable
     if (IsAllBoardsBroadcastCapable_) {
         Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-        outStr << "ScanNodes: all nodes broadcast capable" << std::endl;
+        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
+            Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
+            if (IsAllBoardsBroadcastShorterWait_)
+                outStr << "EthBasePort::ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
+            else if (IsNoBoardsBroadcastShorterWait_)
+                outStr << "EthBasePort::ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
+            else
+                outStr << "EthBasePort::ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
+        }
+        else
+            outStr << "EthBasePort::ScanNodes: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
     }
 
     // update Board2Node

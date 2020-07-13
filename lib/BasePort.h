@@ -81,7 +81,9 @@ protected:
     ProtocolType Protocol_;         // protocol type in use
     bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
     bool IsAllBoardsBroadcastShorterWait_;   // TRUE if all nodes bc capable and support shorter wait
-    bool IsNoBoardsBroadcastShorterWait_;   // TRUE if no nodes support the shorter wait
+    bool IsNoBoardsBroadcastShorterWait_;    // TRUE if no nodes support the shorter wait
+    bool IsAllBoardsRev7_;                   // TRUE if all boards are Firmware Rev 7
+    bool IsNoBoardsRev7_;                    // TRUE if no boards are Firmware Rev 7
     unsigned int ReadSequence_;   // sequence number for WABB
 
     size_t ReadErrorCounter_;
@@ -125,7 +127,7 @@ public:
     virtual ~BasePort() {}
 
     // Set protocol type
-    void SetProtocol(ProtocolType prot);
+    bool SetProtocol(ProtocolType prot);
 
     // Add board to list of boards in use
     virtual bool AddBoard(BoardIO *board);

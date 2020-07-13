@@ -25,6 +25,8 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         IsAllBoardsBroadcastCapable_(false),
         IsAllBoardsBroadcastShorterWait_(false),
         IsNoBoardsBroadcastShorterWait_(true),
+        IsAllBoardsRev7_(false),
+        IsNoBoardsRev7_(false),
         ReadSequence_(0),
         ReadErrorCounter_(0),
         PortNum(portNum),
@@ -45,12 +47,20 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         Node2Board[i] = BoardIO::MAX_BOARDS;
 }
 
-void BasePort::SetProtocol(ProtocolType prot) {
-    if (!IsAllBoardsBroadcastCapable_ && (prot != BasePort::PROTOCOL_SEQ_RW)) {
-        outStr << "***Error: not all boards support broadcasting, " << std::endl
-               << "          please upgrade your firmware"  << std::endl;
-    } else {
-        switch (prot) {
+bool BasePort::SetProtocol(ProtocolType prot) {
+    if (prot != BasePort::PROTOCOL_SEQ_RW) {
+        if (!IsAllBoardsBroadcastCapable_) {
+            outStr << "***Error: not all boards support broadcasting, " << std::endl
+                   << "          please upgrade your firmware"  << std::endl;
+            return false;
+        }
+        if (!(IsAllBoardsRev7_ || IsNoBoardsRev7_)) {
+            outStr << "***Error: cannot use broadcast mode with mix of Rev 7 and older boards, " << std::endl
+                   << "          please upgrade your firmware to Rev 7" << std::endl;
+            return false;
+        }
+    }
+    switch (prot) {
         case BasePort::PROTOCOL_SEQ_RW:
             outStr << "System running in NON broadcast mode" << std::endl;
             Protocol_ = prot;
@@ -66,8 +76,8 @@ void BasePort::SetProtocol(ProtocolType prot) {
         default:
             outStr << "Unknown protocol (ignored): " << prot << std::endl;
             break;
-        }
     }
+    return (Protocol_ == prot);
 }
 
 bool BasePort::AddBoard(BoardIO *board)
