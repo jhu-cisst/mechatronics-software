@@ -109,6 +109,14 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
 
+    //! Read quadlet from node (internal method called by ReadQuadlet).
+    //  Flags are defined above (FW_NODE_xxx) and are only used for Ethernet interface.
+    virtual bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0) = 0;
+
+    //! Write quadlet to node (internal method called by WriteQuadlet)
+    //  Flags are defined above (FW_NODE_xxx) and are only used for Ethernet interface.
+    virtual bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0) = 0;
+
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
     virtual bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes) = 0;

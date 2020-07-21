@@ -224,7 +224,7 @@ void FirewirePort::PollEvents(void)
 bool FirewirePort::ScanNodes(void)
 {
 
-    int board;
+    unsigned int board;
     nodeid_t node;
 
     // Clear any existing Node2Board
@@ -244,42 +244,48 @@ bool FirewirePort::ScanNodes(void)
     IsNoBoardsBroadcastShorterWait_ = true;
     IsAllBoardsRev7_ = true;
     IsNoBoardsRev7_ = true;
+
+    outStr << "FirewirePort::ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
     // Iterate through all connected nodes (except for last one, which is the PC).
-    for (node = 0; node < numNodes-1; node++){
+    for (node = 0; node < numNodes-1; node++) {
         quadlet_t data;
-        if (raw1394_read(handle, baseNodeId+node, 4, 4, &data)) {
-            outStr << "FirewirePort::ScanNodes: unable to read from node " << node << std::endl;
+        // check hardware version
+        if (!ReadQuadletNode(node, 4, data)) {
+            outStr << "ScanNodes: unable to read from node " << node << std::endl;
             return false;
         }
-        data = bswap_32(data);
         if ((data != 0xC0FFEE) && (data != QLA1_String)) {
-            outStr << "FirewirePort::ScanNodes: node " << node << " is not a QLA board" << std::endl;
+            outStr << "ScanNodes: node " << node << " is not a QLA board" << std::endl;
             continue;
         }
-        // Now, read firmware version
+
+        // read firmware version
         unsigned long fver = 0;
         if (data == QLA1_String) {
-            if (raw1394_read(handle, baseNodeId+node, 7, 4, &data)) {
-                outStr << "FirewirePort::ScanNodes: unable to read firmware version from node "
+            if (!ReadQuadletNode(node, 7, data)) {
+                outStr << "ScanNodes: unable to read firmware version from node "
                        << node << std::endl;
                 return false;
             }
-            data = bswap_32(data);
             fver = data;
         }
-        if (raw1394_read(handle, baseNodeId+node, 0, 4, &data)) {
-            outStr << "FirewirePort::ScanNodes: unable to read status from node " << node << std::endl;
+
+        // read board id
+        if (!ReadQuadletNode(node, 0, data)) {
+            outStr << "ScanNodes: unable to read status from node " << node << std::endl;
             return false;
         }
-        data = bswap_32(data);
-        // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
+        // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
         board = (data & BOARD_ID_MASK) >> 24;
         outStr << "  Node " << node << ", BoardId = " << board
                << ", Firmware Version = " << fver << std::endl;
-        if (Node2Board[node] < BoardIO::MAX_BOARDS)
+
+        if (Node2Board[node] < BoardIO::MAX_BOARDS) {
             outStr << "    Duplicate entry, previous value = "
                    << static_cast<int>(Node2Board[node]) << std::endl;
-        Node2Board[node] = board;
+        }
+
+        Node2Board[node] = static_cast<unsigned char>(board);
         FirmwareVersion[board] = fver;
 
         // check firmware version
@@ -498,15 +504,24 @@ void FirewirePort::OnNoneWritten(void)
     PollEvents();
 }
 
+bool FirewirePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char)
+{
+    bool ret = !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
+    if (ret)
+        data = bswap_32(data);
+    return ret;
+}
+
+// PK TODO: Why is byteswapping done in ReadQuadletNode, but not WriteQuadletNode
+bool FirewirePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char)
+{
+    return !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
+}
+
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
     nodeid_t node = GetNodeId(boardId);
-    bool ret = false;
-    if (node < MAX_NODES) {
-        ret = !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
-        data = bswap_32(data);
-    }
-    return ret;
+    return (node < MAX_NODES) ? ReadQuadletNode(node, addr, data) : false;
 }
 
 bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
@@ -515,7 +530,7 @@ bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_
     bool ret = false;
     if (node < MAX_NODES) {
         data = bswap_32(data);
-        ret = !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
+        ret = ReadQuadletNode(node, addr, data);
     }
     return ret;
 }

@@ -446,10 +446,10 @@ bool EthBasePort::ScanNodes(nodeid_t max_nodes)
     IsNoBoardsRev7_ = true;
     NumOfNodes_ = 0;
 
-    quadlet_t data;
     outStr << "ScanNodes: building node map" << std::endl;
-    for (node = 0; node < max_nodes; node++)
-    {
+    // Iterate through all possible nodes
+    for (node = 0; node < max_nodes; node++) {
+        quadlet_t data;
         // check hardware version
         if (!ReadQuadletNode(node, 4, data))
             continue;

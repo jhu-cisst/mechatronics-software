@@ -44,6 +44,14 @@ protected:
     // callback for 1394 bus reset event
     static int reset_handler(raw1394handle_t hdl, unsigned int gen);
 
+    //! Read quadlet from node (internal method called by ReadQuadlet).
+    //  Parameter "flags" is not used for Firewire.
+    bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
+
+    //! Write quadlet to node (internal method called by WriteQuadlet)
+    //  Parameter "flags" is not used for Firewire.
+    bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
+
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     void OnNoneRead(void);
 

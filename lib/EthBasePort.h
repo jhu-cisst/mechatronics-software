@@ -59,12 +59,6 @@ protected:
     // MAX_NODES is larger and would require more time to scan.
     virtual bool ScanNodes(nodeid_t max_nodes = BoardIO::MAX_BOARDS);
 
-    //! Read quadlet from node (internal method called by ReadQuadlet)
-    virtual bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0) = 0;
-
-    //! Write quadlet to node (internal method called by WriteQuadlet)
-    virtual bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0) = 0;
-
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
