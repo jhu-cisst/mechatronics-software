@@ -258,15 +258,13 @@ bool EthUdpPort::Init(void)
     if (!sockPtr->Open(ServerIP, UDP_port))
         return false;
 
-    bool ret = InitNodes();
-    if (ret)
-        ret = ScanNodes();
+    bool ret = ScanNodes();
     //if (!ret)
     //    sockPtr->Close();
     return ret;
 }
 
-bool EthUdpPort::InitNodes(void)
+nodeid_t EthUdpPort::InitNodes(void)
 {
     //  1. Set IP address of first connected board using UDP broadcast
     //  2. Read hub/bridge board id using FireWire broadcast (via unicast UDP)
@@ -274,24 +272,24 @@ bool EthUdpPort::InitNodes(void)
     // First, set IP address by Ethernet and FireWire broadcast
     if (!WriteQuadletNode(FW_NODE_BROADCAST, 11, sockPtr->ServerAddr.sin_addr.s_addr, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to write IP address" << std::endl;
-        return false;
+        return 0;
     }
     quadlet_t data = 0x0;   // initialize data to 0
         
     // Check hardware version of hub board
     if (!ReadQuadletNode(FW_NODE_BROADCAST, 4, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
-        return false;
+        return 0;
     }
     if (data != QLA1_String) {
         outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
-        return false;
+        return 0;
     }
 
     // Find board id for first board (i.e., one connected by Ethernet) by FireWire broadcast
     if (!ReadQuadletNode(FW_NODE_BROADCAST, 0, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
-        return false;
+        return 0;
     }
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
@@ -303,12 +301,13 @@ bool EthUdpPort::InitNodes(void)
         data = 0x00C00000;  // Set eth1394 bit
         if (!WriteQuadletNode(FW_NODE_BROADCAST, 0, data)) {
             outStr << "InitNodes: failed to set eth1394 mode" << std::endl;
-            return false;
+            return 0;
         }
         outStr << "InitNodes: Set eth1394 mode" << std::endl;
     }
 
-    return true;
+    // Scan for up to 16 nodes on bus
+    return BoardIO::MAX_BOARDS;
 }
 
 bool EthUdpPort::IsOK(void)

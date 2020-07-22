@@ -221,112 +221,16 @@ void FirewirePort::PollEvents(void)
         raw1394_loop_iterate(handle);
 }
 
-bool FirewirePort::ScanNodes(void)
+nodeid_t FirewirePort::InitNodes(void)
 {
-
-    unsigned int board;
-    nodeid_t node;
-
-    // Clear any existing Node2Board
-    memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
-
     // Get base node id (zero out 6 lsb)
     baseNodeId = raw1394_get_local_id(handle) & 0xFFC0;
-    outStr << "FirewirePort::ScanNodes: base node id = " << std::hex << baseNodeId << std::endl;
+    outStr << "FirewirePort::InitNodes: base node id = " << std::hex << baseNodeId << std::endl;
 
-    // iterate through all the nodes and find out their boardId
+    // Get total number of nodes on bus
     int numNodes = raw1394_get_nodecount(handle);
-    NumOfNodes_ = numNodes - 1;
-
-    outStr << "FirewirePort::ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
-    IsAllBoardsBroadcastCapable_ = true;
-    IsAllBoardsBroadcastShorterWait_ = true;
-    IsNoBoardsBroadcastShorterWait_ = true;
-    IsAllBoardsRev7_ = true;
-    IsNoBoardsRev7_ = true;
-
-    outStr << "FirewirePort::ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
-    // Iterate through all connected nodes (except for last one, which is the PC).
-    for (node = 0; node < numNodes-1; node++) {
-        quadlet_t data;
-        // check hardware version
-        if (!ReadQuadletNode(node, 4, data)) {
-            outStr << "ScanNodes: unable to read from node " << node << std::endl;
-            return false;
-        }
-        if ((data != 0xC0FFEE) && (data != QLA1_String)) {
-            outStr << "ScanNodes: node " << node << " is not a QLA board" << std::endl;
-            continue;
-        }
-
-        // read firmware version
-        unsigned long fver = 0;
-        if (data == QLA1_String) {
-            if (!ReadQuadletNode(node, 7, data)) {
-                outStr << "ScanNodes: unable to read firmware version from node "
-                       << node << std::endl;
-                return false;
-            }
-            fver = data;
-        }
-
-        // read board id
-        if (!ReadQuadletNode(node, 0, data)) {
-            outStr << "ScanNodes: unable to read status from node " << node << std::endl;
-            return false;
-        }
-        // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
-        board = (data & BOARD_ID_MASK) >> 24;
-        outStr << "  Node " << node << ", BoardId = " << board
-               << ", Firmware Version = " << fver << std::endl;
-
-        if (Node2Board[node] < BoardIO::MAX_BOARDS) {
-            outStr << "    Duplicate entry, previous value = "
-                   << static_cast<int>(Node2Board[node]) << std::endl;
-        }
-
-        Node2Board[node] = static_cast<unsigned char>(board);
-        FirmwareVersion[board] = fver;
-
-        // check firmware version
-        // FirmwareVersion >= 4, broadcast capable
-        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
-        // FirmwareVersion >= 6, broadcast with possibly shorter wait (i.e., skipping nodes
-        // on the bus that are not part of the current configuration).
-        if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
-        else          IsNoBoardsBroadcastShorterWait_ = false;
-        if (fver < 7) IsAllBoardsRev7_ = false;
-        else          IsNoBoardsRev7_ = false;
-    }
-
-    // Use broadcast by default if all firmware are bc capable
-    if (IsAllBoardsBroadcastCapable_) {
-        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
-            Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-            if (IsAllBoardsBroadcastShorterWait_)
-                outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
-            else if (IsNoBoardsBroadcastShorterWait_)
-                outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
-            else
-                outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
-        }
-        else
-            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
-    }
-
-    // update Board2Node
-    for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
-        Board2Node[board] = MAX_NODES;
-        for (node = 0; node < numNodes-1; node++) {
-            if (Node2Board[node] == board) {
-                if (Board2Node[board] < MAX_NODES)
-                    outStr << "FirewirePort::ScanNodes: warning, GetNodeId detected duplicate board id for " << board << std::endl;
-                Board2Node[board] = node;
-            }
-        }
-    }
-
-    return true;
+    // Subtract 1 for PC which, as bus master, is always the highest number
+    return (numNodes-1);
 }
 
 

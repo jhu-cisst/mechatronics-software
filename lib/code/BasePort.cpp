@@ -38,7 +38,6 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
 {
     size_t i;
     for (i = 0; i < BoardIO::MAX_BOARDS; i++) {
-        BoardExists[i] = false;
         BoardList[i] = 0;
         FirmwareVersion[i] = 0;
         Board2Node[i] = MAX_NODES;
@@ -78,6 +77,112 @@ bool BasePort::SetProtocol(ProtocolType prot) {
             break;
     }
     return (Protocol_ == prot);
+}
+
+bool BasePort::ScanNodes(void)
+{
+    unsigned int board;
+    nodeid_t node;
+
+    // Clear any existing Node2Board
+    memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
+
+    IsAllBoardsBroadcastCapable_ = true;
+    IsAllBoardsBroadcastShorterWait_ = true;
+    IsNoBoardsBroadcastShorterWait_ = true;
+    IsAllBoardsRev7_ = true;
+    IsNoBoardsRev7_ = true;
+    NumOfNodes_ = 0;
+
+    nodeid_t max_nodes = InitNodes();
+
+    outStr << "ScanNodes: building node map for " << max_nodes << " nodes:" << std::endl;
+    // Iterate through all possible nodes
+    for (node = 0; node < max_nodes; node++) {
+        quadlet_t data;
+        // check hardware version
+        if (!ReadQuadletNode(node, 4, data)) {
+            if (GetPortType() == PORT_FIREWIRE)
+                outStr << "ScanNodes: unable to read from node " << node << std::endl;
+            continue;
+        }
+        if (data != QLA1_String) {
+            outStr << "ScanNodes: node " << node << " is not a QLA board (data = "
+                   << std::hex << data << ")" << std::endl;
+            continue;
+        }
+
+        // read firmware version
+        unsigned long fver = 0;
+        if (!ReadQuadletNode(node, 7, data)) {
+            outStr << "ScanNodes: unable to read firmware version from node "
+                   << node << std::endl;
+            continue;
+        }
+        fver = data;
+
+        // read board id
+        if (!ReadQuadletNode(node, 0, data)) {
+            outStr << "ScanNodes: unable to read status from node " << node << std::endl;
+            continue;
+        }
+        // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
+        board = (data & BOARD_ID_MASK) >> 24;
+        outStr << "  Node " << node << ", BoardId = " << board
+               << ", Firmware Version = " << fver << std::endl;
+
+        if (Node2Board[node] < BoardIO::MAX_BOARDS) {
+            outStr << "    Duplicate entry, previous value = "
+                   << static_cast<int>(Node2Board[node]) << std::endl;
+        }
+
+        Node2Board[node] = static_cast<unsigned char>(board);
+        FirmwareVersion[board] = fver;
+
+        // check firmware version
+        // FirmwareVersion >= 4, broadcast capable
+        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
+        // FirmwareVersion >= 6, broadcast with possibly shorter wait (i.e., skipping nodes
+        // on the bus that are not part of the current configuration).
+        if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
+        else          IsNoBoardsBroadcastShorterWait_ = false;
+        if (fver < 7) IsAllBoardsRev7_ = false;
+        else          IsNoBoardsRev7_ = false;
+        NumOfNodes_++;
+    }
+    outStr << "ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
+
+    // Use broadcast by default if all firmware are bc capable
+    if ((NumOfNodes_ > 0) && IsAllBoardsBroadcastCapable_) {
+        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
+            Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
+            if (IsAllBoardsBroadcastShorterWait_)
+                outStr << "ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
+            else if (IsNoBoardsBroadcastShorterWait_)
+                outStr << "ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
+            else
+                outStr << "ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
+        }
+        else
+            outStr << "ScanNodes: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
+    }
+
+    // update Board2Node
+    for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
+        Board2Node[board] = MAX_NODES;
+        // search up to max_nodes (not NumOfNodes_) in case nodes are not sequential (i.e., if some nodes
+        // are not associated with valid boards).
+        for (node = 0; node < max_nodes; node++) {
+            if (Node2Board[node] == board) {
+                if (Board2Node[board] < MAX_NODES)
+                    outStr << "ScanNodes: warning: duplicate node id for board " << board 
+                           << "(" << Board2Node[board] << ", " << node << ")" << std::endl;
+                Board2Node[board] = node;
+            }
+        }
+    }
+
+    return (NumOfNodes_ > 0);
 }
 
 bool BasePort::AddBoard(BoardIO *board)

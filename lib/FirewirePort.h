@@ -67,8 +67,9 @@ protected:
     // Cleanup Firewire port
     void Cleanup(void);
 
-    // Look for nodes on the bus
-    bool ScanNodes(void);
+    // Initialize nodes on the bus; called by ScanNodes
+    // \return Maximum number of nodes on bus (0 if error)
+    nodeid_t InitNodes(void);
 
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.

@@ -37,8 +37,9 @@ protected:
     //! Initialize EthUdp port
     bool Init(void);
 
-    //! Initialize nodes on the bus
-    bool InitNodes(void);
+    //! Initialize nodes on the bus; called by ScanNodes
+    // \return Maximum number of nodes on bus (0 if error)
+    nodeid_t InitNodes(void);
 
     //! Read quadlet from node (internal method called by ReadQuadlet)
     bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);

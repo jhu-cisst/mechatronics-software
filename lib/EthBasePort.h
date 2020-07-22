@@ -54,11 +54,6 @@ protected:
     EthCallbackType eth_read_callback;
     double ReceiveTimeout;      // Ethernet receive timeout (seconds)
 
-    // Default implementation may be sufficient (may not need to override).
-    // Note that default is to scan for up to MAX_BOARDS nodes, rather than MAX_NODES because
-    // MAX_NODES is larger and would require more time to scan.
-    virtual bool ScanNodes(nodeid_t max_nodes = BoardIO::MAX_BOARDS);
-
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);

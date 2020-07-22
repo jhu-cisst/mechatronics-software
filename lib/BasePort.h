@@ -91,8 +91,6 @@ protected:
     // Port Index, e.g. eth0 -> PortNum = 0
     int PortNum;
 
-    // Indicates whether board exists in network (might not be used in current configuration)
-    bool BoardExists[BoardIO::MAX_BOARDS];
     unsigned int NumOfNodes_;       // number of nodes (boards) on bus
 
     // Indicates which boards are used in the current configuration
@@ -108,6 +106,16 @@ protected:
     // Mappings between board numbers and node numbers
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
+
+    // Initialize port
+    virtual bool Init(void) = 0;
+
+    // Initialize nodes on the bus; called by ScanNodes
+    // \return Maximum number of nodes on bus (0 if error)
+    virtual nodeid_t InitNodes(void) = 0;
+
+    // Look for nodes on the bus
+    virtual bool ScanNodes(void);
 
     //! Read quadlet from node (internal method called by ReadQuadlet).
     //  Flags are defined above (FW_NODE_xxx) and are only used for Ethernet interface.

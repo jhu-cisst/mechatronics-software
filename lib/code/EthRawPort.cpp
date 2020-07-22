@@ -213,9 +213,7 @@ bool EthRawPort::Init(void)
     frame_hdr[12] = 0;   // length field
     frame_hdr[13] = 0;   // length field
 
-    bool ret = InitNodes();
-    if (ret)
-        ret = ScanNodes();
+    bool ret = ScanNodes();
     if (!ret) {
         pcap_close(handle);
         handle = 0;
@@ -223,7 +221,7 @@ bool EthRawPort::Init(void)
     return ret;
 }
 
-bool EthRawPort::InitNodes(void)
+nodeid_t EthRawPort::InitNodes(void)
 {
     // Find board id for first board (i.e., one connected by Ethernet)
     quadlet_t data = 0x0;   // initialize data to 0
@@ -235,7 +233,7 @@ bool EthRawPort::InitNodes(void)
     }
     if (!ret) {
         outStr << "InitNodes: no response via multicast" << std::endl;
-        return false;
+        return 0;
     }
 
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
@@ -248,12 +246,13 @@ bool EthRawPort::InitNodes(void)
         data = 0x00C00000;  // Set eth1394 bit
         if (!WriteQuadletNode(FW_NODE_BROADCAST, 0, data)) {
             outStr << "InitNodes: failed to set eth1394 mode" << std::endl;
-            return false;
+            return 0;
         }
         outStr << "InitNodes: Set eth1394 mode" << std::endl;
     }
 
-    return true;
+    // Scan for up to 16 nodes on bus
+    return BoardIO::MAX_BOARDS;
 }
 
 bool EthRawPort::IsOK(void)

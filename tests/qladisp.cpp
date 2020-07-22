@@ -222,7 +222,7 @@ int main(int argc, char** argv)
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
-    BasePort *Port;
+    BasePort *Port = 0;
     if (desiredPort == BasePort::PORT_FIREWIRE) {
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
@@ -242,7 +242,7 @@ int main(int argc, char** argv)
         return -1;
 #endif
     }
-    if (!Port->IsOK()) {
+    if (!Port || !Port->IsOK()) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
         return -1;
