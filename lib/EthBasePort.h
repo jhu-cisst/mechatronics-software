@@ -107,6 +107,11 @@ public:
     bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
 
     /*!
+     \brief Write the broadcast read request
+    */
+    bool WriteBroadcastReadRequest(quadlet_t /*data*/) { return false; }  // TEMP
+
+    /*!
      \brief Add delay (if needed) for PROM I/O operations
      The delay is non-zero for Ethernet.
     */

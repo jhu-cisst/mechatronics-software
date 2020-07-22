@@ -24,17 +24,12 @@ http://www.cisst.org/cisst/license.txt.
 #include <byteswap.h>
 #include <sys/select.h>
 #include <errno.h>   // errno
-#include <string.h>  // strerror(errno)
-#include <sys/time.h>
-#include <unistd.h>
-#include <stdio.h>
 
 // firewire
 #include "FirewirePort.h"
+#include "Amp1394Time.h"
 #include <libraw1394/raw1394.h>
 #include <libraw1394/csr.h>
-
-#define FAKEBC 1    // fake broadcast mode
 
 FirewirePort::PortListType FirewirePort::PortList;
 
@@ -249,6 +244,23 @@ bool FirewirePort::RemoveBoard(unsigned char boardId)
     return BasePort::RemoveBoard(boardId);
 }
 
+bool FirewirePort::WriteBroadcastReadRequest(quadlet_t data)
+{
+    nodeaddr_t bcReqAddr = 0xffffffff000f;    // special address to trigger broadcast read
+
+#if 1
+    bool ret = WriteQuadletNode(0, bcReqAddr, data);
+    if (!ret) {
+        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
+        outStr << "bbbbbbb fake ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
+               << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
+    }
+#else
+    bool ret = WriteQuadletBroadcast(bcReqAddr, data);
+#endif
+    return ret;
+}
+
 // CAN BE MERGED WITH ETHBASEPORT
 bool FirewirePort::ReadAllBoardsBroadcast(void)
 {
@@ -260,25 +272,8 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     bool ret;
     bool allOK = true;
     bool noneRead = true;
-    int hub_node_id = GetNodeId(HubBoard);   //  ZC: NOT USE PLACEHOLDER
 
     //--- send out broadcast read request -----
-
-#if 0
-    quadlet_t debugData;
-    nodeaddr_t debugAddr = 0x03;
-
-    bool retdebug = !raw1394_read(handle,
-                                  baseNodeId + hub_node_id,    // boardid 7
-                                  debugAddr,           // read from hub addr
-                                  4,                   // read all 16 boards
-                                  &debugData);
-    if (!retdebug) {
-        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        outStr << "debug read ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-               << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
-    }
-#endif
 
     // sequence number from 16 bits 0 to 65535
     ReadSequence_++;
@@ -296,37 +291,13 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
         // arbitration protocol should prevent disaster, but this could lead to lower efficiency.
         bcReqData += ((1 << NumOfNodes_)-1);
 
-    nodeaddr_t bcReqAddr = 0xffffffff000f;    // special address to trigger broadcast read
-
-
-//#if FAKEBC
-#if 1
-    bcReqData = bswap_32(bcReqData);
-    ret = !raw1394_write(handle,
-                         baseNodeId,
-                         bcReqAddr,
-                         4,
-                         &bcReqData);
-    if (!ret) {
-        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        outStr << "bbbbbbb fake ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-               << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
-    }
-#else
-    WriteQuadletBroadcast(bcReqAddr, bcReqData);
-#endif
+    WriteBroadcastReadRequest(bcReqData);
 
     // Wait for all boards to respond with data
-    timeval start, check;
-    gettimeofday(&start, NULL);
-    while(true) {
-        gettimeofday(&check, NULL);
-        double timeDiff = (check.tv_sec-start.tv_sec)*1000000 + (check.tv_usec-start.tv_usec);
-        if (IsAllBoardsBroadcastShorterWait_ && (timeDiff > (10 + 5.0*NumOfBoards_)))
-            break;  // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
-        else if (timeDiff > (5.0*NumOfNodes_+5.0))
-            break;  // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
-    }
+    // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
+    // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
+    double waitTime_uS = IsAllBoardsBroadcastShorterWait_ ? (10.0 + 5.0*NumOfBoards_) : (5.0 + 5.0*NumOfNodes_);
+    Amp1394_Sleep(waitTime_uS*1e-6);
 
     // initialize max buffer
     const int hubReadSizeMax = 464;  // 16 * 29 = 464 max
@@ -338,16 +309,8 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     else
         hubReadSize = hubReadSizeMax;  // Rev 7
 
-#if 1
-    // raw1394_read 0 = SUCCESS, -1 = FAIL, flip return value
-    ret = !raw1394_read(handle,
-                        baseNodeId + hub_node_id,
-                        0x1000,           // read from hub addr
-                        hubReadSize * sizeof(quadlet_t),          // read all 16 boards
-                        hubReadBuffer);
-#endif
+    ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
 
-#if 1
     // ----- DEBUG -----------
     static int raw1394readCounter = 0;
     if (!ret) {
@@ -359,37 +322,29 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
     }
     // -----------------------
 
+    int readSize;        // Block size per board (depends on firmware version)
+    if (IsNoBoardsRev7_)
+        readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
+    else
+        readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
+
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            const int readSizeMax = 29;  // 1 seq + 28 data, unit quadlet (Rev 7)
-            quadlet_t readBuffer[readSizeMax];
-
-            int readSize;    // Actual size per board (depends on firmware version)
-            if (IsNoBoardsRev7_)
-                readSize = 17;  // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
-            else
-                readSize = readSizeMax;   // Rev 7
-
-            memcpy(readBuffer, &(hubReadBuffer[readSize * board + 0]), readSize * 4);
-
-            unsigned int seq = (bswap_32(readBuffer[0]) >> 16);
+            unsigned int seq = (bswap_32(hubReadBuffer[readSize*board+0]) >> 16);
 
             static int errorcounter = 0;
             if (ReadSequence_ != seq) {
                 errorcounter++;
-                outStr << "errorcounter = " << errorcounter << std::endl;
-                outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
+                outStr << "block read error: counter = " << errorcounter << ", read = "
+                       << seq << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
             }
-//            std::cerr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
-
-            memcpy(BoardList[board]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * sizeof(quadlet_t));
+            memcpy(BoardList[board]->GetReadBuffer(), &(hubReadBuffer[readSize*board+1]), (readSize-1) * sizeof(quadlet_t));
 
             if (ret) noneRead = false;
             else allOK = false;
             BoardList[board]->SetReadValid(ret);
         }
     }
-#endif
 
     if (noneRead) {
         OnNoneRead();

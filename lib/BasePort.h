@@ -262,6 +262,11 @@ public:
     virtual bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes) = 0;
 
     /*!
+     \brief Write the broadcast read request
+    */
+    virtual bool WriteBroadcastReadRequest(quadlet_t data) = 0;
+
+    /*!
      \brief Add delay (if needed) for PROM I/O operations
      The delay is 0 for FireWire, and non-zero for Ethernet.
     */
