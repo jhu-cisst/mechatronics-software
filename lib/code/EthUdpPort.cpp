@@ -479,7 +479,7 @@ bool EthUdpPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    // Build FireWire packet
+    // Build FireWire packet (also byteswaps data)
     make_qwrite_packet(buffer, node, addr, data, fw_tl, flags&FW_NODE_NOFORWARD_MASK);
 
 

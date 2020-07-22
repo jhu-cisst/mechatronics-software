@@ -416,9 +416,9 @@ bool FirewirePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &da
     return ret;
 }
 
-// PK TODO: Why is byteswapping done in ReadQuadletNode, but not WriteQuadletNode
 bool FirewirePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char)
 {
+    data = bswap_32(data);
     return !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
 }
 
@@ -431,12 +431,7 @@ bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
 bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
     nodeid_t node = GetNodeId(boardId);
-    bool ret = false;
-    if (node < MAX_NODES) {
-        data = bswap_32(data);
-        ret = ReadQuadletNode(node, addr, data);
-    }
-    return ret;
+    return (node < MAX_NODES) ? WriteQuadletNode(node, addr, data) : false;
 }
 
 bool FirewirePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
