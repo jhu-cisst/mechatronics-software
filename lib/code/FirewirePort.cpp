@@ -43,8 +43,7 @@ bool FirewirePort::Init(void)
 {
     // create firewire port handle
     handle = raw1394_new_handle();
-    handle_bc = raw1394_new_handle();
-    if (!handle || !handle_bc) {
+    if (!handle) {
         outStr << "FirewirePort::Init: error, could not create handle" << std::endl;
         return false;
     }
@@ -61,9 +60,8 @@ bool FirewirePort::Init(void)
 
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
-    // set the bus reset handlers
+    // set the bus reset handler
     old_reset_handler = raw1394_set_bus_reset_handler(handle, reset_handler);
-    old_reset_handler_bc = raw1394_set_bus_reset_handler(handle_bc, reset_handler);
 
     // get number of ports
     int nports = raw1394_get_port_info(handle, NULL, 0);
@@ -75,12 +73,10 @@ bool FirewirePort::Init(void)
         return false;
     }
 
-    if (raw1394_set_port(handle, PortNum) || raw1394_set_port(handle_bc, PortNum)) {
+    if (raw1394_set_port(handle, PortNum)) {
         outStr << "FirewirePort::Init: error setting port to " << PortNum << std::endl;
         raw1394_destroy_handle(handle);
-        raw1394_destroy_handle(handle_bc);
         handle = NULL;
-        handle_bc = NULL;
         return false;
     }
     outStr << "FirewirePort::Init: successfully initialized port " << PortNum << std::endl;
@@ -165,9 +161,7 @@ void FirewirePort::Cleanup(void)
     else
         PortList.erase(it);
     raw1394_destroy_handle(handle);
-    raw1394_destroy_handle(handle_bc);
     handle = NULL;
-    handle_bc = NULL;
 }
 
 void FirewirePort::Reset(void)
@@ -185,13 +179,6 @@ int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
             (*it)->outStr << "FirewirePort::reset_handler: generation = " << gen << std::endl;
             ret = (*it)->old_reset_handler(hdl, gen);
             (*it)->outStr << "FirewirePort::reset_handler: scanning port " << (*it)->PortNum << std::endl;
-            (*it)->ScanNodes();
-            break;
-        }
-        else if ((*it)->handle_bc == hdl) {
-            (*it)->outStr << "FirewirePort::reset_handler: [bc] generation = " << gen << std::endl;
-            ret = (*it)->old_reset_handler_bc(hdl, gen);
-            (*it)->outStr << "FirewirePort::reset_handler: [bc] scanning port " << (*it)->PortNum << std::endl;
             (*it)->ScanNodes();
             break;
         }
@@ -256,7 +243,7 @@ bool FirewirePort::WriteBroadcastReadRequest(quadlet_t data)
                << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
     }
 #else
-    bool ret = WriteQuadletBroadcast(bcReqAddr, data);
+    bool ret = WriteQuadlet(FW_NODE_BROADCAST, bcReqAddr, data);
 #endif
     return ret;
 }
@@ -264,7 +251,7 @@ bool FirewirePort::WriteBroadcastReadRequest(quadlet_t data)
 // CAN BE MERGED WITH ETHBASEPORT
 bool FirewirePort::ReadAllBoardsBroadcast(void)
 {
-    if (!handle || !handle_bc) {
+    if (!handle) {
         outStr << "FirewirePort::ReadAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
         return false;
     }
@@ -389,15 +376,6 @@ bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_
     return (node < MAX_NODES) ? WriteQuadletNode(node, addr, data) : false;
 }
 
-bool FirewirePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
-{
-    // special case of WriteBlockBroadcast
-    // nbytes = 4
-    data = bswap_32(data);
-    return WriteBlockBroadcast(addr, &data, 4);
-}
-
-
 bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                              unsigned int nbytes)
 {
@@ -422,36 +400,4 @@ bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t 
         return WriteBlockNode(baseNodeId+node, addr, wdata, nbytes);
     else
         return false;
-}
-
-bool FirewirePort::WriteBlockBroadcast(
-        nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-    // check handle
-    if (!handle_bc) {
-        outStr << "FirewirePort::WriteBlockBroadcast: invalid firewire handle" << std::endl;
-        return false;
-    }
-
-    // check address
-    // ZC: maybe limit address to 8 bits reg_addr[7:0]
-    //     and cheat firewire driverg
-    if (addr < CSR_REGISTER_BASE + CSR_CONFIG_ROM_END) {
-        outStr << "FirewirePort::WriteBlockBroadcast: address not allowed, \n"
-               << "addr should > CSR_REG_BASE + CSR_CONFIG_ROM_END" << std::endl;
-        return false;
-    }
-
-    // broadcast
-    int rc;    // return code
-    const nodeid_t broadcast_node_id = 0xffff;  // use node_id 0xffff to broadcast
-    const unsigned long tag = 11;  // tag is random picked, not used
-    // send broadcast request
-    rc = raw1394_start_write(handle_bc, broadcast_node_id, addr, nbytes, wdata, tag);
-    if (rc) {
-        outStr << "FirewirePort::WriteBlockBroadcast: errno = " << strerror(errno) << std::endl;
-        return false;
-    } else {
-        return true;
-    }
 }

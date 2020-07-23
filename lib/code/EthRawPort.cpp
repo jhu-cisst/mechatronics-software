@@ -495,18 +495,6 @@ bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
     return ret;
 }
 
-bool EthRawPort::WriteBlockBroadcast(
-        nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-#if 0 // PK TEMP
-    // TO FIX: eth1394_write does not yet handle 0xffff
-    return !eth1394_write(0xffff, addr, nbytes, data);;
-#else
-    outStr << "WriteBlockBroadcast not yet implemented" << std::endl;
-    return false;
-#endif
-}
-
 int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
                              size_t length, quadlet_t *buffer, bool useEthernetBroadcast)
 {

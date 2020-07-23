@@ -108,16 +108,6 @@ public:
     bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                     unsigned int nbytes);
 
-    /*!
-     \brief Write a block of data using asynchronous broadcast
-
-     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param wdata  The pointer to write buffer data
-     \param nbytes  Number of bytes to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
-
     //****************** Static methods ***************************
 
     static void PrintFrame(unsigned char* buffer, int length);

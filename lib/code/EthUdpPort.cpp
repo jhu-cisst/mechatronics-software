@@ -589,13 +589,6 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
     return true;
 }
 
-bool EthUdpPort::WriteBlockBroadcast(
-        nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-    outStr << "WriteBlockBroadcast not yet implemented" << std::endl;
-    return false;
-}
-
 // Convert IP address from uint32_t to string
 std::string EthUdpPort::IP_String(uint32_t IPaddr)
 {

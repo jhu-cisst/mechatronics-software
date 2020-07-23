@@ -472,14 +472,6 @@ bool EthBasePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
     return WriteQuadletNode(node, addr, data, boardId&FW_NODE_FLAGS_MASK);
 }
 
-bool EthBasePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
-{
-    // special case of WriteBlockBroadcast
-    // nbytes = 4
-    data = bswap_32(data);
-    return WriteBlockBroadcast(addr, &data, 4);
-}
-
 void EthBasePort::PromDelay(void) const
 {
     // Wait 1 msec

@@ -33,14 +33,12 @@ public:
 protected:
 
     raw1394handle_t handle;   // normal read/write handle
-    raw1394handle_t handle_bc;  // broadcasting handle
     nodeid_t baseNodeId;
 
     // List of all ports instantiated (for use by reset_handler)
     typedef std::vector<FirewirePort *> PortListType;
     static PortListType PortList;
     bus_reset_handler_t old_reset_handler;
-    bus_reset_handler_t old_reset_handler_bc;
     // callback for 1394 bus reset event
     static int reset_handler(raw1394handle_t hdl, unsigned int gen);
 
@@ -106,15 +104,6 @@ public:
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
-    /*!
-     \brief Write a quadlet to all boards using broadcasting
-
-     \param addr  The register address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The quadlet data to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
-
     // Read a block from the specified board
     bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                    unsigned int nbytes);
@@ -122,16 +111,6 @@ public:
     // Write a block to the specified board
     bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                     unsigned int nbytes);
-
-    /*!
-     \brief Write a block of data using asynchronous broadcast
-
-     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The pointer to write buffer data
-     \param nbytes  Number of bytes to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
     /*!
      \brief Write the broadcast read request

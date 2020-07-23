@@ -234,15 +234,6 @@ public:
     virtual bool WriteNoOp(unsigned char boardId)
     { return WriteQuadlet(boardId, 0x00, 0); }
 
-    /*!
-     \brief Write a quadlet to all boards using broadcasting
-
-     \param addr  The register address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The quadlet data to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    virtual bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data) = 0;
-
     // Read a block from the specified board
     virtual bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                            unsigned int nbytes) = 0;
@@ -250,16 +241,6 @@ public:
     // Write a block to the specified board
     virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                             unsigned int nbytes) = 0;
-
-    /*!
-     \brief Write a block of data using asynchronous broadcast
-
-     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The pointer to write buffer data
-     \param nbytes  Number of bytes to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    virtual bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes) = 0;
 
     /*!
      \brief Write the broadcast read request

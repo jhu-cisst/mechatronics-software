@@ -98,15 +98,6 @@ public:
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
     /*!
-     \brief Write a quadlet to all boards using broadcasting
-
-     \param addr  The register address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The quadlet data to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data);
-
-    /*!
      \brief Write the broadcast read request
     */
     bool WriteBroadcastReadRequest(quadlet_t /*data*/) { return false; }  // TEMP
