@@ -66,6 +66,13 @@ bool FirewirePort::Init(void)
     // get number of ports
     int nports = raw1394_get_port_info(handle, NULL, 0);
     outStr << "FirewirePort::Init: number of ports = " << nports << std::endl;
+    if (nports > 0) {
+        struct raw1394_portinfo *pinfo = new raw1394_portinfo[nports];
+        raw1394_get_port_info(handle, pinfo, nports);
+        for (int i = 0; i < nports; i++)
+            outStr << "  Port " << i << ": " << pinfo[i].name << ", " << pinfo[i].nodes << " nodes" << std::endl;
+        delete [] pinfo;
+    }
     if (nports < PortNum) {
         outStr << "FirewirePort::Init: port " << PortNum << " does not exist" << std::endl;
         raw1394_destroy_handle(handle);
