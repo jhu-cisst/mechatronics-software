@@ -73,6 +73,9 @@ protected:
     // WriteAllBoardsBroadcast.
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
+    // Read a block from the specified node. Internal method called by ReadBlock
+    bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
+
 public:
     // Initialize IEEE-1394 (Firewire) port.
     FirewirePort(int portNum, std::ostream &debugStream = std::cerr);
@@ -95,9 +98,6 @@ public:
     // Removes board
     bool RemoveBoard(unsigned char boardId);
 
-    // Read all boards broadcasting
-    bool ReadAllBoardsBroadcast(void);
-
     // Read a quadlet from the specified board, true on success
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
@@ -115,7 +115,12 @@ public:
     /*!
      \brief Write the broadcast read request
     */
-    bool WriteBroadcastReadRequest(quadlet_t data);
+    bool WriteBroadcastReadRequest(unsigned int seq);
+
+    /*!
+     \brief Wait for broadcast read data to be available
+    */
+    void WaitBroadcastRead(void);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations

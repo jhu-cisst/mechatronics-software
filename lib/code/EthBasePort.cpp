@@ -431,14 +431,18 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
     }
 }
 
+bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
+                                unsigned int nbytes)
+{
+    unsigned char boardId = Node2Board[node];
+    return (boardId < BoardIO::MAX_BOARDS) ? ReadBlock(boardId, addr, rdata, nbytes) : false;
+}
+
 bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
                                  unsigned int nbytes)
 {
     unsigned char boardId = Node2Board[node];
-    if (boardId < BoardIO::MAX_BOARDS)
-        return WriteBlock(boardId, addr, wdata, nbytes);
-    else
-        return false;
+    return (boardId < BoardIO::MAX_BOARDS) ? WriteBlock(boardId, addr, wdata, nbytes) : false;
 }
 
 void EthBasePort::OnNoneRead(void)

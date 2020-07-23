@@ -129,6 +129,9 @@ protected:
     // WriteAllBoardsBroadcast.
     virtual bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes) = 0;
 
+    // Read a block from the specified node. Internal method called by ReadBlock.
+    virtual bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes) = 0;
+
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     virtual void OnNoneRead(void) {}
 
@@ -215,7 +218,7 @@ public:
     virtual bool ReadAllBoards(void);
 
     // Read all boards broadcasting
-    virtual bool ReadAllBoardsBroadcast(void) = 0;
+    virtual bool ReadAllBoardsBroadcast(void);
 
     // Write to all boards
     virtual bool WriteAllBoards(void);
@@ -245,7 +248,12 @@ public:
     /*!
      \brief Write the broadcast read request
     */
-    virtual bool WriteBroadcastReadRequest(quadlet_t data) = 0;
+    virtual bool WriteBroadcastReadRequest(unsigned int seq) = 0;
+
+    /*!
+     \brief Wait for broadcast read data to be available
+    */
+    virtual void WaitBroadcastRead(void) = 0;
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations

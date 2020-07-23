@@ -54,6 +54,9 @@ protected:
     EthCallbackType eth_read_callback;
     double ReceiveTimeout;      // Ethernet receive timeout (seconds)
 
+    // Write a block to the specified node. Internal method called by ReadBlock.
+    bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
+
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
@@ -100,7 +103,12 @@ public:
     /*!
      \brief Write the broadcast read request
     */
-    bool WriteBroadcastReadRequest(quadlet_t /*data*/) { return false; }  // TEMP
+    bool WriteBroadcastReadRequest(unsigned int /*seq*/) { return false; }  // TEMP
+
+    /*!
+     \brief Wait for broadcast read data to be available
+    */
+    void WaitBroadcastRead(void) { }  // TEMP
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations

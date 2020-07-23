@@ -16,6 +16,14 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <stdio.h>
+
+#ifdef _MSC_VER
+#include <stdlib.h>   // for byteswap functions
+inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
+#else
+#include <byteswap.h>
+#endif
+
 #include "BasePort.h"
 
 
@@ -329,6 +337,70 @@ bool BasePort::ReadAllBoards(void)
     return allOK;
 }
 
+bool BasePort::ReadAllBoardsBroadcast(void)
+{
+    if (!IsOK()) {
+        outStr << "BasePort::ReadAllBoardsBroadcast: port not initialized" << std::endl;
+        return false;
+    }
+
+    bool allOK = true;
+    bool noneRead = true;
+
+    //--- send out broadcast read request -----
+
+    // sequence number from 16 bits 0 to 65535
+    ReadSequence_++;
+    if (ReadSequence_ == 65536) {
+        ReadSequence_ = 1;
+    }
+
+    WriteBroadcastReadRequest(ReadSequence_);
+
+    // Wait for broadcast read data
+    WaitBroadcastRead();
+
+    // initialize max buffer
+    const int hubReadSizeMax = 464;  // 16 * 29 = 464 max
+    quadlet_t hubReadBuffer[hubReadSizeMax];
+    memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
+    int hubReadSize;        // Actual read size (depends on firmware version)
+    if (IsNoBoardsRev7_)
+        hubReadSize = 272;             // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
+    else
+        hubReadSize = hubReadSizeMax;  // Rev 7
+
+    bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
+
+    int readSize;        // Block size per board (depends on firmware version)
+    if (IsNoBoardsRev7_)
+        readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
+    else
+        readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
+
+    for (unsigned int board = 0; board < max_board; board++) {
+        if (BoardList[board]) {
+            unsigned int seq = (bswap_32(hubReadBuffer[readSize*board+0]) >> 16);
+
+            static int errorcounter = 0;
+            if (ReadSequence_ != seq) {
+                errorcounter++;
+                outStr << "block read error: counter = " << std::dec << errorcounter << ", read = "
+                       << seq << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
+            }
+            memcpy(BoardList[board]->GetReadBuffer(), &(hubReadBuffer[readSize*board+1]), (readSize-1) * sizeof(quadlet_t));
+            BoardList[board]->SetReadValid(ret);
+            if (ret) noneRead = false;
+            else allOK = false;
+        }
+    }
+
+    if (noneRead) {
+        OnNoneRead();
+    }
+
+    return allOK;
+}
 
 bool BasePort::WriteAllBoards(void)
 {
@@ -428,9 +500,8 @@ bool BasePort::WriteAllBoardsBroadcast(void)
 #if 1
     ret = WriteBlockNode(0, 0xffffffff0000, bcBuffer, bcBufferOffset);
 #else
-    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
-                              bcBuffer,
-                              bcBufferOffset);
+    ret = WriteBlockNode(FW_NODE_BROADCAST, 0xffffff000000,  // now the address is hardcoded
+                         bcBuffer, bcBufferOffset);
 #endif
 
     // loop 2: send out control quadlet if necessary (firmware prior to Rev 7);
