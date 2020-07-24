@@ -250,7 +250,11 @@ bool FirewirePort::WriteBroadcastReadRequest(unsigned int seq)
         // arbitration protocol should prevent disaster, but this could lead to lower efficiency.
         bcReqData += ((1 << NumOfNodes_)-1);
 
-    nodeaddr_t bcReqAddr = 0xffffffff000f;    // special address to trigger broadcast read
+    nodeaddr_t bcReqAddr;
+    if (IsNoBoardsRev7_)
+        bcReqAddr = 0xffffffff000f;      // special address to trigger broadcast read
+    else
+        bcReqAddr = 0x1800;              // special address to trigger broadcast read
 
 #if 1
     return WriteQuadletNode(0, bcReqAddr, bcReqData);
