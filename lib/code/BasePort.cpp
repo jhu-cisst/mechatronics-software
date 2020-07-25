@@ -364,13 +364,6 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     const int hubReadSizeMax = 464;  // 16 * 29 = 464 max
     quadlet_t hubReadBuffer[hubReadSizeMax];
     memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
-    int hubReadSize;        // Actual read size (depends on firmware version)
-    if (IsNoBoardsRev7_)
-        hubReadSize = 272;             // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
-    else
-        hubReadSize = hubReadSizeMax;  // Rev 7
-
-    bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
 
     int readSize;        // Block size per board (depends on firmware version)
     if (IsNoBoardsRev7_)
@@ -378,9 +371,26 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     else
         readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
 
+    int hubReadSize;        // Actual read size (depends on firmware version)
+    if (IsNoBoardsRev7_)
+        hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
+    else
+        hubReadSize = readSize*NumOfBoards_;         // Rev 7: NumOfBoards * 29
+
+    bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
+
+    unsigned int curIndex = 0;
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            unsigned int seq = (bswap_32(hubReadBuffer[readSize*board+0]) >> 16);
+            unsigned int boardOffset = IsNoBoardsRev7_ ? (readSize*board) : (readSize*curIndex);
+            curIndex++;
+            unsigned int seq = (bswap_32(hubReadBuffer[boardOffset+0]) >> 16);
+            if (IsAllBoardsRev7_) {
+                // Sanity check on board number (from status register)
+                unsigned int thisBoard = (bswap_32(hubReadBuffer[boardOffset+2])&0x0f000000)>>24;
+                if (board != thisBoard)
+                    outStr << "board mismatch: expecting " << board << ", found " << thisBoard << std::endl;
+            }
 
             static int errorcounter = 0;
             if (ReadSequence_ != seq) {
@@ -388,7 +398,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 outStr << "block read error: counter = " << std::dec << errorcounter << ", read = "
                        << seq << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
             }
-            memcpy(BoardList[board]->GetReadBuffer(), &(hubReadBuffer[readSize*board+1]), (readSize-1) * sizeof(quadlet_t));
+            memcpy(BoardList[board]->GetReadBuffer(), &(hubReadBuffer[boardOffset+1]), (readSize-1) * sizeof(quadlet_t));
             BoardList[board]->SetReadValid(ret);
             if (ret) noneRead = false;
             else allOK = false;
