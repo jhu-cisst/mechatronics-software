@@ -55,7 +55,7 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
                   << "6) Read FPGA SN" << std::endl
                   << "7) Read QLA SN" << std::endl;
         if (fver >= 7)
-            std::cout << "8) Reboot FPGA" << std::endl;
+            std::cout << "8) Reboot FPGA and exit" << std::endl;
         std::cout << std::endl;
 
         std::cout << "Select option: ";
@@ -396,6 +396,9 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    unsigned long addr;
+    bool done = false;
+
     if (auto_mode) {
         std::cout << std::endl
                   << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
@@ -406,10 +409,12 @@ int main(int argc, char** argv)
     }
 
 
-    unsigned long addr;
-
-    while (int c = GetMenuChoice(Board, mcsName)) {
+    while (!done) {
+        int c = GetMenuChoice(Board, mcsName);
         switch (c) {
+        case 0:
+            done = true;
+            break;
         case 1:
             PromProgram(Board, promFile);
             break;
@@ -441,6 +446,7 @@ int main(int argc, char** argv)
         case 8:
             Board.WriteReboot();
             std::cout << "Rebooting FPGA ..." << std::endl;
+            done = true;
             break;
         default:
             std::cout << "Not yet implemented" << std::endl;
