@@ -93,9 +93,6 @@ public:
     // Remove board from list of boards in use
     bool RemoveBoard(unsigned char boardId);
 
-    // Read all boards broadcasting
-    bool ReadAllBoardsBroadcast(void);
-
     // ReadQuadlet in EthBasePort
 
     // WriteQuadlet in EthBasePort

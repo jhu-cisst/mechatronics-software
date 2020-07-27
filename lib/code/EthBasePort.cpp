@@ -229,8 +229,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  FrameCount;
         uint16_t Host_FW_Addr;
         uint16_t LengthFW;         // Quad 6
-        uint8_t  maxCountFW;
-        uint8_t  unused11;
+        uint16_t maxCountFW;
         uint16_t rxPktWords;       // Quad 7
         uint16_t txPktWords;
         uint16_t timeReceive;      // Quad 8
@@ -316,7 +315,6 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "fw_count: " << std::dec << static_cast<uint16_t>(p->fw_count) << std::endl;
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
-    debugStream << "Unused11: " << std::hex << static_cast<uint16_t>(p->unused11) << std::endl;
     debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW) << std::endl;
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
@@ -474,6 +472,21 @@ bool EthBasePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t
     }
 
     return WriteQuadletNode(node, addr, data, boardId&FW_NODE_FLAGS_MASK);
+}
+
+bool EthBasePort::WriteBroadcastReadRequest(unsigned int seq)
+{
+    quadlet_t bcReqData = (seq << 16) | BoardInUseMask_;
+    return WriteQuadlet(FW_NODE_BROADCAST, 0x1800, bcReqData);
+}
+
+void EthBasePort::WaitBroadcastRead(void)
+{
+    // Wait for all boards to respond with data
+    // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
+    // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
+    double waitTime_uS = 10.0 + 5.0*NumOfBoards_;
+    Amp1394_Sleep(waitTime_uS*1e-6);
 }
 
 void EthBasePort::PromDelay(void) const

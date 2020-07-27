@@ -378,6 +378,10 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         hubReadSize = readSize*NumOfBoards_;         // Rev 7: NumOfBoards * 29
 
     bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
+    if (!ret) {
+        OnNoneRead();
+        return false;
+    }
 
     unsigned int curIndex = 0;
     for (unsigned int board = 0; board < max_board; board++) {

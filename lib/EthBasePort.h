@@ -103,12 +103,12 @@ public:
     /*!
      \brief Write the broadcast read request
     */
-    bool WriteBroadcastReadRequest(unsigned int /*seq*/) { return false; }  // TEMP
+    bool WriteBroadcastReadRequest(unsigned int seq);
 
     /*!
      \brief Wait for broadcast read data to be available
     */
-    void WaitBroadcastRead(void) { }  // TEMP
+    void WaitBroadcastRead(void);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations
