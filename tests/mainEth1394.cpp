@@ -722,11 +722,12 @@ int main(int argc, char **argv)
 
         case 'f':
             if (curBoardFw) {
-                std::cout << "Firewire PHY data via FireWire:" << std::endl;
-                PrintFirewirePHY(&FwPort, boardNum);
+                unsigned int fw_board = curBoardFw->GetBoardId();
+                std::cout << "Firewire PHY data via FireWire (board " << fw_board << "):" << std::endl;
+                PrintFirewirePHY(&FwPort, fw_board);
             }
             if (curBoardEth) {
-                std::cout << "Firewire PHY data via Ethernet:" << std::endl;
+                std::cout << "Firewire PHY data via Ethernet (board " << static_cast<unsigned int>(boardNum) << "):" << std::endl;
                 PrintFirewirePHY(EthPort, boardNum);
             }
             break;
