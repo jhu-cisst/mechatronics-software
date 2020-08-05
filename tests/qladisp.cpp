@@ -247,6 +247,10 @@ int main(int argc, char** argv)
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
         return -1;
     }
+    if (Port->GetNumOfNodes() == 0) {
+        std::cerr << "Failed to find any boards" << std::endl;
+        return -1;
+    }
 
     // Set protocol; default is PROTOCOL_SEQ_RW (not broadcast), but can be changed to
     // one of the broadcast protocols by specifying -br or -bw command line parameter.
@@ -299,7 +303,10 @@ int main(int argc, char** argv)
     nodelay(stdscr, TRUE);
 
     if (BoardList.size() > 1) {
-        mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+       if (protocol == BasePort::PROTOCOL_BC_QRW)
+           mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
+       else
+           mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
     } else {
         mvwprintw(stdscr, 1, lm, "Sensor Feedback for Board %d", board1);
     }
