@@ -263,33 +263,23 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "FireWire node_id: " << std::dec << static_cast<unsigned int>(p->node_id) << std::endl;
     unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
     EthBasePort::PrintDebug(debugStream, status);
-    debugStream << "Eth errors: ";
-    if (p->eth_errors &0x04) debugStream << "UDPError ";
-    if (p->eth_errors &0x02) debugStream << "AccessError ";
-    if (p->eth_errors &0x01) debugStream << "IPV4Error ";
-    debugStream << std::endl;
-    std::string stateName;
-    switch (p->state) {
-    case 0:  stateName.assign("0");
-             break;
-    case 1:  stateName.assign("IDLE");
-             break;
-    case 2:  stateName.assign("RESET");
-             break;
-    case 4:  stateName.assign("IRQ");
-             break;
-    case 8:  stateName.assign("RECEIVE");
-             break;
-    case 16: stateName.assign("SEND");
-             break;
-    case 32: stateName.assign("KSZIO");
-             break;
-    default: stateName.assign("???");
+    if (p->eth_errors&0x07) {
+       debugStream << "Eth errors: ";
+       if (p->eth_errors&0x04) debugStream << "UDPError ";
+       if (p->eth_errors&0x02) debugStream << "AccessError ";
+       if (p->eth_errors&0x01) debugStream << "IPV4Error ";
+       debugStream << std::endl;
     }
-    debugStream << "State: " << stateName << std::dec
-                << ", nextState: " << static_cast<uint16_t> (p->nextState&0x07) << std::endl;
-    unsigned int eth_send_fw_req = (p->nextState&0x08) ? 1 : 0;
-    unsigned int eth_send_fw_ack = (p->nextState&0x10) ? 1 : 0;
+    if (p->eth_errors&0xE0) {
+        debugStream << "WriteRequests: ";
+        if (p->eth_errors&0x80) debugStream << "Quad ";
+        if (p->eth_errors&0x40) debugStream << "Block ";
+        if (p->eth_errors&0x20) debugStream << "Pending ";
+    }
+    debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
+                << ", nextState: " << static_cast<uint16_t> (p->nextState&0x3f) << std::endl;
+    unsigned int eth_send_fw_req = (p->nextState&0x40) ? 1 : 0;
+    unsigned int eth_send_fw_ack = (p->nextState&0x80) ? 1 : 0;
     debugStream << "eth_send_fw req " << eth_send_fw_req << ", ack " << eth_send_fw_ack << std::endl;
     debugStream << "Flags: ";
     if (p->moreFlags&0x80) debugStream << "doSample ";
