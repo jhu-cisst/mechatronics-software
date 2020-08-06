@@ -28,10 +28,8 @@
 void PrintDebugStream(std::stringstream &debugStream)
 {
     char line[80];
-    while (!debugStream.eof()) {
-        debugStream.getline(line, sizeof(line));
+    while (debugStream.getline(line, sizeof(line)))
         std::cerr << line << std::endl;
-    }
     debugStream.clear();
     debugStream.str("");
 }

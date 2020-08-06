@@ -244,7 +244,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t numIPv4Mismatch;
         uint16_t numStateInvalid;  // Quad 13
         uint8_t  numReset;
-        uint8_t  unused0;
+        uint8_t  numSendStateInvalid;
         uint16_t timeFwdFromFw;    // Quad 14
         uint16_t timeFwdToFw;
         uint32_t timestampEnd;     // Quad 15
@@ -260,7 +260,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         return;
     }
     debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::endl;
-    debugStream << "FireWire node_id: " << std::dec << static_cast<unsigned int>(p->node_id) << std::endl;
+    debugStream << "FireWire node_id: " << std::dec << static_cast<unsigned int>(p->node_id&0x3f) << std::endl;
     unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
     EthBasePort::PrintDebug(debugStream, status);
     if (p->eth_errors&0x07) {
@@ -276,6 +276,12 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         if (p->eth_errors&0x40) debugStream << "Block ";
         if (p->eth_errors&0x20) debugStream << "Pending ";
     }
+    if (!(p->eth_errors&0x10))
+        debugStream << "DMA Send busy" << std::endl;
+    if (p->node_id&0x40)
+        debugStream << "DMA Write requested" << std::endl;
+    if (p->node_id&0x80)
+        debugStream << "DMA Write in process" << std::endl;
     debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t> (p->nextState&0x3f) << std::endl;
     unsigned int eth_send_fw_req = (p->nextState&0x40) ? 1 : 0;
@@ -306,8 +312,10 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
     debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW) << std::endl;
-    debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
-    debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
+    debugStream << "rxPktWords: " << std::dec << (p->rxPktWords&0x0fff) << std::endl;
+    debugStream << "txPktWords: " << std::dec << (p->txPktWords&0x0fff) << std::endl;
+    debugStream << "sendState: "  << std::dec << (p->txPktWords>>12)
+                << ", next: " << (p->rxPktWords>>12) << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
     debugStream << "numPacketInvalid: " << std::dec << p->numPacketInvalid << std::endl;
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
@@ -316,7 +324,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numICMP: " << std::dec << p->numICMP << std::endl;
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
-    debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << std::endl;
+    debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << ", Send: " << static_cast<uint16_t>(p->numSendStateInvalid) << std::endl;
     debugStream << "numReset: " << std::dec << static_cast<uint16_t>(p->numReset) << std::endl;
     double bits2uS = clockPeriod*1e6;
     debugStream << "timeReceive (us): " << p->timeReceive*bits2uS << std::endl;

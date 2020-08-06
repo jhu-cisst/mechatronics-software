@@ -685,7 +685,7 @@ int main(int argc, char **argv)
         case '8':   // Read request via Ethernet multicast
             read_data = 0;
             addr = 0;  // Return status register
-            if (EthPort->ReadQuadlet(0xff, addr, read_data))
+            if (EthPort->ReadQuadlet(FW_NODE_BROADCAST, addr, read_data))
                 std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
             else
                 std::cout << "Failed to read quadlet via Ethernet port" << std::endl;

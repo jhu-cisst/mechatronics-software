@@ -3,7 +3,7 @@
 
 /******************************************************************************
  *
- * (C) Copyright 2018-2019 Johns Hopkins University (JHU), All Rights Reserved.
+ * (C) Copyright 2018-2020 Johns Hopkins University (JHU), All Rights Reserved.
  *
  * This program is used to read the Dallas DS2505 chip inside a da Vinci instrument
  * via its 1-wire interface. The 1-wire interface is implemented in the FPGA,
@@ -34,10 +34,8 @@
 void PrintDebugStream(std::stringstream &debugStream)
 {
     char line[80];
-    while (!debugStream.eof()) {
-        debugStream.getline(line, sizeof(line));
+    while (debugStream.getline(line, sizeof(line)))
         std::cerr << line << std::endl;
-    }
     debugStream.clear();
     debugStream.str("");
 }
