@@ -204,8 +204,8 @@ void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)
     if (status&0x0004) debugStream << "ETH-idle ";
     int waitInfo = status&0x0003;
     if (waitInfo == 0) debugStream << "wait-none";
-    else if (waitInfo == 1) debugStream << "wait-ack";
-    else if (waitInfo == 2) debugStream << "wait-ack-clear";
+    else if (waitInfo == 1) debugStream << "wait-recv";
+    else if (waitInfo == 2) debugStream << "wait-send";
     else debugStream << "wait-flush";
     debugStream << std::endl;
 }
@@ -221,11 +221,11 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  eth_errors;
         uint8_t  isFlags;          // Quad 3
         uint8_t  moreFlags;
-        uint8_t  nextState;
+        uint8_t  retState;
         uint8_t  state;
         uint16_t RegISROther;      // Quad 4
         uint16_t RegISR;
-        uint8_t  fw_count;         // Quad 5
+        uint8_t  numPacketSent;    // Quad 5
         uint8_t  FrameCount;
         uint16_t Host_FW_Addr;
         uint16_t LengthFW;         // Quad 6
@@ -276,16 +276,19 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         if (p->eth_errors&0x40) debugStream << "Block ";
         if (p->eth_errors&0x20) debugStream << "Pending ";
     }
+    if (!(p->eth_errors&0x08))
+        debugStream << "DMA Recv busy" << std::endl;
     if (!(p->eth_errors&0x10))
         debugStream << "DMA Send busy" << std::endl;
     if (p->node_id&0x40)
         debugStream << "DMA Write requested" << std::endl;
     if (p->node_id&0x80)
         debugStream << "DMA Write in process" << std::endl;
-    debugStream << "State: " << std::dec << static_cast<uint16_t>(p->state)
-                << ", nextState: " << static_cast<uint16_t> (p->nextState&0x3f) << std::endl;
-    unsigned int eth_send_fw_req = (p->nextState&0x40) ? 1 : 0;
-    unsigned int eth_send_fw_ack = (p->nextState&0x80) ? 1 : 0;
+    debugStream << "State: " << std::hex << static_cast<uint16_t>(p->state) << std::dec
+                << ", nextState: " << (p->maxCountFW>>10)
+                << ", retState: " << static_cast<uint16_t> (p->retState&0x1f) << std::endl;
+    unsigned int eth_send_fw_req = (p->retState&0x40) ? 1 : 0;
+    unsigned int eth_send_fw_ack = (p->retState&0x80) ? 1 : 0;
     debugStream << "eth_send_fw req " << eth_send_fw_req << ", ack " << eth_send_fw_ack << std::endl;
     debugStream << "Flags: ";
     if (p->moreFlags&0x80) debugStream << "doSample ";
@@ -308,10 +311,9 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "RegISR: " << std::hex << p->RegISR << std::endl;
     debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
     debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
-    debugStream << "fw_count: " << std::dec << static_cast<uint16_t>(p->fw_count) << std::endl;
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
-    debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW) << std::endl;
+    debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW&0x03ff) << std::endl;
     debugStream << "rxPktWords: " << std::dec << (p->rxPktWords&0x0fff) << std::endl;
     debugStream << "txPktWords: " << std::dec << (p->txPktWords&0x0fff) << std::endl;
     debugStream << "sendState: "  << std::dec << (p->txPktWords>>12)
@@ -322,6 +324,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numUDP: " << std::dec << p->numUDP << std::endl;
     debugStream << "numARP: " << std::dec << p->numARP << std::endl;
     debugStream << "numICMP: " << std::dec << p->numICMP << std::endl;
+    debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << p->numIPv4Mismatch << std::endl;
     debugStream << "numStateInvalid: " << std::dec << p->numStateInvalid << ", Send: " << static_cast<uint16_t>(p->numSendStateInvalid) << std::endl;

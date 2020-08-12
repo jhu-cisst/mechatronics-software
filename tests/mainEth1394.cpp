@@ -783,23 +783,28 @@ int main(int argc, char **argv)
 
         case 'x':
             if (curBoardFw) {
-                if (curBoardFw->ReadEthernetData(buffer, 0xc0, 23))
-                    EthBasePort::PrintEthernetPacket(std::cout, buffer, 23);
+                if (curBoardFw->ReadEthernetData(buffer, 0xc0, 16))
+                    EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
                 if (curBoardFw->ReadEthernetData(buffer, 0, 64))
                     EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
                 if (curBoardFw->ReadEthernetData(buffer, 0x80, 16))
                     EthBasePort::PrintDebugData(std::cout, buffer, curBoardFw->GetFPGAClockPeriod());
 #if 0
-                if (curBoardFw->ReadEthernetData(buffer, 0xa0, 17)) {
-                    std::cout << "Initialization Program: " << std::endl;
-                    for (int i = 0; i < 17; i++) {
-                        if (buffer[i]&0x02000000) std::cout << "   Write ";
-                        else std::cout << "   Read  ";
-                        std::cout << std::hex << std::setw(2) << std::setfill('0')
-                                  << ((buffer[i]&0x00ff0000)>>16) << " ";       // address
-                        if (buffer[i]&0x01000000) std::cout << "OR ";
-                        std::cout << std::hex << std::setw(4) << std::setfill('0')
-                                  << (buffer[i]&0x0000ffff) << std::endl;       // data
+                if (curBoardFw->ReadEthernetData(buffer, 0xa0, 32)) {
+                    std::cout << "Initialization Program:" << std::endl;
+                    for (int i = 0; i < 32; i++) {
+                        if (i == 16)
+                            std::cout << "Run Program:" << std::endl;
+                        if (buffer[i] != 0) {
+                           if (buffer[i]&0x02000000) std::cout << "   Write ";
+                           else std::cout << "   Read  ";
+                           std::cout << std::hex << std::setw(2) << std::setfill('0')
+                                     << ((buffer[i]&0x00ff0000)>>16) << " ";       // address
+                           std::cout << std::hex << std::setw(4) << std::setfill('0')
+                                     << (buffer[i]&0x0000ffff);
+                           if (buffer[i]&0x01000000) std::cout << " MOD";
+                           std::cout << std::endl;
+                        }
                     }
                 }
                 if (curBoardFw->ReadEthernetData(buffer, 0xe0, 21)) {
