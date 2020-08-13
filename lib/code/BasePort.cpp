@@ -266,11 +266,11 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
         return (sscanf(arg+2, "%d", &portNum) == 1);
     }
     else if (strncmp(arg, "eth", 3) == 0) {
-        portType = BasePort::PORT_ETH_RAW;
+        portType = PORT_ETH_RAW;
         return (sscanf(arg+3, "%d", &portNum) == 1);
     }
     else if (strncmp(arg, "udp", 3) == 0) {
-        portType = BasePort::PORT_ETH_UDP;
+        portType = PORT_ETH_UDP;
         // For now, if at least 8 characters, assume a valid IP address
         if (strlen(arg+3) >= 8)
             IPaddr.assign(arg+5);

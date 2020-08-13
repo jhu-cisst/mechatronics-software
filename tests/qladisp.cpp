@@ -190,32 +190,8 @@ int main(int argc, char** argv)
                   << "            -br enables broadcast read/write" << std::endl
                   << "            -bw enables broadcast write" << std::endl
                   << "            -v  displays full velocity feedback" << std::endl
-                  << std::endl;
-
-#if Amp1394_HAS_RAW1394
-        std::cerr << "Trying to detect board on default port:" << std::endl;
-        if (desiredPort == BasePort::PORT_FIREWIRE) {
-            // try to locate all boards available on default port
-            FirewirePort testPort(port, std::cerr);
-            if (!testPort.IsOK()) {
-                std::cerr << "Failed to initialize FireWire port " << port << std::endl;
-            }
-        }
-#endif
-
-        // keys
-        std::cerr << std::endl << "Keys:" << std::endl
-                  << "'r': reset FireWire port" << std::endl
-                  << "'d': turn watchdog on/off (25.0 ms)" << std::endl
-                  << "'p': turn power on/off (board and axis)" << std::endl
-                  << "'o': turn power on/off (board only)" << std::endl
-                  << "'i': turn power on/off (axis only, requires board first)" << std::endl
-                  << "'w': increment encoders" << std::endl
-                  << "'s': decrement encoders" << std::endl
-                  << "'=': increase motor current by about 50mA" << std::endl
-                  << "'-': increase motor current by about 50mA" << std::endl
-                  << "'c': start/stop data collection" << std::endl;
-        return 0;
+                  << std::endl
+                  << "Trying to detect boards on port:" << std::endl;
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
@@ -240,11 +216,30 @@ int main(int argc, char** argv)
         return -1;
 #endif
     }
+
     if (!Port || !Port->IsOK()) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
         return -1;
     }
+
+    if (args_found < 1) {
+        PrintDebugStream(debugStream);
+        // keys
+        std::cerr << std::endl << "Keys:" << std::endl
+                  << "'r': reset FireWire port" << std::endl
+                  << "'d': turn watchdog on/off (25.0 ms)" << std::endl
+                  << "'p': turn power on/off (board and axis)" << std::endl
+                  << "'o': turn power on/off (board only)" << std::endl
+                  << "'i': turn power on/off (axis only, requires board first)" << std::endl
+                  << "'w': increment encoders" << std::endl
+                  << "'s': decrement encoders" << std::endl
+                  << "'=': increase motor current by about 50mA" << std::endl
+                  << "'-': increase motor current by about 50mA" << std::endl
+                  << "'c': start/stop data collection" << std::endl;
+        return 0;
+    }
+
     if (Port->GetNumOfNodes() == 0) {
         std::cerr << "Failed to find any boards" << std::endl;
         return -1;
