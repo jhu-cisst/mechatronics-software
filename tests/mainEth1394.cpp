@@ -115,8 +115,7 @@ bool CheckEthernet(AmpIO &Board)
     ComputeMulticastHash(MulticastMAC, HashReg, HashValue);
     ret &= CheckRegister(Board, HashReg, 0xffff, HashValue);
     ret &= CheckRegister(Board, 0x82, 0x03f7, 0x0020);  // Enable QMU frame count threshold (1), no auto-dequeue
-    ret &= CheckRegister(Board, 0x90, 0xffff, 0x2000);  // Enable receive interrupts (TODO: also consider link change interrupt)
-    // ret &= CheckRegister(Board, 0x90, 0xffff, 0xe000);  // Enable receive interrupts (TODO: also consider link change interrupt)
+    ret &= CheckRegister(Board, 0x90, 0xffff, 0xa000);  // Enable receive and link change interrupts
     std::cout << "Checking ---- end ----" << "\n";
     return ret;
 }
