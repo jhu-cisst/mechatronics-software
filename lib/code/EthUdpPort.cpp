@@ -228,8 +228,8 @@ int SocketInternals::FlushRecv(void)
     return numFlushed;
 }
 
-EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, bool isFwMaster, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, isFwMaster, cb),
+EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, EthCallbackType cb):
+    EthBasePort(portNum, debugStream, cb),
     ServerIP(serverIP),
     UDP_port(1394)
 {

@@ -75,7 +75,7 @@ protected:
     bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
 
 public:
-    EthRawPort(int portNum, std::ostream &debugStream = std::cerr, bool isFwMaster = true, EthCallbackType cb = 0);
+    EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthRawPort();
 

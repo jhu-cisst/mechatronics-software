@@ -57,8 +57,8 @@ uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 const unsigned int ETH_ALIGN32 = 2;          // Number of extra bytes for 32-bit alignment
 const unsigned int ETH_HEADER_LEN = 14;      // Number of bytes in Ethernet header
 
-EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, bool isFwMaster, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, isFwMaster, cb)
+EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
+    EthBasePort(portNum, debugStream, cb)
 {
     if (Init())
         outStr << "Initialization done" << std::endl;
@@ -241,8 +241,8 @@ nodeid_t EthRawPort::InitNodes(void)
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
 
     if (is_fw_master) {
+        // TEMP: eth1394 being phased out, so no longer supported in raw mode.
         // Set eth1394 flag on all boards, so that they assign the node number based on the board number.
-        // Otherwise, if there is no Firewire bus master, node numbers may not be valid.
         data = 0x00C00000;  // Set eth1394 bit
         if (!WriteQuadletNode(FW_NODE_BROADCAST, 0, data)) {
             outStr << "InitNodes: failed to set eth1394 mode" << std::endl;

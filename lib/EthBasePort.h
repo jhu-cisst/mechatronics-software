@@ -77,7 +77,7 @@ protected:
 
 public:
 
-    EthBasePort(int portNum, std::ostream &debugStream = std::cerr, bool isFwMaster = true, EthCallbackType cb = 0);
+    EthBasePort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthBasePort();
 

@@ -32,9 +32,9 @@ uint32_t BitReverse32(uint32_t input);
 uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 
 
-EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, bool isFwMaster, EthCallbackType cb):
+EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType cb):
     BasePort(portNum, debugStream),
-    is_fw_master(isFwMaster),
+    is_fw_master((portNum==1)),  // TEMP
     fw_tl(0),
     eth_read_callback(cb),
     ReceiveTimeout(0.01)

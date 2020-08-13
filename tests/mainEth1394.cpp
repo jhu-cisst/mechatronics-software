@@ -437,10 +437,10 @@ int main(int argc, char **argv)
     std::vector<AmpIO *> FwBoardList;
     std::vector<AmpIO *> EthBoardList;
 
+    AmpIO *curBoard = 0;     // Current board via Ethernet or Firewire
     AmpIO *curBoardFw = 0;   // Current board via Firewire
     AmpIO *curBoardEth = 0;  // Current board via Ethernet (sets boardNum)
     AmpIO *HubFw = 0;        // Ethernet Hub board via Firewire
-    bool  Eth1394Mode = true;   // Whether to set Eth1394 mode on FPGA
 
 #if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
@@ -458,19 +458,18 @@ int main(int argc, char **argv)
     }
     if (FwBoardList.size() > 0) {
         curBoardFw = FwBoardList[0];
-        Eth1394Mode = false;
     }
 
 #endif
     EthBasePort *EthPort = 0;
     if (desiredPort == BasePort::PORT_ETH_UDP) {
         std::cout << "Creating Ethernet UDP port" << std::endl;
-        EthPort = new EthUdpPort(port, IPaddr, std::cout, Eth1394Mode);
+        EthPort = new EthUdpPort(port, IPaddr, std::cout);
     }
 #if Amp1394_HAS_PCAP
     else if (desiredPort == BasePort::PORT_ETH_RAW) {
         std::cout << "Creating Ethernet raw (PCAP) port" << std::endl;
-        EthPort = new EthRawPort(port, std::cout, Eth1394Mode);
+        EthPort = new EthRawPort(port, std::cout);
     }
 #endif
     if (!EthPort) {
@@ -499,6 +498,9 @@ int main(int argc, char **argv)
     }
     else
         std::cout << "Failed to initialize Ethernet port" << std::endl;
+
+    // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth
+    curBoard = curBoardFw ? curBoardFw : curBoardEth;
 
     // Turn off buffered I/O for keyboard
     struct termios oldTerm, newTerm;
@@ -532,8 +534,9 @@ int main(int argc, char **argv)
         if (curBoardFw) {
             std::cout << "  5) Ethernet port status" << std::endl;
             std::cout << "  6) Initialize Ethernet port" << std::endl;
-            std::cout << "  7) Ethernet debug info" << std::endl;
         }
+        if (curBoard)
+            std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "  8) Multicast quadlet read via Ethernet" << std::endl;
         if (curBoardEth)
             std::cout << "  9) Block write test to 0x4090" << std::endl;
@@ -553,8 +556,8 @@ int main(int argc, char **argv)
         }
         if (curBoardEth)
             std::cout << "  t) Run Ethernet timing analysis" << std::endl;
-        if (curBoardFw)
-            std::cout << "  x) Read Ethernet data via FireWire" << std::endl;
+        if (curBoard)
+            std::cout << "  x) Read Ethernet debug data" << std::endl;
         if (curBoardEth)
             std::cout << "  y) Read Firewire data via Ethernet" << std::endl;
         if (curBoardFw)
@@ -677,8 +680,8 @@ int main(int argc, char **argv)
             break;
 
         case '7':
-            if (curBoardFw)
-                PrintEthernetDebug(*curBoardFw);
+            if (curBoard)
+                PrintEthernetDebug(*curBoard);
             break;
 
         case '8':   // Read request via Ethernet multicast
@@ -781,15 +784,15 @@ int main(int argc, char **argv)
             break;
 
         case 'x':
-            if (curBoardFw) {
-                if (curBoardFw->ReadEthernetData(buffer, 0xc0, 16))
+            if (curBoard) {
+                if (curBoard->ReadEthernetData(buffer, 0xc0, 16))
                     EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
-                if (curBoardFw->ReadEthernetData(buffer, 0, 64))
+                if (curBoard->ReadEthernetData(buffer, 0, 64))
                     EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-                if (curBoardFw->ReadEthernetData(buffer, 0x80, 16))
-                    EthBasePort::PrintDebugData(std::cout, buffer, curBoardFw->GetFPGAClockPeriod());
+                if (curBoard->ReadEthernetData(buffer, 0x80, 16))
+                    EthBasePort::PrintDebugData(std::cout, buffer, curBoard->GetFPGAClockPeriod());
 #if 0
-                if (curBoardFw->ReadEthernetData(buffer, 0xa0, 32)) {
+                if (curBoard->ReadEthernetData(buffer, 0xa0, 32)) {
                     std::cout << "Initialization Program:" << std::endl;
                     for (int i = 0; i < 32; i++) {
                         if (i == 16)
@@ -806,7 +809,7 @@ int main(int argc, char **argv)
                         }
                     }
                 }
-                if (curBoardFw->ReadEthernetData(buffer, 0xe0, 21)) {
+                if (curBoard->ReadEthernetData(buffer, 0xe0, 21)) {
                     const uint16_t *packetw = reinterpret_cast<const uint16_t *>(buffer);
                     std::cout << "ReplyIndex: " << std::endl;
                     for (int i = 0; i < 41; i++)
