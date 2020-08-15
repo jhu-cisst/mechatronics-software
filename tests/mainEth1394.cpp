@@ -463,7 +463,7 @@ int main(int argc, char **argv)
 #endif
     EthBasePort *EthPort = 0;
     if (desiredPort == BasePort::PORT_ETH_UDP) {
-        std::cout << "Creating Ethernet UDP port" << std::endl;
+        std::cout << "Creating Ethernet UDP port, IP address = " << IPaddr << std::endl;
         EthPort = new EthUdpPort(port, IPaddr, std::cout);
     }
 #if Amp1394_HAS_PCAP

@@ -273,7 +273,7 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
         portType = PORT_ETH_UDP;
         // For now, if at least 8 characters, assume a valid IP address
         if (strlen(arg+3) >= 8)
-            IPaddr.assign(arg+5);
+            IPaddr.assign(arg+3);
         else if (strlen(arg+3) > 0)
             sscanf(arg+3, "%d", &portNum);  // TEMP: portNum==1 for UDP means set eth1394 mode
         return true;
