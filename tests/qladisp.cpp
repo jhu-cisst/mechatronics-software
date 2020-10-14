@@ -228,7 +228,8 @@ int main(int argc, char** argv)
         // keys
         std::cerr << std::endl << "Keys:" << std::endl
                   << "'r': reset FireWire port" << std::endl
-                  << "'d': turn watchdog on/off (25.0 ms)" << std::endl
+                  << "'d': turn watchdog on/off (0.25 ms, this should be triggered immediately)" << std::endl
+                  << "'D': turn watchdog on/off (25.0 ms, can be triggered by unplugging cable to PC)" << std::endl
                   << "'p': turn power on/off (board and axis)" << std::endl
                   << "'o': turn power on/off (board only)" << std::endl
                   << "'i': turn power on/off (axis only, requires board first)" << std::endl
@@ -359,6 +360,12 @@ int main(int argc, char** argv)
             for (j = 0; j < BoardList.size(); j++)
                 // 50 CNTS = 0.25 ms
                 BoardList[j]->WriteWatchdogPeriod(watchdog_on?50:0);
+        }
+        else if (c == 'D'){
+            watchdog_on = !watchdog_on;
+            for (j = 0; j < BoardList.size(); j++)
+                // 5000 CNTS = 25.00 ms
+                BoardList[j]->WriteWatchdogPeriod(watchdog_on?5000:0);
         }
         else if (c == 'p') {
             power_on = !power_on;
