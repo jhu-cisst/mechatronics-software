@@ -26,15 +26,24 @@ http://www.cisst.org/cisst/license.txt.
 int main(int argc, char** argv)
 {
     unsigned int i, j;
-    int port = 0;;
+    int port = 0;
+    bool closing = true;
 
     for (i = 1; i < (unsigned int)argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
             port = atoi(argv[i]+2);
         }
+        if ((argv[i][0] == '-') && (argv[i][1] == 'o')) {
+            closing = false;
+        }
     }
 
     std::cout << "Using firewire port " << port << " (to change port, use -p)" << std::endl;
+    if (closing) {
+        std::cout << "Closing all relays (to open all, use -o)" << std::endl;
+    } else {
+        std::cout << "Opening all relays" << std::endl;
+    }
 
     FirewirePort Port(port, std::cout);
     if (!Port.IsOK()) {
@@ -51,10 +60,14 @@ int main(int argc, char** argv)
     }
 
     for (j = 0; j < BoardList.size(); j++) {
-        BoardList[j]->WriteSafetyRelay(true);
+        BoardList[j]->WriteSafetyRelay(closing);
         usleep(40000); // sleep 40 ms
     }
 
-    std::cout << "Safety relays closed" << std::endl;
+    if (closing) {
+        std::cout << "Safety relays closed" << std::endl;
+    } else {
+        std::cout << "Safety relays opened" << std::endl;
+    }
     return 0;
 }
