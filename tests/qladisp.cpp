@@ -373,15 +373,18 @@ int main(int argc, char** argv)
                 if (power_on) {
                     power_board = true;
                     power_axis = true;
-                    BoardList[j]->WriteSafetyRelay(true);
+                    BoardList[j]->SetSafetyRelay(true);
+                    // Cannot enable Amp power unless Board power is
+                    // already enabled.
                     BoardList[j]->WritePowerEnable(true);
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
+                    //BoardList[j]->SetPowerEnable(true);
+                    BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
                 } else {
                     power_board = false;
                     power_axis = false;
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
-                    BoardList[j]->WritePowerEnable(false);
-                    BoardList[j]->WriteSafetyRelay(false);
+                    BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                    BoardList[j]->SetPowerEnable(false);
+                    BoardList[j]->SetSafetyRelay(false);
                 }
             }
         }
@@ -391,13 +394,13 @@ int main(int argc, char** argv)
                 if (power_board) {
                     // if axis are on, it's like having all power on
                     power_on = power_axis;
-                    BoardList[j]->WriteSafetyRelay(true);
-                    BoardList[j]->WritePowerEnable(true);
+                    BoardList[j]->SetSafetyRelay(true);
+                    BoardList[j]->SetPowerEnable(true);
                 }
                 else {
                     power_on = false;
-                    BoardList[j]->WritePowerEnable(false);
-                    BoardList[j]->WriteSafetyRelay(false);
+                    BoardList[j]->SetPowerEnable(false);
+                    BoardList[j]->SetSafetyRelay(false);
                 }
             }
         }
@@ -407,11 +410,11 @@ int main(int argc, char** argv)
                 if (power_axis) {
                     // if boards are on, it's like having all power on
                     power_on = power_board;
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
+                    BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
                 }
                 else {
                     power_on = false;
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
+                    BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
                 }
             }
         }

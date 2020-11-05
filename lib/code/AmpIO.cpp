@@ -687,6 +687,15 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
     return false;
 }
 
+bool AmpIO::SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state)
+{
+    AmpIO_UInt32 enable_mask = static_cast<AmpIO_UInt32>(mask) << 8;
+    // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
+    // with different masks
+    WriteBufferData[WB_CTRL_OFFSET] = (WriteBufferData[WB_CTRL_OFFSET]&(~mask)) | enable_mask | state;
+    return true;
+}
+
 void AmpIO::SetSafetyRelay(bool state)
 {
     AmpIO_UInt32 enable_mask = 0x00020000;

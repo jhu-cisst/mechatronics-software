@@ -191,9 +191,16 @@ public:
     // The SetXXX methods below write data to local buffers that are sent over
     // IEEE-1394 via FirewirePort::WriteAllBoards. To immediately write to
     // the boards, you can use a WriteXXX method.
+    // Note that SetAmpEnableMask is equivalent to WriteAmpEnable, whereas
+    // SetAmpEnable affects only the specified amplifier index.
+    // Also, due to the firmware implementation, SetAmpEnable/SetAmpEnableMask
+    // cannot enable the amplifiers unless board power is already enabled,
+    // i.e., via an earlier SetPowerEnable(true) followed by WriteAllBoards, or
+    // via a call to WritePowerEnable(true).
 
     void SetPowerEnable(bool state);
     bool SetAmpEnable(unsigned int index, bool state);
+    bool SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state);
     void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
