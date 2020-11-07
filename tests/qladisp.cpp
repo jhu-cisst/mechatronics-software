@@ -279,7 +279,6 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++)
             BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
     }
-    bool power_on = false;
     bool power_board = false;
     bool power_axis = false;
     for (j = 0; j < BoardList.size(); j++) {
@@ -368,9 +367,10 @@ int main(int argc, char** argv)
                 BoardList[j]->WriteWatchdogPeriod(watchdog_on?5000:0);
         }
         else if (c == 'p') {
-            power_on = !power_on;
             for (j = 0; j < BoardList.size(); j++) {
-                if (power_on) {
+                // Only power on system if completely off (power_board
+                // and power_axis false). Otherwise, we power off.
+                if (!power_board && !power_axis) {
                     power_board = true;
                     power_axis = true;
                     BoardList[j]->SetSafetyRelay(true);
@@ -392,13 +392,10 @@ int main(int argc, char** argv)
             power_board = !power_board;
             for (j = 0; j < BoardList.size(); j++) {
                 if (power_board) {
-                    // if axis are on, it's like having all power on
-                    power_on = power_axis;
                     BoardList[j]->SetSafetyRelay(true);
                     BoardList[j]->SetPowerEnable(true);
                 }
                 else {
-                    power_on = false;
                     BoardList[j]->SetPowerEnable(false);
                     BoardList[j]->SetSafetyRelay(false);
                 }
@@ -408,12 +405,9 @@ int main(int argc, char** argv)
             power_axis = !power_axis;
             for (j = 0; j < BoardList.size(); j++) {
                 if (power_axis) {
-                    // if boards are on, it's like having all power on
-                    power_on = power_board;
                     BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
                 }
                 else {
-                    power_on = false;
                     BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
                 }
             }
