@@ -659,13 +659,20 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 
 /*******************************************************************************
  * Set commands
+ * Note that for Firmware 7+, the power control quadlet is byteswapped because it
+ * is sent using a block write, rather than a quadlet write, in WriteAllBoards or
+ * WriteAllBoardsBroadcast.
  */
 
 void AmpIO::SetPowerEnable(bool state)
 {
     AmpIO_UInt32 enable_mask = 0x00080000;
-    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
     AmpIO_UInt32 state_mask  = 0x00040000;
+    if (GetFirmwareVersion() >= 7) {
+        enable_mask = bswap_32(enable_mask);
+        state_mask = bswap_32(state_mask);
+    }
+    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
     if (state)
         WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
     else
@@ -676,8 +683,12 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 {
     if (index < NUM_CHANNELS) {
         AmpIO_UInt32 enable_mask = 0x00000100 << index;
-        WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
         AmpIO_UInt32 state_mask  = 0x00000001 << index;
+        if (GetFirmwareVersion() >= 7) {
+            enable_mask = bswap_32(enable_mask);
+            state_mask = bswap_32(state_mask);
+        }
+        WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
         if (state)
             WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
         else
@@ -690,17 +701,28 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 bool AmpIO::SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state)
 {
     AmpIO_UInt32 enable_mask = static_cast<AmpIO_UInt32>(mask) << 8;
+    AmpIO_UInt32 state_clr_mask = static_cast<AmpIO_UInt32>(mask);
+    AmpIO_UInt32 state_set_mask = static_cast<AmpIO_UInt32>(state);
+    if (GetFirmwareVersion() >= 7) {
+        enable_mask = bswap_32(enable_mask);
+        state_clr_mask = bswap_32(state_clr_mask);
+        state_set_mask = bswap_32(state_set_mask);
+    }
     // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
     // with different masks
-    WriteBufferData[WB_CTRL_OFFSET] = (WriteBufferData[WB_CTRL_OFFSET]&(~mask)) | enable_mask | state;
+    WriteBufferData[WB_CTRL_OFFSET] = (WriteBufferData[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
     return true;
 }
 
 void AmpIO::SetSafetyRelay(bool state)
 {
     AmpIO_UInt32 enable_mask = 0x00020000;
-    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
     AmpIO_UInt32 state_mask  = 0x00010000;
+    if (GetFirmwareVersion() >= 7) {
+        enable_mask = bswap_32(enable_mask);
+        state_mask = bswap_32(state_mask);
+    }
+    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
     if (state)
         WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
     else
