@@ -35,6 +35,7 @@ const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bi
 const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
 const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
 
+const AmpIO_UInt32 DOUT_CFG_RESET   = 0x01000000;  /*!< Reset DOUT config (Rev 7+) */
 const AmpIO_UInt32 REBOOT_FPGA      = 0x00300000;  /*!< Reboot FPGA (Rev 7+)       */
 const AmpIO_UInt32 PWR_ENABLE       = 0x000c0000;  /*!< Turn pwr_en on             */
 const AmpIO_UInt32 PWR_DISABLE      = 0x00080000;  /*!< Turn pwr_en off            */
@@ -894,6 +895,11 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
     } else {
         return false;
     }
+}
+
+bool AmpIO::WriteDoutConfigReset(void)
+{
+    return (port && (GetFirmwareVersion() >= 7)) ? port->WriteQuadlet(BoardId, 0, DOUT_CFG_RESET) : false;
 }
 
 bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)

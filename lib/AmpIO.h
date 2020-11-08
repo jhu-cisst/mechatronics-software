@@ -255,6 +255,10 @@ public:
 
     bool WriteEncoderPreload(unsigned int index, AmpIO_Int32 enc);
 
+    // Reset DOUT configuration bit, which causes firmware to repeat DOUT configuration check
+    // (i.e., to detect QLA Rev 1.4+ with bidirectional DOUT).
+    bool WriteDoutConfigReset(void);
+
     // Set digital output state
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
