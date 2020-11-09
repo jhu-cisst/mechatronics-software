@@ -239,8 +239,10 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t numPacketInvalid;
         uint16_t numIPv4;          // Quad 10
         uint16_t numUDP;
-        uint16_t numARP;           // Quad 11
-        uint16_t numICMP;
+        uint8_t  numARP;           // Quad 11
+        uint8_t  fw_bus_gen;
+        uint8_t  numICMP;
+        uint8_t  unused00;
         uint16_t numPacketError;   // Quad 12
         uint16_t numIPv4Mismatch;
         uint16_t numStateInvalid;  // Quad 13
@@ -317,6 +319,9 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
     debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
+    debugStream << "Fw Bus Generation: " << std::dec << static_cast<uint16_t>(p->fw_bus_gen);
+    if (p->numIPv4Mismatch&0x8000) debugStream << " fw_bus_reset";
+    debugStream << std::endl;
     debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
     debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW&0x03ff) << std::endl;
     debugStream << "rxPktWords: " << std::dec << (p->rxPktWords&0x0fff) << std::endl;
@@ -327,8 +332,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numPacketInvalid: " << std::dec << (p->numPacketInvalid&0x03ff) << std::endl;
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
     debugStream << "numUDP: " << std::dec << p->numUDP << std::endl;
-    debugStream << "numARP: " << std::dec << p->numARP << std::endl;
-    debugStream << "numICMP: " << std::dec << p->numICMP << std::endl;
+    debugStream << "numARP: " << std::dec << static_cast<uint16_t>(p->numARP) << std::endl;
+    debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
     debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << (p->numIPv4Mismatch&0x03ff) << std::endl;
@@ -342,7 +347,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     //debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
     debugStream << "Error state: state = " << std::hex << (p->errorStateInfo&0x003fffff) << std::dec
                 << ", index = " << ((p->errorStateInfo>>22)&0x0000001f) << ", next = " << (p->errorStateInfo>>27)
-                << ", runPC = " << (p->numIPv4Mismatch>>10) << std::endl;
+                << ", runPC = " << ((p->numIPv4Mismatch>>10)&0x001f) << std::endl;
 }
 
 void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
