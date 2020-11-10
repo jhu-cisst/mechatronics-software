@@ -225,7 +225,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  retState;
         uint8_t  state;
         uint16_t RegISROther;      // Quad 4
-        uint16_t RegISR;
+        uint16_t FwCtrl;
         uint8_t  numPacketSent;    // Quad 5
         uint8_t  FrameCount;
         uint16_t Host_FW_Addr;
@@ -315,7 +315,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     if (p->isFlags&0x01) debugStream << "ipv4_short ";
     if (linkStatus)      debugStream << "link-on ";
     debugStream << std::endl;
-    debugStream << "RegISR: " << std::hex << p->RegISR << std::endl;
+    debugStream << "FwCtrl: " << std::hex << p->FwCtrl << std::endl;
     debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
     debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;

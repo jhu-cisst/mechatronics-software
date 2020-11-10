@@ -31,6 +31,9 @@ const unsigned int FW_BRESPONSE_HEADER_SIZE = 20;  // Number of bytes in Firewir
 const unsigned int FW_BWRITE_HEADER_SIZE = 20;     // Number of bytes in Firewire block write header (including CRC)
 const unsigned int FW_CRC_SIZE = 4;                // Number of bytes in Firewire CRC
 
+// Firewire control word (includes expected Firewire generation). This control word is specific to our implementation.
+const unsigned int FW_CTRL_SIZE = 2;               // Number of bytes in Firewire control word
+
 class EthBasePort : public BasePort
 {
 public:

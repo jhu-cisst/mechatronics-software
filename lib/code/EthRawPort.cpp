@@ -54,7 +54,6 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 uint32_t BitReverse32(uint32_t input);
 uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 
-const unsigned int ETH_ALIGN32 = 2;          // Number of extra bytes for 32-bit alignment
 const unsigned int ETH_HEADER_LEN = 14;      // Number of bytes in Ethernet header
 
 EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
@@ -271,11 +270,11 @@ bool EthRawPort::AddBoard(BoardIO *board)
     if (ret) {
         // Allocate a buffer that is big enough for Ethernet and FireWire headers as well
         // as the data to be sent.
-        size_t block_write_len = (ETH_ALIGN32 + ETH_HEADER_LEN + FW_BWRITE_HEADER_SIZE +
+        size_t block_write_len = (ETH_HEADER_LEN + FW_CTRL_SIZE + FW_BWRITE_HEADER_SIZE +
                                   board->GetWriteNumBytes() + FW_CRC_SIZE)/sizeof(quadlet_t);
         quadlet_t * buf = new quadlet_t[block_write_len];
         // Offset into the data part of the buffer
-        size_t offset = (ETH_ALIGN32 + ETH_HEADER_LEN + FW_BWRITE_HEADER_SIZE)/sizeof(quadlet_t);
+        size_t offset = (ETH_HEADER_LEN + FW_CTRL_SIZE + FW_BWRITE_HEADER_SIZE)/sizeof(quadlet_t);
         board->SetWriteBuffer(buf, offset);
     }
     return ret;
@@ -307,8 +306,8 @@ bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
 bool EthRawPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
 {
     // Create buffer that is large enough for Ethernet header and Firewire packet
-    quadlet_t buffer[(ETH_ALIGN32+ETH_HEADER_LEN+FW_QWRITE_SIZE)/sizeof(quadlet_t)];
-    quadlet_t *packet_FW = buffer + (ETH_ALIGN32+ETH_HEADER_LEN)/sizeof(quadlet_t);
+    quadlet_t buffer[(ETH_HEADER_LEN+FW_CTRL_SIZE+FW_QWRITE_SIZE)/sizeof(quadlet_t)];
+    quadlet_t *packet_FW = buffer + (ETH_HEADER_LEN+FW_CTRL_SIZE)/sizeof(quadlet_t);
 
     // header
     fw_tl = (fw_tl+1)&FW_TL_MASK;   // increment transaction label
@@ -358,7 +357,7 @@ bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
 
     quadlet_t *frame = 0;     // The entire Ethernet frame (headers and data)
     // Offset into the data part of the frame
-    size_t data_offset = (ETH_ALIGN32 + ETH_HEADER_LEN + FW_BWRITE_HEADER_SIZE)/sizeof(quadlet_t);
+    size_t data_offset = (ETH_HEADER_LEN + FW_CTRL_SIZE + FW_BWRITE_HEADER_SIZE)/sizeof(quadlet_t);
 
 
     // Check for real-time write
@@ -378,7 +377,7 @@ bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         frame = new quadlet_t[block_write_len];
     }
 
-    quadlet_t *fw_header = frame + (ETH_ALIGN32 + ETH_HEADER_LEN)/sizeof(quadlet_t);
+    quadlet_t *fw_header = frame + (ETH_HEADER_LEN + FW_CTRL_SIZE)/sizeof(quadlet_t);
     // header
     fw_tl = (fw_tl+1)&FW_TL_MASK;   // increment transaction label
     make_1394_header(fw_header, node, addr, EthRawPort::BWRITE, fw_tl);
@@ -440,15 +439,15 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
     if (DEBUG) PrintFrame((unsigned char*)packet_FW, length_fw_bytes);
 
     // Ethernet frame
-    const int ethlength = length_fw * 4 + 14;  // eth frame length in bytes
+    const int ethlength = ETH_HEADER_LEN + FW_CTRL_SIZE + length_fw*sizeof(quadlet_t);  // eth frame length in bytes
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
     frame_hdr[12] = 0;
-    frame_hdr[13] = length_fw * 4;
+    frame_hdr[13] = ethlength-ETH_HEADER_LEN;
 
     //uint8_t frame[ethlength];
-    uint8_t frame[5*4+14];
-    memcpy(frame, frame_hdr, 14);
+    uint8_t frame[ETH_HEADER_LEN+FW_CTRL_SIZE+5*sizeof(quadlet_t)];
+    memcpy(frame, frame_hdr, ETH_HEADER_LEN);
     if (useEthernetBroadcast) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
         frame[5] = 0xff;     // keep multicast address
@@ -456,7 +455,9 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
         frame[5] = HubBoard;   // last byte of dest address is bridge board id
     }
 
-    memcpy(frame + 14, packet_FW, length_fw * 4);
+    unsigned short fw_ctrl = fw_tl;
+    memcpy(frame+ETH_HEADER_LEN, &fw_ctrl, sizeof(fw_ctrl));
+    memcpy(frame+ETH_HEADER_LEN+FW_CTRL_SIZE, packet_FW, length_fw*sizeof(quadlet_t));
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
@@ -571,20 +572,23 @@ bool EthRawPort::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_f
     // Firewire packet is already created by caller
     bool ret = true;
     // Ethernet frame
-    uint8_t *frame = reinterpret_cast<uint8_t *>(buffer) + ETH_ALIGN32;
-    memcpy(frame, frame_hdr, 12);
+    uint8_t *frame = reinterpret_cast<uint8_t *>(buffer);
+    memcpy(frame, frame_hdr, 12);  // Copy header except length field
     if (useEthernetBroadcast) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
         frame[5] = 0xff;     // keep multicast address
     }
     frame[5] = HubBoard;     // last byte of dest address is board id
 
+    int ethlength = ETH_HEADER_LEN + FW_CTRL_SIZE + length_fw*sizeof(quadlet_t);  // eth frame length in bytes
+
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
     frame[12] = 0;
-    frame[13] = length_fw * 4;
+    frame[13] = ethlength-ETH_HEADER_LEN;
 
-    int ethlength = length_fw*4 + ETH_HEADER_LEN;  // eth frame length in bytes
+    unsigned short fw_ctrl = fw_tl;
+    memcpy(frame+ETH_HEADER_LEN, &fw_ctrl, sizeof(fw_ctrl));
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
@@ -597,6 +601,7 @@ bool EthRawPort::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_f
     return ret;
 }
 
+// Currently not used
 int EthRawPort::make_ethernet_header(unsigned char *buffer, unsigned int numBytes)
 {
     memcpy(buffer, frame_hdr, 12);
