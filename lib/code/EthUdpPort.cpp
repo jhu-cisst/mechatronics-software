@@ -385,19 +385,24 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
         return false;
     }
 
-    quadlet_t recvPacket[FW_QRESPONSE_SIZE/sizeof(quadlet_t)];
-    int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), FW_QRESPONSE_SIZE, ReceiveTimeout);
-    if (nRecv != static_cast<int>(FW_QRESPONSE_SIZE)) {
+    quadlet_t recvPacket[(FW_QRESPONSE_SIZE+FW_EXTRA_SIZE)/sizeof(quadlet_t)];
+    int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), FW_QRESPONSE_SIZE+FW_EXTRA_SIZE, ReceiveTimeout);
+    if (nRecv == FW_EXTRA_SIZE) {
+        outStr << "ReadQuadlet: only extra data" << std::endl;
+        return false;
+    }
+    else if (nRecv != static_cast<int>(FW_QRESPONSE_SIZE+FW_EXTRA_SIZE)) {
         unsigned int boardId = Node2Board[node];
         if (boardId < BoardIO::MAX_BOARDS) {
             // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
             outStr << "ReadQuadlet: failed to receive read response from board " << boardId << " via UDP: return value = "
-                   << nRecv << ", expected = " << FW_QRESPONSE_SIZE << std::endl;
+                   << nRecv << ", expected = " << (FW_QRESPONSE_SIZE+FW_EXTRA_SIZE) << std::endl;
         }
         return false;
     }
     if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), 0, node, EthBasePort::QRESPONSE, fw_tl))
         return false;
+    ProcessExtraData(reinterpret_cast<const unsigned char *>(recvPacket)+FW_QRESPONSE_SIZE);
     data = bswap_32(recvPacket[3]);
     return true;
 }
@@ -469,16 +474,20 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         return false;
     }
 
-    size_t packetSize = FW_BRESPONSE_HEADER_SIZE + nbytes + FW_CRC_SIZE;   // PK TEMP
+    size_t packetSize = FW_BRESPONSE_HEADER_SIZE + nbytes + FW_CRC_SIZE + FW_EXTRA_SIZE;   // PK TEMP
     quadlet_t *recvPacket = new quadlet_t[packetSize/sizeof(quadlet_t)];
     int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), packetSize, ReceiveTimeout);
     if (nRecv != static_cast<int>(packetSize)) {
         outStr << "ReadBlock: failed to receive read response via UDP: return value = " << nRecv << ", expected = " << packetSize << std::endl;
         return false;
     }
-    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), nbytes, node, EthBasePort::BRESPONSE, fw_tl))
+    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), nbytes, node, EthBasePort::BRESPONSE, fw_tl)) {
+        delete [] recvPacket;
         return false;
+    }
+    ProcessExtraData(reinterpret_cast<const unsigned char *>(recvPacket)+packetSize-FW_EXTRA_SIZE);
     memcpy(rdata, &recvPacket[5], nbytes);   // PK TEMP
+    delete [] recvPacket;
     return true;
 }
 

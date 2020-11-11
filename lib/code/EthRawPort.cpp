@@ -517,8 +517,10 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
                 int tcode_recv = packet[17] >> 4;
                 if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
                     // check header crc
-                    if (checkCRC(packet))
+                    if (checkCRC(packet)) {
                         memcpy(buffer, &packet[26], 4);
+                        ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_QRESPONSE_SIZE);
+                    }
                     else {
                         outStr <<"ERROR: crc check error"<<std::endl;
                         return -1;
@@ -526,8 +528,10 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
                 }
                 else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
                     if (length == static_cast<size_t>((packet[26] << 8) | packet[27])) {
-                        if (checkCRC(packet))
+                        if (checkCRC(packet)) {
                             memcpy(buffer, &packet[34], length);
+                            ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_BRESPONSE_HEADER_SIZE + length + FW_CRC_SIZE);
+                        }
                         else {
                             outStr <<"ERROR: header crc check error"<<std::endl;
                             return -1;

@@ -93,6 +93,17 @@ void EthBasePort::PrintIP(std::ostream &outStr, const char* name, const uint8_t 
     }
 }
 
+void EthBasePort::ProcessExtraData(const unsigned char *packet)
+{
+#if 0
+    const unsigned short *packetW = reinterpret_cast<const unsigned short *>(packet);
+    outStr << "Extra data: " << std::hex;
+    for (size_t i = 0; i < 4; i++)
+        outStr << std::setw(4) << std::setfill('0') << packetW[i] << " ";
+    outStr << std::dec << std::endl;
+#endif
+}
+
 //TODO: fix for byteswapping
 bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl)
 {

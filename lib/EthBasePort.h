@@ -27,12 +27,15 @@ const unsigned int FW_QREAD_SIZE      = 16;        // Number of bytes in Firewir
 const unsigned int FW_QWRITE_SIZE     = 20;        // Number of bytes in Firewire quadlet write packet
 const unsigned int FW_QRESPONSE_SIZE  = 20;        // Number of bytes in Firewire quadlet read response packet
 const unsigned int FW_BREAD_SIZE      = 20;        // Number of bytes in Firewire block read request
-const unsigned int FW_BRESPONSE_HEADER_SIZE = 20;  // Number of bytes in Firewire block read response header (including CRC)
-const unsigned int FW_BWRITE_HEADER_SIZE = 20;     // Number of bytes in Firewire block write header (including CRC)
+const unsigned int FW_BRESPONSE_HEADER_SIZE = 20;  // Number of bytes in Firewire block read response header (including header CRC)
+const unsigned int FW_BWRITE_HEADER_SIZE = 20;     // Number of bytes in Firewire block write header (including header CRC)
 const unsigned int FW_CRC_SIZE = 4;                // Number of bytes in Firewire CRC
 
 // Firewire control word (includes expected Firewire generation). This control word is specific to our implementation.
 const unsigned int FW_CTRL_SIZE = 2;               // Number of bytes in Firewire control word
+
+// Firewire extra data, received after the quadlet and block responses. This is specific to our implementation.
+const unsigned int FW_EXTRA_SIZE = 8;              // Number of extra bytes (4 words)
 
 class EthBasePort : public BasePort
 {
@@ -145,6 +148,9 @@ public:
     //   tl:      transaction label
     // PK TODO: Make it static? Need to handle outStr
     bool CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl);
+
+    // Process extra data received from FPGA
+    void ProcessExtraData(const unsigned char *packet);
 
     static bool checkCRC(const unsigned char *packet);
 
