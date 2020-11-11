@@ -367,12 +367,18 @@ int main(int argc, char** argv)
                 BoardList[j]->WriteWatchdogPeriod(watchdog_on?5000:0);
         }
         else if (c == 'p') {
+            // Only power on system if completely off (power_board
+            // and power_axis false). Otherwise, we power off.
+            if (!power_board && !power_axis) {
+                power_board = true;
+                power_axis = true;
+            }
+            else {
+                power_board = false;
+                power_axis = false;
+            }
             for (j = 0; j < BoardList.size(); j++) {
-                // Only power on system if completely off (power_board
-                // and power_axis false). Otherwise, we power off.
-                if (!power_board && !power_axis) {
-                    power_board = true;
-                    power_axis = true;
+                if (power_board && power_axis) {
                     BoardList[j]->SetSafetyRelay(true);
                     // Cannot enable Amp power unless Board power is
                     // already enabled.
@@ -380,8 +386,6 @@ int main(int argc, char** argv)
                     //BoardList[j]->SetPowerEnable(true);
                     BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
                 } else {
-                    power_board = false;
-                    power_axis = false;
                     BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
                     BoardList[j]->SetPowerEnable(false);
                     BoardList[j]->SetSafetyRelay(false);
