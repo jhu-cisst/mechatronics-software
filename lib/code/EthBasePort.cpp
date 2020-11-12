@@ -97,13 +97,13 @@ void EthBasePort::PrintIP(std::ostream &outStr, const char* name, const uint8_t 
 
 void EthBasePort::ProcessExtraData(const unsigned char *packet)
 {
-    unsigned int FwBusGeneration_FPGA = packet[0];
-    FwBusReset = packet[1]&0x01;
+    unsigned int FwBusGeneration_FPGA = packet[1];
+    FwBusReset = packet[0]&0x01;
 
     const double FPGA_sysclk_MHz = 49.152;      /* FPGA sysclk in MHz (from AmpIO.cpp) */
     const unsigned short *packetW = reinterpret_cast<const unsigned short *>(packet);
-    FPGA_RecvTime = packetW[2]/(FPGA_sysclk_MHz*1.0e6);
-    FPGA_TotalTime = packetW[3]/(FPGA_sysclk_MHz*1.0e6);
+    FPGA_RecvTime = bswap_16(packetW[2])/(FPGA_sysclk_MHz*1.0e6);
+    FPGA_TotalTime = bswap_16(packetW[3])/(FPGA_sysclk_MHz*1.0e6);
 
     if (FwBusGeneration_FPGA != FwBusGeneration)
         OnFwBusReset(FwBusGeneration_FPGA);
@@ -547,12 +547,11 @@ void EthBasePort::PromDelay(void) const
 // Quadlet 1:  | Source bus (10)      | Source node (6)      | Destination offset MSW (16)           |
 // Quadlet 2:  | Destination offset (32)                                                             |
 void EthBasePort::make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode,
-                                   unsigned int tl, bool doNotForward)
+                                   unsigned int tl)
 {
     // FFC0 replicates the base node ID when using FireWire on PC. This is followed by a transaction
     // label (arbitrary value that is returned by any resulting FireWire packets) and the transaction code.
-    // Finally, we use the PRI field to indicate when a packet should not be forwarded (PRI=1).
-    unsigned char fw_pri = doNotForward ? 1 : 0;
+    unsigned char fw_pri = 0;
     packet[0] = bswap_32((0xFFC0 | (node&FW_NODE_MASK)) << 16 | (tl & 0x003F) << 10 | (tcode & 0x000F) << 4 | (fw_pri & 0x000F));
     // FFD0 is used as source ID (most significant 16 bits); this sets source node to 0x10 (16).
     // Previously, FFFF was used, which set the source node to 0x3f (63), which is the broadcast address.
@@ -563,18 +562,18 @@ void EthBasePort::make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t 
 
 // Create a quadlet read request packet.
 // In addition to the header, it contains the CRC in Quadlet 3.
-void EthBasePort::make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl, bool doNotForward)
+void EthBasePort::make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl)
 {
-    make_1394_header(packet, node, addr, EthBasePort::QREAD, tl, doNotForward);
+    make_1394_header(packet, node, addr, EthBasePort::QREAD, tl);
     // CRC
     packet[3] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_QREAD_SIZE-FW_CRC_SIZE)));
 }
 
 // Create a quadlet write packet.
 // In addition to the header, it contains the 32-bit data (Quadlet 3) and the CRC (Quadlet 4).
-void EthBasePort::make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned int tl, bool doNotForward)
+void EthBasePort::make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned int tl)
 {
-    make_1394_header(packet, node, addr, EthBasePort::QWRITE, tl, doNotForward);
+    make_1394_header(packet, node, addr, EthBasePort::QWRITE, tl);
     // quadlet data
     packet[3] = bswap_32(data);
     // CRC
@@ -585,9 +584,9 @@ void EthBasePort::make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_
 // In addition to the header, it contains the following:
 // Quadlet 3:  | Data length (16) | Extended tcode (16) |
 // Quadlet 4:  | CRC (32)                               |
-void EthBasePort::make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl, bool doNotForward)
+void EthBasePort::make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl)
 {
-    make_1394_header(packet, node, addr, EthBasePort::BREAD, tl, doNotForward);
+    make_1394_header(packet, node, addr, EthBasePort::BREAD, tl);
     packet[3] = bswap_32((nBytes & 0xffff) << 16);
     // CRC
     packet[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_BREAD_SIZE-FW_CRC_SIZE)));
@@ -599,9 +598,9 @@ void EthBasePort::make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t
 // Quadlet 4:  | Header CRC (32)                        |
 // Quadlet 5 to 5+N | Data block (N quadlets)           |
 // Quadlet 5+N+1:   | Data CRC (32)                     |
-void EthBasePort::make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl, bool doNotForward)
+void EthBasePort::make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl)
 {
-    make_1394_header(packet, node, addr, EthBasePort::BWRITE, tl, doNotForward);
+    make_1394_header(packet, node, addr, EthBasePort::BWRITE, tl);
     packet[3] = bswap_32((nBytes & 0xffff) << 16);
     // header CRC
     packet[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_BWRITE_HEADER_SIZE-FW_CRC_SIZE)));

@@ -433,8 +433,7 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
 
     if (tcode == BREAD)
         packet_FW[3] = bswap_32((length & 0xFFFF) << 16);
-    packet_FW[length_fw-1] =
-    bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, length_fw_bytes - FW_CRC_SIZE)));
+    packet_FW[length_fw-1] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, length_fw_bytes - FW_CRC_SIZE)));
 
     if (DEBUG) PrintFrame((unsigned char*)packet_FW, length_fw_bytes);
 
@@ -455,8 +454,10 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
         frame[5] = HubBoard;   // last byte of dest address is bridge board id
     }
 
-    unsigned short fw_ctrl = (FwBusGeneration<<8);
-    memcpy(frame+ETH_HEADER_LEN, &fw_ctrl, sizeof(fw_ctrl));
+    unsigned char fw_ctrl[2];
+    fw_ctrl[0] = 0;
+    fw_ctrl[1] = FwBusGeneration;
+    memcpy(frame+ETH_HEADER_LEN, fw_ctrl, sizeof(fw_ctrl));
     memcpy(frame+ETH_HEADER_LEN+FW_CTRL_SIZE, packet_FW, length_fw*sizeof(quadlet_t));
 
     if (DEBUG) {
@@ -591,8 +592,10 @@ bool EthRawPort::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_f
     frame[12] = 0;
     frame[13] = ethlength-ETH_HEADER_LEN;
 
-    unsigned short fw_ctrl = (FwBusGeneration<<8);
-    memcpy(frame+ETH_HEADER_LEN, &fw_ctrl, sizeof(fw_ctrl));
+    unsigned char fw_ctrl[2];
+    fw_ctrl[0] = 0;
+    fw_ctrl[1] = FwBusGeneration;
+    memcpy(frame+ETH_HEADER_LEN, fw_ctrl, sizeof(fw_ctrl));
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;

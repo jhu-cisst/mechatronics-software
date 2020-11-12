@@ -365,12 +365,14 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(sendPacket)+1;
-    *fw_ctrl = (FwBusGeneration<<8);
+    char *sendPacketB = reinterpret_cast<char *>(sendPacket)+ETH_ALIGN32;
+    sendPacketB[0] = 0;
+    if (flags&FW_NODE_NOFORWARD_MASK) sendPacketB[0] |= FW_CTRL_NOFORWARD;
+    sendPacketB[1] = FwBusGeneration;
 
     // Build FireWire packet
-    make_qread_packet(sendPacket+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, fw_tl, flags&FW_NODE_NOFORWARD_MASK);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket)+ETH_ALIGN32, FW_CTRL_SIZE+FW_QREAD_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
+    make_qread_packet(sendPacket+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, fw_tl);
+    int nSent = sockPtr->Send(sendPacketB, FW_CTRL_SIZE+FW_QREAD_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
     if (nSent != static_cast<int>(FW_CTRL_SIZE+FW_QREAD_SIZE)) {
         outStr << "ReadQuadlet: failed to send read request via UDP: return value = " << nSent << ", expected = " << (FW_CTRL_SIZE+FW_QREAD_SIZE) << std::endl;
         return false;
@@ -415,14 +417,16 @@ bool EthUdpPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(buffer)+1;
-    *fw_ctrl = (FwBusGeneration<<8);
+    char *bufferB = reinterpret_cast<char *>(buffer)+ETH_ALIGN32;
+    bufferB[0] = 0;
+    if (flags&FW_NODE_NOFORWARD_MASK) bufferB[0] |= FW_CTRL_NOFORWARD;
+    bufferB[1] = FwBusGeneration;
 
     // Build FireWire packet (also byteswaps data)
-    make_qwrite_packet(buffer+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, data, fw_tl, flags&FW_NODE_NOFORWARD_MASK);
+    make_qwrite_packet(buffer+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, data, fw_tl);
 
 
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(buffer)+ETH_ALIGN32, FW_CTRL_SIZE+FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
+    int nSent = sockPtr->Send(bufferB, FW_CTRL_SIZE+FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
     return (nSent == static_cast<int>(FW_CTRL_SIZE+FW_QWRITE_SIZE));
 }
 
@@ -452,12 +456,14 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(sendPacket)+1;
-    *fw_ctrl = (FwBusGeneration<<8);
+    char *sendPacketB = reinterpret_cast<char *>(sendPacket)+ETH_ALIGN32;
+    sendPacketB[0] = 0;
+    if (boardId&FW_NODE_NOFORWARD_MASK) sendPacketB[0] |= FW_CTRL_NOFORWARD;
+    sendPacketB[1] = FwBusGeneration;
 
     // Build FireWire packet
-    make_bread_packet(sendPacket+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket)+ETH_ALIGN32, FW_CTRL_SIZE+FW_BREAD_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK);
+    make_bread_packet(sendPacket+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, nbytes, fw_tl);
+    int nSent = sockPtr->Send(sendPacketB, FW_CTRL_SIZE+FW_BREAD_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK);
     if (nSent != static_cast<int>(FW_CTRL_SIZE+FW_BREAD_SIZE)) {
         outStr << "ReadBlock: failed to send read request via UDP: return value = " << nSent << ", expected = " << (FW_CTRL_SIZE+FW_BREAD_SIZE) << std::endl;
         return false;
@@ -525,12 +531,14 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(packet)+1;
-    *fw_ctrl = (FwBusGeneration<<8);
+    char *packetB = reinterpret_cast<char *>(packet)+ETH_ALIGN32;
+    packetB[0] = 0;
+    if (boardId&FW_NODE_NOFORWARD_MASK) packetB[0] |= FW_CTRL_NOFORWARD;
+    packetB[1] = FwBusGeneration;
 
     // Build FireWire packet
-    make_bwrite_packet(packet+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, wdata, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(packet)+ETH_ALIGN32, packetSize-ETH_ALIGN32, boardId&FW_NODE_ETH_BROADCAST_MASK);
+    make_bwrite_packet(packet+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, wdata, nbytes, fw_tl);
+    int nSent = sockPtr->Send(packetB, packetSize-ETH_ALIGN32, boardId&FW_NODE_ETH_BROADCAST_MASK);
     if (nSent != static_cast<int>(packetSize-ETH_ALIGN32)) {
         outStr << "WriteBlock: failed to send write via UDP: return value = " << nSent << ", expected = " << (packetSize-ETH_ALIGN32) << std::endl;
         return false;

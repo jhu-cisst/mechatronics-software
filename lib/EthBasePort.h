@@ -31,11 +31,15 @@ const unsigned int FW_BRESPONSE_HEADER_SIZE = 20;  // Number of bytes in Firewir
 const unsigned int FW_BWRITE_HEADER_SIZE = 20;     // Number of bytes in Firewire block write header (including header CRC)
 const unsigned int FW_CRC_SIZE = 4;                // Number of bytes in Firewire CRC
 
-// Firewire control word (includes expected Firewire generation). This control word is specific to our implementation.
+// Firewire control word -- specific to our implementation.
+// First byte is FW_CTRL_FLAGS, second byte is Firewire bus generation
 const unsigned int FW_CTRL_SIZE = 2;               // Number of bytes in Firewire control word
 
 // Firewire extra data, received after the quadlet and block responses. This is specific to our implementation.
 const unsigned int FW_EXTRA_SIZE = 8;              // Number of extra bytes (4 words)
+
+// FW_CTRL_FLAGS
+const unsigned char FW_CTRL_NOFORWARD = 0x01;      // Prevent forwarding by Ethernet/Firewire bridge
 
 class EthBasePort : public BasePort
 {
@@ -83,13 +87,12 @@ protected:
     // to be different than the one on the PC.
     virtual void OnFwBusReset(unsigned int newFwBusGeneration);
 
-    static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl,
-                                 bool doNotForward = false);
+    static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
 
-    static void make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl, bool doNotForward);
-    static void make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned int tl, bool doNotForward);
-    static void make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl, bool doNotForward);
-    static void make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl, bool doNotForward);
+    static void make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl);
+    static void make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned int tl);
+    static void make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl);
+    static void make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl);
 
 public:
 
