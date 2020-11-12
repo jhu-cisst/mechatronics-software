@@ -366,8 +366,7 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(sendPacket)+1;
-    // PK TEMP - set FwCtrl
-    *fw_ctrl = fw_tl;
+    *fw_ctrl = (FwBusGeneration<<8);
 
     // Build FireWire packet
     make_qread_packet(sendPacket+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, fw_tl, flags&FW_NODE_NOFORWARD_MASK);
@@ -417,8 +416,7 @@ bool EthUdpPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(buffer)+1;
-    // PK TEMP - set FwCtrl
-    *fw_ctrl = fw_tl;
+    *fw_ctrl = (FwBusGeneration<<8);
 
     // Build FireWire packet (also byteswaps data)
     make_qwrite_packet(buffer+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, data, fw_tl, flags&FW_NODE_NOFORWARD_MASK);
@@ -455,8 +453,7 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(sendPacket)+1;
-    // PK TEMP - set FwCtrl
-    *fw_ctrl = fw_tl;
+    *fw_ctrl = (FwBusGeneration<<8);
 
     // Build FireWire packet
     make_bread_packet(sendPacket+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
@@ -529,8 +526,7 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     unsigned short *fw_ctrl = reinterpret_cast<unsigned short *>(packet)+1;
-    // PK TEMP - set FwCtrl
-    *fw_ctrl = fw_tl;
+    *fw_ctrl = (FwBusGeneration<<8);
 
     // Build FireWire packet
     make_bwrite_packet(packet+(ETH_ALIGN32+FW_CTRL_SIZE)/sizeof(quadlet_t), node, addr, wdata, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);

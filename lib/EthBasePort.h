@@ -60,6 +60,12 @@ protected:
     EthCallbackType eth_read_callback;
     double ReceiveTimeout;      // Ethernet receive timeout (seconds)
 
+    unsigned int FwBusGeneration;
+    bool   FwBusReset;          // True if Firewire bus reset is active
+
+    double FPGA_RecvTime;       // Time for FPGA to receive Ethernet packet (seconds)
+    double FPGA_TotalTime;      // Total time for FPGA to receive packet and respond (seconds)
+
     // Write a block to the specified node. Internal method called by ReadBlock.
     bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
 
@@ -72,6 +78,10 @@ protected:
 
     // Method called by WriteAllBoards/WriteAllBoardsBroadcast if no data written
     void OnNoneWritten(void);
+
+    // Method called when Firewire bus reset has caused the Firewire generation number on the FPGA
+    // to be different than the one on the PC.
+    virtual void OnFwBusReset(unsigned int newFwBusGeneration);
 
     static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl,
                                  bool doNotForward = false);
@@ -93,6 +103,15 @@ public:
     double GetReceiveTimeout(void) const { return ReceiveTimeout; }
 
     void SetReceiveTimeout(double timeSec) { ReceiveTimeout = timeSec; }
+
+    // Return time required to receive Ethernet packet on FPGA, in seconds.
+    double GetFpgaReceiveTime(void) const { return FPGA_RecvTime; }
+
+    // Return time required to receive and respond to Ethernet packet on FPGA, in seconds.
+    // This is the last data value placed in the response packet, but it is a little
+    // lower (by about 0.7 microseconds) because it does not include the time to write this
+    // value to the KSZ8851 or to queue the packet into the transmit buffer.
+    double GetFpgaTotalTime(void) const { return FPGA_TotalTime; }
 
     //****************** Virtual methods ***************************
     // Implementations of pure virtual methods from BasePort

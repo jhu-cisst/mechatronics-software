@@ -37,7 +37,9 @@ EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType
     is_fw_master((portNum==1)),  // TEMP
     fw_tl(0),
     eth_read_callback(cb),
-    ReceiveTimeout(0.01)
+    ReceiveTimeout(0.01),
+    FwBusGeneration(0),
+    FwBusReset(false)
 {
 }
 
@@ -95,8 +97,17 @@ void EthBasePort::PrintIP(std::ostream &outStr, const char* name, const uint8_t 
 
 void EthBasePort::ProcessExtraData(const unsigned char *packet)
 {
-#if 0
+    unsigned int FwBusGeneration_FPGA = packet[0];
+    FwBusReset = packet[1]&0x01;
+
+    const double FPGA_sysclk_MHz = 49.152;      /* FPGA sysclk in MHz (from AmpIO.cpp) */
     const unsigned short *packetW = reinterpret_cast<const unsigned short *>(packet);
+    FPGA_RecvTime = packetW[2]/(FPGA_sysclk_MHz*1.0e6);
+    FPGA_TotalTime = packetW[3]/(FPGA_sysclk_MHz*1.0e6);
+
+    if (FwBusGeneration_FPGA != FwBusGeneration)
+        OnFwBusReset(FwBusGeneration_FPGA);
+#if 0
     outStr << "Extra data: " << std::hex;
     for (size_t i = 0; i < 4; i++)
         outStr << std::setw(4) << std::setfill('0') << packetW[i] << " ";
@@ -476,6 +487,13 @@ void EthBasePort::OnNoneRead(void)
 void EthBasePort::OnNoneWritten(void)
 {
     outStr << "Failed to write any board, check Ethernet physical connection" << std::endl;
+}
+
+void EthBasePort::OnFwBusReset(unsigned int newFwBusGeneration)
+{
+    outStr << "Firewire bus reset, FPGA = " << std::dec << newFwBusGeneration << ", PC = " << FwBusGeneration << std::endl;
+    if (FwBusReset) outStr << "Firewire Bus Reset active!" << std::endl;
+    FwBusGeneration = newFwBusGeneration;  // PK TEMP
 }
 
 bool EthBasePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)

@@ -455,7 +455,7 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
         frame[5] = HubBoard;   // last byte of dest address is bridge board id
     }
 
-    unsigned short fw_ctrl = fw_tl;
+    unsigned short fw_ctrl = (FwBusGeneration<<8);
     memcpy(frame+ETH_HEADER_LEN, &fw_ctrl, sizeof(fw_ctrl));
     memcpy(frame+ETH_HEADER_LEN+FW_CTRL_SIZE, packet_FW, length_fw*sizeof(quadlet_t));
 
@@ -591,7 +591,7 @@ bool EthRawPort::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_f
     frame[12] = 0;
     frame[13] = ethlength-ETH_HEADER_LEN;
 
-    unsigned short fw_ctrl = fw_tl;
+    unsigned short fw_ctrl = (FwBusGeneration<<8);
     memcpy(frame+ETH_HEADER_LEN, &fw_ctrl, sizeof(fw_ctrl));
 
     if (DEBUG) {

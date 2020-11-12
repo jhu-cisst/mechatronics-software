@@ -607,6 +607,8 @@ int main(int argc, char **argv)
                 memcpy(buf, (char *)(&read_data), 4);
                 buf[4] = 0;
                 std::cout << "  as string: " << buf << std::endl;
+                std::cout << "FPGA Recv time (us): " << EthPort->GetFpgaReceiveTime()*1.0e6
+                          << ", FPGA Total time (us): " << EthPort->GetFpgaTotalTime()*1.0e6 << std::endl;
             }
             break;
 
@@ -625,6 +627,8 @@ int main(int argc, char **argv)
                         std::cout << "Failed to read block data via Ethernet port" << std::endl;
                         break;
                     }
+                    std::cout << "FPGA Recv time (us): " << EthPort->GetFpgaReceiveTime()*1.0e6
+                              << ", FPGA Total time (us): " << EthPort->GetFpgaTotalTime()*1.0e6 << std::endl;
                 }
                 std::cout << "     Firewire   Ethernet" << std::endl;
                 for (i = 0; static_cast<size_t>(i) < sizeof(fw_block_data)/sizeof(quadlet_t); i++)
