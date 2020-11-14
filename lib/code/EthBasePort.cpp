@@ -38,7 +38,6 @@ EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType
     fw_tl(0),
     eth_read_callback(cb),
     ReceiveTimeout(0.01),
-    FwBusGeneration(0),
     FwBusReset(false)
 {
 }
@@ -99,6 +98,7 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
 {
     unsigned int FwBusGeneration_FPGA = packet[1];
     FwBusReset = packet[0]&0x01;
+    // FwPacketDropped = packet[0]&0x02;
 
     const double FPGA_sysclk_MHz = 49.152;      /* FPGA sysclk in MHz (from AmpIO.cpp) */
     const unsigned short *packetW = reinterpret_cast<const unsigned short *>(packet);
@@ -107,12 +107,6 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
 
     if (FwBusGeneration_FPGA != FwBusGeneration)
         OnFwBusReset(FwBusGeneration_FPGA);
-#if 0
-    outStr << "Extra data: " << std::hex;
-    for (size_t i = 0; i < 4; i++)
-        outStr << std::setw(4) << std::setfill('0') << packetW[i] << " ";
-    outStr << std::dec << std::endl;
-#endif
 }
 
 //TODO: fix for byteswapping
@@ -489,15 +483,17 @@ void EthBasePort::OnNoneWritten(void)
     outStr << "Failed to write any board, check Ethernet physical connection" << std::endl;
 }
 
-void EthBasePort::OnFwBusReset(unsigned int newFwBusGeneration)
+void EthBasePort::OnFwBusReset(unsigned int FwBusGeneration_FPGA)
 {
-    outStr << "Firewire bus reset, FPGA = " << std::dec << newFwBusGeneration << ", PC = " << FwBusGeneration << std::endl;
-    if (FwBusReset) outStr << "Firewire Bus Reset active!" << std::endl;
-    FwBusGeneration = newFwBusGeneration;  // PK TEMP
+    outStr << "Firewire bus reset, FPGA = " << std::dec << FwBusGeneration_FPGA << ", PC = " << FwBusGeneration << std::endl;
+    newFwBusGeneration = FwBusGeneration_FPGA;
 }
 
 bool EthBasePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
+    if (!CheckFwBusGeneration("EthBasePort::ReadQuadlet"))
+        return false;
+
     nodeid_t node = ConvertBoardToNode(boardId);
     if (node == static_cast<nodeid_t>(MAX_NODES)) {
         outStr << "ReadQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
@@ -508,6 +504,9 @@ bool EthBasePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t 
 
 bool EthBasePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
+    if (!CheckFwBusGeneration("EthBasePort::WriteQuadlet"))
+        return false;
+
     nodeid_t node = ConvertBoardToNode(boardId);
     if (node == static_cast<nodeid_t>(MAX_NODES)) {
         outStr << "WriteQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;

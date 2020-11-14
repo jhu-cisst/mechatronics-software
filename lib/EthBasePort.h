@@ -64,7 +64,6 @@ protected:
     EthCallbackType eth_read_callback;
     double ReceiveTimeout;      // Ethernet receive timeout (seconds)
 
-    unsigned int FwBusGeneration;
     bool   FwBusReset;          // True if Firewire bus reset is active
 
     double FPGA_RecvTime;       // Time for FPGA to receive Ethernet packet (seconds)
@@ -85,7 +84,7 @@ protected:
 
     // Method called when Firewire bus reset has caused the Firewire generation number on the FPGA
     // to be different than the one on the PC.
-    virtual void OnFwBusReset(unsigned int newFwBusGeneration);
+    virtual void OnFwBusReset(unsigned int FwBusGeneration_FPGA);
 
     static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
 
@@ -121,6 +120,10 @@ public:
 
     // For now, always returns 1
     int NumberOfUsers(void) { return 1; }
+
+    unsigned int GetBusGeneration(void) const { return FwBusGeneration; }
+
+    void UpdateBusGeneration(unsigned int gen) { FwBusGeneration = gen; }
 
     // Read a quadlet from the specified board
     bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);

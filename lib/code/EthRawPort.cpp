@@ -67,14 +67,7 @@ EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType c
 
 EthRawPort::~EthRawPort()
 {
-    if (IsOK() && is_fw_master) {
-        // Attempt to clear eth1394 flag on all boards
-        quadlet_t data = 0x00800000;  // Clear eth1394 bit
-        if (WriteQuadletNode(FW_NODE_BROADCAST, 0, data))
-            std::cout << "EthRawPort destructor: cleared eth1394 mode" << std::endl;
-    }
-
-    pcap_close(handle);
+    Cleanup();
 }
 
 bool EthRawPort::Init(void)
@@ -220,6 +213,18 @@ bool EthRawPort::Init(void)
     return ret;
 }
 
+void EthRawPort::Cleanup(void)
+{
+    if (IsOK() && is_fw_master) {
+        // Attempt to clear eth1394 flag on all boards
+        quadlet_t data = 0x00800000;  // Clear eth1394 bit
+        if (WriteQuadletNode(FW_NODE_BROADCAST, 0, data))
+            std::cout << "EthRawPort destructor: cleared eth1394 mode" << std::endl;
+    }
+
+    pcap_close(handle);
+}
+
 nodeid_t EthRawPort::InitNodes(void)
 {
     // Find board id for first board (i.e., one connected by Ethernet)
@@ -259,11 +264,6 @@ bool EthRawPort::IsOK(void)
     return (handle != NULL);
 }
 
-void EthRawPort::Reset(void)
-{
-    return;
-}
-
 bool EthRawPort::AddBoard(BoardIO *board)
 {
     bool ret = BasePort::AddBoard(board);
@@ -297,6 +297,9 @@ bool EthRawPort::RemoveBoard(unsigned char boardId)
 
 bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
+    if (!CheckFwBusGeneration("EthRawPort::ReadQuadletNode"))
+        return false;
+
     bool ret = eth1394_read(node, addr, 4, &data, flags&FW_NODE_ETH_BROADCAST_MASK);
     data = bswap_32(data);
     return (!ret);
@@ -305,6 +308,9 @@ bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
 
 bool EthRawPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
 {
+    if (!CheckFwBusGeneration("EthRawPort::WriteQuadletNode"))
+        return false;
+
     // Create buffer that is large enough for Ethernet header and Firewire packet
     quadlet_t buffer[(ETH_HEADER_LEN+FW_CTRL_SIZE+FW_QWRITE_SIZE)/sizeof(quadlet_t)];
     quadlet_t *packet_FW = buffer + (ETH_HEADER_LEN+FW_CTRL_SIZE)/sizeof(quadlet_t);
@@ -330,6 +336,9 @@ bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         return false;
     }
 
+    if (!CheckFwBusGeneration("EthRawPort::ReadBlock"))
+        return false;
+
     nodeid_t node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
         outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
@@ -348,6 +357,9 @@ bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
+
+    if (!CheckFwBusGeneration("EthRawPort::WriteBlock"))
+        return false;
 
     nodeid_t node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
@@ -496,6 +508,10 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
             if (packet == NULL)
                 break;
             numPackets++;
+            if (header.caplen == (ETH_FRAME_HEADER_SIZE + FW_EXTRA_SIZE)) {
+                outStr << "eth1394_read: only extra data" << std::endl;
+                ProcessExtraData(packet);
+            }
             if (headercheck((unsigned char *)packet, true)) {
                 if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
                     outStr << "Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "

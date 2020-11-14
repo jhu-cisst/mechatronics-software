@@ -91,6 +91,9 @@ protected:
     // Port Index, e.g. eth0 -> PortNum = 0
     int PortNum;
 
+    unsigned int FwBusGeneration;     // Current Firewire bus generation
+    unsigned int newFwBusGeneration;  // New Firewire bus generation
+
     unsigned int NumOfNodes_;       // number of nodes (boards) on bus
 
     // Indicates which boards are used in the current configuration
@@ -107,8 +110,11 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
 
-    // Initialize port
+    // Initialize port (called by constructor and Reset)
     virtual bool Init(void) = 0;
+
+    // Cleanup port (called by destructor and Reset)
+    virtual void Cleanup(void) = 0;
 
     // Initialize nodes on the bus; called by ScanNodes
     // \return Maximum number of nodes on bus (0 if error)
@@ -147,6 +153,9 @@ public:
 
     // Set protocol type
     bool SetProtocol(ProtocolType prot);
+
+    // Reset the port (call Cleanup, then Init)
+    virtual void Reset(void);
 
     // Add board to list of boards in use
     virtual bool AddBoard(BoardIO *board);
@@ -212,7 +221,18 @@ public:
 
     virtual bool IsOK(void) = 0;
 
-    virtual void Reset(void) = 0;
+    // Get the bus generation number
+    virtual unsigned int GetBusGeneration(void) const = 0;
+
+    // Update the bus generation number
+    virtual void UpdateBusGeneration(unsigned int gen) = 0;
+
+    // Check whether bus generation has changed
+    virtual bool CheckFwBusGeneration(const std::string &caller) const;
+
+    // Check whether nodes need to be rescanned (e.g., after bus generation change)
+    // and call ScanNodes if needed
+    virtual bool CheckScanNodes(const std::string &caller);
 
     // Read all boards
     virtual bool ReadAllBoards(void);

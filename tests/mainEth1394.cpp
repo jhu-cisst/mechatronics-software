@@ -499,9 +499,6 @@ int main(int argc, char **argv)
     else
         std::cout << "Failed to initialize Ethernet port" << std::endl;
 
-    // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth
-    curBoard = curBoardFw ? curBoardFw : curBoardEth;
-
     // Turn off buffered I/O for keyboard
     struct termios oldTerm, newTerm;
     tcgetattr(0, &oldTerm);
@@ -516,6 +513,9 @@ int main(int argc, char **argv)
     quadlet_t buffer[128];
 
     while (!done) {
+
+        // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth
+        curBoard = curBoardFw ? curBoardFw : curBoardEth;
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         if (curBoardFw)
@@ -600,15 +600,16 @@ int main(int argc, char **argv)
             if (curBoardEth) {
                 read_data = 0;
                 addr = 0x04;  // Return QLA1
-                if (EthPort->ReadQuadlet(boardNum, addr, read_data))
+                if (EthPort->ReadQuadlet(boardNum, addr, read_data)) {
                     std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
+                    memcpy(buf, (char *)(&read_data), 4);
+                    buf[4] = 0;
+                    std::cout << "  as string: " << buf << std::endl;
+                    std::cout << "FPGA Recv time (us): " << EthPort->GetFpgaReceiveTime()*1.0e6
+                              << ", FPGA Total time (us): " << EthPort->GetFpgaTotalTime()*1.0e6 << std::endl;
+                }
                 else
                     std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
-                memcpy(buf, (char *)(&read_data), 4);
-                buf[4] = 0;
-                std::cout << "  as string: " << buf << std::endl;
-                std::cout << "FPGA Recv time (us): " << EthPort->GetFpgaReceiveTime()*1.0e6
-                          << ", FPGA Total time (us): " << EthPort->GetFpgaTotalTime()*1.0e6 << std::endl;
             }
             break;
 
@@ -616,19 +617,16 @@ int main(int argc, char **argv)
             if (curBoardFw || curBoardEth) {
                 memset(fw_block_data, 0, sizeof(fw_block_data));
                 if (curBoardFw) {
-                    if (!FwPort.ReadBlock(boardNum, 0, fw_block_data, sizeof(fw_block_data))) {
+                    if (!FwPort.ReadBlock(boardNum, 0, fw_block_data, sizeof(fw_block_data)))
                         std::cout << "Failed to read block data via FireWire port" << std::endl;
-                        break;
-                    }
                 }
                 memset(eth_block_data, 0, sizeof(eth_block_data));
                 if (curBoardEth) {
-                    if (!EthPort->ReadBlock(boardNum, 0, eth_block_data, sizeof(eth_block_data))) {
+                    if (!EthPort->ReadBlock(boardNum, 0, eth_block_data, sizeof(eth_block_data)))
                         std::cout << "Failed to read block data via Ethernet port" << std::endl;
-                        break;
-                    }
-                    std::cout << "FPGA Recv time (us): " << EthPort->GetFpgaReceiveTime()*1.0e6
-                              << ", FPGA Total time (us): " << EthPort->GetFpgaTotalTime()*1.0e6 << std::endl;
+                    else
+                        std::cout << "FPGA Recv time (us): " << EthPort->GetFpgaReceiveTime()*1.0e6
+                                  << ", FPGA Total time (us): " << EthPort->GetFpgaTotalTime()*1.0e6 << std::endl;
                 }
                 std::cout << "     Firewire   Ethernet" << std::endl;
                 for (i = 0; static_cast<size_t>(i) < sizeof(fw_block_data)/sizeof(quadlet_t); i++)

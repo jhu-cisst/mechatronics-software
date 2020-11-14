@@ -244,14 +244,7 @@ EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &d
 
 EthUdpPort::~EthUdpPort()
 {
-    if (IsOK() && is_fw_master) {
-        // Attempt to clear eth1394 flag on all boards
-        quadlet_t data = 0x00800000;  // Clear eth1394 bit
-        if (WriteQuadletNode(FW_NODE_BROADCAST, 0, data))
-            std::cout << "EthUdpPort destructor: cleared eth1394 mode" << std::endl;
-    }
-
-    sockPtr->Close();
+    Cleanup();
     delete sockPtr;
 }
 
@@ -266,6 +259,17 @@ bool EthUdpPort::Init(void)
     return ret;
 }
 
+void EthUdpPort::Cleanup(void)
+{
+    if (IsOK() && is_fw_master) {
+        // Attempt to clear eth1394 flag on all boards
+        quadlet_t data = 0x00800000;  // Clear eth1394 bit
+        if (WriteQuadletNode(FW_NODE_BROADCAST, 0, data))
+            std::cout << "EthUdpPort destructor: cleared eth1394 mode" << std::endl;
+    }
+    sockPtr->Close();
+}
+
 nodeid_t EthUdpPort::InitNodes(void)
 {
     //  1. Set IP address of first connected board using UDP broadcast
@@ -276,8 +280,9 @@ nodeid_t EthUdpPort::InitNodes(void)
         outStr << "InitNodes: failed to write IP address" << std::endl;
         return 0;
     }
-    quadlet_t data = 0x0;   // initialize data to 0
         
+    quadlet_t data = 0x0;   // initialize data to 0
+
     // Check hardware version of hub board
     if (!ReadQuadletNode(FW_NODE_BROADCAST, 4, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
@@ -285,6 +290,16 @@ nodeid_t EthUdpPort::InitNodes(void)
     }
     if (data != QLA1_String) {
         outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
+        return 0;
+    }
+
+    // ReadQuadletNode should have updated bus generation
+    FwBusGeneration = newFwBusGeneration;
+    outStr << "InitNodes: Firewire bus generation = " << FwBusGeneration << std::endl;
+
+    data = 0;
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, 1, data)) {
+        outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
         return 0;
     }
 
@@ -315,11 +330,6 @@ nodeid_t EthUdpPort::InitNodes(void)
 bool EthUdpPort::IsOK(void)
 {
     return (sockPtr && (sockPtr->SocketFD != INVALID_SOCKET));
-}
-
-void EthUdpPort::Reset(void)
-{
-    return;
 }
 
 bool EthUdpPort::AddBoard(BoardIO *board)
@@ -390,6 +400,7 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
     int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), FW_QRESPONSE_SIZE+FW_EXTRA_SIZE, ReceiveTimeout);
     if (nRecv == FW_EXTRA_SIZE) {
         outStr << "ReadQuadlet: only extra data" << std::endl;
+        ProcessExtraData(reinterpret_cast<const unsigned char *>(recvPacket));
         return false;
     }
     else if (nRecv != static_cast<int>(FW_QRESPONSE_SIZE+FW_EXTRA_SIZE)) {
@@ -411,6 +422,9 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
 
 bool EthUdpPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
 {
+    if (!CheckFwBusGeneration("EthUdpPort::WriteQuadletNode"))
+        return false;
+
     // Create buffer that is large enough for Firewire packet
     quadlet_t buffer[(ETH_ALIGN32+FW_CTRL_SIZE+FW_QWRITE_SIZE)/sizeof(quadlet_t)];
 
@@ -438,6 +452,9 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
+
+    if (!CheckFwBusGeneration("EthUdpPort::ReadBlock"))
+        return false;
 
     nodeid_t node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {
@@ -480,8 +497,15 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     size_t packetSize = FW_BRESPONSE_HEADER_SIZE + nbytes + FW_CRC_SIZE + FW_EXTRA_SIZE;   // PK TEMP
     quadlet_t *recvPacket = new quadlet_t[packetSize/sizeof(quadlet_t)];
     int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), packetSize, ReceiveTimeout);
-    if (nRecv != static_cast<int>(packetSize)) {
+    if (nRecv == FW_EXTRA_SIZE) {
+        outStr << "ReadBlock: only extra data" << std::endl;
+        ProcessExtraData(reinterpret_cast<const unsigned char *>(recvPacket));
+        delete [] recvPacket;
+        return false;
+    }
+    else if (nRecv != static_cast<int>(packetSize)) {
         outStr << "ReadBlock: failed to receive read response via UDP: return value = " << nRecv << ", expected = " << packetSize << std::endl;
+        delete [] recvPacket;
         return false;
     }
     if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), nbytes, node, EthBasePort::BRESPONSE, fw_tl)) {
@@ -503,6 +527,9 @@ bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *w
         outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
+
+    if (!CheckFwBusGeneration("EthUdpPort::WriteBlock"))
+        return false;
 
     nodeid_t node = ConvertBoardToNode(boardId);
     if (node == MAX_NODES) {

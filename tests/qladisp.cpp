@@ -540,7 +540,8 @@ int main(int argc, char** argv)
         }
         Port->WriteAllBoards();
 
-        mvwprintw(stdscr, 1, lm+41, "dt: %f",  (1.0 / 49125.0) * maxTime);
+        mvwprintw(stdscr, 1, lm+38, "Gen: %d",  Port->GetBusGeneration());
+        mvwprintw(stdscr, 1, lm+52, "dt: %f",  (1.0 / 49125.0) * maxTime);
 
         wrefresh(stdscr);
         usleep(500);

@@ -25,7 +25,7 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #endif
 
 #include "BasePort.h"
-
+#include "Amp1394Time.h"
 
 BasePort::BasePort(int portNum, std::ostream &ostr):
         outStr(ostr),
@@ -38,6 +38,8 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         ReadSequence_(0),
         ReadErrorCounter_(0),
         PortNum(portNum),
+        FwBusGeneration(0),
+        newFwBusGeneration(0),
         NumOfNodes_(0),
         NumOfBoards_(0),
         BoardInUseMask_(0),
@@ -85,6 +87,12 @@ bool BasePort::SetProtocol(ProtocolType prot) {
             break;
     }
     return (Protocol_ == prot);
+}
+
+void BasePort::Reset(void)
+{
+    Cleanup();
+    Init();
 }
 
 bool BasePort::ScanNodes(void)
@@ -293,6 +301,33 @@ nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
     return node;
 }
 
+bool BasePort::CheckFwBusGeneration(const std::string &caller) const
+{
+    bool ret = (FwBusGeneration == newFwBusGeneration);
+    if (!ret) {
+        outStr << caller << ": Firewire bus reset, old generation = " << FwBusGeneration
+               << ", new generation = " << newFwBusGeneration << std::endl;
+    }
+    return ret;
+}
+
+bool BasePort::CheckScanNodes(const std::string &caller)
+{
+    bool ret = true;
+    if (FwBusGeneration != newFwBusGeneration) {
+        unsigned int oldFwBusGeneration = FwBusGeneration;
+        UpdateBusGeneration(newFwBusGeneration);
+        if (GetPortType() == PORT_FIREWIRE)
+            Amp1394_Sleep(1.0);
+        ret = ScanNodes();
+        if (!ret) {
+            outStr << caller << ": failed to rescan nodes" << std::endl;
+            UpdateBusGeneration(oldFwBusGeneration);
+        }
+    }
+    return ret;
+}
+
 bool BasePort::ReadAllBoards(void)
 {
     if (!IsOK()) {
@@ -303,6 +338,9 @@ bool BasePort::ReadAllBoards(void)
     if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
         return ReadAllBoardsBroadcast();
     }
+
+    if (!CheckScanNodes("BasePort::ReadAllBoards"))
+        return false;
 
     bool allOK = true;
     bool noneRead = true;
@@ -345,6 +383,9 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         outStr << "BasePort::ReadAllBoardsBroadcast: port not initialized" << std::endl;
         return false;
     }
+
+    if (!CheckScanNodes("BasePort::ReadAllBoardsBroadcast"))
+        return false;
 
     bool allOK = true;
     bool noneRead = true;
@@ -429,6 +470,9 @@ bool BasePort::WriteAllBoards(void)
         return WriteAllBoardsBroadcast();
     }
 
+    if (!CheckScanNodes("BasePort::WriteAllBoards"))
+        return false;
+
     bool allOK = true;
     bool noneWritten = true;
     for (unsigned int board = 0; board < max_board; board++) {
@@ -483,6 +527,9 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         outStr << "BasePort::WriteAllBoardsBroadcast: port not initialized" << std::endl;
         return false;
     }
+
+    if (!CheckScanNodes("BasePort::WriteAllBoardsBroadcast"))
+        return false;
 
     // sanity check vars
     bool allOK = true;

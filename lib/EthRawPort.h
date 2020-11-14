@@ -64,6 +64,9 @@ protected:
     //! Initialize EthRaw port
     bool Init(void);
 
+    //! Cleanup EthRaw port
+    void Cleanup(void);
+
     //! Initialize nodes on the bus; called by ScanNodes
     // \return Maximum number of nodes on bus (0 if error)
     nodeid_t InitNodes(void);
@@ -84,8 +87,6 @@ public:
     PortType GetPortType(void) const { return PORT_ETH_RAW; }
 
     bool IsOK(void);
-
-    void Reset(void);
 
     // Add board to list of boards in use
     bool AddBoard(BoardIO *board);

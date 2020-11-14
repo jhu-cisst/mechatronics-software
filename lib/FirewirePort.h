@@ -88,9 +88,11 @@ public:
     // Call lsof to count the number of users, assumes /dev/fw<port-number>
     int NumberOfUsers(void);
 
-    void Reset(void);
-
     bool IsOK(void) { return (handle != NULL); }
+
+    unsigned int GetBusGeneration(void) const;
+
+    void UpdateBusGeneration(unsigned int gen);
 
     // Adds board(s)
     bool AddBoard(BoardIO *board);
