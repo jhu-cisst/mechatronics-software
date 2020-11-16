@@ -490,15 +490,15 @@ bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     size_t packetSize = GetWritePrefixSize() + nbytes + GetWritePostfixSize();
 
     // Check for real-time write
-    unsigned char *wdata_base = reinterpret_cast<unsigned char *>(wdata)-GetWritePrefixSize();
+    unsigned char *wdata_base = reinterpret_cast<unsigned char *>(wdata)-GetWriteQuadAlign()-GetWritePrefixSize();
     if (wdata_base == WriteBufferBroadcast) {
-        packet = WriteBufferBroadcast;
+        packet = WriteBufferBroadcast+GetWriteQuadAlign();
     }
     else {
         unsigned char bId = boardId&FW_NODE_MASK;
         if ((bId < BoardIO::MAX_BOARDS) &&
             (wdata_base == WriteBuffer[bId])) {
-           packet = WriteBuffer[bId];
+            packet = WriteBuffer[bId]+GetWriteQuadAlign();
         }
     }
 

@@ -445,7 +445,7 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     size_t packetSize = GetReadPrefixSize() + nbytes + GetReadPostfixSize();
 
     // Check for real-time read
-    unsigned char *rdata_base = reinterpret_cast<unsigned char *>(rdata)-GetReadPrefixSize();
+    unsigned char *rdata_base = reinterpret_cast<unsigned char *>(rdata)-GetReadQuadAlign()-GetReadPrefixSize();
     if (rdata_base == ReadBufferBroadcast) {
         packet = ReadBufferBroadcast;
     }

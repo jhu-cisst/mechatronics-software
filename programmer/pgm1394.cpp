@@ -105,9 +105,9 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         Callback_StartTime = Amp1394_GetTime();
         while (page < numBytes) {
             unsigned int bytesToProgram = ((numBytes-page)<256UL) ? (numBytes-page) : 256UL;
-            if (Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram,
-                                      PromProgramCallback) != bytesToProgram) {
-                std::cout << "Failed to program page " << addr << std::endl;
+            int nRet = Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram, PromProgramCallback);
+            if ((nRet < 0) || (static_cast<unsigned int>(nRet) != bytesToProgram)) {
+                std::cout << "Failed to program page " << addr << ", rc = " << nRet << std::endl;
                 return false;
             }
             page += bytesToProgram;
