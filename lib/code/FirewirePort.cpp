@@ -174,7 +174,8 @@ void FirewirePort::Cleanup(void)
 unsigned int FirewirePort::GetBusGeneration(void) const
 {
     if (FwBusGeneration != raw1394_get_generation(handle))
-        outStr << "FirewirePort::GetBusGeneration mismatch: " << FwBusGeneration << ", " << raw1394_get_generation(handle) << std::endl;
+        outStr << "FirewirePort::GetBusGeneration mismatch: " << FwBusGeneration
+               << ", " << raw1394_get_generation(handle) << std::endl;
     return FwBusGeneration;
 }
 
@@ -295,20 +296,18 @@ void FirewirePort::OnNoneWritten(void)
 
 bool FirewirePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char)
 {
-    if (!CheckFwBusGeneration("FirewirePort::ReadQuadletNode"))
+    if (!CheckFwBusGeneration("FirewirePort::ReadQuadlet"))
         return false;
 
     bool ret = !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
     if (ret)
         data = bswap_32(data);
-    else
-        outStr << "ReadQuadletNode: " << strerror(errno) << std::endl;
     return ret;
 }
 
 bool FirewirePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char)
 {
-    if (!CheckFwBusGeneration("FirewirePort::WriteQuadletNode"))
+    if (!CheckFwBusGeneration("FirewirePort::WriteQuadlet"))
         return false;
 
     data = bswap_32(data);
@@ -317,18 +316,12 @@ bool FirewirePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t da
 
 bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
 {
-    if (!CheckFwBusGeneration("FirewirePort::ReadQuadlet"))
-        return false;
-
     nodeid_t node = ConvertBoardToNode(boardId);
     return (node < MAX_NODES) ? ReadQuadletNode(node, addr, data) : false;
 }
 
 bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
 {
-    if (!CheckFwBusGeneration("FirewirePort::WriteQuadlet"))
-        return false;
-
     nodeid_t node = ConvertBoardToNode(boardId);
     return (node < MAX_NODES) ? WriteQuadletNode(node, addr, data) : false;
 }
@@ -336,18 +329,16 @@ bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_
 bool FirewirePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
                                  unsigned int nbytes)
 {
-    if (!CheckFwBusGeneration("FirewirePort::ReadBlockNode"))
+    if (!CheckFwBusGeneration("FirewirePort::ReadBlock"))
         return false;
 
+    rtRead = true;   // for debugging
     return !raw1394_read(handle, baseNodeId+node, addr, nbytes, rdata);
 }
 
 bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                              unsigned int nbytes)
 {
-    if (!CheckFwBusGeneration("FirewirePort::ReadBlock"))
-        return false;
-
     nodeid_t node = ConvertBoardToNode(boardId);
     return (node < MAX_NODES) ? ReadBlockNode(node, addr, rdata, nbytes) : false;
 }
@@ -355,18 +346,16 @@ bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
 bool FirewirePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
                                   unsigned int nbytes)
 {
-    if (!CheckFwBusGeneration("FirewirePort::WriteBlockNode"))
+    if (!CheckFwBusGeneration("FirewirePort::WriteBlock"))
         return false;
 
+    rtWrite = true;   // for debugging
     return !raw1394_write(handle, baseNodeId+node, addr, nbytes, wdata);
 }
 
 bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                               unsigned int nbytes)
 {
-    if (!CheckFwBusGeneration("FirewirePort::WriteBlock"))
-        return false;
-
     nodeid_t node = ConvertBoardToNode(boardId);
     return (node < MAX_NODES) ? WriteBlockNode(node, addr, wdata, nbytes) : false;
 }

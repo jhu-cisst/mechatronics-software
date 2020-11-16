@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -48,17 +48,6 @@ protected:
      */
     int eth1394_read(nodeid_t node, nodeaddr_t addr, size_t length, quadlet_t* buffer, bool useEthernetBroadcast = false);
 
-    /**
-     * \brief Write FireWire packet via Ethernet
-     *
-     * \param node        destination board number
-     * \param buffer      address of pre-allocated buffer (includes space for Ethernet header)
-     * \param length_fw   length of FireWire packet, in quadlets
-     *
-     * \return true on success; false otherwise
-     */
-    bool eth1394_write(nodeid_t node, quadlet_t* buffer, size_t length_fw, bool useEthernetBroadcast = false);
-
     int make_ethernet_header(unsigned char *buffer, unsigned int numBytes);
 
     //! Initialize EthRaw port
@@ -77,6 +66,9 @@ protected:
     //! Write quadlet to node (internal method called by WriteQuadlet)
     bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
 
+    // Send packet via PCAP
+    bool PacketSend(char *packet, size_t nbytes, bool useEthernetBroadcast);
+
 public:
     EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
@@ -88,11 +80,19 @@ public:
 
     bool IsOK(void);
 
-    // Add board to list of boards in use
-    bool AddBoard(BoardIO *board);
+    unsigned int GetWritePrefixSize(void) const
+        { return (ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE+FW_BWRITE_HEADER_SIZE); }
+    unsigned int GetWritePostfixSize(void) const
+        { return FW_CRC_SIZE; }
+    unsigned int GetReadPrefixSize(void) const
+        { return (ETH_FRAME_HEADER_SIZE+FW_BRESPONSE_HEADER_SIZE); }
+    unsigned int GetReadPostfixSize(void) const
+        { return (FW_CRC_SIZE+FW_EXTRA_SIZE); }
 
-    // Remove board from list of boards in use
-    bool RemoveBoard(unsigned char boardId);
+    unsigned int GetWriteQuadAlign(void) const
+        { return ((ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE)%sizeof(quadlet_t)); }
+    unsigned int GetReadQuadAlign(void) const
+        { return (ETH_FRAME_HEADER_SIZE%sizeof(quadlet_t)); }
 
     // ReadQuadlet in EthBasePort
 
@@ -101,10 +101,6 @@ public:
     // Read a block from the specified board
     bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
                    unsigned int nbytes);
-
-    // Write a block to the specified board
-    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                    unsigned int nbytes);
 
     //****************** Static methods ***************************
 

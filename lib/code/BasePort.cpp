@@ -49,11 +49,27 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     size_t i;
     for (i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardList[i] = 0;
+        ReadBuffer[i] = 0;
+        WriteBuffer[i] = 0;
         FirmwareVersion[i] = 0;
         Board2Node[i] = MAX_NODES;
     }
+    ReadBufferBroadcast = 0;
+    WriteBufferBroadcast = 0;
+    GenericBuffer = reinterpret_cast<unsigned char *>(new quadlet_t[FW_MAX_PACKET_SIZE/sizeof(quadlet_t)]);
     for (i = 0; i < MAX_NODES; i++)
         Node2Board[i] = BoardIO::MAX_BOARDS;
+}
+
+BasePort::~BasePort()
+{
+    for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
+        delete [] ReadBuffer[i];
+        delete [] WriteBuffer[i];
+    }
+    delete [] ReadBufferBroadcast;
+    delete [] WriteBufferBroadcast;
+    delete [] GenericBuffer;
 }
 
 bool BasePort::SetProtocol(ProtocolType prot) {
@@ -72,14 +88,32 @@ bool BasePort::SetProtocol(ProtocolType prot) {
     switch (prot) {
         case BasePort::PROTOCOL_SEQ_RW:
             outStr << "System running in NON broadcast mode" << std::endl;
+            if (Protocol_ != prot) {
+                SetReadBuffer();
+                SetWriteBuffer();
+            }
             Protocol_ = prot;
             break;
         case BasePort::PROTOCOL_SEQ_R_BC_W:
             outStr << "System running with broadcast write" << std::endl;
+            if (Protocol_ != prot) {
+                SetReadBuffer();
+                if (IsNoBoardsRev7_)
+                    SetWriteBuffer();
+                else
+                    SetWriteBufferBroadcast();
+            }
             Protocol_ = prot;
             break;
         case BasePort::PROTOCOL_BC_QRW:
             outStr << "System running with broadcast query, read, and write" << std::endl;
+            if (Protocol_ != prot) {
+                SetReadBufferBroadcast();
+                if (IsNoBoardsRev7_)
+                    SetWriteBuffer();
+                else
+                    SetWriteBufferBroadcast();
+            }
             Protocol_ = prot;
             break;
         default:
@@ -87,6 +121,50 @@ bool BasePort::SetProtocol(ProtocolType prot) {
             break;
     }
     return (Protocol_ == prot);
+}
+
+void BasePort::SetReadBuffer(void)
+{
+    for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
+        BoardIO *board = BoardList[i];
+        if (board)
+            board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[i]+GetReadPrefixSize()));
+    }
+}
+
+void BasePort::SetWriteBuffer(void)
+{
+    for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
+        BoardIO *board = BoardList[i];
+        if (board)
+            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[i]+GetWritePrefixSize()));
+    }
+}
+
+void BasePort::SetReadBufferBroadcast(void)
+{
+    if (!ReadBufferBroadcast) {
+        size_t numReadBytes = GetReadQuadAlign()+GetReadPrefixSize()+FW_MAX_PACKET_SIZE+GetReadPostfixSize();
+        quadlet_t *buf = new quadlet_t[numReadBytes/sizeof(quadlet_t)];
+        ReadBufferBroadcast = reinterpret_cast<unsigned char *>(buf)+GetReadQuadAlign();
+    }
+}
+
+void BasePort::SetWriteBufferBroadcast(void)
+{
+    if (!WriteBufferBroadcast) {
+        size_t numWriteBytes = GetWriteQuadAlign()+GetWritePrefixSize()+FW_MAX_PACKET_SIZE+GetWritePostfixSize();
+        quadlet_t *buf = new quadlet_t[numWriteBytes/sizeof(quadlet_t)];
+        WriteBufferBroadcast = reinterpret_cast<unsigned char *>(buf)+GetWriteQuadAlign();
+    }
+    unsigned char *curPtr = WriteBufferBroadcast+GetWritePrefixSize();
+    for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
+        BoardIO *board = BoardList[i];
+        if (board) {
+            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(curPtr));
+            curPtr += board->GetWriteNumBytes();
+        }
+    }
 }
 
 void BasePort::Reset(void)
@@ -210,6 +288,17 @@ bool BasePort::AddBoard(BoardIO *board)
     }
     BoardList[id] = board;
     board->port = this;
+    // We allocate the individual buffers, even if the current protocol would not use them
+    // (e.g., a broadcast protocol), because it simplifies the logic, especially if the protocol
+    // is changed later.
+    delete [] ReadBuffer[id];
+    size_t numReadBytes = GetReadQuadAlign()+GetReadPrefixSize()+board->GetReadNumBytes()+GetReadPostfixSize();
+    quadlet_t *rdBuf = new quadlet_t[numReadBytes/sizeof(quadlet_t)];
+    ReadBuffer[id] = reinterpret_cast<unsigned char *>(rdBuf)+GetReadQuadAlign();
+    delete [] WriteBuffer[id];
+    size_t numWriteBytes = GetWriteQuadAlign()+GetWritePrefixSize()+board->GetWriteNumBytes()+GetWritePostfixSize();
+    quadlet_t *wrBuf = new quadlet_t[numWriteBytes/sizeof(quadlet_t)];
+    WriteBuffer[id] = reinterpret_cast<unsigned char *>(wrBuf)+GetWriteQuadAlign();
 
     if (id >= max_board)
         max_board = id+1;
@@ -217,6 +306,28 @@ bool BasePort::AddBoard(BoardIO *board)
     BoardInUseMask_ = (BoardInUseMask_ | (1 << id));
 
     NumOfBoards_++;   // increment board counts
+
+    // Now, set the BoardIO buffers based on the current protocol. Note that we have to do this here
+    // and in SetProtocol because we do not make any assumptions about which is called last.
+    if (Protocol_ == BasePort::PROTOCOL_SEQ_RW) {
+        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadPrefixSize()));
+        board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWritePrefixSize()));
+    }
+    else if (Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) {
+        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadPrefixSize()));
+        if (IsNoBoardsRev7_)
+            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWritePrefixSize()));
+        else
+            SetWriteBufferBroadcast();
+    }
+    else if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
+        SetReadBufferBroadcast();
+        if (IsNoBoardsRev7_)
+            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWritePrefixSize()));
+        else
+            SetWriteBufferBroadcast();
+    }
+
     return true;
 }
 
@@ -235,8 +346,16 @@ bool BasePort::RemoveBoard(unsigned char boardId)
     // update BoardInuseMask_
     BoardInUseMask_ = (BoardInUseMask_ & (~(1 << boardId)));
 
+    // set board to use internal buffers
+    board->SetReadBuffer(0);
+    board->SetWriteBuffer(0);
+
     BoardList[boardId] = 0;
     board->port = 0;
+    delete [] ReadBuffer[boardId];
+    ReadBuffer[boardId] = 0;
+    delete [] WriteBuffer[boardId];
+    WriteBuffer[boardId] = 0;
     NumOfBoards_--;
 
     if (boardId >= max_board-1) {
@@ -342,6 +461,8 @@ bool BasePort::ReadAllBoards(void)
     if (!CheckScanNodes("BasePort::ReadAllBoards"))
         return false;
 
+    bool rtRead = true;   // for debugging
+
     bool allOK = true;
     bool noneRead = true;
     for (unsigned int board = 0; board < max_board; board++) {
@@ -374,6 +495,8 @@ bool BasePort::ReadAllBoards(void)
     if (noneRead) {
         OnNoneRead();
     }
+    if (!rtRead)
+        outStr << "ReadAllBoards: rtRead is false" << std::endl;
     return allOK;
 }
 
@@ -386,6 +509,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 
     if (!CheckScanNodes("BasePort::ReadAllBoardsBroadcast"))
         return false;
+
+    bool rtRead = true;   // for debugging
 
     bool allOK = true;
     bool noneRead = true;
@@ -403,11 +528,6 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     // Wait for broadcast read data
     WaitBroadcastRead();
 
-    // initialize max buffer
-    const int hubReadSizeMax = 464;  // 16 * 29 = 464 max
-    quadlet_t hubReadBuffer[hubReadSizeMax];
-    memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
-
     int readSize;        // Block size per board (depends on firmware version)
     if (IsNoBoardsRev7_)
         readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
@@ -419,6 +539,9 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
     else
         hubReadSize = readSize*NumOfBoards_;         // Rev 7: NumOfBoards * 29
+
+    quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadPrefixSize());
+    memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
 
     bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
     if (!ret) {
@@ -445,7 +568,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 outStr << "block read error: counter = " << std::dec << errorcounter << ", read = "
                        << seq << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
             }
-            memcpy(BoardList[board]->GetReadBuffer(), &(hubReadBuffer[boardOffset+1]), (readSize-1) * sizeof(quadlet_t));
+            BoardList[board]->SetReadBuffer(&(hubReadBuffer[boardOffset+1]));
             BoardList[board]->SetReadValid(ret);
             if (ret) noneRead = false;
             else allOK = false;
@@ -455,6 +578,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     if (noneRead) {
         OnNoneRead();
     }
+    if (!rtRead)
+        outStr << "ReadAllBoardsBroadcast: rtRead is false" << std::endl;
 
     return allOK;
 }
@@ -473,11 +598,12 @@ bool BasePort::WriteAllBoards(void)
     if (!CheckScanNodes("BasePort::WriteAllBoards"))
         return false;
 
+    rtWrite = true;   // for debugging
     bool allOK = true;
     bool noneWritten = true;
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            quadlet_t *buf = BoardList[board]->GetWriteBufferData();
+            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
             if (FirmwareVersion[board] < 7) {
                 // Rev 1-6 firmware: the last quadlet (Status/Control register)
@@ -518,6 +644,8 @@ bool BasePort::WriteAllBoards(void)
     if (noneWritten) {
         OnNoneWritten();
     }
+    if (!rtWrite)
+        outStr << "WriteAllBoards: rtWrite is false" << std::endl;
     return allOK;
 }
 
@@ -531,27 +659,26 @@ bool BasePort::WriteAllBoardsBroadcast(void)
     if (!CheckScanNodes("BasePort::WriteAllBoardsBroadcast"))
         return false;
 
+    bool rtWrite = true;   // for debugging
+
     // sanity check vars
     bool allOK = true;
     bool noneWritten = true;
 
-    // loop 1: broadcast write block
-
     // construct broadcast write buffer
-    const int numOfChannel = 4;
-    quadlet_t bcBuffer[(numOfChannel+1) * BoardIO::MAX_BOARDS];  // +1 for Rev 7
-    memset(bcBuffer, 0, sizeof(bcBuffer));
-    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
-    int numOfBoards = 0;
+    quadlet_t *bcBuffer = reinterpret_cast<quadlet_t *>(WriteBufferBroadcast + GetWritePrefixSize());
 
+    // Only do memory copy for firmware < 7
+    // For firmware Rev 7, the data should already be in WriteBufferBroadcast.
+    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            numOfBoards++;
-            quadlet_t *buf = BoardList[board]->GetWriteBufferData();
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            if (FirmwareVersion[board] < 7)
+            if (IsNoBoardsRev7_) {
+                quadlet_t *buf = BoardList[board]->GetWriteBuffer();
                 numBytes -= 4;   // -4 for ctrl offset
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes);
+                memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes);
+            }
             // bcBufferOffset equals total numBytes to write, when the loop ends
             bcBufferOffset = bcBufferOffset + numBytes;
         }
@@ -567,13 +694,13 @@ bool BasePort::WriteAllBoardsBroadcast(void)
                          bcBuffer, bcBufferOffset);
 #endif
 
-    // loop 2: send out control quadlet if necessary (firmware prior to Rev 7);
-    //         also check for data collection
+    // Send out control quadlet if necessary (firmware prior to Rev 7);
+    //    also check for data collection
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             if (FirmwareVersion[board] < 7) {
                 bool noneWrittenThisBoard = true;
-                quadlet_t *buf = BoardList[board]->GetWriteBufferData();
+                quadlet_t *buf = BoardList[board]->GetWriteBuffer();
                 unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
                 unsigned int numQuads = numBytes/4;
                 quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
@@ -605,6 +732,8 @@ bool BasePort::WriteAllBoardsBroadcast(void)
     if (noneWritten) {
         OnNoneWritten();
     }
+    if (!rtWrite)
+        outStr << "WriteAllBoardsBroadcast: rtWrite is false" << std::endl;
 
     // return
     return allOK;

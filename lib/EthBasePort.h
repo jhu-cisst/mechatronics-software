@@ -76,6 +76,9 @@ protected:
     // WriteAllBoardsBroadcast.
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
+    // Send packet
+    virtual bool PacketSend(char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
+
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     void OnNoneRead(void);
 
@@ -86,12 +89,12 @@ protected:
     // to be different than the one on the PC.
     virtual void OnFwBusReset(unsigned int FwBusGeneration_FPGA);
 
-    static void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
+    void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
 
-    static void make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl);
-    static void make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned int tl);
-    static void make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl);
-    static void make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl);
+    void make_qread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tl);
+    void make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned int tl);
+    void make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl);
+    void make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl);
 
 public:
 
@@ -130,6 +133,9 @@ public:
 
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
+
+    // Write a block to the specified board
+    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
     /*!
      \brief Write the broadcast read request

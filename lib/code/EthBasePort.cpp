@@ -466,6 +466,57 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
     return (boardId < BoardIO::MAX_BOARDS) ? ReadBlock(boardId, addr, rdata, nbytes) : false;
 }
 
+bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
+{
+    if (nbytes == 4) {
+        return WriteQuadlet(boardId, addr, *wdata);
+    }
+    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
+        outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
+        return false;
+    }
+
+    if (!CheckFwBusGeneration("EthBasePort::WriteBlock"))
+        return false;
+
+    nodeid_t node = ConvertBoardToNode(boardId);
+    if (node == MAX_NODES) {
+        outStr << "WriteBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
+        return false;
+    }
+
+    // Packet to send
+    unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
+    size_t packetSize = GetWritePrefixSize() + nbytes + GetWritePostfixSize();
+
+    // Check for real-time write
+    unsigned char *wdata_base = reinterpret_cast<unsigned char *>(wdata)-GetWritePrefixSize();
+    if (wdata_base == WriteBufferBroadcast) {
+        packet = WriteBufferBroadcast;
+    }
+    else {
+        unsigned char bId = boardId&FW_NODE_MASK;
+        if ((bId < BoardIO::MAX_BOARDS) &&
+            (wdata_base == WriteBuffer[bId])) {
+           packet = WriteBuffer[bId];
+        }
+    }
+
+    // Increment transaction label
+    fw_tl = (fw_tl+1)&FW_TL_MASK;
+
+    packet[0] = 0;
+    if (boardId&FW_NODE_NOFORWARD_MASK) packet[0] |= FW_CTRL_NOFORWARD;
+    packet[1] = FwBusGeneration;
+
+    // Build FireWire packet
+    quadlet_t *packet_fw = reinterpret_cast<quadlet_t *>(packet+GetWritePrefixSize()-FW_BWRITE_HEADER_SIZE);
+    make_bwrite_packet(packet_fw, node, addr, wdata, nbytes, fw_tl);
+
+    // Now, send the packet
+    return PacketSend(reinterpret_cast<char *>(packet), packetSize, boardId&FW_NODE_ETH_BROADCAST_MASK);
+}
+
 bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
                                  unsigned int nbytes)
 {
@@ -600,17 +651,25 @@ void EthBasePort::make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t
 void EthBasePort::make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl)
 {
     make_1394_header(packet, node, addr, EthBasePort::BWRITE, tl);
-    packet[3] = bswap_32((nBytes & 0xffff) << 16);
+    // block length
+    packet[3] = bswap_32((nBytes & 0x0000ffff) << 16);
     // header CRC
     packet[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_BWRITE_HEADER_SIZE-FW_CRC_SIZE)));
     // Now, copy the data. We first check if the copy is needed.
     size_t data_offset = FW_BWRITE_HEADER_SIZE/sizeof(quadlet_t);  // data_offset = 20/4 = 5
     // Only copy data if it is not already in packet (i.e., if addresses are not equal).
-    if (data != &packet[data_offset])
+    if (data != &packet[data_offset]) {
+        rtWrite = false;
         memcpy(&packet[data_offset], data, nBytes);
+    }
     // Now, compute the data CRC (assumes nBytes is a multiple of 4 because this is checked in WriteBlock)
     size_t data_crc_offset = data_offset + nBytes/sizeof(quadlet_t);
     packet[data_crc_offset] = bswap_32(BitReverse32(crc32(0U, static_cast<void *>(packet+data_offset), nBytes)));
+#if 0 // ALTERNATIVE IMPLEMENTATION
+    // CRC
+    quadlet_t *fw_crc = fw_data + (nbytes/sizeof(quadlet_t));
+    *fw_crc = bswap_32(BitReverse32(crc32(0U, (void*)fw_data, nbytes)));
+#endif
 }
 
 bool EthBasePort::checkCRC(const unsigned char *packet)
@@ -713,7 +772,7 @@ uint32_t BitReverse32(uint32_t input)
 
 // The sample use of CRC
 // crc = BitReverse32(crc32(0U,(void*)array_char,len_in_byte));
-// It is also needed to be byteSwaped before putting into stream
+// It is also needed to be byteSwapped before putting into stream
 uint32_t crc32(uint32_t crc, const void *buf, size_t size)
 {
     const uint8_t *p;

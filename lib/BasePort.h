@@ -48,6 +48,9 @@ http://www.cisst.org/cisst/license.txt.
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
 
+// Maximum Firewire packet size in bytes (at 400 Mbits/sec)
+const unsigned int FW_MAX_PACKET_SIZE = 2048;
+
 // The FireWire node number is represented by an unsigned char (8 bits), but only 6
 // bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
 // uses the upper two bits as flags to indicate whether the packet should be sent
@@ -103,6 +106,19 @@ protected:
     unsigned int max_board;         // highest index of used (non-zero) entry in BoardList
     unsigned char HubBoard;         // board number of hub/bridge
 
+    // Memory for ReadAllBoards/WriteAllBoards
+    unsigned char *ReadBuffer[BoardIO::MAX_BOARDS];
+    unsigned char *WriteBuffer[BoardIO::MAX_BOARDS];
+    // Memory for ReadAllBoardsBroadcast/WriteAllBoardsBroadcast
+    unsigned char *WriteBufferBroadcast;
+    unsigned char *ReadBufferBroadcast;
+    // Memory for generic use
+    unsigned char *GenericBuffer;
+
+    // For debugging
+    bool rtWrite;
+    bool rtRead;
+
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
@@ -115,6 +131,13 @@ protected:
 
     // Cleanup port (called by destructor and Reset)
     virtual void Cleanup(void) = 0;
+
+    // Following methods assign the memory used by each board,
+    // based on the protocol.
+    void SetReadBuffer(void);
+    void SetWriteBuffer(void);
+    void SetReadBufferBroadcast(void);
+    void SetWriteBufferBroadcast(void);
 
     // Initialize nodes on the bus; called by ScanNodes
     // \return Maximum number of nodes on bus (0 if error)
@@ -149,7 +172,7 @@ public:
     // Constructor
     BasePort(int portNum, std::ostream &ostr = std::cerr);
 
-    virtual ~BasePort() {}
+    virtual ~BasePort();
 
     // Set protocol type
     bool SetProtocol(ProtocolType prot);
@@ -226,6 +249,20 @@ public:
 
     // Update the bus generation number
     virtual void UpdateBusGeneration(unsigned int gen) = 0;
+
+    // Port-specific prefix/postfix sizes (in bytes).
+    // These are non-zero for the Ethernet ports.
+    virtual unsigned int GetWritePrefixSize(void) const = 0;
+    virtual unsigned int GetWritePostfixSize(void) const = 0;
+    virtual unsigned int GetReadPrefixSize(void) const = 0;
+    virtual unsigned int GetReadPostfixSize(void) const = 0;
+
+    // Quadlet alignment offset, used to align buffers on 32-bit boundaries.
+    // Probably not necessary for modern processors/compilers.
+    virtual unsigned int GetWriteQuadAlign(void) const = 0;
+    virtual unsigned int GetReadQuadAlign(void) const = 0;
+
+    //*********************** Virtual methods **********************************
 
     // Check whether bus generation has changed
     virtual bool CheckFwBusGeneration(const std::string &caller) const;

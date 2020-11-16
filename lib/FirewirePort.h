@@ -94,6 +94,14 @@ public:
 
     void UpdateBusGeneration(unsigned int gen);
 
+    unsigned int GetWritePrefixSize(void) const   { return 0; }
+    unsigned int GetWritePostfixSize(void) const  { return 0; }
+    unsigned int GetReadPrefixSize(void) const    { return 0; }
+    unsigned int GetReadPostfixSize(void) const   { return 0; }
+
+    unsigned int GetWriteQuadAlign(void) const    { return 0; }
+    unsigned int GetReadQuadAlign(void) const     { return 0; }
+
     // Adds board(s)
     bool AddBoard(BoardIO *board);
 

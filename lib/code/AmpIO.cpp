@@ -97,7 +97,7 @@ AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), Nu
     memset(read_buffer_internal, 0, sizeof(read_buffer_internal));
     memset(write_buffer_internal, 0, sizeof(write_buffer_internal));
     SetReadBuffer(0);
-    SetWriteBuffer(0,0);
+    SetWriteBuffer(0);
 }
 
 AmpIO::~AmpIO()
@@ -119,26 +119,24 @@ void AmpIO::SetReadBuffer(quadlet_t *buf)
     ReadBuffer = buf ? buf : read_buffer_internal;
 }
 
-void AmpIO::SetWriteBuffer(quadlet_t *buf, size_t data_offset)
+void AmpIO::SetWriteBuffer(quadlet_t *buf)
 {
     if (buf) {
         WriteBuffer = buf;
-        WriteBufferData = buf + data_offset;
-        memset(WriteBufferData, 0, GetWriteNumBytes());
+        memset(WriteBuffer, 0, GetWriteNumBytes());
     }
     else {
         WriteBuffer = write_buffer_internal;
-        WriteBufferData = write_buffer_internal;
     }
 }
 
 bool AmpIO::WriteBufferResetsWatchdog(void) const
 {
     return
-        (bswap_32(WriteBufferData[WB_CURR_OFFSET + 0]) & VALID_BIT)
-        | (bswap_32(WriteBufferData[WB_CURR_OFFSET + 1]) & VALID_BIT)
-        | (bswap_32(WriteBufferData[WB_CURR_OFFSET + 2]) & VALID_BIT)
-        | (bswap_32(WriteBufferData[WB_CURR_OFFSET + 3]) & VALID_BIT);
+        (bswap_32(WriteBuffer[WB_CURR_OFFSET + 0]) & VALID_BIT)
+        | (bswap_32(WriteBuffer[WB_CURR_OFFSET + 1]) & VALID_BIT)
+        | (bswap_32(WriteBuffer[WB_CURR_OFFSET + 2]) & VALID_BIT)
+        | (bswap_32(WriteBuffer[WB_CURR_OFFSET + 3]) & VALID_BIT);
 }
 
 AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
@@ -673,11 +671,11 @@ void AmpIO::SetPowerEnable(bool state)
         enable_mask = bswap_32(enable_mask);
         state_mask = bswap_32(state_mask);
     }
-    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
+    WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
     if (state)
-        WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
     else
-        WriteBufferData[WB_CTRL_OFFSET] &= ~state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
 }
 
 bool AmpIO::SetAmpEnable(unsigned int index, bool state)
@@ -689,11 +687,11 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
             enable_mask = bswap_32(enable_mask);
             state_mask = bswap_32(state_mask);
         }
-        WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
+        WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
         if (state)
-            WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
+            WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
         else
-            WriteBufferData[WB_CTRL_OFFSET] &= ~state_mask;
+            WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
         return true;
     }
     return false;
@@ -711,7 +709,7 @@ bool AmpIO::SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state)
     }
     // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
     // with different masks
-    WriteBufferData[WB_CTRL_OFFSET] = (WriteBufferData[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
+    WriteBuffer[WB_CTRL_OFFSET] = (WriteBuffer[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
     return true;
 }
 
@@ -723,11 +721,11 @@ void AmpIO::SetSafetyRelay(bool state)
         enable_mask = bswap_32(enable_mask);
         state_mask = bswap_32(state_mask);
     }
-    WriteBufferData[WB_CTRL_OFFSET] |=  enable_mask;
+    WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
     if (state)
-        WriteBufferData[WB_CTRL_OFFSET] |=  state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
     else
-        WriteBufferData[WB_CTRL_OFFSET] &= ~state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
 }
 
 bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
@@ -738,7 +736,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
         data |= COLLECT_BIT;
 
     if (index < NUM_CHANNELS) {
-        WriteBufferData[index+WB_CURR_OFFSET] = bswap_32(data);
+        WriteBuffer[index+WB_CURR_OFFSET] = bswap_32(data);
         return true;
     }
     else

@@ -74,11 +74,10 @@ protected:
     // Following methods are for real-time block writes
     // TODO: Consolidate Buffer and BufferData
     void SetWriteValid(bool flag)
-    { writeValid = flag; if (writeValid) memset(GetWriteBufferData(), 0, GetWriteNumBytes()); }
+    { writeValid = flag; if (writeValid) memset(GetWriteBuffer(), 0, GetWriteNumBytes()); }
     virtual unsigned int GetWriteNumBytes() const = 0;
     virtual quadlet_t *GetWriteBuffer() const = 0;
-    virtual quadlet_t *GetWriteBufferData() const = 0;
-    virtual void SetWriteBuffer(quadlet_t *buf, size_t data_offset) = 0;
+    virtual void SetWriteBuffer(quadlet_t *buf) = 0;
 
     virtual bool WriteBufferResetsWatchdog(void) const = 0;
     virtual void CheckCollectCallback() = 0;

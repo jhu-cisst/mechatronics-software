@@ -264,37 +264,6 @@ bool EthRawPort::IsOK(void)
     return (handle != NULL);
 }
 
-bool EthRawPort::AddBoard(BoardIO *board)
-{
-    bool ret = BasePort::AddBoard(board);
-    if (ret) {
-        // Allocate a buffer that is big enough for Ethernet and FireWire headers as well
-        // as the data to be sent.
-        size_t block_write_len = (ETH_HEADER_LEN + FW_CTRL_SIZE + FW_BWRITE_HEADER_SIZE +
-                                  board->GetWriteNumBytes() + FW_CRC_SIZE)/sizeof(quadlet_t);
-        quadlet_t * buf = new quadlet_t[block_write_len];
-        // Offset into the data part of the buffer
-        size_t offset = (ETH_HEADER_LEN + FW_CTRL_SIZE + FW_BWRITE_HEADER_SIZE)/sizeof(quadlet_t);
-        board->SetWriteBuffer(buf, offset);
-    }
-    return ret;
-}
-
-bool EthRawPort::RemoveBoard(unsigned char boardId)
-{
-    bool ret = false;
-    BoardIO *board = BoardList[boardId];
-    if (board) {
-        // Free up the memory that was allocated in AddBoard
-        delete [] BoardList[boardId]->GetWriteBuffer();
-        BoardList[boardId]->SetWriteBuffer(0, 0);
-        ret = BasePort::RemoveBoard(boardId);
-    }
-    else
-        outStr << "RemoveBoard: board " << static_cast<unsigned int>(boardId) << " not in use" << std::endl;
-    return ret;
-}
-
 bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
     if (!CheckFwBusGeneration("EthRawPort::ReadQuadletNode"))
@@ -323,8 +292,7 @@ bool EthRawPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data
     // CRC
     packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, FW_QWRITE_SIZE-FW_CRC_SIZE)));
 
-    size_t length_fw = FW_QWRITE_SIZE/sizeof(quadlet_t);
-    return eth1394_write(node, buffer, length_fw, flags&FW_NODE_ETH_BROADCAST_MASK);
+    return PacketSend(reinterpret_cast<char *>(buffer), FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
@@ -346,72 +314,6 @@ bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
     }
 
     return !eth1394_read(node, addr, nbytes, rdata, boardId&FW_NODE_ETH_BROADCAST_MASK);
-}
-
-bool EthRawPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-    if (nbytes == 4) {
-        return WriteQuadlet(boardId, addr, *wdata);
-    }
-    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
-        return false;
-    }
-
-    if (!CheckFwBusGeneration("EthRawPort::WriteBlock"))
-        return false;
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "WriteBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
-    quadlet_t *frame = 0;     // The entire Ethernet frame (headers and data)
-    // Offset into the data part of the frame
-    size_t data_offset = (ETH_HEADER_LEN + FW_CTRL_SIZE + FW_BWRITE_HEADER_SIZE)/sizeof(quadlet_t);
-
-
-    // Check for real-time write
-    bool realTimeWrite = false;
-    boardId = boardId&FW_NODE_MASK;
-    if (boardId < BoardIO::MAX_BOARDS) {
-        if ((BoardList[boardId]->GetWriteBufferData() == wdata) &&
-            (nbytes <= BoardList[boardId]->GetWriteNumBytes())) {
-            realTimeWrite = true;
-            frame = BoardList[boardId]->GetWriteBuffer();
-        }
-        node = GetNodeId(boardId);
-    }
-
-    if (!realTimeWrite) {
-        size_t block_write_len = data_offset + (nbytes + FW_CRC_SIZE)/sizeof(quadlet_t);
-        frame = new quadlet_t[block_write_len];
-    }
-
-    quadlet_t *fw_header = frame + (ETH_HEADER_LEN + FW_CTRL_SIZE)/sizeof(quadlet_t);
-    // header
-    fw_tl = (fw_tl+1)&FW_TL_MASK;   // increment transaction label
-    make_1394_header(fw_header, node, addr, EthRawPort::BWRITE, fw_tl);
-    // block length
-    fw_header[3] = bswap_32(nbytes<<16);
-    // header CRC
-    fw_header[4] = bswap_32(BitReverse32(crc32(0U, (void*)fw_header, FW_BWRITE_HEADER_SIZE-FW_CRC_SIZE)));
-    // Pointer to data part of frame
-    quadlet_t *fw_data = frame + data_offset;
-    if (!realTimeWrite) {
-        // Copy the user-supplied data into the frame
-        memcpy(fw_data, wdata, nbytes);
-    }
-    // CRC
-    quadlet_t *fw_crc = fw_data + (nbytes/sizeof(quadlet_t));
-    *fw_crc = bswap_32(BitReverse32(crc32(0U, (void*)fw_data, nbytes)));
-
-    size_t length_fw = (FW_BWRITE_HEADER_SIZE + nbytes + FW_CRC_SIZE)/sizeof(quadlet_t);  // size in quadlets
-    bool ret = eth1394_write(node, frame, length_fw, boardId&FW_NODE_ETH_BROADCAST_MASK);
-    if (!realTimeWrite)
-        delete [] frame;
-    return ret;
 }
 
 int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
@@ -588,36 +490,31 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
 }
 
 
-bool EthRawPort::eth1394_write(nodeid_t node, quadlet_t *buffer, size_t length_fw, bool useEthernetBroadcast)
+bool EthRawPort::PacketSend(char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
     // Firewire packet is already created by caller
     bool ret = true;
-    // Ethernet frame
-    uint8_t *frame = reinterpret_cast<uint8_t *>(buffer);
-    memcpy(frame, frame_hdr, 12);  // Copy header except length field
-    if (useEthernetBroadcast) {      // multicast
-        frame[0] |= 0x01;    // set multicast destination address
-        frame[5] = 0xff;     // keep multicast address
-    }
-    frame[5] = HubBoard;     // last byte of dest address is board id
 
-    int ethlength = ETH_HEADER_LEN + FW_CTRL_SIZE + length_fw*sizeof(quadlet_t);  // eth frame length in bytes
+    // Ethernet frame
+    memcpy(packet, frame_hdr, 12);  // Copy header except length field
+    if (useEthernetBroadcast) {      // multicast
+        packet[0] |= 0x01;    // set multicast destination address
+        packet[5] = 0xff;     // keep multicast address
+    }
+    packet[5] = HubBoard;     // last byte of dest address is board id
+
+    int ethlength = ETH_HEADER_LEN + FW_CTRL_SIZE + nbytes;  // eth frame length in bytes
 
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
-    frame[12] = 0;
-    frame[13] = ethlength-ETH_HEADER_LEN;
-
-    unsigned char fw_ctrl[2];
-    fw_ctrl[0] = 0;
-    fw_ctrl[1] = FwBusGeneration;
-    memcpy(frame+ETH_HEADER_LEN, fw_ctrl, sizeof(fw_ctrl));
+    packet[12] = 0;
+    packet[13] = ethlength-ETH_HEADER_LEN;
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
-        PrintFrame((unsigned char*)frame, ethlength);
+        PrintFrame(reinterpret_cast<unsigned char *>(packet), ethlength);
     }
-    if (pcap_sendpacket(handle, frame, ethlength) != 0)  {
+    if (pcap_sendpacket(handle, reinterpret_cast<unsigned char *>(packet), ethlength) != 0)  {
         outStr << "ERROR: PCAP send packet failed" << std::endl;
         ret = false;
     }
