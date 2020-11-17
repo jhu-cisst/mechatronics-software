@@ -264,9 +264,6 @@ void EthUdpPort::Cleanup(void)
 
 nodeid_t EthUdpPort::InitNodes(void)
 {
-    //  1. Set IP address of first connected board using UDP broadcast
-    //  2. Read hub/bridge board id using FireWire broadcast (via unicast UDP)
-
     // First, set IP address by Ethernet and FireWire broadcast
     if (!WriteQuadletNode(FW_NODE_BROADCAST, 11, sockPtr->ServerAddr.sin_addr.s_addr, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to write IP address" << std::endl;
@@ -289,6 +286,9 @@ nodeid_t EthUdpPort::InitNodes(void)
     FwBusGeneration = newFwBusGeneration;
     outStr << "InitNodes: Firewire bus generation = " << FwBusGeneration << std::endl;
 
+    // Broadcast a command to initiate a read of Firewire PHY Register 0. In cases where there is no
+    // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
+    // to obtain its Firewire node id.
     data = 0;
     if (!WriteQuadletNode(FW_NODE_BROADCAST, 1, data)) {
         outStr << "InitNodes: failed to broadcast PHY command" << std::endl;

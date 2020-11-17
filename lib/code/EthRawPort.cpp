@@ -222,16 +222,15 @@ void EthRawPort::Cleanup(void)
 
 nodeid_t EthRawPort::InitNodes(void)
 {
-    // Find board id for first board (i.e., one connected by Ethernet)
     quadlet_t data = 0x0;   // initialize data to 0
-    bool ret = ReadQuadletNode(FW_NODE_BROADCAST, 0, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK));
-    // One retry
-    if (!ret) {
-        outStr << "ScanNodes: multicast failed, retrying" << std::endl;
-        ret = ReadQuadletNode(FW_NODE_BROADCAST, 0, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK));
+
+    // Check hardware version of hub board
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, 4, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK))) {
+        outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
+        return 0;
     }
-    if (!ret) {
-        outStr << "InitNodes: no response via multicast" << std::endl;
+    if (data != QLA1_String) {
+        outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
         return 0;
     }
 
@@ -239,6 +238,20 @@ nodeid_t EthRawPort::InitNodes(void)
     FwBusGeneration = newFwBusGeneration;
     outStr << "InitNodes: Firewire bus generation = " << FwBusGeneration << std::endl;
 
+    // Broadcast a command to initiate a read of Firewire PHY Register 0. In cases where there is no
+    // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
+    // to obtain its Firewire node id.
+    data = 0;
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, 1, data, FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
+        return 0;
+    }
+
+    // Find board id for first board (i.e., one connected by Ethernet)
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, 0, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK)))  {
+        outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
+        return 0;
+    }
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
@@ -269,18 +282,19 @@ bool EthRawPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data
         return false;
 
     // Create buffer that is large enough for Ethernet header and Firewire packet
-    quadlet_t buffer[(ETH_HEADER_LEN+FW_CTRL_SIZE+FW_QWRITE_SIZE)/sizeof(quadlet_t)];
-    quadlet_t *packet_FW = buffer + (ETH_HEADER_LEN+FW_CTRL_SIZE)/sizeof(quadlet_t);
+    char *buffer = reinterpret_cast<char *>(GenericBuffer)+GetWriteQuadAlign();
 
-    // header
-    fw_tl = (fw_tl+1)&FW_TL_MASK;   // increment transaction label
-    make_1394_header(packet_FW, node, addr, EthRawPort::QWRITE, fw_tl);
-    // quadlet data
-    packet_FW[3] = bswap_32(data);
-    // CRC
-    packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, FW_QWRITE_SIZE-FW_CRC_SIZE)));
+    // Increment transaction label
+    fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    return PacketSend(reinterpret_cast<char *>(buffer), FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
+    buffer[ETH_HEADER_LEN] = 0;
+    if (flags&FW_NODE_NOFORWARD_MASK) buffer[ETH_HEADER_LEN] |= FW_CTRL_NOFORWARD;
+    buffer[ETH_HEADER_LEN+1] = FwBusGeneration;
+
+    // Build FireWire packet (also byteswaps data)
+    make_qwrite_packet(reinterpret_cast<quadlet_t *>(buffer+ETH_HEADER_LEN+FW_CTRL_SIZE), node, addr, data, fw_tl);
+
+    return PacketSend(buffer, ETH_HEADER_LEN+FW_CTRL_SIZE+FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
