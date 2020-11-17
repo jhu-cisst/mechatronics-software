@@ -541,7 +541,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         hubReadSize = readSize*NumOfBoards_;         // Rev 7: NumOfBoards * 29
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetReadPrefixSize());
-    memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
+    //memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
 
     bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
     if (!ret) {
@@ -549,7 +549,43 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    unsigned int curIndex = 0;
+    quadlet_t *curPtr = hubReadBuffer;
+    unsigned boardMax = IsAllBoardsRev7_ ? NumOfBoards_ : max_board;
+    for (unsigned int boardNum = 0; boardNum < boardMax; boardNum++) {
+        unsigned int seq = (bswap_32(curPtr[0]) >> 16);
+        unsigned int thisBoard = (bswap_32(curPtr[2])&0x0f000000)>>24;
+        bool thisBoardOK = false;
+        BoardIO *board = 0;
+        if (IsAllBoardsRev7_) {
+            // Should check against BoardInUseMask_
+            board = BoardList[thisBoard];
+        }
+        else {
+            board = BoardList[boardNum];
+            if (board) {
+                if (board->GetBoardId() != thisBoard) {
+                    outStr << "Board mismatch: expecting " << board << ", found " << thisBoard << std::endl;
+                    board = 0;
+                }
+            }
+        }
+        if (board) {
+            if (seq == ReadSequence_) {
+               board->SetReadBuffer(curPtr+1);
+               board->SetReadValid(true);
+               noneRead = false;
+               allOK = true; // PK TEMP
+            }
+            else {
+               outStr << "Board " << thisBoard << ", seq = " << seq << ", expected = " << ReadSequence_ << std::endl;
+               board->SetReadValid(false);
+               allOK = false; // PK TEMP
+            }
+        }
+        curPtr += readSize;
+    }
+
+#if 0
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             unsigned int boardOffset = IsNoBoardsRev7_ ? (readSize*board) : (readSize*curIndex);
@@ -574,6 +610,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             else allOK = false;
         }
     }
+#endif
 
     if (noneRead) {
         OnNoneRead();

@@ -58,7 +58,6 @@ public:
 
 protected:
 
-    bool is_fw_master;      // Whether bridge board must manage Firewire bus (e.g., Firewire not connected to PC)
     uint8_t fw_tl;          // FireWire transaction label (6 bits)
 
     EthCallbackType eth_read_callback;

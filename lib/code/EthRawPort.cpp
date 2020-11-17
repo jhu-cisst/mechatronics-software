@@ -206,22 +206,17 @@ bool EthRawPort::Init(void)
     frame_hdr[13] = 0;   // length field
 
     bool ret = ScanNodes();
+#if 0
     if (!ret) {
         pcap_close(handle);
         handle = 0;
     }
+#endif
     return ret;
 }
 
 void EthRawPort::Cleanup(void)
 {
-    if (IsOK() && is_fw_master) {
-        // Attempt to clear eth1394 flag on all boards
-        quadlet_t data = 0x00800000;  // Clear eth1394 bit
-        if (WriteQuadletNode(FW_NODE_BROADCAST, 0, data))
-            std::cout << "EthRawPort destructor: cleared eth1394 mode" << std::endl;
-    }
-
     pcap_close(handle);
 }
 
@@ -240,20 +235,13 @@ nodeid_t EthRawPort::InitNodes(void)
         return 0;
     }
 
+    // ReadQuadletNode should have updated bus generation
+    FwBusGeneration = newFwBusGeneration;
+    outStr << "InitNodes: Firewire bus generation = " << FwBusGeneration << std::endl;
+
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
-
-    if (is_fw_master) {
-        // TEMP: eth1394 being phased out, so no longer supported in raw mode.
-        // Set eth1394 flag on all boards, so that they assign the node number based on the board number.
-        data = 0x00C00000;  // Set eth1394 bit
-        if (!WriteQuadletNode(FW_NODE_BROADCAST, 0, data)) {
-            outStr << "InitNodes: failed to set eth1394 mode" << std::endl;
-            return 0;
-        }
-        outStr << "InitNodes: Set eth1394 mode" << std::endl;
-    }
 
     // Scan for up to 16 nodes on bus
     return BoardIO::MAX_BOARDS;
@@ -501,7 +489,9 @@ bool EthRawPort::PacketSend(char *packet, size_t nbytes, bool useEthernetBroadca
         packet[0] |= 0x01;    // set multicast destination address
         packet[5] = 0xff;     // keep multicast address
     }
-    packet[5] = HubBoard;     // last byte of dest address is board id
+    else {
+        packet[5] = HubBoard;     // last byte of dest address is board id
+    }
 
     int ethlength = ETH_HEADER_LEN + FW_CTRL_SIZE + nbytes;  // eth frame length in bytes
 

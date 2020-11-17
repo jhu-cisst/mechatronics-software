@@ -34,7 +34,6 @@ uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 
 EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType cb):
     BasePort(portNum, debugStream),
-    is_fw_master((portNum==1)),  // TEMP
     fw_tl(0),
     eth_read_callback(cb),
     ReceiveTimeout(0.01),
@@ -505,9 +504,10 @@ bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    packet[0] = 0;
-    if (boardId&FW_NODE_NOFORWARD_MASK) packet[0] |= FW_CTRL_NOFORWARD;
-    packet[1] = FwBusGeneration;
+    unsigned int ctrlOffset = GetWritePrefixSize()-FW_CTRL_SIZE-FW_BWRITE_HEADER_SIZE;
+    packet[ctrlOffset] = 0;
+    if (boardId&FW_NODE_NOFORWARD_MASK) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
+    packet[ctrlOffset+1] = FwBusGeneration;
 
     // Build FireWire packet
     quadlet_t *packet_fw = reinterpret_cast<quadlet_t *>(packet+GetWritePrefixSize()-FW_BWRITE_HEADER_SIZE);
