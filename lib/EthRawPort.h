@@ -80,12 +80,9 @@ public:
 
     bool IsOK(void);
 
-    unsigned int GetWritePrefixSize(void) const
-        { return (ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE+FW_BWRITE_HEADER_SIZE); }
+    unsigned int GetPrefixOffset(MsgType msg) const;
     unsigned int GetWritePostfixSize(void) const
         { return FW_CRC_SIZE; }
-    unsigned int GetReadPrefixSize(void) const
-        { return (ETH_FRAME_HEADER_SIZE+FW_BRESPONSE_HEADER_SIZE); }
     unsigned int GetReadPostfixSize(void) const
         { return (FW_CRC_SIZE+FW_EXTRA_SIZE); }
 

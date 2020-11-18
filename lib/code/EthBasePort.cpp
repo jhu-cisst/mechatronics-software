@@ -486,10 +486,10 @@ bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
 
     // Packet to send
     unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
-    size_t packetSize = GetWritePrefixSize() + nbytes + GetWritePostfixSize();
+    size_t packetSize = GetPrefixOffset(WR_FW_BDATA) + nbytes + GetWritePostfixSize();
 
     // Check for real-time write
-    unsigned char *wdata_base = reinterpret_cast<unsigned char *>(wdata)-GetWriteQuadAlign()-GetWritePrefixSize();
+    unsigned char *wdata_base = reinterpret_cast<unsigned char *>(wdata)-GetWriteQuadAlign()-GetPrefixOffset(WR_FW_BDATA);
     if (wdata_base == WriteBufferBroadcast) {
         packet = WriteBufferBroadcast+GetWriteQuadAlign();
     }
@@ -504,13 +504,13 @@ bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    unsigned int ctrlOffset = GetWritePrefixSize()-FW_CTRL_SIZE-FW_BWRITE_HEADER_SIZE;
+    unsigned int ctrlOffset = GetPrefixOffset(WR_CTRL);
     packet[ctrlOffset] = 0;
     if (boardId&FW_NODE_NOFORWARD_MASK) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
     packet[ctrlOffset+1] = FwBusGeneration;
 
     // Build FireWire packet
-    quadlet_t *packet_fw = reinterpret_cast<quadlet_t *>(packet+GetWritePrefixSize()-FW_BWRITE_HEADER_SIZE);
+    quadlet_t *packet_fw = reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER));
     make_bwrite_packet(packet_fw, node, addr, wdata, nbytes, fw_tl);
 
     // Now, send the packet

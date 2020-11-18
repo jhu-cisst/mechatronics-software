@@ -313,6 +313,19 @@ bool EthUdpPort::IsOK(void)
     return (sockPtr && (sockPtr->SocketFD != INVALID_SOCKET));
 }
 
+unsigned int EthUdpPort::GetPrefixOffset(MsgType msg) const
+{
+    switch (msg) {
+        case WR_CTRL:      return 0;
+        case WR_FW_HEADER: return FW_CTRL_SIZE;
+        case WR_FW_BDATA:  return FW_CTRL_SIZE+FW_BWRITE_HEADER_SIZE;
+        case RD_FW_HEADER: return 0;
+        case RD_FW_BDATA:  return FW_BRESPONSE_HEADER_SIZE;
+    }
+    outStr << "EthUdpPort::GetPrefixOffset: Invalid type: " << msg << std::endl;
+    return 0;
+}
+
 bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
     // Flush before reading
@@ -425,10 +438,10 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
 
     // Packet to receive
     unsigned char *packet = GenericBuffer;
-    size_t packetSize = GetReadPrefixSize() + nbytes + GetReadPostfixSize();
+    size_t packetSize = GetPrefixOffset(RD_FW_BDATA) + nbytes + GetReadPostfixSize();
 
     // Check for real-time read
-    unsigned char *rdata_base = reinterpret_cast<unsigned char *>(rdata)-GetReadQuadAlign()-GetReadPrefixSize();
+    unsigned char *rdata_base = reinterpret_cast<unsigned char *>(rdata)-GetReadQuadAlign()-GetPrefixOffset(RD_FW_BDATA);
     if (rdata_base == ReadBufferBroadcast) {
         packet = ReadBufferBroadcast;
     }
@@ -447,7 +460,7 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         return false;
 
     ProcessExtraData(reinterpret_cast<const unsigned char *>(packet)+packetSize-FW_EXTRA_SIZE);
-    const quadlet_t *packet_data = reinterpret_cast<const quadlet_t *>(packet+GetReadPrefixSize());
+    const quadlet_t *packet_data = reinterpret_cast<const quadlet_t *>(packet+GetPrefixOffset(RD_FW_BDATA));
     if (rdata != packet_data) {
         rtRead = false;
         memcpy(rdata, packet_data, nbytes);

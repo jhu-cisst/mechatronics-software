@@ -250,11 +250,18 @@ public:
     // Update the bus generation number
     virtual void UpdateBusGeneration(unsigned int gen) = 0;
 
+    enum MsgType {
+        WR_CTRL,          // Offset to Control word (used in Ethernet implementations)
+        WR_FW_HEADER,     // Offset to Firewire packet header (when writing)
+        WR_FW_BDATA,      // Offset to Firewire block write data
+        RD_FW_HEADER,     // Offset to Firewire packet header (when reading)
+        RD_FW_BDATA       // Offset to Firewire block read data
+    };
+
     // Port-specific prefix/postfix sizes (in bytes).
     // These are non-zero for the Ethernet ports.
-    virtual unsigned int GetWritePrefixSize(void) const = 0;
+    virtual unsigned int GetPrefixOffset(MsgType msg) const = 0;
     virtual unsigned int GetWritePostfixSize(void) const = 0;
-    virtual unsigned int GetReadPrefixSize(void) const = 0;
     virtual unsigned int GetReadPostfixSize(void) const = 0;
 
     // Quadlet alignment offset, used to align buffers on 32-bit boundaries.

@@ -94,7 +94,7 @@ public:
 
     void UpdateBusGeneration(unsigned int gen);
 
-    unsigned int GetWritePrefixSize(void) const   { return 0; }
+    unsigned int GetPrefixOffset(MsgType) const   { return 0; }
     unsigned int GetWritePostfixSize(void) const  { return 0; }
     unsigned int GetReadPrefixSize(void) const    { return 0; }
     unsigned int GetReadPostfixSize(void) const   { return 0; }

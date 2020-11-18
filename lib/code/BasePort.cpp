@@ -128,7 +128,7 @@ void BasePort::SetReadBuffer(void)
     for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardIO *board = BoardList[i];
         if (board)
-            board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[i]+GetReadQuadAlign()+GetReadPrefixSize()));
+            board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[i]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)));
     }
 }
 
@@ -137,14 +137,14 @@ void BasePort::SetWriteBuffer(void)
     for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardIO *board = BoardList[i];
         if (board)
-            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[i]+GetWriteQuadAlign()+GetWritePrefixSize()));
+            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[i]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
     }
 }
 
 void BasePort::SetReadBufferBroadcast(void)
 {
     if (!ReadBufferBroadcast) {
-        size_t numReadBytes = GetReadQuadAlign()+GetReadPrefixSize()+FW_MAX_PACKET_SIZE+GetReadPostfixSize();
+        size_t numReadBytes = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+FW_MAX_PACKET_SIZE+GetReadPostfixSize();
         quadlet_t *buf = new quadlet_t[numReadBytes/sizeof(quadlet_t)];
         ReadBufferBroadcast = reinterpret_cast<unsigned char *>(buf);
     }
@@ -153,11 +153,11 @@ void BasePort::SetReadBufferBroadcast(void)
 void BasePort::SetWriteBufferBroadcast(void)
 {
     if (!WriteBufferBroadcast) {
-        size_t numWriteBytes = GetWriteQuadAlign()+GetWritePrefixSize()+FW_MAX_PACKET_SIZE+GetWritePostfixSize();
+        size_t numWriteBytes = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+FW_MAX_PACKET_SIZE+GetWritePostfixSize();
         quadlet_t *buf = new quadlet_t[numWriteBytes/sizeof(quadlet_t)];
         WriteBufferBroadcast = reinterpret_cast<unsigned char *>(buf);
     }
-    unsigned char *curPtr = WriteBufferBroadcast+GetWriteQuadAlign()+GetWritePrefixSize();
+    unsigned char *curPtr = WriteBufferBroadcast+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA);
     for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardIO *board = BoardList[i];
         if (board) {
@@ -292,11 +292,11 @@ bool BasePort::AddBoard(BoardIO *board)
     // (e.g., a broadcast protocol), because it simplifies the logic, especially if the protocol
     // is changed later.
     delete [] ReadBuffer[id];
-    size_t numReadBytes = GetReadQuadAlign()+GetReadPrefixSize()+board->GetReadNumBytes()+GetReadPostfixSize();
+    size_t numReadBytes = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+board->GetReadNumBytes()+GetReadPostfixSize();
     quadlet_t *rdBuf = new quadlet_t[numReadBytes/sizeof(quadlet_t)];
     ReadBuffer[id] = reinterpret_cast<unsigned char *>(rdBuf);
     delete [] WriteBuffer[id];
-    size_t numWriteBytes = GetWriteQuadAlign()+GetWritePrefixSize()+board->GetWriteNumBytes()+GetWritePostfixSize();
+    size_t numWriteBytes = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+board->GetWriteNumBytes()+GetWritePostfixSize();
     quadlet_t *wrBuf = new quadlet_t[numWriteBytes/sizeof(quadlet_t)];
     WriteBuffer[id] = reinterpret_cast<unsigned char *>(wrBuf);
 
@@ -310,20 +310,20 @@ bool BasePort::AddBoard(BoardIO *board)
     // Now, set the BoardIO buffers based on the current protocol. Note that we have to do this here
     // and in SetProtocol because we do not make any assumptions about which is called last.
     if (Protocol_ == BasePort::PROTOCOL_SEQ_RW) {
-        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadQuadAlign()+GetReadPrefixSize()));
-        board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetWritePrefixSize()));
+        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)));
+        board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
     }
     else if (Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) {
-        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadQuadAlign()+GetReadPrefixSize()));
+        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)));
         if (IsNoBoardsRev7_)
-            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetWritePrefixSize()));
+            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
         else
             SetWriteBufferBroadcast();
     }
     else if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
         SetReadBufferBroadcast();
         if (IsNoBoardsRev7_)
-            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetWritePrefixSize()));
+            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
         else
             SetWriteBufferBroadcast();
     }
@@ -540,7 +540,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     else
         hubReadSize = readSize*NumOfBoards_;         // Rev 7: NumOfBoards * 29
 
-    quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetReadPrefixSize());
+    quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
     //memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
 
     bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
@@ -703,7 +703,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
     bool noneWritten = true;
 
     // construct broadcast write buffer
-    quadlet_t *bcBuffer = reinterpret_cast<quadlet_t *>(WriteBufferBroadcast + GetWriteQuadAlign() + GetWritePrefixSize());
+    quadlet_t *bcBuffer = reinterpret_cast<quadlet_t *>(WriteBufferBroadcast + GetWriteQuadAlign() + GetPrefixOffset(WR_FW_BDATA));
 
     // Only do memory copy for firmware < 7
     // For firmware Rev 7, the data should already be in WriteBufferBroadcast.

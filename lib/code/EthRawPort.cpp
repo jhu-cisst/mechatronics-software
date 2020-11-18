@@ -265,6 +265,19 @@ bool EthRawPort::IsOK(void)
     return (handle != NULL);
 }
 
+unsigned int EthRawPort::GetPrefixOffset(MsgType msg) const
+{
+    switch (msg) {
+        case WR_CTRL:      return ETH_FRAME_HEADER_SIZE;
+        case WR_FW_HEADER: return ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE;
+        case WR_FW_BDATA:  return ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE+FW_BWRITE_HEADER_SIZE;
+        case RD_FW_HEADER: return ETH_FRAME_HEADER_SIZE;
+        case RD_FW_BDATA:  return ETH_FRAME_HEADER_SIZE+FW_BRESPONSE_HEADER_SIZE;
+    }
+    outStr << "EthRawPort::GetPrefixOffset: Invalid type: " << msg << std::endl;
+    return 0;
+}
+
 bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
     if (!CheckFwBusGeneration("EthRawPort::ReadQuadletNode"))
