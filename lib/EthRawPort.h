@@ -36,19 +36,10 @@ protected:
 
     bool headercheck(const unsigned char *header, bool toPC) const;
 
-    /**
-     * @brief send async read request to a node and wait for response.
-     *
-     * @param node: target node ID
-     * @param addr: address to read from
-     * @param length: amount of bytes of data to read
-     * @param buffer: pointer to buffer where data will be saved
-     *
-     * @return int 0 on success, -1 on failure
-     */
-    int eth1394_read(nodeid_t node, nodeaddr_t addr, size_t length, quadlet_t* buffer, bool useEthernetBroadcast = false);
-
     int make_ethernet_header(unsigned char *buffer, unsigned int numBytes);
+
+    // Check Ethernet header
+    bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
 
     //! Initialize EthRaw port
     bool Init(void);
@@ -60,14 +51,14 @@ protected:
     // \return Maximum number of nodes on bus (0 if error)
     nodeid_t InitNodes(void);
 
-    //! Read quadlet from node (internal method called by ReadQuadlet)
-    bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
-
     // Send packet via PCAP
     bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via PCAP
     int PacketReceive(unsigned char *packet, size_t nbytes);
+
+    // Flush all packets in receive buffer
+    int PacketFlushAll(void);
 
 public:
     EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
@@ -90,14 +81,6 @@ public:
         { return ((ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE)%sizeof(quadlet_t)); }
     unsigned int GetReadQuadAlign(void) const
         { return (ETH_FRAME_HEADER_SIZE%sizeof(quadlet_t)); }
-
-    // ReadQuadlet in EthBasePort
-
-    // WriteQuadlet in EthBasePort
-
-    // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                   unsigned int nbytes);
 
     //****************** Static methods ***************************
 

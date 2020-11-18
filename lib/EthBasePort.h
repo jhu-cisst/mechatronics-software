@@ -68,6 +68,9 @@ protected:
     double FPGA_RecvTime;       // Time for FPGA to receive Ethernet packet (seconds)
     double FPGA_TotalTime;      // Total time for FPGA to receive packet and respond (seconds)
 
+    //! Read quadlet from node (internal method called by ReadQuadlet)
+    bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
+
     //! Write quadlet to node (internal method called by WriteQuadlet)
     bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
 
@@ -83,6 +86,9 @@ protected:
 
     // Receive packet
     virtual int PacketReceive(unsigned char *packet, size_t nbytes) = 0;
+
+    // Flush all packets in receive buffer
+    virtual int PacketFlushAll(void) = 0;
 
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     void OnNoneRead(void);
@@ -141,6 +147,9 @@ public:
     // Write a quadlet to the specified board
     bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
+    // Read a block from the specified board
+    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
+
     // Write a block to the specified board
     bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
@@ -179,12 +188,14 @@ public:
     // Print IP address
     static void PrintIP(std::ostream &outStr, const char* name, const uint8_t *addr, bool swap16 = false);
 
+    // Check Ethernet header (only for EthRawPort)
+    virtual bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
+
     // Check if FireWire packet valid
     //   length:  length of data sectio (for BRESPONSE)
     //   node:    expected source node
     //   tcode:   expected tcode (e.g., QRESPONSE or BRESPONSE)
     //   tl:      transaction label
-    // PK TODO: Make it static? Need to handle outStr
     bool CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl);
 
     // Process extra data received from FPGA

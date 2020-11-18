@@ -326,138 +326,6 @@ unsigned int EthUdpPort::GetPrefixOffset(MsgType msg) const
     return 0;
 }
 
-bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
-{
-    // Flush before reading
-    int numFlushed = sockPtr->FlushRecv();
-    if (numFlushed > 0)
-        outStr << "ReadQuadlet: flushed " << numFlushed << " packets" << std::endl;
-
-    // Increment transaction label
-    fw_tl = (fw_tl+1)&FW_TL_MASK;
-
-    unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
-
-    // Make control word
-    make_ctrl_word(sendPacket, flags&FW_NODE_NOFORWARD_MASK);
-
-    // Build FireWire packet
-    make_qread_packet(reinterpret_cast<quadlet_t *>(sendPacket+FW_CTRL_SIZE), node, addr, fw_tl);
-    if (!PacketSend(sendPacket, FW_CTRL_SIZE+FW_QREAD_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK))
-        return false;
-
-    // Invoke callback (if defined) between sending read request
-    // and checking for read response. If callback returns false, we
-    // skip checking for a received packet.
-    if (eth_read_callback && !(*eth_read_callback)(*this, node, outStr)) {
-        outStr << "ReadQuadlet: callback aborting (not reading packet)" << std::endl;
-        return false;
-    }
-
-    unsigned char *recvPacket = GenericBuffer+GetWriteQuadAlign();
-    unsigned int recvPacketSize = FW_QRESPONSE_SIZE+FW_EXTRA_SIZE;
-    int nRecv = PacketReceive(recvPacket, recvPacketSize);
-    if (nRecv != static_cast<int>(recvPacketSize)) {
-        // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
-        unsigned int boardId = Node2Board[node];
-        if (boardId < BoardIO::MAX_BOARDS) {
-            outStr << "ReadQuadlet: failed to receive read response from board " << boardId
-                   << " via UDP: return value = " << nRecv
-                   << ", expected = " << recvPacketSize << std::endl;
-        }
-        return false;
-    }
-
-    if (!CheckFirewirePacket(recvPacket, 0, node, EthBasePort::QRESPONSE, fw_tl))
-        return false;
-    ProcessExtraData(recvPacket+FW_QRESPONSE_SIZE);
-    const quadlet_t *packet_FW = reinterpret_cast<const quadlet_t *>(recvPacket);
-    data = bswap_32(packet_FW[3]);
-    return true;
-}
-
-bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
-{
-    if (nbytes == 4)
-        return ReadQuadlet(boardId, addr, *rdata);
-    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
-        return false;
-    }
-
-    if (!CheckFwBusGeneration("EthUdpPort::ReadBlock"))
-        return false;
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
-    // Flush before reading
-    int numFlushed = sockPtr->FlushRecv();
-    if (numFlushed > 0)
-        outStr << "ReadBlock: flushed " << numFlushed << " packets" << std::endl;
-
-    // Create buffer that is large enough for Firewire packet
-    unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
-
-    // Increment transaction label
-    fw_tl = (fw_tl+1)&FW_TL_MASK;
-
-    // Make control word
-    make_ctrl_word(sendPacket, boardId&FW_NODE_NOFORWARD_MASK);
-
-    // Build FireWire packet
-    make_bread_packet(reinterpret_cast<quadlet_t *>(sendPacket+FW_CTRL_SIZE), node, addr, nbytes, fw_tl);
-    if (!PacketSend(sendPacket, FW_CTRL_SIZE+FW_BREAD_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK))
-        return false;
-
-    // Invoke callback (if defined) between sending read request
-    // and checking for read response. If callback returns false, we
-    // skip checking for a received packet.
-    if (eth_read_callback && !(*eth_read_callback)(*this, node, outStr)) {
-        outStr << "ReadBlock: callback aborting (not reading packet)" << std::endl;
-        return false;
-    }
-
-    // Packet to receive
-    unsigned char *packet = GenericBuffer+GetReadQuadAlign();;
-    size_t packetSize = GetPrefixOffset(RD_FW_BDATA) + nbytes + GetReadPostfixSize();
-
-    // Check for real-time read
-    unsigned char *rdata_base = reinterpret_cast<unsigned char *>(rdata)-GetReadQuadAlign()-GetPrefixOffset(RD_FW_BDATA);
-    if (rdata_base == ReadBufferBroadcast) {
-        packet = ReadBufferBroadcast;
-    }
-    else {
-        unsigned char bId = boardId&FW_NODE_MASK;
-        if ((bId < BoardIO::MAX_BOARDS) &&
-            (rdata_base == ReadBuffer[bId])) {
-            packet = ReadBuffer[bId];
-        }
-    }
-
-    int nRecv = PacketReceive(packet, packetSize);
-    if (nRecv != static_cast<int>(packetSize)) {
-        outStr << "ReadBlock: failed to receive read response from board " << (boardId&FW_NODE_MASK)
-               << " via UDP: return value = " << nRecv
-               << ", expected = " << packetSize << std::endl;
-        return false;
-    }
-
-    if (!CheckFirewirePacket(packet, nbytes, node, EthBasePort::BRESPONSE, fw_tl))
-        return false;
-
-    ProcessExtraData(packet+packetSize-FW_EXTRA_SIZE);
-    const quadlet_t *packet_data = reinterpret_cast<const quadlet_t *>(packet+GetPrefixOffset(RD_FW_BDATA));
-    if (rdata != packet_data) {
-        rtRead = false;
-        memcpy(rdata, packet_data, nbytes);
-    }
-    return true;
-}
-
 bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
     int nSent = sockPtr->Send(packet, nbytes, useEthernetBroadcast);
@@ -479,6 +347,11 @@ int EthUdpPort::PacketReceive(unsigned char *packet, size_t nbytes)
         nRecv = 0;
     }
     return nRecv;
+}
+
+int EthUdpPort::PacketFlushAll(void)
+{
+    return sockPtr->FlushRecv();
 }
 
 // Convert IP address from uint32_t to string

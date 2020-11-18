@@ -242,6 +242,7 @@ int main(int argc, char** argv)
     }
 
     if (Port->GetNumOfNodes() == 0) {
+        PrintDebugStream(debugStream);
         std::cerr << "Failed to find any boards" << std::endl;
         return -1;
     }

@@ -917,7 +917,7 @@ bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
 
 bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
-    // period = counts(16 bits) * 5.208333 us (default = 0 = no timeout)
+    // period = counts(16 bits) * 5.208333 us (0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, counts);
 }
 

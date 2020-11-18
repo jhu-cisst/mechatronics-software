@@ -279,178 +279,6 @@ unsigned int EthRawPort::GetPrefixOffset(MsgType msg) const
     return 0;
 }
 
-bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
-{
-    if (!CheckFwBusGeneration("EthRawPort::ReadQuadletNode"))
-        return false;
-
-    bool ret = !eth1394_read(node, addr, 4, &data, flags&FW_NODE_ETH_BROADCAST_MASK);
-    if (ret) {
-        data = bswap_32(data);
-    }
-    else {
-        // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
-        unsigned int boardId = Node2Board[node];
-        if (boardId < BoardIO::MAX_BOARDS) {
-            outStr << "ReadQuadlet: failed to receive read response from board " << boardId
-                   << " via RAW Ethernet: addr = " << addr << std::endl;
-        }
-    }
-    return ret;
-}
-
-
-bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
-{
-    if (nbytes == 4)
-        return ReadQuadlet(boardId, addr, *rdata);
-    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
-        return false;
-    }
-
-    if (!CheckFwBusGeneration("EthRawPort::ReadBlock"))
-        return false;
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
-    bool ret = !eth1394_read(node, addr, nbytes, rdata, boardId&FW_NODE_ETH_BROADCAST_MASK);
-    if (!ret) {
-        outStr << "ReadBlock: failed to receive read response from board " << (boardId&FW_NODE_MASK)
-               << " via RAW Ethernet: addr = " << std::hex << addr << ", nbytes = " << std::dec << nbytes << std::endl;
-    }
-    return ret;
-}
-
-// length is in bytes
-int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
-                             size_t length, quadlet_t *buffer, bool useEthernetBroadcast)
-{
-    unsigned int tcode;     // fw tcode
-    size_t fw_packet_size;  // fw packet length in bytes
-
-    if (length == 4) {
-        tcode = EthBasePort::QREAD;
-        fw_packet_size = FW_QREAD_SIZE;
-    } else if ((length > 4) && (length%4 == 0)) {
-        tcode = EthBasePort::BREAD;
-        fw_packet_size = FW_BREAD_SIZE;
-    }
-    else
-    {
-        outStr << "eth1394_read: illegal length = " << length << std::endl;
-        return -1;
-    }
-
-    // Ethernet frame length in bytes
-    const int ethlength = GetPrefixOffset(WR_FW_HEADER) + fw_packet_size;
-
-    // Increment transaction label
-    fw_tl = (fw_tl+1)&FW_TL_MASK;
-
-    unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
-
-    // Currently does not support noForward flag
-    make_ctrl_word(packet, false);
-
-    quadlet_t *packet_FW = reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER));
-
-    if (tcode == QREAD)
-        make_qread_packet(packet_FW, node, addr, fw_tl);
-    else if (tcode == BREAD)
-        make_bread_packet(packet_FW, node, addr, length, fw_tl);
-
-    if (DEBUG) {
-        std::cout << "------ Eth Frame ------" << std::endl;
-        PrintFrame(packet, fw_packet_size);
-    }
-
-    if (!PacketSend(packet, ethlength, useEthernetBroadcast)) {
-        outStr << "ERROR: PCAP send packet failed" << std::endl;
-        return -1;
-    }
-
-    // Invoke callback (if defined) between sending read request
-    // and checking for read response. If callback returns false, we
-    // skip checking for a received packet.
-    if (eth_read_callback) {
-        if (!(*eth_read_callback)(*this, node, outStr)) {
-            outStr << "eth_read_callback: aborting (not reading packet)" << std::endl;
-            return -1;
-        }
-    }
-
-    // TODO: Check for real-time buffer
-    packet = GenericBuffer+GetReadQuadAlign();
-
-    unsigned int recvLength = GetPrefixOffset(RD_FW_HEADER)+GetReadPostfixSize();
-    if (tcode == QREAD)
-        recvLength += (FW_QRESPONSE_SIZE-FW_CRC_SIZE);  // CRC included in ReadPostfix
-    else if (tcode == BREAD)
-        recvLength += FW_BRESPONSE_HEADER_SIZE + length;
-
-    int nRecv = PacketReceive(packet, recvLength);
-
-    if (nRecv > 0) {
-        if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
-            outStr << "Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
-                   << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
-            return -1;
-        }
-        nodeid_t src_node = packet[19]&FW_NODE_MASK;
-        if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
-            outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
-        }
-        int tl_recv = packet[16] >> 2;
-        if (tl_recv != fw_tl) {
-                outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
-                       << ", received tl = " << tl_recv << std::endl;
-            }
-        int tcode_recv = packet[17] >> 4;
-        if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
-            // check header crc
-            if (checkCRC(packet)) {
-                memcpy(buffer, &packet[26], 4);
-                ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_QRESPONSE_SIZE);
-            }
-            else {
-                outStr <<"ERROR: crc check error"<<std::endl;
-                return -1;
-            }
-        }
-        else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
-            if (length == static_cast<size_t>((packet[26] << 8) | packet[27])) {
-                if (checkCRC(packet)) {
-                    if (reinterpret_cast<unsigned char *>(buffer) != &packet[34]) {
-                        memcpy(buffer, &packet[34], length);
-                        //rtRead = false;   // PK TEMP
-                    }
-                    ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_BRESPONSE_HEADER_SIZE + length + FW_CRC_SIZE);
-                }
-                else {
-                    outStr <<"ERROR: header crc check error"<<std::endl;
-                    return -1;
-                }
-            }
-            else{
-                outStr << "ERROR: block read response size error" << std::endl;
-                return -1;
-            }
-        }
-        else {
-            outStr << "WARNING: unexpected response tcode: " << tcode_recv
-                   << " (sent tcode: " << tcode << ")" << std::endl;
-            return -1;
-        }
-        return 0;
-    }
-    return -1;
-}
-
 bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
     // Firewire packet is already created by caller
@@ -484,7 +312,6 @@ bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthern
 
 int EthRawPort::PacketReceive(unsigned char *recvPacket, size_t nbytes)
 {
-    // Read packets
     struct pcap_pkthdr header;      /* The header that pcap gives us */
     const unsigned char *packet;    /* The actual packet */
     unsigned int numPackets = 0;
@@ -530,6 +357,26 @@ int EthRawPort::PacketReceive(unsigned char *recvPacket, size_t nbytes)
            << ", time = " << timeDiffSec << " sec" << std::endl;
 #endif
     return static_cast<int>(nRead);
+}
+
+int EthRawPort::PacketFlushAll(void)
+{
+    struct pcap_pkthdr header;      /* The header that pcap gives us */
+
+    int numFlushed = 0;
+    while (pcap_next(handle, &header))
+        numFlushed++;
+    return numFlushed;
+}
+
+bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast)
+{
+    if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
+        outStr << "WARNING: Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
+               << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
+        return false;
+    }
+    return true;
 }
 
 // Currently not used

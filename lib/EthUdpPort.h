@@ -44,14 +44,14 @@ protected:
     // \return Maximum number of nodes on bus (0 if error)
     nodeid_t InitNodes(void);
 
-    //! Read quadlet from node (internal method called by ReadQuadlet)
-    bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
-
     // Send packet via UDP
     bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via UDP
     int PacketReceive(unsigned char *packet, size_t nbytes);
+
+    // Flush all packets in receive buffer
+    int PacketFlushAll(void);
 
 public:
 
@@ -72,14 +72,6 @@ public:
 
     unsigned int GetWriteQuadAlign(void) const    { return (FW_CTRL_SIZE%sizeof(quadlet_t)); }
     unsigned int GetReadQuadAlign(void) const     { return 0; }
-
-    // ReadQuadlet in EthBasePort
-
-    // WriteQuadlet in EthBasePort
-
-    // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                   unsigned int nbytes);
 
     //****************** Static methods ***************************
 
