@@ -68,6 +68,9 @@ protected:
     double FPGA_RecvTime;       // Time for FPGA to receive Ethernet packet (seconds)
     double FPGA_TotalTime;      // Total time for FPGA to receive packet and respond (seconds)
 
+    //! Write quadlet to node (internal method called by WriteQuadlet)
+    bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
+
     // Write a block to the specified node. Internal method called by ReadBlock.
     bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
 
@@ -76,7 +79,7 @@ protected:
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
     // Send packet
-    virtual bool PacketSend(char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
+    virtual bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
 
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     void OnNoneRead(void);
@@ -87,6 +90,8 @@ protected:
     // Method called when Firewire bus reset has caused the Firewire generation number on the FPGA
     // to be different than the one on the PC.
     virtual void OnFwBusReset(unsigned int FwBusGeneration_FPGA);
+
+    void make_ctrl_word(unsigned char *packet, bool noForward);
 
     void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
 

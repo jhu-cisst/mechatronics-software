@@ -458,6 +458,26 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
     }
 }
 
+bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
+{
+    if (!CheckFwBusGeneration("EthBasePort::WriteQuadletNode"))
+        return false;
+
+    // Use GenericBuffer, which is much larger than needed
+    unsigned char *buffer = GenericBuffer+GetWriteQuadAlign();
+
+    // Increment transaction label
+    fw_tl = (fw_tl+1)&FW_TL_MASK;
+
+    // Make control word
+    make_ctrl_word(buffer, flags&FW_NODE_NOFORWARD_MASK);
+
+    // Build FireWire packet (also byteswaps data)
+    make_qwrite_packet(reinterpret_cast<quadlet_t *>(buffer+GetPrefixOffset(WR_FW_HEADER)), node, addr, data, fw_tl);
+
+    return PacketSend(buffer, GetPrefixOffset(WR_FW_HEADER)+FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
+}
+
 bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
                                 unsigned int nbytes)
 {
@@ -504,17 +524,15 @@ bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    unsigned int ctrlOffset = GetPrefixOffset(WR_CTRL);
-    packet[ctrlOffset] = 0;
-    if (boardId&FW_NODE_NOFORWARD_MASK) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
-    packet[ctrlOffset+1] = FwBusGeneration;
+    // Make control word
+    make_ctrl_word(packet, boardId&FW_NODE_NOFORWARD_MASK);
 
     // Build FireWire packet
     quadlet_t *packet_fw = reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER));
     make_bwrite_packet(packet_fw, node, addr, wdata, nbytes, fw_tl);
 
     // Now, send the packet
-    return PacketSend(reinterpret_cast<char *>(packet), packetSize, boardId&FW_NODE_ETH_BROADCAST_MASK);
+    return PacketSend(packet, packetSize, boardId&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
@@ -591,6 +609,14 @@ void EthBasePort::PromDelay(void) const
 // ---------------------------------------------------------
 // Protected
 // ---------------------------------------------------------
+
+void EthBasePort::make_ctrl_word(unsigned char *packet, bool noForward)
+{
+    unsigned int ctrlOffset = GetPrefixOffset(WR_CTRL);
+    packet[ctrlOffset] = 0;
+    if (noForward) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
+    packet[ctrlOffset+1] = FwBusGeneration;
+}
 
 // The first 3 quadlets in a FireWire request packet are the same, and we only need to create request packets.
 // Quadlet 0:  | Destination bus (10) | Destination node (6) | TL (6) | RT (2) | TCODE (4) | PRI (4) |

@@ -54,8 +54,6 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 uint32_t BitReverse32(uint32_t input);
 uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 
-const unsigned int ETH_HEADER_LEN = 14;      // Number of bytes in Ethernet header
-
 EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
     EthBasePort(portNum, debugStream, cb)
 {
@@ -289,27 +287,6 @@ bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
 }
 
 
-bool EthRawPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
-{
-    if (!CheckFwBusGeneration("EthRawPort::WriteQuadletNode"))
-        return false;
-
-    // Create buffer that is large enough for Ethernet header and Firewire packet
-    char *buffer = reinterpret_cast<char *>(GenericBuffer)+GetWriteQuadAlign();
-
-    // Increment transaction label
-    fw_tl = (fw_tl+1)&FW_TL_MASK;
-
-    buffer[ETH_HEADER_LEN] = 0;
-    if (flags&FW_NODE_NOFORWARD_MASK) buffer[ETH_HEADER_LEN] |= FW_CTRL_NOFORWARD;
-    buffer[ETH_HEADER_LEN+1] = FwBusGeneration;
-
-    // Build FireWire packet (also byteswaps data)
-    make_qwrite_packet(reinterpret_cast<quadlet_t *>(buffer+ETH_HEADER_LEN+FW_CTRL_SIZE), node, addr, data, fw_tl);
-
-    return PacketSend(buffer, ETH_HEADER_LEN+FW_CTRL_SIZE+FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
-}
-
 bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
 {
     if (nbytes == 4)
@@ -367,15 +344,15 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
     if (DEBUG) PrintFrame((unsigned char*)packet_FW, length_fw_bytes);
 
     // Ethernet frame
-    const int ethlength = ETH_HEADER_LEN + FW_CTRL_SIZE + length_fw*sizeof(quadlet_t);  // eth frame length in bytes
+    const int ethlength = GetPrefixOffset(WR_FW_HEADER) + length_fw*sizeof(quadlet_t);  // eth frame length in bytes
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
     frame_hdr[12] = 0;
-    frame_hdr[13] = ethlength-ETH_HEADER_LEN;
+    frame_hdr[13] = ethlength-GetPrefixOffset(WR_CTRL);
 
     //uint8_t frame[ethlength];
-    uint8_t frame[ETH_HEADER_LEN+FW_CTRL_SIZE+5*sizeof(quadlet_t)];
-    memcpy(frame, frame_hdr, ETH_HEADER_LEN);
+    uint8_t frame[GetPrefixOffset(WR_FW_HEADER)+5*sizeof(quadlet_t)];
+    memcpy(frame, frame_hdr, ETH_FRAME_HEADER_SIZE);
     if (useEthernetBroadcast) {      // multicast
         frame[0] |= 0x01;    // set multicast destination address
         frame[5] = 0xff;     // keep multicast address
@@ -383,11 +360,10 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
         frame[5] = HubBoard;   // last byte of dest address is bridge board id
     }
 
-    unsigned char fw_ctrl[2];
-    fw_ctrl[0] = 0;
-    fw_ctrl[1] = FwBusGeneration;
-    memcpy(frame+ETH_HEADER_LEN, fw_ctrl, sizeof(fw_ctrl));
-    memcpy(frame+ETH_HEADER_LEN+FW_CTRL_SIZE, packet_FW, length_fw*sizeof(quadlet_t));
+    // Currently does not support noForward flag
+    make_ctrl_word(frame, false);
+
+    memcpy(frame+GetPrefixOffset(WR_FW_HEADER), packet_FW, length_fw*sizeof(quadlet_t));
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
@@ -505,7 +481,7 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
 }
 
 
-bool EthRawPort::PacketSend(char *packet, size_t nbytes, bool useEthernetBroadcast)
+bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
     // Firewire packet is already created by caller
     bool ret = true;
@@ -520,18 +496,16 @@ bool EthRawPort::PacketSend(char *packet, size_t nbytes, bool useEthernetBroadca
         packet[5] = HubBoard;     // last byte of dest address is board id
     }
 
-    int ethlength = ETH_HEADER_LEN + FW_CTRL_SIZE + nbytes;  // eth frame length in bytes
-
     // length field (big endian 16-bit integer)
     // Following assumes length is less than 256 bytes
     packet[12] = 0;
-    packet[13] = ethlength-ETH_HEADER_LEN;
+    packet[13] = nbytes-ETH_FRAME_HEADER_SIZE;
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
-        PrintFrame(reinterpret_cast<unsigned char *>(packet), ethlength);
+        PrintFrame(packet, nbytes);
     }
-    if (pcap_sendpacket(handle, reinterpret_cast<unsigned char *>(packet), ethlength) != 0)  {
+    if (pcap_sendpacket(handle, packet, nbytes) != 0)  {
         outStr << "ERROR: PCAP send packet failed" << std::endl;
         ret = false;
     }

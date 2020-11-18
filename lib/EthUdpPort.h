@@ -47,14 +47,11 @@ protected:
     //! Read quadlet from node (internal method called by ReadQuadlet)
     bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
 
-    //! Write quadlet to node (internal method called by WriteQuadlet)
-    bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
-
     // Send packet via UDP
-    bool PacketSend(char *packet, size_t nbytes, bool useEthernetBroadcast);
+    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via UDP
-    bool PacketReceive(char *packet, size_t nbytes, bool silent, unsigned int boardId);
+    bool PacketReceive(unsigned char *packet, size_t nbytes, bool silent, unsigned int boardId);
 
 public:
 

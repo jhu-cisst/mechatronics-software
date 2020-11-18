@@ -63,11 +63,8 @@ protected:
     //! Read quadlet from node (internal method called by ReadQuadlet)
     bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
 
-    //! Write quadlet to node (internal method called by WriteQuadlet)
-    bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
-
     // Send packet via PCAP
-    bool PacketSend(char *packet, size_t nbytes, bool useEthernetBroadcast);
+    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
 public:
     EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
