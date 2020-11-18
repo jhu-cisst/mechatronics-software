@@ -34,7 +34,7 @@ protected:
     pcap_t *handle;
     uint8_t frame_hdr[ETH_FRAME_HEADER_SIZE];
 
-    bool headercheck(uint8_t* header, bool toPC) const;
+    bool headercheck(const unsigned char *header, bool toPC) const;
 
     /**
      * @brief send async read request to a node and wait for response.
@@ -65,6 +65,9 @@ protected:
 
     // Send packet via PCAP
     bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
+
+    // Receive packet via PCAP
+    int PacketReceive(unsigned char *packet, size_t nbytes);
 
 public:
     EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);

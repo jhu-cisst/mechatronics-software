@@ -75,7 +75,10 @@ bool EthRawPort::Init(void)
         return false;
     }
 
-    // Put Ethernet initialization here
+    // Increase ReceiveTimeout
+    ReceiveTimeout = 0.1;
+
+    // Ethernet initialization
     pcap_if_t* alldevs;
     char errbuf[PCAP_ERRBUF_SIZE];
     if ((pcap_findalldevs(&alldevs, errbuf)) == -1) {
@@ -180,7 +183,7 @@ bool EthRawPort::Init(void)
 
     // Following filters out any packets from local ethernet interface,
     // most of which are multicast packets and are not of interest
-    struct bpf_program fp;		            // The compiled filter expression
+    struct bpf_program fp;                  // The compiled filter expression
     std::stringstream ss_filter;
     ss_filter << "not ether src " << std::hex
        << (int)eth_src[0] << ":" << (int)eth_src[1] << ":" << (int)eth_src[2] << ":"
@@ -281,9 +284,19 @@ bool EthRawPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
     if (!CheckFwBusGeneration("EthRawPort::ReadQuadletNode"))
         return false;
 
-    bool ret = eth1394_read(node, addr, 4, &data, flags&FW_NODE_ETH_BROADCAST_MASK);
-    data = bswap_32(data);
-    return (!ret);
+    bool ret = !eth1394_read(node, addr, 4, &data, flags&FW_NODE_ETH_BROADCAST_MASK);
+    if (ret) {
+        data = bswap_32(data);
+    }
+    else {
+        // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
+        unsigned int boardId = Node2Board[node];
+        if (boardId < BoardIO::MAX_BOARDS) {
+            outStr << "ReadQuadlet: failed to receive read response from board " << boardId
+                   << " via RAW Ethernet: addr = " << addr << std::endl;
+        }
+    }
+    return ret;
 }
 
 
@@ -305,78 +318,61 @@ bool EthRawPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         return false;
     }
 
-    return !eth1394_read(node, addr, nbytes, rdata, boardId&FW_NODE_ETH_BROADCAST_MASK);
+    bool ret = !eth1394_read(node, addr, nbytes, rdata, boardId&FW_NODE_ETH_BROADCAST_MASK);
+    if (!ret) {
+        outStr << "ReadBlock: failed to receive read response from board " << (boardId&FW_NODE_MASK)
+               << " via RAW Ethernet: addr = " << std::hex << addr << ", nbytes = " << std::dec << nbytes << std::endl;
+    }
+    return ret;
 }
 
+// length is in bytes
 int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
                              size_t length, quadlet_t *buffer, bool useEthernetBroadcast)
 {
-    unsigned int tcode;  // fw tcode
-    size_t length_fw;    // fw length in quadlets
-    int length_fw_bytes; // fw length in bytes
+    unsigned int tcode;     // fw tcode
+    size_t fw_packet_size;  // fw packet length in bytes
 
     if (length == 4) {
         tcode = EthBasePort::QREAD;
-        length_fw = 4;
+        fw_packet_size = FW_QREAD_SIZE;
     } else if ((length > 4) && (length%4 == 0)) {
         tcode = EthBasePort::BREAD;
-        length_fw = 5;
+        fw_packet_size = FW_BREAD_SIZE;
     }
     else
     {
         outStr << "eth1394_read: illegal length = " << length << std::endl;
         return -1;
     }
-    length_fw_bytes = length_fw*sizeof(quadlet_t);
 
-    //quadlet_t packet_FW[length_fw];
-    quadlet_t packet_FW[5];
+    // Ethernet frame length in bytes
+    const int ethlength = GetPrefixOffset(WR_FW_HEADER) + fw_packet_size;
 
-    // header
-    //    make_1394_header(packet_FW, node, addr, tcode);
-    fw_tl = (fw_tl+1)&FW_TL_MASK;   // increment transaction label
-    make_1394_header(packet_FW, node, addr, tcode, fw_tl);
+    // Increment transaction label
+    fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    if (tcode == BREAD)
-        packet_FW[3] = bswap_32((length & 0xFFFF) << 16);
-    packet_FW[length_fw-1] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, length_fw_bytes - FW_CRC_SIZE)));
-
-    if (DEBUG) PrintFrame((unsigned char*)packet_FW, length_fw_bytes);
-
-    // Ethernet frame
-    const int ethlength = GetPrefixOffset(WR_FW_HEADER) + length_fw*sizeof(quadlet_t);  // eth frame length in bytes
-    // length field (big endian 16-bit integer)
-    // Following assumes length is less than 256 bytes
-    frame_hdr[12] = 0;
-    frame_hdr[13] = ethlength-GetPrefixOffset(WR_CTRL);
-
-    //uint8_t frame[ethlength];
-    uint8_t frame[GetPrefixOffset(WR_FW_HEADER)+5*sizeof(quadlet_t)];
-    memcpy(frame, frame_hdr, ETH_FRAME_HEADER_SIZE);
-    if (useEthernetBroadcast) {      // multicast
-        frame[0] |= 0x01;    // set multicast destination address
-        frame[5] = 0xff;     // keep multicast address
-    } else {
-        frame[5] = HubBoard;   // last byte of dest address is bridge board id
-    }
+    unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
 
     // Currently does not support noForward flag
-    make_ctrl_word(frame, false);
+    make_ctrl_word(packet, false);
 
-    memcpy(frame+GetPrefixOffset(WR_FW_HEADER), packet_FW, length_fw*sizeof(quadlet_t));
+    quadlet_t *packet_FW = reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER));
+
+    if (tcode == QREAD)
+        make_qread_packet(packet_FW, node, addr, fw_tl);
+    else if (tcode == BREAD)
+        make_bread_packet(packet_FW, node, addr, length, fw_tl);
 
     if (DEBUG) {
         std::cout << "------ Eth Frame ------" << std::endl;
-        PrintFrame((unsigned char*)frame, ethlength*sizeof(uint8_t));
+        PrintFrame(packet, fw_packet_size);
     }
 
-    if (pcap_sendpacket(handle, frame, ethlength) != 0)
-    {
+    if (!PacketSend(packet, ethlength, useEthernetBroadcast)) {
         outStr << "ERROR: PCAP send packet failed" << std::endl;
         return -1;
     }
-
-    double startTime = Amp1394_GetTime();
 
     // Invoke callback (if defined) between sending read request
     // and checking for read response. If callback returns false, we
@@ -388,98 +384,72 @@ int EthRawPort::eth1394_read(nodeid_t node, nodeaddr_t addr,
         }
     }
 
-    // Read packets
-    struct pcap_pkthdr header;	/* The header that pcap gives us */
-    const u_char *packet;		/* The actual packet */
-    unsigned int numPackets = 0;
-    unsigned int numPacketsValid = 0;
-    double timeDiffSec = 0.0;
+    // TODO: Check for real-time buffer
+    packet = GenericBuffer+GetReadQuadAlign();
 
-    while ((numPacketsValid < 1) && (timeDiffSec < 0.1)) {
-        while (1) {  // can probably eliminate this loop
-            packet = pcap_next(handle, &header);
-            if (packet == NULL)
-                break;
-            numPackets++;
-            if (header.caplen == (ETH_FRAME_HEADER_SIZE + FW_EXTRA_SIZE)) {
-                outStr << "eth1394_read: only extra data" << std::endl;
-                ProcessExtraData(packet);
+    unsigned int recvLength = GetPrefixOffset(RD_FW_HEADER)+GetReadPostfixSize();
+    if (tcode == QREAD)
+        recvLength += (FW_QRESPONSE_SIZE-FW_CRC_SIZE);  // CRC included in ReadPostfix
+    else if (tcode == BREAD)
+        recvLength += FW_BRESPONSE_HEADER_SIZE + length;
+
+    int nRecv = PacketReceive(packet, recvLength);
+
+    if (nRecv > 0) {
+        if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
+            outStr << "Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
+                   << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
+            return -1;
+        }
+        nodeid_t src_node = packet[19]&FW_NODE_MASK;
+        if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
+            outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
+        }
+        int tl_recv = packet[16] >> 2;
+        if (tl_recv != fw_tl) {
+                outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
+                       << ", received tl = " << tl_recv << std::endl;
             }
-            if (headercheck((unsigned char *)packet, true)) {
-                if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
-                    outStr << "Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
-                           << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
-                    continue;
-                }
-                nodeid_t src_node = packet[19]&FW_NODE_MASK;
-                if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
-                    outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
-                    continue;
-                }
-                //unsigned int packetLength = static_cast<int>(packet[13])<<8 | packet[12];
-                //outStr << "Packet length = " << std::dec << packetLength << std::endl;
-                numPacketsValid++;
-                int tl_recv = packet[16] >> 2;
-                if (tl_recv != fw_tl) {
-                    outStr << "WARNING: expected tl = " << (unsigned int)fw_tl
-                           << ", received tl = " << tl_recv << std::endl;
-                }
-                int tcode_recv = packet[17] >> 4;
-                if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
-                    // check header crc
-                    if (checkCRC(packet)) {
-                        memcpy(buffer, &packet[26], 4);
-                        ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_QRESPONSE_SIZE);
+        int tcode_recv = packet[17] >> 4;
+        if ((tcode == QREAD) && (tcode_recv == QRESPONSE)) {
+            // check header crc
+            if (checkCRC(packet)) {
+                memcpy(buffer, &packet[26], 4);
+                ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_QRESPONSE_SIZE);
+            }
+            else {
+                outStr <<"ERROR: crc check error"<<std::endl;
+                return -1;
+            }
+        }
+        else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
+            if (length == static_cast<size_t>((packet[26] << 8) | packet[27])) {
+                if (checkCRC(packet)) {
+                    if (reinterpret_cast<unsigned char *>(buffer) != &packet[34]) {
+                        memcpy(buffer, &packet[34], length);
+                        //rtRead = false;   // PK TEMP
                     }
-                    else {
-                        outStr <<"ERROR: crc check error"<<std::endl;
-                        return -1;
-                    }
-                }
-                else if ((tcode == BREAD) && (tcode_recv == BRESPONSE)) {
-                    if (length == static_cast<size_t>((packet[26] << 8) | packet[27])) {
-                        if (checkCRC(packet)) {
-                            memcpy(buffer, &packet[34], length);
-                            ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_BRESPONSE_HEADER_SIZE + length + FW_CRC_SIZE);
-                        }
-                        else {
-                            outStr <<"ERROR: header crc check error"<<std::endl;
-                            return -1;
-                       }
-                    }
-                    else{
-                        outStr << "ERROR: block read response size error" << std::endl;
-                        return -1;
-                    }
+                    ProcessExtraData(packet + ETH_FRAME_HEADER_SIZE + FW_BRESPONSE_HEADER_SIZE + length + FW_CRC_SIZE);
                 }
                 else {
-                    outStr << "WARNING: unexpected response tcode: " << tcode_recv
-                           << " (sent tcode: " << tcode << ")" << std::endl;
+                    outStr <<"ERROR: header crc check error"<<std::endl;
                     return -1;
-//                    continue;
                 }
             }
+            else{
+                outStr << "ERROR: block read response size error" << std::endl;
+                return -1;
+            }
         }
-        timeDiffSec = Amp1394_GetTime() - startTime;
-    }
-
-    if (numPacketsValid < 1) {
-        unsigned int boardId = Node2Board[node];
-        if (boardId < BoardIO::MAX_BOARDS) {
-            // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
-            outStr << "Error: Receive failed, addr = " << std::hex << addr
-                   << ", nbytes = " << length << ", time = " << timeDiffSec << " sec" << ", num pkt = " << numPackets << std::endl;
+        else {
+            outStr << "WARNING: unexpected response tcode: " << tcode_recv
+                   << " (sent tcode: " << tcode << ")" << std::endl;
+            return -1;
         }
-        return -1;
+        return 0;
     }
-#if 0
-    outStr << "Processed " << numPackets << " packets, " << numPacketsValid << " valid"
-           << ", time = " << timeDiffSec << " sec" << std::endl;
-#endif
-
-    return 0;
+    return -1;
 }
-
 
 bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
@@ -487,7 +457,7 @@ bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthern
     bool ret = true;
 
     // Ethernet frame
-    memcpy(packet, frame_hdr, 12);  // Copy header except length field
+    memcpy(packet, frame_hdr, ETH_FRAME_HEADER_SIZE-2);  // Copy header except length field
     if (useEthernetBroadcast) {      // multicast
         packet[0] |= 0x01;    // set multicast destination address
         packet[5] = 0xff;     // keep multicast address
@@ -512,6 +482,56 @@ bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthern
     return ret;
 }
 
+int EthRawPort::PacketReceive(unsigned char *recvPacket, size_t nbytes)
+{
+    // Read packets
+    struct pcap_pkthdr header;      /* The header that pcap gives us */
+    const unsigned char *packet;    /* The actual packet */
+    unsigned int numPackets = 0;
+    unsigned int numPacketsValid = 0;
+    double timeDiffSec = 0.0;
+    unsigned int nRead = 0;
+
+    double startTime = Amp1394_GetTime();
+    while ((numPacketsValid < 1) && (timeDiffSec < ReceiveTimeout)) {
+        packet = pcap_next(handle, &header);
+        if (packet) {
+            numPackets++;
+            if (headercheck(packet, true)) {
+                // Get length from Ethernet header
+                nRead = bswap_16(*(unsigned int *)(packet+ETH_FRAME_HEADER_SIZE-2));
+                if (nRead < 1500) {
+                    nRead += ETH_FRAME_HEADER_SIZE;
+                }
+                else {
+                    // Shouldn't happen with raw Ethernet, but in case it does, use the capture length instead
+                    nRead = header.caplen;
+                }
+                if (nRead == (ETH_FRAME_HEADER_SIZE + FW_EXTRA_SIZE)) {
+                    outStr << "PacketReceive: only extra data" << std::endl;
+                    ProcessExtraData(packet);
+                    nRead = 0;
+                }
+                numPacketsValid++;
+            }
+        }
+        timeDiffSec = Amp1394_GetTime() - startTime;
+    }
+    if (nRead > 0) {
+        if (nRead > nbytes) {
+            outStr << "PacketReceive: truncating packet from " << std::dec << nRead << " to "
+                   << nbytes << " bytes" << std::endl;
+            nRead = nbytes;
+        }
+        memcpy(recvPacket, packet, nRead);
+    }
+#if 0
+    outStr << "Processed " << numPackets << " packets, " << numPacketsValid << " valid"
+           << ", time = " << timeDiffSec << " sec" << std::endl;
+#endif
+    return static_cast<int>(nRead);
+}
+
 // Currently not used
 int EthRawPort::make_ethernet_header(unsigned char *buffer, unsigned int numBytes)
 {
@@ -530,11 +550,11 @@ int EthRawPort::make_ethernet_header(unsigned char *buffer, unsigned int numByte
  \param toPC  true: check FPGA to PC, false: check PC to FPGA
  \return bool true if valid
 */
-bool EthRawPort::headercheck(uint8_t* header, bool toPC) const
+bool EthRawPort::headercheck(const unsigned char *header, bool toPC) const
 {
     unsigned int i;
-    const uint8_t *srcAddr;
-    const uint8_t *destAddr;
+    const unsigned char *srcAddr;
+    const unsigned char *destAddr;
     if (toPC) {
         // the header should be "Local MAC addr" + "CID,0x1394,boardid"
         destAddr = frame_hdr+6;

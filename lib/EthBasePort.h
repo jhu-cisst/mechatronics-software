@@ -81,6 +81,9 @@ protected:
     // Send packet
     virtual bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
 
+    // Receive packet
+    virtual int PacketReceive(unsigned char *packet, size_t nbytes) = 0;
+
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     void OnNoneRead(void);
 

@@ -355,11 +355,18 @@ bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data
     }
 
     unsigned char *recvPacket = GenericBuffer+GetWriteQuadAlign();
-    // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
-    unsigned int boardId = Node2Board[node];
-    bool silent = !(boardId < BoardIO::MAX_BOARDS);
-    if (!PacketReceive(recvPacket, FW_QRESPONSE_SIZE+FW_EXTRA_SIZE, silent, boardId))
+    unsigned int recvPacketSize = FW_QRESPONSE_SIZE+FW_EXTRA_SIZE;
+    int nRecv = PacketReceive(recvPacket, recvPacketSize);
+    if (nRecv != static_cast<int>(recvPacketSize)) {
+        // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
+        unsigned int boardId = Node2Board[node];
+        if (boardId < BoardIO::MAX_BOARDS) {
+            outStr << "ReadQuadlet: failed to receive read response from board " << boardId
+                   << " via UDP: return value = " << nRecv
+                   << ", expected = " << recvPacketSize << std::endl;
+        }
         return false;
+    }
 
     if (!CheckFirewirePacket(recvPacket, 0, node, EthBasePort::QRESPONSE, fw_tl))
         return false;
@@ -431,8 +438,13 @@ bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rd
         }
     }
 
-    if (!PacketReceive(packet, packetSize, false, boardId))
+    int nRecv = PacketReceive(packet, packetSize);
+    if (nRecv != static_cast<int>(packetSize)) {
+        outStr << "ReadBlock: failed to receive read response from board " << (boardId&FW_NODE_MASK)
+               << " via UDP: return value = " << nRecv
+               << ", expected = " << packetSize << std::endl;
         return false;
+    }
 
     if (!CheckFirewirePacket(packet, nbytes, node, EthBasePort::BRESPONSE, fw_tl))
         return false;
@@ -458,23 +470,15 @@ bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthern
     return true;
 }
 
-bool EthUdpPort::PacketReceive(unsigned char *packet, size_t nbytes, bool silent, unsigned int boardId)
+int EthUdpPort::PacketReceive(unsigned char *packet, size_t nbytes)
 {
     int nRecv = sockPtr->Recv(packet, nbytes, ReceiveTimeout);
     if (nRecv == static_cast<int>(FW_EXTRA_SIZE)) {
         outStr << "PacketReceive: only extra data" << std::endl;
         ProcessExtraData(packet);
-        return false;
+        nRecv = 0;
     }
-    else if (nRecv != static_cast<int>(nbytes)) {
-        if (!silent) {
-            outStr << "ReadQuadlet: failed to receive read response from board " << boardId
-                   << " via UDP: return value = " << nRecv
-                   << ", expected = " << nbytes << std::endl;
-        }
-        return false;
-    }
-    return true;
+    return nRecv;
 }
 
 // Convert IP address from uint32_t to string

@@ -51,7 +51,7 @@ protected:
     bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via UDP
-    bool PacketReceive(unsigned char *packet, size_t nbytes, bool silent, unsigned int boardId);
+    int PacketReceive(unsigned char *packet, size_t nbytes);
 
 public:
 
