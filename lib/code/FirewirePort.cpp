@@ -91,7 +91,10 @@ bool FirewirePort::Init(void)
     // stop cycle start packet
     StopCycleStartPacket();
 
-    return ScanNodes();
+    bool ret = ScanNodes();
+    if (ret)
+        SetDefaultProtocol();
+    return ret;
 }
 
 void FirewirePort::StopCycleStartPacket(void)

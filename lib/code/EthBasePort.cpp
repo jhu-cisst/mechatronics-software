@@ -466,7 +466,7 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
 
 bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
-    if (!CheckFwBusGeneration("EthBasePort::ReadQuadlet"))
+    if ((node != FW_NODE_BROADCAST) && !CheckFwBusGeneration("ReadQuadlet"))
         return false;
 
     // Flush before reading
@@ -524,7 +524,7 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
 
 bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
 {
-    if (!CheckFwBusGeneration("EthBasePort::WriteQuadlet"))
+    if ((node != FW_NODE_BROADCAST) && !CheckFwBusGeneration("WriteQuadlet"))
         return false;
 
     // Use GenericBuffer, which is much larger than needed
@@ -545,7 +545,7 @@ bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t dat
 bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
                                 unsigned int nbytes, unsigned char flags)
 {
-    if (!CheckFwBusGeneration("EthBasePort::ReadBlock"))
+    if ((node != FW_NODE_BROADCAST) && !CheckFwBusGeneration("ReadBlock"))
         return false;
 
     // Flush before reading
@@ -619,7 +619,7 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
                                  unsigned int nbytes, unsigned char flags)
 {
-    if (!CheckFwBusGeneration("EthBasePort::WriteBlock"))
+    if ((node != FW_NODE_BROADCAST) && !CheckFwBusGeneration("WriteBlock"))
         return false;
 
     // Packet to send

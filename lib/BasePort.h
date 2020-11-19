@@ -132,12 +132,18 @@ protected:
     // Cleanup port (called by destructor and Reset)
     virtual void Cleanup(void) = 0;
 
+    // Sets default protocol based on firmware
+    void SetDefaultProtocol(void);
+
     // Following methods assign the memory used by each board,
     // based on the protocol.
     void SetReadBuffer(void);
     void SetWriteBuffer(void);
     void SetReadBufferBroadcast(void);
     void SetWriteBufferBroadcast(void);
+
+    // Convenience function
+    void SetReadInvalid(void);
 
     // Initialize nodes on the bus; called by ScanNodes
     // \return Maximum number of nodes on bus (0 if error)
@@ -273,12 +279,12 @@ public:
 
     //*********************** Virtual methods **********************************
 
-    // Check whether bus generation has changed
-    virtual bool CheckFwBusGeneration(const std::string &caller) const;
+    // Check whether bus generation has changed. If doScan is true, then
+    // call ReScanNodes if bus generation mismatch.
+    virtual bool CheckFwBusGeneration(const std::string &caller, bool doScan = false);
 
-    // Check whether nodes need to be rescanned (e.g., after bus generation change)
-    // and call ScanNodes if needed
-    virtual bool CheckScanNodes(const std::string &caller);
+    // Rescan the Firewire bus (e.g., after bus reset)
+    virtual bool ReScanNodes(const std::string &caller);
 
     // Read all boards
     virtual bool ReadAllBoards(void);

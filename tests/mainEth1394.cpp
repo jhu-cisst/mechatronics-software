@@ -554,6 +554,7 @@ int main(int argc, char **argv)
             std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
             std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
         }
+        std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (curBoardEth)
             std::cout << "  t) Run Ethernet timing analysis" << std::endl;
         if (curBoard)
@@ -772,6 +773,13 @@ int main(int argc, char **argv)
                 else
                     std::cout << "Failed to write IP address" << std::endl;
             }
+            break;
+
+        case 'r':
+            if (EthPort->IsOK())
+                EthPort->CheckFwBusGeneration("EthPort", true);
+            if (FwPort.IsOK())
+                FwPort.CheckFwBusGeneration("FwPort", true);
             break;
 
         case 't':

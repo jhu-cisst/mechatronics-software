@@ -252,6 +252,10 @@ bool EthUdpPort::Init(void)
         return false;
 
     bool ret = ScanNodes();
+
+    if (ret)
+        SetDefaultProtocol();
+
     //if (!ret)
     //    sockPtr->Close();
     return ret;

@@ -47,13 +47,6 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
-#define DEBUG 0
-
-// PK TEMP following CRC defs
-// crc related
-uint32_t BitReverse32(uint32_t input);
-uint32_t crc32(uint32_t crc, const void *buf, size_t size);
-
 EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
     EthBasePort(portNum, debugStream, cb)
 {
@@ -207,6 +200,10 @@ bool EthRawPort::Init(void)
     frame_hdr[13] = 0;   // length field
 
     bool ret = ScanNodes();
+
+    if (ret)
+        SetDefaultProtocol();
+
 #if 0
     if (!ret) {
         pcap_close(handle);

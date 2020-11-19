@@ -455,7 +455,7 @@ int main(int argc, char** argv)
 
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
-            char line[80];
+            char line[120];
             memset(line, ' ', sizeof(line)-1);
             line[sizeof(line)-1] = 0;
             for (i = cur_line; i < last_debug_line; i++)

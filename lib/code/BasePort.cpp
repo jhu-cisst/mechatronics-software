@@ -167,6 +167,15 @@ void BasePort::SetWriteBufferBroadcast(void)
     }
 }
 
+void BasePort::SetReadInvalid(void)
+{
+    for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
+        BoardIO *board = BoardList[boardNum];
+        if (board)
+            board->SetReadValid(false);
+    }
+}
+
 void BasePort::Reset(void)
 {
     Cleanup();
@@ -246,21 +255,6 @@ bool BasePort::ScanNodes(void)
     }
     outStr << "ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
 
-    // Use broadcast by default if all firmware are bc capable
-    if ((NumOfNodes_ > 0) && IsAllBoardsBroadcastCapable_) {
-        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
-            Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-            if (IsAllBoardsBroadcastShorterWait_)
-                outStr << "ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
-            else if (IsNoBoardsBroadcastShorterWait_)
-                outStr << "ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
-            else
-                outStr << "ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
-        }
-        else
-            outStr << "ScanNodes: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
-    }
-
     // update Board2Node
     for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
         Board2Node[board] = MAX_NODES;
@@ -277,6 +271,24 @@ bool BasePort::ScanNodes(void)
     }
 
     return (NumOfNodes_ > 0);
+}
+
+void BasePort::SetDefaultProtocol(void)
+{
+    // Use broadcast by default if all firmware are bc capable
+    if ((NumOfNodes_ > 0) && IsAllBoardsBroadcastCapable_) {
+        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
+            Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
+            if (IsAllBoardsBroadcastShorterWait_)
+                outStr << "All nodes broadcast capable and support shorter wait" << std::endl;
+            else if (IsNoBoardsBroadcastShorterWait_)
+                outStr << "All nodes broadcast capable and do not support shorter wait" << std::endl;
+            else
+                outStr << "All nodes broadcast capable and some support shorter wait" << std::endl;
+        }
+        else
+            outStr << "All nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
+    }
 }
 
 bool BasePort::AddBoard(BoardIO *board)
@@ -420,29 +432,26 @@ nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
     return node;
 }
 
-bool BasePort::CheckFwBusGeneration(const std::string &caller) const
+bool BasePort::CheckFwBusGeneration(const std::string &caller, bool doScan)
 {
     bool ret = (FwBusGeneration == newFwBusGeneration);
     if (!ret) {
         outStr << caller << ": Firewire bus reset, old generation = " << FwBusGeneration
                << ", new generation = " << newFwBusGeneration << std::endl;
+        if (doScan)
+            ret = ReScanNodes(caller);
     }
     return ret;
 }
 
-bool BasePort::CheckScanNodes(const std::string &caller)
+bool BasePort::ReScanNodes(const std::string &caller)
 {
-    bool ret = true;
-    if (FwBusGeneration != newFwBusGeneration) {
-        unsigned int oldFwBusGeneration = FwBusGeneration;
-        UpdateBusGeneration(newFwBusGeneration);
-        if (GetPortType() == PORT_FIREWIRE)
-            Amp1394_Sleep(1.0);
-        ret = ScanNodes();
-        if (!ret) {
-            outStr << caller << ": failed to rescan nodes" << std::endl;
-            UpdateBusGeneration(oldFwBusGeneration);
-        }
+    unsigned int oldFwBusGeneration = FwBusGeneration;
+    UpdateBusGeneration(newFwBusGeneration);
+    bool ret = ScanNodes();
+    if (!ret) {
+        outStr << caller << ": failed to rescan nodes" << std::endl;
+        UpdateBusGeneration(oldFwBusGeneration);
     }
     return ret;
 }
@@ -499,17 +508,19 @@ bool BasePort::ReadAllBoards(void)
         return ReadAllBoardsBroadcast();
     }
 
-    if (!CheckScanNodes("BasePort::ReadAllBoards"))
+    if (!CheckFwBusGeneration("ReadAllBoards", true)) {
+        SetReadInvalid();
+        OnNoneRead();
         return false;
-
-    bool rtRead = true;   // for debugging
+    }
 
     bool allOK = true;
     bool noneRead = true;
+
+    bool rtRead = true;
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(),
-                                 BoardList[board]->GetReadNumBytes());
+            bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(), BoardList[board]->GetReadNumBytes());
             if (ret) {
                 noneRead = false;
             } else {
@@ -519,12 +530,12 @@ bool BasePort::ReadAllBoards(void)
 
             if (!ret) {
                 if (ReadErrorCounter_ == 0) {
-                    outStr << "BasePort::ReadAllBoards: read failed on port "
+                    outStr << "ReadAllBoards: read failed on port "
                            << PortNum << ", board " << board << std::endl;
                 }
                 ReadErrorCounter_++;
                 if (ReadErrorCounter_ == 10000) {
-                    outStr << "BasePort::ReadAllBoards: read failed on port "
+                    outStr << "ReadAllBoards: read failed on port "
                            << PortNum << ", board " << board << " occurred 10,000 times" << std::endl;
                     ReadErrorCounter_ = 0;
                 }
@@ -533,11 +544,12 @@ bool BasePort::ReadAllBoards(void)
             }
         }
     }
+    if (!rtRead)
+        outStr << "ReadAllBoards: rtRead is false" << std::endl;
+
     if (noneRead) {
         OnNoneRead();
     }
-    if (!rtRead)
-        outStr << "ReadAllBoards: rtRead is false" << std::endl;
     return allOK;
 }
 
@@ -548,16 +560,18 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!CheckScanNodes("BasePort::ReadAllBoardsBroadcast"))
+    if (!CheckFwBusGeneration("ReadAllBoardsBroadcast", true)) {
+        SetReadInvalid();
+        OnNoneRead();
         return false;
-
-    bool rtRead = true;   // for debugging
+    }
 
     bool allOK = true;
     bool noneRead = true;
 
     //--- send out broadcast read request -----
 
+    bool rtRead = true;
     // sequence number from 16 bits 0 to 65535
     ReadSequence_++;
     if (ReadSequence_ == 65536) {
@@ -585,7 +599,9 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     //memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
 
     bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
+
     if (!ret) {
+        SetReadInvalid();
         OnNoneRead();
         return false;
     }
@@ -673,8 +689,10 @@ bool BasePort::WriteAllBoards(void)
         return WriteAllBoardsBroadcast();
     }
 
-    if (!CheckScanNodes("BasePort::WriteAllBoards"))
+    if (!CheckFwBusGeneration("WriteAllBoards", true)) {
+        OnNoneWritten();
         return false;
+    }
 
     rtWrite = true;   // for debugging
     bool allOK = true;
@@ -734,8 +752,10 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!CheckScanNodes("BasePort::WriteAllBoardsBroadcast"))
+    if (!CheckFwBusGeneration("WriteAllBoardsBroadcast", true)) {
+        OnNoneWritten();
         return false;
+    }
 
     bool rtWrite = true;   // for debugging
 
