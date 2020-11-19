@@ -100,7 +100,7 @@ protected:
     // to be different than the one on the PC.
     virtual void OnFwBusReset(unsigned int FwBusGeneration_FPGA);
 
-    void make_ctrl_word(unsigned char *packet, bool noForward);
+    virtual void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
 
     void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
 

@@ -279,35 +279,13 @@ unsigned int EthRawPort::GetPrefixOffset(MsgType msg) const
     return 0;
 }
 
-bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
+bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool)
 {
-    // Firewire packet is already created by caller
-    bool ret = true;
-
-    // Ethernet frame
-    memcpy(packet, frame_hdr, ETH_FRAME_HEADER_SIZE-2);  // Copy header except length field
-    if (useEthernetBroadcast) {      // multicast
-        packet[0] |= 0x01;    // set multicast destination address
-        packet[5] = 0xff;     // keep multicast address
-    }
-    else {
-        packet[5] = HubBoard;     // last byte of dest address is board id
-    }
-
-    // length field (big endian 16-bit integer)
-    // Following assumes length is less than 256 bytes
-    packet[12] = 0;
-    packet[13] = nbytes-ETH_FRAME_HEADER_SIZE;
-
-    if (DEBUG) {
-        std::cout << "------ Eth Frame ------" << std::endl;
-        PrintFrame(packet, nbytes);
-    }
     if (pcap_sendpacket(handle, packet, nbytes) != 0)  {
         outStr << "ERROR: PCAP send packet failed" << std::endl;
-        ret = false;
+        return false;
     }
-    return ret;
+    return true;
 }
 
 int EthRawPort::PacketReceive(unsigned char *recvPacket, size_t nbytes)
@@ -326,7 +304,7 @@ int EthRawPort::PacketReceive(unsigned char *recvPacket, size_t nbytes)
             numPackets++;
             if (headercheck(packet, true)) {
                 // Get length from Ethernet header
-                nRead = bswap_16(*(unsigned int *)(packet+ETH_FRAME_HEADER_SIZE-2));
+                nRead = bswap_16(*reinterpret_cast<const uint16_t *>(packet+ETH_FRAME_LENGTH_OFFSET));
                 if (nRead < 1500) {
                     nRead += ETH_FRAME_HEADER_SIZE;
                 }
@@ -379,15 +357,24 @@ bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthern
     return true;
 }
 
-// Currently not used
-int EthRawPort::make_ethernet_header(unsigned char *buffer, unsigned int numBytes)
+void EthRawPort::make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags)
 {
-    memcpy(buffer, frame_hdr, 12);
+    make_ethernet_header(packet, nBytes, flags);
+    EthBasePort::make_write_header(packet, nBytes, flags);
+}
+
+void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags)
+{
+    memcpy(packet, frame_hdr, ETH_FRAME_LENGTH_OFFSET);  // Copy header except length field
+    if (flags&FW_NODE_ETH_BROADCAST_MASK) {      // multicast
+        packet[0] |= 0x01;    // set multicast destination address
+        packet[5] = 0xff;     // keep multicast address
+    }
+    else {
+        packet[5] = HubBoard;     // last byte of dest address is board id
+    }
     // length field (big endian 16-bit integer)
-    // Following assumes length is less than 256 bytes
-    buffer[12] = 0;
-    buffer[13] = numBytes;
-    return 14;
+    *reinterpret_cast<uint16_t *>(packet+ETH_FRAME_LENGTH_OFFSET) = bswap_16(numBytes-ETH_FRAME_HEADER_SIZE);
 }
 
 /*!
@@ -448,20 +435,4 @@ bool EthRawPort::headercheck(const unsigned char *header, bool toPC) const
         }
     }
     return true;
-}
-
-void EthRawPort::PrintFrame(unsigned char* buffer, int length)
-{
-    unsigned char* currentChar = buffer;
-    std::cout<<"Frame length: "<<std::dec<<length<<std::endl;
-    for(int i=0;i<length;i++)
-    {
-        std::cout<<std::hex<<std::setw(2)<<std::setfill('0')<<(int)*currentChar;
-        currentChar = currentChar + 1;
-        if(i%2)
-            std::cout<<" ";
-        if((i+3)%8 == 0)
-            std::cout<<std::endl;
-    }
-    std::cout << std::endl;
 }

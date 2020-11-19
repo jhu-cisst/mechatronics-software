@@ -478,13 +478,14 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
+    unsigned int sendPacketSize = GetPrefixOffset(WR_FW_HEADER)+FW_QREAD_SIZE;
 
     // Make control word
-    make_ctrl_word(sendPacket, flags&FW_NODE_NOFORWARD_MASK);
+    make_write_header(sendPacket, sendPacketSize, flags);
 
     // Build FireWire packet
     make_qread_packet(reinterpret_cast<quadlet_t *>(sendPacket+GetPrefixOffset(WR_FW_HEADER)), node, addr, fw_tl);
-    if (!PacketSend(sendPacket, GetPrefixOffset(WR_FW_HEADER)+FW_QREAD_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK))
+    if (!PacketSend(sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
 
     // Invoke callback (if defined) between sending read request
@@ -527,18 +528,18 @@ bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t dat
         return false;
 
     // Use GenericBuffer, which is much larger than needed
-    unsigned char *buffer = GenericBuffer+GetWriteQuadAlign();
+    unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
+    unsigned int packetSize = GetPrefixOffset(WR_FW_HEADER)+FW_QWRITE_SIZE;
 
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    // Make control word
-    make_ctrl_word(buffer, flags&FW_NODE_NOFORWARD_MASK);
+    make_write_header(packet, packetSize, flags);
 
     // Build FireWire packet (also byteswaps data)
-    make_qwrite_packet(reinterpret_cast<quadlet_t *>(buffer+GetPrefixOffset(WR_FW_HEADER)), node, addr, data, fw_tl);
+    make_qwrite_packet(reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER)), node, addr, data, fw_tl);
 
-    return PacketSend(buffer, GetPrefixOffset(WR_FW_HEADER)+FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
+    return PacketSend(packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
@@ -554,16 +555,16 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 
     // Create buffer that is large enough for Firewire packet
     unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
+    unsigned int sendPacketSize = GetPrefixOffset(WR_FW_HEADER)+FW_BREAD_SIZE;
 
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    // Make control word
-    make_ctrl_word(sendPacket, flags&FW_NODE_NOFORWARD_MASK);
+    make_write_header(sendPacket, sendPacketSize, flags);
 
     // Build FireWire packet
     make_bread_packet(reinterpret_cast<quadlet_t *>(sendPacket+GetPrefixOffset(WR_FW_HEADER)), node, addr, nbytes, fw_tl);
-    if (!PacketSend(sendPacket, GetPrefixOffset(WR_FW_HEADER)+FW_BREAD_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK))
+    if (!PacketSend(sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
 
     // Invoke callback (if defined) between sending read request
@@ -576,7 +577,7 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 
     // Packet to receive
     unsigned char *packet = GenericBuffer+GetReadQuadAlign();;
-    size_t packetSize = GetPrefixOffset(RD_FW_BDATA) + nbytes + GetReadPostfixSize();
+    unsigned int packetSize = GetPrefixOffset(RD_FW_BDATA) + nbytes + GetReadPostfixSize();
 
     // Check for real-time read
     unsigned char *rdata_base = reinterpret_cast<unsigned char *>(rdata)-GetReadQuadAlign()-GetPrefixOffset(RD_FW_BDATA);
@@ -641,12 +642,10 @@ bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdat
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
-    // Make control word
-    make_ctrl_word(packet, flags&FW_NODE_NOFORWARD_MASK);
+    make_write_header(packet, packetSize, flags);
 
     // Build FireWire packet
-    quadlet_t *packet_fw = reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER));
-    make_bwrite_packet(packet_fw, node, addr, wdata, nbytes, fw_tl);
+    make_bwrite_packet(reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER)), node, addr, wdata, nbytes, fw_tl);
 
     // Now, send the packet
     return PacketSend(packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
@@ -693,11 +692,11 @@ void EthBasePort::PromDelay(void) const
 // Protected
 // ---------------------------------------------------------
 
-void EthBasePort::make_ctrl_word(unsigned char *packet, bool noForward)
+void EthBasePort::make_write_header(unsigned char *packet, unsigned int, unsigned char flags)
 {
     unsigned int ctrlOffset = GetPrefixOffset(WR_CTRL);
     packet[ctrlOffset] = 0;
-    if (noForward) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
+    if (flags&FW_NODE_NOFORWARD_MASK) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
     packet[ctrlOffset+1] = FwBusGeneration;
 }
 

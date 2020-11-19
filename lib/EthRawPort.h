@@ -25,7 +25,8 @@ http://www.cisst.org/cisst/license.txt.
 struct pcap;
 typedef struct pcap pcap_t;
 
-const unsigned int ETH_FRAME_HEADER_SIZE = 14;  // dest addr (6), src addr (6), length (2)
+const unsigned int ETH_FRAME_HEADER_SIZE = 14;    // dest addr (6), src addr (6), length (2)
+const unsigned int ETH_FRAME_LENGTH_OFFSET = 12;  // offset to length
 
 class EthRawPort : public EthBasePort
 {
@@ -36,7 +37,9 @@ protected:
 
     bool headercheck(const unsigned char *header, bool toPC) const;
 
-    int make_ethernet_header(unsigned char *buffer, unsigned int numBytes);
+    void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
+
+    void make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags);
 
     // Check Ethernet header
     bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
@@ -81,10 +84,6 @@ public:
         { return ((ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE)%sizeof(quadlet_t)); }
     unsigned int GetReadQuadAlign(void) const
         { return (ETH_FRAME_HEADER_SIZE%sizeof(quadlet_t)); }
-
-    //****************** Static methods ***************************
-
-    static void PrintFrame(unsigned char* buffer, int length);
 };
 
 #endif  // __EthRawPort_H__
