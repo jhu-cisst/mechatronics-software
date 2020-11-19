@@ -340,7 +340,10 @@ int main(int argc, char** argv)
 
     // control loop
     while ((c = getch()) != ESC_CHAR) {
-        if (c == 'r') Port->Reset();
+        if (c == 'r') {
+            Port->Reset();
+            Port->SetProtocol(protocol);
+        }
         else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));
