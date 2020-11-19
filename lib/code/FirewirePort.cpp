@@ -314,20 +314,8 @@ bool FirewirePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t da
     return !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
 }
 
-bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
-{
-    nodeid_t node = ConvertBoardToNode(boardId);
-    return (node < MAX_NODES) ? ReadQuadletNode(node, addr, data) : false;
-}
-
-bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
-{
-    nodeid_t node = ConvertBoardToNode(boardId);
-    return (node < MAX_NODES) ? WriteQuadletNode(node, addr, data) : false;
-}
-
 bool FirewirePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
-                                 unsigned int nbytes)
+                                 unsigned int nbytes, unsigned char)
 {
     if (!CheckFwBusGeneration("FirewirePort::ReadBlock"))
         return false;
@@ -336,26 +324,12 @@ bool FirewirePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdat
     return !raw1394_read(handle, baseNodeId+node, addr, nbytes, rdata);
 }
 
-bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                             unsigned int nbytes)
-{
-    nodeid_t node = ConvertBoardToNode(boardId);
-    return (node < MAX_NODES) ? ReadBlockNode(node, addr, rdata, nbytes) : false;
-}
-
 bool FirewirePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
-                                  unsigned int nbytes)
+                                  unsigned int nbytes, unsigned char)
 {
     if (!CheckFwBusGeneration("FirewirePort::WriteBlock"))
         return false;
 
     rtWrite = true;   // for debugging
     return !raw1394_write(handle, baseNodeId+node, addr, nbytes, wdata);
-}
-
-bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                              unsigned int nbytes)
-{
-    nodeid_t node = ConvertBoardToNode(boardId);
-    return (node < MAX_NODES) ? WriteBlockNode(node, addr, wdata, nbytes) : false;
 }

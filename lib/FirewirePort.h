@@ -71,10 +71,14 @@ protected:
 
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
-    bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
+    // Parameter "flags" is not used for Firewire.
+    bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
+                        unsigned int nbytes, unsigned char flags = 0);
 
-    // Read a block from the specified node. Internal method called by ReadBlock
-    bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
+    // Read a block from the specified node. Internal method called by ReadBlock.
+    // Parameter "flags" is not used for Firewire.
+    bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
+                       unsigned int nbytes, unsigned char flags = 0);
 
 public:
     // Initialize IEEE-1394 (Firewire) port.
@@ -107,20 +111,6 @@ public:
 
     // Removes board
     bool RemoveBoard(unsigned char boardId);
-
-    // Read a quadlet from the specified board, true on success
-    bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
-
-    // Write a quadlet to the specified board
-    bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
-
-    // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                   unsigned int nbytes);
-
-    // Write a block to the specified board
-    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                    unsigned int nbytes);
 
     /*!
      \brief Write the broadcast read request

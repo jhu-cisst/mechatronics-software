@@ -75,11 +75,11 @@ protected:
     bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
 
     // Write a block to the specified node. Internal method called by ReadBlock.
-    bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
+    bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes, unsigned char flags = 0);
 
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
-    bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
+    bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes, unsigned char flags = 0);
 
     // Send packet
     virtual bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
@@ -140,18 +140,6 @@ public:
     unsigned int GetBusGeneration(void) const { return FwBusGeneration; }
 
     void UpdateBusGeneration(unsigned int gen) { FwBusGeneration = gen; }
-
-    // Read a quadlet from the specified board
-    bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
-
-    // Write a quadlet to the specified board
-    bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
-
-    // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
-
-    // Write a block to the specified board
-    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
 
     /*!
      \brief Write the broadcast read request

@@ -466,7 +466,7 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
 
 bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
 {
-    if (!CheckFwBusGeneration("EthBasePort::ReadQuadletNode"))
+    if (!CheckFwBusGeneration("EthBasePort::ReadQuadlet"))
         return false;
 
     // Flush before reading
@@ -523,7 +523,7 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
 
 bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
 {
-    if (!CheckFwBusGeneration("EthBasePort::WriteQuadletNode"))
+    if (!CheckFwBusGeneration("EthBasePort::WriteQuadlet"))
         return false;
 
     // Use GenericBuffer, which is much larger than needed
@@ -541,23 +541,11 @@ bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t dat
     return PacketSend(buffer, GetPrefixOffset(WR_FW_HEADER)+FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
-bool EthBasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
+bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
+                                unsigned int nbytes, unsigned char flags)
 {
-    if (nbytes == 4)
-        return ReadQuadlet(boardId, addr, *rdata);
-    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
-        return false;
-    }
-
     if (!CheckFwBusGeneration("EthBasePort::ReadBlock"))
         return false;
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
 
     // Flush before reading
     int numFlushed = PacketFlushAll();
@@ -571,11 +559,11 @@ bool EthBasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *r
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     // Make control word
-    make_ctrl_word(sendPacket, boardId&FW_NODE_NOFORWARD_MASK);
+    make_ctrl_word(sendPacket, flags&FW_NODE_NOFORWARD_MASK);
 
     // Build FireWire packet
     make_bread_packet(reinterpret_cast<quadlet_t *>(sendPacket+GetPrefixOffset(WR_FW_HEADER)), node, addr, nbytes, fw_tl);
-    if (!PacketSend(sendPacket, GetPrefixOffset(WR_FW_HEADER)+FW_BREAD_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK))
+    if (!PacketSend(sendPacket, GetPrefixOffset(WR_FW_HEADER)+FW_BREAD_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
 
     // Invoke callback (if defined) between sending read request
@@ -596,17 +584,18 @@ bool EthBasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *r
         packet = ReadBufferBroadcast;
     }
     else {
-        unsigned char bId = boardId&FW_NODE_MASK;
-        if ((bId < BoardIO::MAX_BOARDS) &&
-            (rdata_base == ReadBuffer[bId])) {
-            packet = ReadBuffer[bId];
+        unsigned char boardId = Node2Board[node];
+        if ((boardId < BoardIO::MAX_BOARDS) &&
+            (rdata_base == ReadBuffer[boardId])) {
+            packet = ReadBuffer[boardId];
         }
     }
 
     int nRecv = PacketReceive(packet, packetSize);
     if (nRecv != static_cast<int>(packetSize)) {
+        unsigned char boardId = Node2Board[node];
         outStr << "ReadBlock: failed to receive read response from board " << (boardId&FW_NODE_MASK)
-               << " via RAW Ethernet: return value = " << nRecv
+               << ": return value = " << nRecv
                << ", expected = " << packetSize << std::endl;
         return false;
     }
@@ -626,31 +615,11 @@ bool EthBasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *r
     return true;
 }
 
-bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
-                                unsigned int nbytes)
+bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
+                                 unsigned int nbytes, unsigned char flags)
 {
-    unsigned char boardId = Node2Board[node];
-    return (boardId < BoardIO::MAX_BOARDS) ? ReadBlock(boardId, addr, rdata, nbytes) : false;
-}
-
-bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-    if (nbytes == 4) {
-        return WriteQuadlet(boardId, addr, *wdata);
-    }
-    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
-        return false;
-    }
-
     if (!CheckFwBusGeneration("EthBasePort::WriteBlock"))
         return false;
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "WriteBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
 
     // Packet to send
     unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
@@ -662,10 +631,10 @@ bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
         packet = WriteBufferBroadcast+GetWriteQuadAlign();
     }
     else {
-        unsigned char bId = boardId&FW_NODE_MASK;
-        if ((bId < BoardIO::MAX_BOARDS) &&
-            (wdata_base == WriteBuffer[bId])) {
-            packet = WriteBuffer[bId]+GetWriteQuadAlign();
+        unsigned char boardId = Node2Board[node];
+        if ((boardId < BoardIO::MAX_BOARDS) &&
+            (wdata_base == WriteBuffer[boardId])) {
+            packet = WriteBuffer[boardId]+GetWriteQuadAlign();
         }
     }
 
@@ -673,21 +642,14 @@ bool EthBasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
     // Make control word
-    make_ctrl_word(packet, boardId&FW_NODE_NOFORWARD_MASK);
+    make_ctrl_word(packet, flags&FW_NODE_NOFORWARD_MASK);
 
     // Build FireWire packet
     quadlet_t *packet_fw = reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER));
     make_bwrite_packet(packet_fw, node, addr, wdata, nbytes, fw_tl);
 
     // Now, send the packet
-    return PacketSend(packet, packetSize, boardId&FW_NODE_ETH_BROADCAST_MASK);
-}
-
-bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
-                                 unsigned int nbytes)
-{
-    unsigned char boardId = Node2Board[node];
-    return (boardId < BoardIO::MAX_BOARDS) ? WriteBlock(boardId, addr, wdata, nbytes) : false;
+    return PacketSend(packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 void EthBasePort::OnNoneRead(void)
@@ -704,33 +666,6 @@ void EthBasePort::OnFwBusReset(unsigned int FwBusGeneration_FPGA)
 {
     outStr << "Firewire bus reset, FPGA = " << std::dec << FwBusGeneration_FPGA << ", PC = " << FwBusGeneration << std::endl;
     newFwBusGeneration = FwBusGeneration_FPGA;
-}
-
-bool EthBasePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
-{
-    if (!CheckFwBusGeneration("EthBasePort::ReadQuadlet"))
-        return false;
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == static_cast<nodeid_t>(MAX_NODES)) {
-        outStr << "ReadQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-    return ReadQuadletNode(node, addr, data, boardId&FW_NODE_FLAGS_MASK);
-}
-
-bool EthBasePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
-{
-    if (!CheckFwBusGeneration("EthBasePort::WriteQuadlet"))
-        return false;
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == static_cast<nodeid_t>(MAX_NODES)) {
-        outStr << "WriteQuadlet: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
-    return WriteQuadletNode(node, addr, data, boardId&FW_NODE_FLAGS_MASK);
 }
 
 bool EthBasePort::WriteBroadcastReadRequest(unsigned int seq)

@@ -156,10 +156,12 @@ protected:
 
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
-    virtual bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes) = 0;
+    virtual bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
+                                unsigned int nbytes, unsigned char flags = 0) = 0;
 
     // Read a block from the specified node. Internal method called by ReadBlock.
-    virtual bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes) = 0;
+    virtual bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
+                               unsigned int nbytes, unsigned char flags = 0) = 0;
 
     // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
     virtual void OnNoneRead(void) {}
@@ -291,10 +293,10 @@ public:
     virtual bool WriteAllBoardsBroadcast(void);
 
     // Read a quadlet from the specified board
-    virtual bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data) = 0;
+    virtual bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
     // Write a quadlet to the specified board
-    virtual bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data) = 0;
+    virtual bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
     // Write a No-op quadlet to reset watchdog counters on boards.
     // This is used by WriteAllBoards if no other valid command is written
@@ -303,11 +305,11 @@ public:
 
     // Read a block from the specified board
     virtual bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                           unsigned int nbytes) = 0;
+                           unsigned int nbytes);
 
     // Write a block to the specified board
     virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                            unsigned int nbytes) = 0;
+                            unsigned int nbytes);
 
     /*!
      \brief Write the broadcast read request

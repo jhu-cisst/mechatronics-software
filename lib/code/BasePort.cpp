@@ -447,6 +447,47 @@ bool BasePort::CheckScanNodes(const std::string &caller)
     return ret;
 }
 
+bool BasePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
+{
+    nodeid_t node = ConvertBoardToNode(boardId);
+    return (node < MAX_NODES) ? ReadQuadletNode(node, addr, data, boardId&FW_NODE_MASK) : false;
+}
+
+bool BasePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
+{
+    nodeid_t node = ConvertBoardToNode(boardId);
+    return (node < MAX_NODES) ? WriteQuadletNode(node, addr, data, boardId&FW_NODE_FLAGS_MASK) : false;
+}
+
+bool BasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
+                             unsigned int nbytes)
+{
+    if (nbytes == 4)
+        return ReadQuadlet(boardId, addr, *rdata);
+    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
+        outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
+        return false;
+    }
+
+    nodeid_t node = ConvertBoardToNode(boardId);
+    return (node < MAX_NODES) ? ReadBlockNode(node, addr, rdata, nbytes, boardId&FW_NODE_FLAGS_MASK) : false;
+}
+
+bool BasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
+                              unsigned int nbytes)
+{
+    if (nbytes == 4) {
+        return WriteQuadlet(boardId, addr, *wdata);
+    }
+    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
+        outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
+        return false;
+    }
+
+    nodeid_t node = ConvertBoardToNode(boardId);
+    return (node < MAX_NODES) ? WriteBlockNode(node, addr, wdata, nbytes, boardId&FW_NODE_FLAGS_MASK) : false;
+}
+
 bool BasePort::ReadAllBoards(void)
 {
     if (!IsOK()) {
