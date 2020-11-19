@@ -180,7 +180,7 @@ public:
     virtual bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
 
     // Check if FireWire packet valid
-    //   length:  length of data sectio (for BRESPONSE)
+    //   length:  length of data section (for BRESPONSE)
     //   node:    expected source node
     //   tcode:   expected tcode (e.g., QRESPONSE or BRESPONSE)
     //   tl:      transaction label

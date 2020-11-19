@@ -785,8 +785,9 @@ bool EthBasePort::checkCRC(const unsigned char *packet)
     // Eliminate CRC checking of FireWire packets received via Ethernet
     // because Ethernet already includes CRC.
 #if 0
-    uint32_t crc_check = BitReverse32(crc32(0U,(void*)(packet+14),16));
-    uint32_t crc_original = bswap_32(*((uint32_t*)(packet+30)));
+    // Note that FW_QREPONSE_SIZE == FW_BRESPONSE_HEADER_SIZE
+    uint32_t crc_check = BitReverse32(crc32(0U, packet, FW_QRESPONSE_SIZE-FW_CRC_SIZE));
+    uint32_t crc_original = bswap_32(*reinterpret_cast<const uint32_t *>(packet+FW_QRESPONSE_SIZE-FW_CRC_SIZE));
     return (crc_check == crc_original);
 #else
     return true;
