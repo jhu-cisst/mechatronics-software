@@ -142,6 +142,11 @@ public:
     void UpdateBusGeneration(unsigned int gen) { FwBusGeneration = gen; }
 
     /*!
+     \brief Write the broadcast packet containing the DAC values and power control
+    */
+    bool WriteBroadcastOutput(quadlet_t *buffer, unsigned int size);
+
+    /*!
      \brief Write the broadcast read request
     */
     bool WriteBroadcastReadRequest(unsigned int seq);

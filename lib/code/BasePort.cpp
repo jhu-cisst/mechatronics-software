@@ -42,6 +42,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         PortNum(portNum),
         FwBusGeneration(0),
         newFwBusGeneration(0),
+        autoReScan(true),
         NumOfNodes_(0),
         NumOfBoards_(0),
         BoardInUseMask_(0),
@@ -510,7 +511,7 @@ bool BasePort::ReadAllBoards(void)
         return ReadAllBoardsBroadcast();
     }
 
-    if (!CheckFwBusGeneration("ReadAllBoards", true)) {
+    if (!CheckFwBusGeneration("ReadAllBoards", autoReScan)) {
         SetReadInvalid();
         OnNoneRead();
         return false;
@@ -562,7 +563,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!CheckFwBusGeneration("ReadAllBoardsBroadcast", true)) {
+    if (!CheckFwBusGeneration("ReadAllBoardsBroadcast", autoReScan)) {
         SetReadInvalid();
         OnNoneRead();
         return false;
@@ -691,7 +692,7 @@ bool BasePort::WriteAllBoards(void)
         return WriteAllBoardsBroadcast();
     }
 
-    if (!CheckFwBusGeneration("WriteAllBoards", true)) {
+    if (!CheckFwBusGeneration("WriteAllBoards", autoReScan)) {
         OnNoneWritten();
         return false;
     }
@@ -754,7 +755,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!CheckFwBusGeneration("WriteAllBoardsBroadcast", true)) {
+    if (!CheckFwBusGeneration("WriteAllBoardsBroadcast", autoReScan)) {
         OnNoneWritten();
         return false;
     }
@@ -787,12 +788,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
     // now broadcast out the huge packet
     bool ret;
 
-#if 1
-    ret = WriteBlockNode(0, 0xffffffff0000, bcBuffer, bcBufferOffset);
-#else
-    ret = WriteBlockNode(FW_NODE_BROADCAST, 0xffffff000000,  // now the address is hardcoded
-                         bcBuffer, bcBufferOffset);
-#endif
+    ret = WriteBroadcastOutput(bcBuffer, bcBufferOffset);
 
     // Send out control quadlet if necessary (firmware prior to Rev 7);
     //    also check for data collection

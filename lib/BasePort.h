@@ -97,6 +97,8 @@ protected:
     unsigned int FwBusGeneration;     // Current Firewire bus generation
     unsigned int newFwBusGeneration;  // New Firewire bus generation
 
+    bool autoReScan;                // Whether to automatically re-scan after bus reset
+
     unsigned int NumOfNodes_;       // number of nodes (boards) on bus
 
     // Indicates which boards are used in the current configuration
@@ -286,6 +288,13 @@ public:
     // Rescan the Firewire bus (e.g., after bus reset)
     virtual bool ReScanNodes(const std::string &caller);
 
+    // Get/Set autoReScan
+    // If true, system will automatically rescan the bus when the bus generation changes
+    // (e.g., due to a bus reset). If false, user application will need to rescan the bus,
+    // for example, by calling ReScanNodes or CheckFwBusGeneration (with doScan = true).
+    bool GetAutoReScan(void) const { return autoReScan; }
+    void SetAutoReScan(bool newValue) { autoReScan = newValue; }
+
     // Read all boards
     virtual bool ReadAllBoards(void);
 
@@ -316,6 +325,11 @@ public:
     // Write a block to the specified board
     virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
                             unsigned int nbytes);
+
+    /*!
+     \brief Write the broadcast packet containing the DAC values and power control
+    */
+    virtual bool WriteBroadcastOutput(quadlet_t *buffer, unsigned int size) = 0;
 
     /*!
      \brief Write the broadcast read request

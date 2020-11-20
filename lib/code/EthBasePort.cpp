@@ -668,6 +668,11 @@ void EthBasePort::OnFwBusReset(unsigned int FwBusGeneration_FPGA)
     newFwBusGeneration = FwBusGeneration_FPGA;
 }
 
+bool EthBasePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
+{
+    return WriteBlockNode(FW_NODE_BROADCAST, 0, buffer, size);
+}
+
 bool EthBasePort::WriteBroadcastReadRequest(unsigned int seq)
 {
     quadlet_t bcReqData = (seq << 16) | BoardInUseMask_;

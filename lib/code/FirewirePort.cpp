@@ -253,6 +253,16 @@ bool FirewirePort::RemoveBoard(unsigned char boardId)
     return BasePort::RemoveBoard(boardId);
 }
 
+bool FirewirePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
+{
+#if 1
+    return WriteBlockNode(0, 0xffffffff0000, buffer, size);
+#else
+    return WriteBlockNode(FW_NODE_BROADCAST, 0xffffff000000,  // now the address is hardcoded
+                          buffer, size);
+#endif
+}
+
 bool FirewirePort::WriteBroadcastReadRequest(unsigned int seq)
 {
     quadlet_t bcReqData = (seq << 16);

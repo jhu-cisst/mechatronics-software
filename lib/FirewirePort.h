@@ -69,6 +69,9 @@ protected:
     // \return Maximum number of nodes on bus (0 if error)
     nodeid_t InitNodes(void);
 
+    // Write the broadcast packet containing the DAC values and power control
+    bool WriteBroadcastOutput(quadlet_t *buffer, unsigned int size);
+
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
     // Parameter "flags" is not used for Firewire.
