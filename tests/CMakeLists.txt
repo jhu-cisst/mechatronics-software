@@ -63,12 +63,12 @@ install (TARGETS instrument
          RUNTIME DESTINATION bin)
 
 add_executable (block1394eth block1394eth.cpp)
-target_link_libraries (block1394eth raw1394 Amp1394)
+target_link_libraries (block1394eth ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
 add_custom_command (TARGET block1394eth POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy
-                       ${EXECUTABLE_OUTPUT_PATH}/block1394eth
-                       ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
+                       ${EXECUTABLE_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/block1394eth${CMAKE_EXECUTABLE_SUFFIX}
+                       ${EXECUTABLE_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/quad1394eth${CMAKE_EXECUTABLE_SUFFIX}
                     COMMENT "Generating quad1394eth")
 
 install (TARGETS block1394eth

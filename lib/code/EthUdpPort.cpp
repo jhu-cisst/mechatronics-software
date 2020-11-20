@@ -157,9 +157,11 @@ int SocketInternals::Send(const unsigned char *bufsend, size_t msglen, bool useB
 {
     int retval;
     if (useBroadcast)
-        retval = sendto(SocketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&ServerAddrBroadcast), sizeof(ServerAddrBroadcast));
+        retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
+                        reinterpret_cast<struct sockaddr *>(&ServerAddrBroadcast), sizeof(ServerAddrBroadcast));
     else
-        retval = sendto(SocketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&ServerAddr), sizeof(ServerAddr));
+        retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
+                        reinterpret_cast<struct sockaddr *>(&ServerAddr), sizeof(ServerAddr));
 
     if (retval == SOCKET_ERROR) {
 #ifdef _MSC_VER
@@ -206,7 +208,7 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
         //struct sockaddr_in fromAddr;
         //socklen_t length = sizeof(fromAddr);
         //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
-        retval = recv(SocketFD, bufrecv, maxlen, 0);
+        retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
         if (retval == SOCKET_ERROR) {
 #ifdef _MSC_VER
             outStr << "Recv: failed to receive: " << WSAGetLastError() << std::endl;

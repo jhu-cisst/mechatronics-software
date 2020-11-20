@@ -21,6 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #ifdef _MSC_VER
 #include <stdlib.h>   // for byteswap functions
+inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
 inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #else
 #include <string.h>  // for memset
