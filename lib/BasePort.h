@@ -184,6 +184,9 @@ public:
 
     virtual ~BasePort();
 
+    // Get protocol
+    ProtocolType GetProtocol(void) const { return Protocol_; }
+
     // Set protocol type
     bool SetProtocol(ProtocolType prot);
 

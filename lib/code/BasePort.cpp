@@ -298,7 +298,7 @@ bool BasePort::AddBoard(BoardIO *board)
 {
     unsigned int id = board->BoardId;
     if (id >= BoardIO::MAX_BOARDS) {
-        outStr << "BasePort::AddBoard: board number out of range: " << id << std::endl;
+        outStr << "AddBoard: board number out of range: " << id << std::endl;
         return false;
     }
     BoardList[id] = board;
@@ -349,12 +349,12 @@ bool BasePort::AddBoard(BoardIO *board)
 bool BasePort::RemoveBoard(unsigned char boardId)
 {
     if (boardId >= BoardIO::MAX_BOARDS) {
-        outStr << "BasePort::RemoveBoard: board number out of range: " << static_cast<unsigned int>(boardId) << std::endl;
+        outStr << "RemoveBoard: board number out of range: " << static_cast<unsigned int>(boardId) << std::endl;
         return false;
     }
     BoardIO *board = BoardList[boardId];
     if (!board) {
-        outStr << "BasePort::RemoveBoard: board not found: " << static_cast<unsigned int>(boardId) << std::endl;
+        outStr << "RemoveBoard: board not found: " << static_cast<unsigned int>(boardId) << std::endl;
         return false;
     }
 
@@ -503,7 +503,8 @@ bool BasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wda
 bool BasePort::ReadAllBoards(void)
 {
     if (!IsOK()) {
-        outStr << "BasePort::ReadAllBoards: port not initialized" << std::endl;
+        outStr << "ReadAllBoards: port not initialized" << std::endl;
+        OnNoneRead();
         return false;
     }
 
@@ -559,7 +560,14 @@ bool BasePort::ReadAllBoards(void)
 bool BasePort::ReadAllBoardsBroadcast(void)
 {
     if (!IsOK()) {
-        outStr << "BasePort::ReadAllBoardsBroadcast: port not initialized" << std::endl;
+        outStr << "ReadAllBoardsBroadcast: port not initialized" << std::endl;
+        OnNoneRead();
+        return false;
+    }
+
+    if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
+        outStr << "ReadAllBoardsBroadcast: invalid mix of firmware" << std::endl;
+        OnNoneRead();
         return false;
     }
 
@@ -684,7 +692,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 bool BasePort::WriteAllBoards(void)
 {
     if (!IsOK()) {
-        outStr << "BasePort::WriteAllBoards: port not initialized" << std::endl;
+        outStr << "WriteAllBoards: port not initialized" << std::endl;
+        OnNoneWritten();
         return false;
     }
 
@@ -751,7 +760,14 @@ bool BasePort::WriteAllBoards(void)
 bool BasePort::WriteAllBoardsBroadcast(void)
 {
     if (!IsOK()) {
-        outStr << "BasePort::WriteAllBoardsBroadcast: port not initialized" << std::endl;
+        outStr << "WriteAllBoardsBroadcast: port not initialized" << std::endl;
+        OnNoneWritten();
+        return false;
+    }
+
+    if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
+        outStr << "WriteAllBoardsBroadcast: invalid mix of firmware" << std::endl;
+        OnNoneWritten();
         return false;
     }
 
@@ -769,16 +785,23 @@ bool BasePort::WriteAllBoardsBroadcast(void)
     // construct broadcast write buffer
     quadlet_t *bcBuffer = reinterpret_cast<quadlet_t *>(WriteBufferBroadcast + GetWriteQuadAlign() + GetPrefixOffset(WR_FW_BDATA));
 
-    // Only do memory copy for firmware < 7
-    // For firmware Rev 7, the data should already be in WriteBufferBroadcast.
     int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
+            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
+            quadlet_t *bcPtr = bcBuffer+bcBufferOffset/sizeof(quadlet_t);
             if (IsNoBoardsRev7_) {
-                quadlet_t *buf = BoardList[board]->GetWriteBuffer();
                 numBytes -= 4;   // -4 for ctrl offset
-                memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes);
+                memcpy(bcPtr, buf, numBytes);
+            }
+            else {
+                // For firmware Rev 7, the data should already be in WriteBufferBroadcast,
+                // but we check to be sure.
+                if (buf != bcPtr) {
+                    rtWrite = false;
+                    memcpy(bcPtr, buf, numBytes);
+                }
             }
             // bcBufferOffset equals total numBytes to write, when the loop ends
             bcBufferOffset = bcBufferOffset + numBytes;

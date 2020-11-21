@@ -264,14 +264,13 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  numARP;           // Quad 11
         uint8_t  fw_bus_gen;
         uint8_t  numICMP;
-        uint8_t  unused00;
+        uint8_t  bwState;
         uint16_t numPacketError;   // Quad 12
         uint16_t numIPv4Mismatch;
         uint16_t numStateInvalid;  // Quad 13
         uint8_t  numReset;
         uint8_t  numSendStateInvalid;
-        uint16_t timeFwdFromFw;    // Quad 14
-        uint16_t timeFwdToFw;
+        uint32_t unused32;           // Quad 14
         //uint32_t timestampEnd;     // Quad 15
         uint32_t errorStateInfo;   // Quad 15
     };
@@ -300,7 +299,6 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         debugStream << "WriteRequests: ";
         if (p->eth_errors&0x80) debugStream << "Quad ";
         if (p->eth_errors&0x40) debugStream << "Block ";
-        if (p->eth_errors&0x20) debugStream << "Pending ";
     }
     if (!(p->eth_errors&0x08))
         debugStream << "DMA Recv busy" << std::endl;
@@ -356,6 +354,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numUDP: " << std::dec << p->numUDP << std::endl;
     debugStream << "numARP: " << std::dec << static_cast<uint16_t>(p->numARP) << std::endl;
     debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
+    debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState) << std::endl;
     debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
     debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
     debugStream << "numIPv4Mismatch: " << std::dec << (p->numIPv4Mismatch&0x03ff) << std::endl;
@@ -364,8 +363,6 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     double bits2uS = clockPeriod*1e6;
     debugStream << "timeReceive (us): " << p->timeReceive*bits2uS << std::endl;
     debugStream << "timeSend (us): " << p->timeSend*bits2uS << std::endl;
-    debugStream << "timeFwdToFw (us): " << p->timeFwdToFw*bits2uS << std::endl;
-    debugStream << "timeFwdFromFw (us): " << p->timeFwdFromFw*bits2uS << std::endl;
     //debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
     debugStream << "Error state: state = " << std::hex << (p->errorStateInfo&0x003fffff) << std::dec
                 << ", index = " << ((p->errorStateInfo>>22)&0x0000001f) << ", next = " << (p->errorStateInfo>>27)

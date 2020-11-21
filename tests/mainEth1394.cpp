@@ -202,6 +202,19 @@ AmpIO *SelectBoard(const std::string &portName, std::vector<AmpIO *> boardList, 
     return newBoard;
 }
 
+void  WriteAllBoardsTest(BasePort *port, std::vector<AmpIO *> &boardList)
+{
+    std::cout << "Protocol: " << port->GetProtocol() << std::endl;
+    for (int j = 0; j < boardList.size(); j++) {
+        boardList[j]->WritePowerEnable(true);
+        boardList[j]->SetAmpEnableMask(0x0f, 0x0f);
+        boardList[j]->SetSafetyRelay(true);
+        for (int axis = 0; axis < 4; axis++)
+            boardList[j]->SetMotorCurrent(axis, 0x8000+16*boardList[j]->GetBoardId()+axis);
+    }
+    port->WriteAllBoards();
+}
+
 void  ContinuousReadTest(BasePort *port, unsigned char boardNum)
 {
     bool done = false;
@@ -544,8 +557,10 @@ int main(int argc, char **argv)
         if (curBoard)
             std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "  8) Multicast quadlet read via Ethernet" << std::endl;
-        if (curBoardEth)
+        if (curBoardEth) {
             std::cout << "  9) Block write test to 0x4090" << std::endl;
+            std::cout << "  a) WriteAllBoards test" << std::endl;
+        }
         if ((EthBoardList.size() > 0) || (FwBoardList.size() > 0))
             std::cout << "  b) Change Firewire/Ethernet board" << std::endl;
         if (curBoardEth) {
@@ -726,6 +741,11 @@ int main(int argc, char **argv)
                 std::cout << "Writing new data" << std::endl;
                 EthPort->WriteBlock(boardNum, 0x4090, testBlock, sizeof(testBlock));
             }
+            break;
+
+        case 'a':
+            if (curBoardEth)
+                WriteAllBoardsTest(EthPort, EthBoardList);
             break;
 
         case 'b':
