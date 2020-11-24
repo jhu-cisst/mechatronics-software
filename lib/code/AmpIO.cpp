@@ -641,6 +641,11 @@ bool AmpIO::GetAmpEnable(unsigned int index) const
     return GetStatus()&mask;
 }
 
+AmpIO_UInt8 AmpIO::GetAmpEnableMask(void) const
+{
+    return GetStatus()&0x0000000f;
+}
+
 bool AmpIO::GetAmpStatus(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)

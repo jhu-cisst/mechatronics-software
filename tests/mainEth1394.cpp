@@ -205,7 +205,7 @@ AmpIO *SelectBoard(const std::string &portName, std::vector<AmpIO *> boardList, 
 void  WriteAllBoardsTest(BasePort *port, std::vector<AmpIO *> &boardList)
 {
     std::cout << "Protocol: " << port->GetProtocol() << std::endl;
-    for (int j = 0; j < boardList.size(); j++) {
+    for (unsigned int j = 0; j < boardList.size(); j++) {
         boardList[j]->WritePowerEnable(true);
         boardList[j]->SetAmpEnableMask(0x0f, 0x0f);
         boardList[j]->SetSafetyRelay(true);

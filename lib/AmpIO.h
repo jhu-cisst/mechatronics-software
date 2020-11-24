@@ -180,6 +180,10 @@ public:
     // be enabled (but, amplifier might be in fault state)
     bool GetAmpEnable(unsigned int index) const;
 
+    // GetAmpEnableMask: returns mask where each set bit indicates that
+    // the corresponding amplifier is requested to be enabled
+    AmpIO_UInt8 GetAmpEnableMask(void) const;
+
     // GetAmpStatus: returns true if amplifier is enabled; false if
     // amplifier is in fault state.
     bool GetAmpStatus(unsigned int index) const;

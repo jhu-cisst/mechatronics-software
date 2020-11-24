@@ -148,6 +148,11 @@ int main(int argc, char** argv)
     AmpIO_UInt32 maxTime = 0;
     AmpIO_UInt32 lastTime = 0;
 
+    unsigned int curAxis = 0;     // Current axis (0=all, 1-8)
+    unsigned int curBoardIndex = 0;
+    unsigned int curAxisIndex = 0;
+    char axisString[4] = "all";
+
     int args_found = 0;
     for (i = 1; i < (unsigned int)argc; i++) {
         if (argv[i][0] == '-') {
@@ -228,6 +233,7 @@ int main(int argc, char** argv)
         // keys
         std::cerr << std::endl << "Keys:" << std::endl
                   << "'r': reset FireWire port" << std::endl
+                  << "'a': axis to address (1-4 or 8) or all (0, default)" << std::endl
                   << "'d': turn watchdog on/off (0.25 ms, this should be triggered immediately)" << std::endl
                   << "'D': turn watchdog on/off (25.0 ms, can be triggered by unplugging cable to PC)" << std::endl
                   << "'p': turn power on/off (board and axis)" << std::endl
@@ -237,7 +243,8 @@ int main(int argc, char** argv)
                   << "'s': decrement encoders" << std::endl
                   << "'=': increase motor current by about 50mA" << std::endl
                   << "'-': increase motor current by about 50mA" << std::endl
-                  << "'c': start/stop data collection" << std::endl;
+                  << "'c': start/stop data collection" << std::endl
+                  << "'0'-'3': toggle digital output bit" << std::endl;
         return 0;
     }
 
@@ -280,8 +287,6 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++)
             BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
     }
-    bool power_board = false;
-    bool power_axis = false;
     for (j = 0; j < BoardList.size(); j++) {
         BoardList[j]->WriteSafetyRelay(false);
         BoardList[j]->WritePowerEnable(false);
@@ -340,96 +345,137 @@ int main(int argc, char** argv)
 
     // control loop
     while ((c = getch()) != ESC_CHAR) {
+
+        unsigned int startIndex = (curAxis == 0) ? 0 : curBoardIndex;
+        unsigned int endIndex = (curAxis == 0) ? BoardList.size() : curBoardIndex+1;
+
         if (c == 'r') {
             Port->Reset();
             Port->SetProtocol(protocol);
         }
+        else if (c == 'a') {
+            if (curAxis < numAxes) {
+                curAxis++;
+                curBoardIndex = (curAxis-1)/4;
+                curAxisIndex = (curAxis-1)%4;
+                sprintf(axisString, "%d", curAxis);
+            }
+            else {
+                curAxis = 0;
+                strcpy(axisString, "all");
+            }
+        }
         else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 BoardList[j]->WriteDigitalOutput(0x0f, dig_out);
         }
         else if (c == 'w') {
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 EncUp(*(BoardList[j]));
         }
         else if (c == 's') {
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 EncDown(*(BoardList[j]));
         }
-        else if (c == 'd'){
+        else if (c == 'd') {
             watchdog_on = !watchdog_on;
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 // 50 CNTS = 0.25 ms
                 BoardList[j]->WriteWatchdogPeriod(watchdog_on?50:0);
         }
         else if (c == 'D'){
             watchdog_on = !watchdog_on;
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 // 5000 CNTS = 25.00 ms
                 BoardList[j]->WriteWatchdogPeriod(watchdog_on?5000:0);
         }
         else if (c == 'p') {
-            // Only power on system if completely off (power_board
-            // and power_axis false). Otherwise, we power off.
-            if (!power_board && !power_axis) {
-                power_board = true;
-                power_axis = true;
+            // Only power on system if completely off; otherwise, we power off.
+            bool anyBoardPowered = false;
+            for (j = startIndex; j < endIndex; j++) {
+                // Also use safety relay for power status because GetPowerStatus relies on the motor
+                // power supply being connected to the QLA.
+                if (BoardList[j]->GetSafetyRelayStatus() || BoardList[j]->GetPowerStatus())
+                    anyBoardPowered = true;
             }
-            else {
-                power_board = false;
-                power_axis = false;
-            }
-            for (j = 0; j < BoardList.size(); j++) {
-                if (power_board && power_axis) {
+            for (j = startIndex; j < endIndex; j++) {
+                if (anyBoardPowered) {
+                    BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                    BoardList[j]->SetPowerEnable(false);
+                    BoardList[j]->SetSafetyRelay(false);
+                }
+                else {
                     BoardList[j]->SetSafetyRelay(true);
                     // Cannot enable Amp power unless Board power is
                     // already enabled.
                     BoardList[j]->WritePowerEnable(true);
                     //BoardList[j]->SetPowerEnable(true);
                     BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
-                } else {
-                    BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
-                    BoardList[j]->SetPowerEnable(false);
-                    BoardList[j]->SetSafetyRelay(false);
                 }
             }
         }
         else if (c == 'o') {
-            power_board = !power_board;
-            for (j = 0; j < BoardList.size(); j++) {
-                if (power_board) {
-                    BoardList[j]->SetSafetyRelay(true);
-                    BoardList[j]->SetPowerEnable(true);
-                }
-                else {
+            bool anyBoardPowered = false;
+            for (j = startIndex; j < endIndex; j++) {
+                // Also use safety relay for power status because GetPowerStatus relies on the motor
+                // power supply being connected to the QLA.
+                if (BoardList[j]->GetSafetyRelayStatus() || BoardList[j]->GetPowerStatus())
+                    anyBoardPowered = true;
+            }
+            for (j = startIndex; j < endIndex; j++) {
+                if (anyBoardPowered) {
                     BoardList[j]->SetPowerEnable(false);
                     BoardList[j]->SetSafetyRelay(false);
+                }
+                else {
+                    BoardList[j]->SetSafetyRelay(true);
+                    BoardList[j]->SetPowerEnable(true);
                 }
             }
         }
         else if (c == 'i') {
-            power_axis = !power_axis;
-            for (j = 0; j < BoardList.size(); j++) {
-                if (power_axis) {
-                    BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
+            if (curAxis == 0) {
+                bool anyAxisPowered = false;
+                for (j = 0; j < BoardList.size(); j++) {
+                    if (BoardList[j]->GetAmpEnableMask() != 0)
+                        anyAxisPowered = true;
                 }
-                else {
-                    BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                for (j = 0; j < BoardList.size(); j++) {
+                    if (anyAxisPowered) {
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                    }
+                    else {
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
+                    }
                 }
+            }
+            else {
+                bool isPowered = BoardList[curBoardIndex]->GetAmpEnable(curAxisIndex);
+                BoardList[curBoardIndex]->SetAmpEnable(curAxisIndex, !isPowered);
             }
         }
         else if (c == '=') {
-            for (j = 0; j < BoardList.size(); j++) {
-                for (i = 0; i < 4; i++)
-                    MotorCurrents[j][i] += 0x100;   // 0x100 is about 50 mA
+            if (curAxis == 0) {
+                for (j = 0; j < BoardList.size(); j++) {
+                    for (i = 0; i < 4; i++)
+                        MotorCurrents[j][i] += 0x100;   // 0x100 is about 50 mA
+                }
+            }
+            else {
+                MotorCurrents[curBoardIndex][curAxisIndex] += 0x100;
             }
         }
         else if (c == '-') {
-            for (j = 0; j < BoardList.size(); j++) {
-                for (i = 0; i < 4; i++)
-                    MotorCurrents[j][i] -= 0x100;   // 0x100 is about 50 mA
+            if (curAxis == 0) {
+                for (j = 0; j < BoardList.size(); j++) {
+                    for (i = 0; i < 4; i++)
+                        MotorCurrents[j][i] -= 0x100;   // 0x100 is about 50 mA
+                }
+            }
+            else {
+                MotorCurrents[curBoardIndex][curAxisIndex] -= 0x100;
             }
         }
         else if (c == 'c') {
@@ -545,7 +591,8 @@ int main(int argc, char** argv)
         Port->WriteAllBoards();
 
         mvwprintw(stdscr, 1, lm+42, "Gen: %d",  Port->GetBusGeneration());
-        mvwprintw(stdscr, 1, lm+54, "dt: %f",  (1.0 / 49125.0) * maxTime);
+        mvwprintw(stdscr, 1, lm+54, "Axis: %4s", axisString);
+        mvwprintw(stdscr, 1, lm+70, "dt: %f",  (1.0 / 49125.0) * maxTime);
 
         wrefresh(stdscr);
         usleep(500);
