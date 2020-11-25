@@ -128,6 +128,53 @@ bool CollectFileConvert(const char *inFilename, const char *outFilename)
     return true;
 }
 
+void UpdateStatusStrings(char *statusStr1, char *statusStr2, AmpIO_UInt32 statusChanged, AmpIO_UInt32 status)
+{
+    if (statusChanged&0x00080000) {  // power (mv-good)
+        if (status&0x00080000) {
+            statusStr1[0] = 'P';
+            statusStr1[1] = '+';
+        }
+        else {
+            statusStr1[3] = 'P';
+            statusStr1[4] = '-';
+        }
+    }
+    if (statusChanged&0x00020000) {  // safety relay
+        if (status&0x00020000) {
+            statusStr1[6] = 'S';
+            statusStr1[7] = '+';
+        }
+        else {
+            statusStr1[9] = 'S';
+            statusStr1[10] = '-';
+        }
+    }
+    if (statusChanged&0x00800000) {  // watchdog
+        if (status&0x00800000) {
+            statusStr1[12] = 'W';
+            statusStr1[13] = '+';
+        }
+        else {
+            statusStr1[15] = 'W';
+            statusStr1[16] = '-';
+        }
+    }
+    for (unsigned int i = 0; i < 4; i++) {  // amplifier status
+        AmpIO_UInt32 mask = (0x00000100 << i);
+        if (statusChanged&mask) {
+            if (status&mask) {
+                statusStr2[0] = 'A';
+                statusStr2[2+4*i] = '+';
+            }
+            else {
+                statusStr2[0] = 'A';
+                statusStr2[2+4*i+1] = '-';
+            }
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
@@ -244,6 +291,7 @@ int main(int argc, char** argv)
                   << "'=': increase motor current by about 50mA" << std::endl
                   << "'-': increase motor current by about 50mA" << std::endl
                   << "'c': start/stop data collection" << std::endl
+                  << "'z': clear status events" << std::endl
                   << "'0'-'3': toggle digital output bit" << std::endl;
         return 0;
     }
@@ -267,7 +315,7 @@ int main(int argc, char** argv)
                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
 
     std::vector<AmpIO*> BoardList;
-    std::vector<AmpIO_UInt32> FirmwareVersionList;
+    std::vector<AmpIO_UInt32> BoardStatusList;
     BoardList.push_back(new AmpIO(board1));
     Port->AddBoard(BoardList[0]);
     if (board2 < BoardIO::MAX_BOARDS) {
@@ -276,10 +324,9 @@ int main(int argc, char** argv)
     }
 
     bool allRev7 = true;
-    FirmwareVersionList.clear();
+    BoardStatusList.clear();
     for (j = 0; j < BoardList.size(); j++) {
         AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
-        FirmwareVersionList.push_back(fver);
         if (fver < 7) allRev7 = false;
     }
 
@@ -291,6 +338,8 @@ int main(int argc, char** argv)
         BoardList[j]->WriteSafetyRelay(false);
         BoardList[j]->WritePowerEnable(false);
         BoardList[j]->WriteAmpEnable(0x0f, 0);
+        AmpIO_UInt32 bstat = BoardList[j]->ReadStatus();
+        BoardStatusList.push_back(bstat);
     }
 
     bool watchdog_on = false;
@@ -335,6 +384,14 @@ int main(int argc, char** argv)
 
     unsigned char dig_out = 0x0f;
     unsigned char collect_axis = 1;
+    AmpIO_UInt32 status;
+    AmpIO_UInt32 statusChanged = 0;
+    char statusStr1[18];
+    memset(statusStr1, ' ', sizeof(statusStr1)-1);
+    statusStr1[sizeof(statusStr1)-1] = 0;
+    char statusStr2[18];
+    memset(statusStr2, ' ', sizeof(statusStr2)-1);
+    statusStr2[sizeof(statusStr2)-1] = 0;
 
     int loop_cnt = 0;
     const int STATUS_LINE = fullvel ? 15 : 13;
@@ -508,6 +565,12 @@ int main(int argc, char** argv)
                 }
             }
         }
+        else if (c == 'z') {
+            memset(statusStr1, ' ', sizeof(statusStr1)-1);
+            statusStr1[sizeof(statusStr1)-1] = 0;
+            memset(statusStr2, ' ', sizeof(statusStr2)-1);
+            statusStr2[sizeof(statusStr2)-1] = 0;
+        }
 
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
@@ -548,38 +611,46 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
-                    mvwprintw(stdscr, 6, lm+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i)+0x800000);
-                    mvwprintw(stdscr, 7, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogInput(i));
+                    mvwprintw(stdscr, 6, lm+7+(i+4*j)*13, "%07X", BoardList[j]->GetEncoderPosition(i)+0x800000);
+                    mvwprintw(stdscr, 7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
-                        mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocityRaw(i));
+                        mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
                     else
-                        mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
-                    mvwprintw(stdscr, 9, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
+                        mvwprintw(stdscr, 8, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetEncoderVelocity(i));
+                    mvwprintw(stdscr, 9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
                     if (fullvel) {
                         if (allRev7) {
-                            mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderQtr1(i));
-                            mvwprintw(stdscr, 12, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderQtr5(i));
-                            mvwprintw(stdscr, 13, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderRunningCounter(i));
+                            mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "%06X", BoardList[j]->GetEncoderQtr1(i));
+                            mvwprintw(stdscr, 12, lm+8+(i+4*j)*13, "%06X", BoardList[j]->GetEncoderQtr5(i));
+                            mvwprintw(stdscr, 13, lm+8+(i+4*j)*13, "%06X", BoardList[j]->GetEncoderRunningCounter(i));
                         }
                         else
-                            mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                            mvwprintw(stdscr, 11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
                     }
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
-                mvwprintw(stdscr, STATUS_LINE, lm+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X",
-                          BoardList[j]->GetStatus(), BoardList[j]->GetTimestamp(),
+                status = BoardList[j]->GetStatus();
+                if (status != BoardStatusList[j]) {
+                    statusChanged = status^BoardStatusList[j];
+                    BoardStatusList[j] = status;
+                    UpdateStatusStrings(statusStr1, statusStr2, statusChanged, status);
+                }
+                mvwprintw(stdscr, STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
+                          status, BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
-                mvwprintw(stdscr, STATUS_LINE+1, lm+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
+                mvwprintw(stdscr, STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
+                          statusStr1,
                           BoardList[j]->GetNegativeLimitSwitches(),
                           BoardList[j]->GetPositiveLimitSwitches(),
                           BoardList[j]->GetHomeSwitches());
-                mvwprintw(stdscr, STATUS_LINE+2, lm+58*j, "EncA: 0x%01X            EncB: 0x%01X            EncInd: 0x%01X",
+                mvwprintw(stdscr, STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
+                          statusStr2,
                           BoardList[j]->GetEncoderChannelA(),
                           BoardList[j]->GetEncoderChannelB(),
                           BoardList[j]->GetEncoderIndex());
 
                 mvwprintw(stdscr, STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
-                mvwprintw(stdscr, STATUS_LINE+4, lm+18+58*j, "Temp:  0x%02X    0x%02X",
+                mvwprintw(stdscr, STATUS_LINE+4, lm+19+58*j, "Temp:  %02X    %02X",
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
                 mvwprintw(stdscr, STATUS_LINE+4, lm+40, "Ct: %8d", loop_cnt++);
@@ -591,7 +662,7 @@ int main(int argc, char** argv)
                 }
             }
             for (i = 0; i < 4; i++) {
-                mvwprintw(stdscr, 10, lm+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
+                mvwprintw(stdscr, 10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
         }

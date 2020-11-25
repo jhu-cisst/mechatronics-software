@@ -60,7 +60,6 @@ protected:
     friend class EthRawPort;
     friend class EthUdpPort;
 
-    // DESIGN APPROACH (IN PROCESS):
     // For real-time block reads and writes, the board class (i.e., derived classes from BoardIO)
     // determines the data size (NumBytes), but the port classes (i.e., derived classes from BasePort)
     // allocate the memory and call SetReadBuffer/SetWriteBuffer.
@@ -72,7 +71,6 @@ protected:
     virtual void SetReadBuffer(quadlet_t *buf) = 0;
 
     // Following methods are for real-time block writes
-    // TODO: Consolidate Buffer and BufferData
     void SetWriteValid(bool flag)
     { writeValid = flag; if (writeValid) memset(GetWriteBuffer(), 0, GetWriteNumBytes()); }
     virtual unsigned int GetWriteNumBytes() const = 0;
