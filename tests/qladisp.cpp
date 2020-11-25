@@ -402,7 +402,11 @@ int main(int argc, char** argv)
             }
             for (j = startIndex; j < endIndex; j++) {
                 if (anyBoardPowered) {
-                    BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                    // Note that all axes will be disabled when board power is removed
+                    if (curAxis == 0)
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                    else
+                        BoardList[j]->SetAmpEnable(curAxisIndex, false);
                     BoardList[j]->SetPowerEnable(false);
                     BoardList[j]->SetSafetyRelay(false);
                 }
@@ -412,7 +416,10 @@ int main(int argc, char** argv)
                     // already enabled.
                     BoardList[j]->WritePowerEnable(true);
                     //BoardList[j]->SetPowerEnable(true);
-                    BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
+                    if (curAxis == 0)
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
+                    else
+                        BoardList[j]->SetAmpEnable(curAxisIndex, true);
                 }
             }
         }
