@@ -386,12 +386,17 @@ int main(int argc, char** argv)
     unsigned char collect_axis = 1;
     AmpIO_UInt32 status;
     AmpIO_UInt32 statusChanged = 0;
-    char statusStr1[18];
-    memset(statusStr1, ' ', sizeof(statusStr1)-1);
-    statusStr1[sizeof(statusStr1)-1] = 0;
-    char statusStr2[18];
-    memset(statusStr2, ' ', sizeof(statusStr2)-1);
-    statusStr2[sizeof(statusStr2)-1] = 0;
+    const unsigned int STATUS_STR_LENGTH = 18;
+    char statusStr1[2][STATUS_STR_LENGTH];
+    memset(statusStr1[0], ' ', STATUS_STR_LENGTH-1);
+    memset(statusStr1[1], ' ', STATUS_STR_LENGTH-1);
+    statusStr1[0][STATUS_STR_LENGTH-1] = 0;
+    statusStr1[1][STATUS_STR_LENGTH-1] = 0;
+    char statusStr2[2][STATUS_STR_LENGTH];
+    memset(statusStr2[0], ' ', STATUS_STR_LENGTH-1);
+    memset(statusStr2[1], ' ', STATUS_STR_LENGTH-1);
+    statusStr2[0][STATUS_STR_LENGTH-1] = 0;
+    statusStr2[1][STATUS_STR_LENGTH-1] = 0;
 
     int loop_cnt = 0;
     const int STATUS_LINE = fullvel ? 15 : 13;
@@ -566,10 +571,12 @@ int main(int argc, char** argv)
             }
         }
         else if (c == 'z') {
-            memset(statusStr1, ' ', sizeof(statusStr1)-1);
-            statusStr1[sizeof(statusStr1)-1] = 0;
-            memset(statusStr2, ' ', sizeof(statusStr2)-1);
-            statusStr2[sizeof(statusStr2)-1] = 0;
+            for (j = 0; j < BoardList.size(); j++) {
+                memset(statusStr1[j], ' ', STATUS_STR_LENGTH-1);
+                statusStr1[j][STATUS_STR_LENGTH-1] = 0;
+                memset(statusStr2[j], ' ', STATUS_STR_LENGTH-1);
+                statusStr2[j][STATUS_STR_LENGTH-1] = 0;
+            }
         }
 
         if (!debugStream.str().empty()) {
@@ -633,18 +640,18 @@ int main(int argc, char** argv)
                 if (status != BoardStatusList[j]) {
                     statusChanged = status^BoardStatusList[j];
                     BoardStatusList[j] = status;
-                    UpdateStatusStrings(statusStr1, statusStr2, statusChanged, status);
+                    UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status);
                 }
                 mvwprintw(stdscr, STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
                           status, BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
                 mvwprintw(stdscr, STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
-                          statusStr1,
+                          statusStr1[j],
                           BoardList[j]->GetNegativeLimitSwitches(),
                           BoardList[j]->GetPositiveLimitSwitches(),
                           BoardList[j]->GetHomeSwitches());
                 mvwprintw(stdscr, STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
-                          statusStr2,
+                          statusStr2[j],
                           BoardList[j]->GetEncoderChannelA(),
                           BoardList[j]->GetEncoderChannelB(),
                           BoardList[j]->GetEncoderIndex());
