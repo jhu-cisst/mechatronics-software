@@ -40,13 +40,14 @@ typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
 typedef uint8_t  AmpIO_UInt8;
 
+/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
 class AmpIO : public BoardIO
 {
 public:
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    AmpIO_UInt32 GetFirmwareVersion(void) const;    
+    AmpIO_UInt32 GetFirmwareVersion(void) const;
     // Return FPGA serial number (empty string if not found)
     std::string GetFPGASerialNumber(void);
     // Return QLA serial number (empty string if not found)
@@ -165,10 +166,16 @@ public:
         for internal use and testing (Rev 7+). */
     AmpIO_UInt32 GetEncoderRunningCounter(unsigned int index) const;
 
+    // GetPowerEnable: return power enable control
+    bool GetPowerEnable(void) const;
+
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.
     bool GetPowerStatus(void) const;
+
+    // GetSafetyRelay: returns desired safety relay state
+    bool GetSafetyRelay(void) const;
 
     // GetSafetyRelayStatus: returns true if safety relay contacts are closed
     bool GetSafetyRelayStatus(void) const;
@@ -224,6 +231,9 @@ public:
     bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
     bool IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const;
 
+    AmpIO_Int32 ReadWatchdogPeriod(void) const;
+    double ReadWatchdogPeriodInSeconds(void) const;
+
     AmpIO_UInt32 ReadDigitalIO(void) const;
 
     /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
@@ -267,6 +277,7 @@ public:
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
+    bool WriteWatchdogPeriodInSeconds(const double seconds);
 
     /*! \brief Write DOUT control register to set digital output mode (e.g., PWM, one-shot (pulse), general out).
 
@@ -519,7 +530,7 @@ protected:
     CollectCallback collect_cb;        // user-supplied callback (if non-zero)
     unsigned short collect_rindex;     // current read index
     unsigned short collect_rquads;     // current block read request size (in quadlets)
-    
+
     // Virtual methods
     quadlet_t *GetReadBuffer() const { return ReadBuffer; }
     unsigned int GetReadNumBytes() const;
@@ -541,7 +552,7 @@ protected:
     bool GetEncoderDir(unsigned int index) const;
 
     /*! Returns the latched period of the most recent encoder
-      quarter cycle. Used internally to calculate acceleration 
+      quarter cycle. Used internally to calculate acceleration
       in firmware Rev 6 and deprecated in >6. */
     AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
 

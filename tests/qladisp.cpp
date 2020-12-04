@@ -439,14 +439,14 @@ int main(int argc, char** argv)
         else if (c == 'd') {
             watchdog_on = !watchdog_on;
             for (j = startIndex; j < endIndex; j++)
-                // 50 CNTS = 0.25 ms
-                BoardList[j]->WriteWatchdogPeriod(watchdog_on?50:0);
+                // 0.25 ms
+                BoardList[j]->WriteWatchdogPeriodInSeconds(watchdog_on?(0.00025):0);
         }
-        else if (c == 'D'){
+        else if (c == 'D') {
             watchdog_on = !watchdog_on;
             for (j = startIndex; j < endIndex; j++)
-                // 5000 CNTS = 25.00 ms
-                BoardList[j]->WriteWatchdogPeriod(watchdog_on?5000:0);
+                // 25.00 ms
+                BoardList[j]->WriteWatchdogPeriodInSeconds(watchdog_on?(0.025):0);
         }
         else if (c == 'p') {
             // Only power on system if completely off; otherwise, we power off.

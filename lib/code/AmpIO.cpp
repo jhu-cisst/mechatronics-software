@@ -615,10 +615,22 @@ AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
     return ENC_MIDRANGE;
 }
 
+bool AmpIO::GetPowerEnable(void) const
+{
+    // Bit 18
+    return (GetStatus()&0x01000000);
+}
+
 bool AmpIO::GetPowerStatus(void) const
 {
     // Bit 19: MV_GOOD
     return (GetStatus()&0x00080000);
+}
+
+bool AmpIO::GetSafetyRelay(void) const
+{
+    // Bit 16
+    return (GetStatus()&0x00010000);
 }
 
 bool AmpIO::GetSafetyRelayStatus(void) const
@@ -808,6 +820,22 @@ bool AmpIO::IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) cons
     return ret;
 }
 
+AmpIO_Int32 AmpIO::ReadWatchdogPeriod(void) const
+{
+    AmpIO_UInt32 counts = 0;
+    if (port) {
+        port->ReadQuadlet(BoardId, 3, counts);
+    }
+    return counts;
+}
+
+double AmpIO::ReadWatchdogPeriodInSeconds(void) const
+{
+    double counts = ReadWatchdogPeriod();
+    const double WATCHDOG_MS_TO_COUNT = 192.0;
+    return counts / (1000.0 * WATCHDOG_MS_TO_COUNT);
+}
+
 AmpIO_UInt32 AmpIO::ReadDigitalIO(void) const
 {
     AmpIO_UInt32 read_data = 0;
@@ -924,6 +952,23 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     // period = counts(16 bits) * 5.208333 us (0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, counts);
+}
+
+bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
+{
+    AmpIO_UInt32 counts;
+    if (seconds == 0.0) {
+        // Disable watchdog
+        counts = 0;
+    } else {
+        // Use at least one tick just to make sure we don't accidentaly disable
+        // the truth is that the count will be so low that watchdog will
+        // continuously trigger.
+        const size_t WATCHDOG_MS_TO_COUNT = 192;
+        counts = (seconds * 1000.0) * WATCHDOG_MS_TO_COUNT;
+        counts = std::max(counts, static_cast<AmpIO_UInt32>(1));
+    }
+    return WriteWatchdogPeriod(counts);
 }
 
 bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
