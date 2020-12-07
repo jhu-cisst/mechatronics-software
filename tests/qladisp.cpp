@@ -458,8 +458,9 @@ int main(int argc, char** argv)
             bool anyBoardPowered = false;
             for (j = startIndex; j < endIndex; j++) {
                 // Also use safety relay for power status because GetPowerStatus relies on the motor
-                // power supply being connected to the QLA.
-                if (BoardList[j]->GetSafetyRelayStatus() || BoardList[j]->GetPowerStatus())
+                // power supply being connected to the QLA. Check GetPowerEnable in addition to
+                // GetPowerStatus because GetPowerStatus returns true if the QLA is not connected.
+                if (BoardList[j]->GetSafetyRelayStatus() || (BoardList[j]->GetPowerEnable() && BoardList[j]->GetPowerStatus()))
                     anyBoardPowered = true;
             }
             for (j = startIndex; j < endIndex; j++) {
@@ -489,8 +490,9 @@ int main(int argc, char** argv)
             bool anyBoardPowered = false;
             for (j = startIndex; j < endIndex; j++) {
                 // Also use safety relay for power status because GetPowerStatus relies on the motor
-                // power supply being connected to the QLA.
-                if (BoardList[j]->GetSafetyRelayStatus() || BoardList[j]->GetPowerStatus())
+                // power supply being connected to the QLA. Check GetPowerEnable in addition to
+                // GetPowerStatus because GetPowerStatus returns true if the QLA is not connected.
+                if (BoardList[j]->GetSafetyRelayStatus() || (BoardList[j]->GetPowerEnable() && BoardList[j]->GetPowerStatus()))
                     anyBoardPowered = true;
             }
             for (j = startIndex; j < endIndex; j++) {
