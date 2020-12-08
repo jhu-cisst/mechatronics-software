@@ -539,6 +539,7 @@ protected:
     quadlet_t *GetWriteBuffer() const { return WriteBuffer; }
     unsigned int GetWriteNumBytes() const { return WriteBufSize*sizeof(quadlet_t); }
     void SetWriteBuffer(quadlet_t *buf);
+    void InitWriteBuffer(void);
 
     // Test if the current write buffer contains commands that will
     // reset the watchdog on the board.  In practice, checks if

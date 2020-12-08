@@ -72,10 +72,12 @@ protected:
 
     // Following methods are for real-time block writes
     void SetWriteValid(bool flag)
-    { writeValid = flag; if (writeValid) memset(GetWriteBuffer(), 0, GetWriteNumBytes()); }
+    { writeValid = flag; if (writeValid) InitWriteBuffer(); }
     virtual unsigned int GetWriteNumBytes() const = 0;
     virtual quadlet_t *GetWriteBuffer() const = 0;
     virtual void SetWriteBuffer(quadlet_t *buf) = 0;
+    virtual void InitWriteBuffer(void)
+    { memset(GetWriteBuffer(), 0, GetWriteNumBytes()); }
 
     virtual bool WriteBufferResetsWatchdog(void) const = 0;
     virtual void CheckCollectCallback() = 0;

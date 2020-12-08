@@ -119,15 +119,23 @@ void AmpIO::SetReadBuffer(quadlet_t *buf)
     ReadBuffer = buf ? buf : read_buffer_internal;
 }
 
+void AmpIO::InitWriteBuffer(void)
+{
+    quadlet_t data = bswap_32((BoardId & 0x0F) << 24);
+    for (size_t i = 0; i < NUM_CHANNELS; i++)
+        WriteBuffer[WB_CURR_OFFSET+i] = data;
+    WriteBuffer[WB_CTRL_OFFSET] = 0;
+}
+
 void AmpIO::SetWriteBuffer(quadlet_t *buf)
 {
     if (buf) {
         WriteBuffer = buf;
-        memset(WriteBuffer, 0, GetWriteNumBytes());
     }
     else {
         WriteBuffer = write_buffer_internal;
     }
+    InitWriteBuffer();
 }
 
 bool AmpIO::WriteBufferResetsWatchdog(void) const
@@ -747,8 +755,7 @@ void AmpIO::SetSafetyRelay(bool state)
 
 bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 {
-    quadlet_t data = 0x00;
-    data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
+    quadlet_t data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
     if (collect_state && (collect_chan == (index+1)))
         data |= COLLECT_BIT;
 
