@@ -626,7 +626,7 @@ AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
 bool AmpIO::GetPowerEnable(void) const
 {
     // Bit 18
-    return (GetStatus()&0x01000000);
+    return (GetStatus()&0x00040000);
 }
 
 bool AmpIO::GetPowerStatus(void) const
