@@ -249,6 +249,8 @@ public:
     // udpxx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
     static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr);
 
+    static std::string DefaultPort(void);
+
     //*********************** Pure virtual methods **********************************
 
     virtual PortType GetPortType(void) const = 0;

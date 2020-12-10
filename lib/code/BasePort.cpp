@@ -26,6 +26,7 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
+#include <Amp1394/AmpIORevision.h>
 #include "BasePort.h"
 #include "Amp1394Time.h"
 
@@ -266,7 +267,7 @@ bool BasePort::ScanNodes(void)
         for (node = 0; node < max_nodes; node++) {
             if (Node2Board[node] == board) {
                 if (Board2Node[board] < MAX_NODES)
-                    outStr << "ScanNodes: warning: duplicate node id for board " << board 
+                    outStr << "ScanNodes: warning: duplicate node id for board " << board
                            << "(" << Board2Node[board] << ", " << node << ")" << std::endl;
                 Board2Node[board] = node;
             }
@@ -421,6 +422,16 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     }
     portType = PORT_FIREWIRE;
     return (sscanf(arg, "%d", &portNum) == 1);
+}
+
+std::string BasePort::DefaultPort(void)
+{
+#if Amp1394_HAS_RAW1394
+    return "0";
+#else
+    return "udp169.254.0.100";
+#endif
+
 }
 
 nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
@@ -621,7 +632,6 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     for (unsigned int boardNum = 0; boardNum < boardMax; boardNum++) {
         unsigned int seq = (bswap_32(curPtr[0]) >> 16);
         unsigned int thisBoard = (bswap_32(curPtr[2])&0x0f000000)>>24;
-        bool thisBoardOK = false;
         BoardIO *board = 0;
         if (IsAllBoardsRev7_) {
             // Should check against BoardInUseMask_
