@@ -25,6 +25,7 @@ http://www.cisst.org/cisst/license.txt.
 #ifdef _MSC_VER
 #include <stdlib.h>
 inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
+#include <algorithm>   // for std::max
 #else
 #include <byteswap.h>
 #endif
@@ -496,7 +497,11 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
         return 0L;
 
     double acc = 0.0;
-    if ((GetFirmwareVersion() == 6)) {
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    if (fver < 6) {
+        return 0.0;
+    }
+    else if (fver == 6) {
 
         if (!GetEncoderVelocityOverflow(index)) {
             AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
@@ -511,7 +516,7 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
                     acc = -acc;
             }
        } 
-    } else {
+    } else {  // firmware version 7
         if (!GetEncoderVelocityOverflow(index)) {
             AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
             AmpIO_Int32 rec_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
