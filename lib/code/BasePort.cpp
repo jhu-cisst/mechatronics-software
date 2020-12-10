@@ -278,6 +278,7 @@ bool BasePort::ScanNodes(void)
 
 void BasePort::SetDefaultProtocol(void)
 {
+    Protocol_ = BasePort::PROTOCOL_SEQ_RW;
     // Use broadcast by default if all firmware are bc capable
     if ((NumOfNodes_ > 0) && IsAllBoardsBroadcastCapable_) {
         if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
