@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -55,6 +55,15 @@ if (Amp1394_BUILD_SWIG)
   find_package(PythonLibs)
   include_directories(${PYTHON_INCLUDE_PATH})
 
+  find_package(PythonInterp)
+  if (PYTHON_EXECUTABLE)
+    execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import numpy; print(numpy.get_include())"
+                    ERROR_QUIET
+                    OUTPUT_VARIABLE Amp1394_NUMPY_INCLUDE_DIR
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    include_directories(${Amp1394_NUMPY_INCLUDE_DIR})
+  endif()
+
   set_source_files_properties(Amp1394.i PROPERTIES CPLUSPLUS ON)
   swig_add_module(Amp1394Python python Amp1394.i ${HEADERS} ${SOURCE_FILES})
   swig_link_libraries(Amp1394Python ${PYTHON_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
@@ -68,7 +77,7 @@ if (Amp1394_BUILD_SWIG)
   add_custom_command(TARGET _Amp1394Python POST_BUILD
                      COMMAND ${CMAKE_COMMAND}
                      ARGS -E copy_if_different
-                             ${CMAKE_CURRENT_BINARY_DIR}/Amp1394Python.py
+                             ${CMAKE_CURRENT_BINARY_DIR}/Amp1394.py  # Not sure why not Amp1394Python
                              ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/Amp1394Python.py
                      COMMENT "Copying Amp1394Python to ${LIBRARY_OUTPUT_PATH}" )
 endif (Amp1394_BUILD_SWIG)

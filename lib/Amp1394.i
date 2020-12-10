@@ -5,25 +5,9 @@
     
 /*Put headers and other declarations here*/
 #include "AmpIO.h"
-#include "Eth1394Port.h"
+#include "EthUdpPort.h"
+#include "EthRawPort.h"
 #include "FirewirePort.h"
-#ifdef _MSC_VER
-#include <stdlib.h>
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
-#else
-#include <byteswap.h>
-#endif
-extern void print_frame(unsigned char* buffer, int length);
-
-/*Provide bswap_32*/
-uint32_t bswap32(uint32_t in) {
-    return bswap_32(in);
-}
-
-uint16_t bswap16(uint16_t in) {
-    return bswap_16(in);
-}
 
 %}
 
@@ -34,15 +18,6 @@ uint16_t bswap16(uint16_t in) {
 %init %{
     import_array();
 %}
-
-void print_frame(unsigned char* buffer, int length);
-uint32_t bswap32(uint32_t in);
-uint16_t bswap16(uint16_t in);
-
-typedef unsigned long int	nodeaddr_t;
-typedef unsigned int		quadlet_t;
-typedef unsigned int		uint32_t;
-
 
 /*%apply int *INPUT { Int32 *in };*/
 %typemap(in,numinputs=0)
@@ -149,6 +124,7 @@ typedef unsigned int		uint32_t;
 %ignore AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
 %ignore AmpIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
 
+%include "BoardIO.h"
 %include "AmpIO.h"
 
 
@@ -157,6 +133,7 @@ typedef unsigned int		uint32_t;
 %apply (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES) {(quadlet_t *rdata, unsigned int nbytes)};
 %apply (quadlet_t* IN_ARRAY1, unsigned int NBYTES) {(quadlet_t *wdata, unsigned int nbytes)};
 %include "BasePort.h"
-%include "Eth1394Port.h"  
+%include "EthBasePort.h"
+%include "EthRawPort.h"
+%include "EthUdpPort.h"
 %include "FirewirePort.h"
-
