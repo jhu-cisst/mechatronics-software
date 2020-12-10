@@ -101,10 +101,9 @@ bool BasePort::SetProtocol(ProtocolType prot) {
             outStr << "System running with broadcast write" << std::endl;
             if (Protocol_ != prot) {
                 SetReadBuffer();
+                SetWriteBufferBroadcast();
                 if (IsNoBoardsRev7_)
                     SetWriteBuffer();
-                else
-                    SetWriteBufferBroadcast();
             }
             Protocol_ = prot;
             break;
@@ -112,10 +111,9 @@ bool BasePort::SetProtocol(ProtocolType prot) {
             outStr << "System running with broadcast query, read, and write" << std::endl;
             if (Protocol_ != prot) {
                 SetReadBufferBroadcast();
+                SetWriteBufferBroadcast();
                 if (IsNoBoardsRev7_)
                     SetWriteBuffer();
-                else
-                    SetWriteBufferBroadcast();
             }
             Protocol_ = prot;
             break;
@@ -160,12 +158,14 @@ void BasePort::SetWriteBufferBroadcast(void)
         quadlet_t *buf = new quadlet_t[numWriteBytes/sizeof(quadlet_t)];
         WriteBufferBroadcast = reinterpret_cast<unsigned char *>(buf);
     }
-    unsigned char *curPtr = WriteBufferBroadcast+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA);
-    for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
-        BoardIO *board = BoardList[i];
-        if (board) {
-            board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(curPtr));
-            curPtr += board->GetWriteNumBytes();
+    if (IsAllBoardsRev7_) {
+        unsigned char *curPtr = WriteBufferBroadcast+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA);
+        for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
+            BoardIO *board = BoardList[i];
+            if (board) {
+                board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(curPtr));
+                curPtr += board->GetWriteNumBytes();
+            }
         }
     }
 }
@@ -330,17 +330,15 @@ bool BasePort::AddBoard(BoardIO *board)
     }
     else if (Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) {
         board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)));
+        SetWriteBufferBroadcast();
         if (IsNoBoardsRev7_)
             board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
-        else
-            SetWriteBufferBroadcast();
     }
     else if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
         SetReadBufferBroadcast();
+        SetWriteBufferBroadcast();
         if (IsNoBoardsRev7_)
             board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
-        else
-            SetWriteBufferBroadcast();
     }
 
     return true;
