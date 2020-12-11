@@ -54,6 +54,9 @@ protected:
     bool readValid;
     bool writeValid;
 
+    unsigned int numReadErrors;
+    unsigned int numWriteErrors;
+
     friend class BasePort;
     friend class FirewirePort;
     friend class EthBasePort;
@@ -65,14 +68,15 @@ protected:
     // allocate the memory and call SetReadBuffer/SetWriteBuffer.
 
     // Following methods are for real-time block reads
-    void SetReadValid(bool flag) { readValid = flag; }
+    void SetReadValid(bool flag)
+    { readValid = flag; if (!readValid) numReadErrors++; }
     virtual unsigned int GetReadNumBytes() const = 0;
     virtual quadlet_t *GetReadBuffer() const = 0;
     virtual void SetReadBuffer(quadlet_t *buf) = 0;
 
     // Following methods are for real-time block writes
     void SetWriteValid(bool flag)
-    { writeValid = flag; if (writeValid) InitWriteBuffer(); }
+    { writeValid = flag; if (!writeValid) numWriteErrors++; }
     virtual unsigned int GetWriteNumBytes() const = 0;
     virtual quadlet_t *GetWriteBuffer() const = 0;
     virtual void SetWriteBuffer(quadlet_t *buf) = 0;
@@ -85,7 +89,8 @@ protected:
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards
 
-    BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false) {}
+    BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
+                                      numReadErrors(0), numWriteErrors(0) {}
     virtual ~BoardIO() {}
 
     inline unsigned char GetBoardId() const { return BoardId; }
@@ -95,6 +100,12 @@ public:
 
     inline bool ValidRead() const { return readValid; }
     inline bool ValidWrite() const { return writeValid; }
+
+    inline unsigned int GetReadErrors() const { return numReadErrors; }
+    inline unsigned int GetWriteErrors() const { return numWriteErrors; }
+
+    inline void ClearReadErrors() { numReadErrors = 0; }
+    inline void ClearWriteErrors() { numWriteErrors = 0; }
 };
 
 #endif // __BOARDIO_H__

@@ -291,7 +291,7 @@ int main(int argc, char** argv)
                   << "'=': increase motor current by about 50mA" << std::endl
                   << "'-': increase motor current by about 50mA" << std::endl
                   << "'c': start/stop data collection" << std::endl
-                  << "'z': clear status events" << std::endl
+                  << "'z': clear status events and r/w errors" << std::endl
                   << "'0'-'3': toggle digital output bit" << std::endl;
         return 0;
     }
@@ -398,7 +398,7 @@ int main(int argc, char** argv)
     statusStr2[0][STATUS_STR_LENGTH-1] = 0;
     statusStr2[1][STATUS_STR_LENGTH-1] = 0;
 
-    int loop_cnt = 0;
+    unsigned int loop_cnt = 0;
     const int STATUS_LINE = fullvel ? 15 : 13;
     const int DEBUG_START_LINE = fullvel ? 22 : 19;
     unsigned int last_debug_line = DEBUG_START_LINE;
@@ -578,6 +578,9 @@ int main(int argc, char** argv)
                 statusStr1[j][STATUS_STR_LENGTH-1] = 0;
                 memset(statusStr2[j], ' ', STATUS_STR_LENGTH-1);
                 statusStr2[j][STATUS_STR_LENGTH-1] = 0;
+                BoardList[j]->ClearReadErrors();
+                BoardList[j]->ClearWriteErrors();
+                mvwprintw(stdscr, STATUS_LINE+4, lm+45+58*j, "            ");
             }
         }
 
@@ -600,19 +603,19 @@ int main(int argc, char** argv)
 
         if (!Port->IsOK()) continue;
 
-        char nodeStr[2][5];
+        char nodeStr[2][3];
         int node = Port->GetNodeId(board1);
         if (node < BoardIO::MAX_BOARDS)
-            sprintf(nodeStr[0], "%4d", node);
+            sprintf(nodeStr[0], "%2d", node);
         else
             strcpy(nodeStr[0], "none");
 
         if (BoardList.size() > 1) {
             node = Port->GetNodeId(board2);
             if (node < BasePort::MAX_NODES)
-                sprintf(nodeStr[1], "%4d", node);
+                sprintf(nodeStr[1], "%2d", node);
             else
-                strcpy(nodeStr[1], "none");
+                strcpy(nodeStr[1], "??");
         }
 
         Port->ReadAllBoards();
@@ -659,10 +662,9 @@ int main(int argc, char** argv)
                           BoardList[j]->GetEncoderIndex());
 
                 mvwprintw(stdscr, STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
-                mvwprintw(stdscr, STATUS_LINE+4, lm+19+58*j, "Temp:  %02X    %02X",
+                mvwprintw(stdscr, STATUS_LINE+4, lm+14+58*j, "Temp:  %02X    %02X",
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
-                mvwprintw(stdscr, STATUS_LINE+4, lm+40, "Ct: %8d", loop_cnt++);
                 if (loop_cnt > 500) {
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
@@ -670,16 +672,21 @@ int main(int argc, char** argv)
                     }
                 }
             }
+            mvwprintw(stdscr, STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
+                      BoardList[j]->GetReadErrors(),
+                      BoardList[j]->GetWriteErrors());
             for (i = 0; i < 4; i++) {
                 mvwprintw(stdscr, 10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
+            loop_cnt++;
         }
         Port->WriteAllBoards();
 
         mvwprintw(stdscr, 1, lm+42, "Gen: %d",  Port->GetBusGeneration());
         mvwprintw(stdscr, 1, lm+54, "Axis: %4s", axisString);
-        mvwprintw(stdscr, 1, lm+70, "dt: %f",  (1.0 / 49125.0) * maxTime);
+        mvwprintw(stdscr, 1, lm+70, "dt: %.3f",  (1.0 / 49125.0) * maxTime);
+        mvwprintw(stdscr, 1, lm+85, "Ct: %8u", loop_cnt++);
 
         wrefresh(stdscr);
         usleep(500);

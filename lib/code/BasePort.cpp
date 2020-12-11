@@ -743,16 +743,18 @@ bool BasePort::WriteAllBoards(void)
                     bool ret3 = WriteNoOp(board);
                     if (ret3) noneWritten = false;
                 }
-                // SetWriteValid clears the buffer if the write was valid
                 BoardList[board]->SetWriteValid(ret&&ret2);
+                // Initialize (clear) the write buffer
+                BoardList[board]->InitWriteBuffer();
             }
             else {
                 // Rev 7 firmware: write DAC (x4) and Status/Control register
                 bool ret = WriteBlock(board, 0, buf, numBytes);
                 if (ret) noneWritten = false;
                 else allOK = false;
-                // SetWriteValid clears the buffer if the write was valid
                 BoardList[board]->SetWriteValid(ret);
+                // Initialize (clear) the write buffer
+                BoardList[board]->InitWriteBuffer();
             }
             // Check for data collection callback
             BoardList[board]->CheckCollectCallback();
@@ -844,13 +846,15 @@ bool BasePort::WriteAllBoardsBroadcast(void)
                     bool ret3 = WriteNoOp(board);
                     if (ret3) noneWritten = false;
                 }
-                // SetWriteValid clears the buffer if the write was valid
                 BoardList[board]->SetWriteValid(ret&&ret2);
+                // Initialize (clear) the write buffer
+                BoardList[board]->InitWriteBuffer();
             }
             else {
                 if (ret) noneWritten = false;
-                // SetWriteValid clears the buffer if the write was valid
                 BoardList[board]->SetWriteValid(ret);
+                // Initialize (clear) the write buffer
+                BoardList[board]->InitWriteBuffer();
             }
 
             // Check for data collection callback
