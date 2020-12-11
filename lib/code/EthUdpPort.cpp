@@ -17,22 +17,20 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EthUdpPort.h"
 #include "Amp1394Time.h"
+#include "Amp1394BSwap.h"
 
 #ifdef _MSC_VER
 #define WIN32_LEAN_AND_MEAN
 #include <string>
-#include <stdlib.h>   // for byteswap functions
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #define WINSOCKVERSION MAKEWORD(2,2)
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #else
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <string.h>  // for memset
 #include <math.h>    // for floor
-#include <byteswap.h>
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
 // Following assertion checks that sizeof(struct in_addr) is equal to sizeof(unsigned long).
@@ -115,7 +113,7 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
     //    Class B: first byte is 128-191, default subnet mask is 255.255.0.0
     //    Class C: first byte is 192-223, default subnet mask is 255.255.255.0
     // If the first byte is greater than 223, we use the global broadcast address, 255.255.255.255
-    
+
     ServerAddrBroadcast.sin_family = AF_INET;
     ServerAddrBroadcast.sin_port = htons(port);
     unsigned char firstByte = static_cast<unsigned char>(ServerAddr.sin_addr.s_addr&0x000000ff);
@@ -275,7 +273,7 @@ nodeid_t EthUdpPort::InitNodes(void)
         outStr << "InitNodes: failed to write IP address" << std::endl;
         return 0;
     }
-        
+
     quadlet_t data = 0x0;   // initialize data to 0
 
     // Check hardware version of hub board

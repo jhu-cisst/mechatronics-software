@@ -15,6 +15,7 @@ set (HEADERS
      BoardIO.h
      AmpIO.h
      Amp1394Time.h
+     Amp1394BSwap.h
      BasePort.h
      EthBasePort.h
      EthUdpPort.h)

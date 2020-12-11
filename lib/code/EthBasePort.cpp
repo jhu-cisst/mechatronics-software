@@ -17,15 +17,11 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EthBasePort.h"
 #include "Amp1394Time.h"
+#include "Amp1394BSwap.h"
 #include <iomanip>
 
-#ifdef _MSC_VER
-#include <stdlib.h>   // for byteswap functions
-inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
+#ifndef _MSC_VER
 #include <string.h>  // for memset
-#include <byteswap.h>
 #endif
 
 // crc related

@@ -57,9 +57,9 @@ else (WIN32)
 
 endif (WIN32)
 
-if (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
-  message (SEND_ERROR "Amp1394 requires at least one of Amp1394_HAS_RAW1394 or Amp1394_HAS_PCAP")
-endif (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
+# if (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
+#   message (SEND_ERROR "Amp1394 requires at least one of Amp1394_HAS_RAW1394 or Amp1394_HAS_PCAP")
+# endif (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
 
 # TODO: Determine whether it is necessary to have separate EXTRA variables for LIBRARY_DIR
 #       and LIBRARIES. Currently, it seems that both are always used together.

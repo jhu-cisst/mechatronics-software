@@ -14,12 +14,8 @@
 #include <vector>
 #include <stdlib.h>
 #include <stdio.h>
-#ifdef _MSC_VER
-typedef unsigned __int32 uint32_t;
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
-#include <byteswap.h>
-#endif
+#include "Amp1394BSwap.h"
+
 #include <Amp1394/AmpIORevision.h>
 #if Amp1394_HAS_RAW1394
 #include "FirewirePort.h"

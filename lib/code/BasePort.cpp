@@ -18,17 +18,10 @@ http://www.cisst.org/cisst/license.txt.
 #include <stdio.h>
 #include <string>
 
-#ifdef _MSC_VER
-#include <stdlib.h>   // for byteswap functions
-typedef unsigned __int32 uint32_t;
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
-#include <byteswap.h>
-#endif
-
 #include <Amp1394/AmpIORevision.h>
 #include "BasePort.h"
 #include "Amp1394Time.h"
+#include "Amp1394BSwap.h"
 
 BasePort::BasePort(int portNum, std::ostream &ostr):
         outStr(ostr),

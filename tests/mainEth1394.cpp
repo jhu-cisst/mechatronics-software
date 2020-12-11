@@ -20,15 +20,7 @@
 #include "EthUdpPort.h"
 #include "AmpIO.h"
 #include "Amp1394Time.h"
-
-#ifdef _MSC_VER
-#include <stdlib.h>   // for byteswap functions
-inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
-#include <unistd.h>
-#include <byteswap.h>
-#endif
+#include "Amp1394BSwap.h"
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
@@ -44,7 +36,7 @@ AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
                 crc = crc << 1;
         }
     }
-    return crc;    
+    return crc;
 }
 
 // Compute parameters to initialize multicast hash table
@@ -585,7 +577,7 @@ int main(int argc, char **argv)
         if (curBoardFw)
             std::cout << "  z) Check Ethernet initialization" << std::endl;
         std::cout << "Select option: ";
-        
+
         int c = getchar();
         std::cout << std::endl << std::endl;
 

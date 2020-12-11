@@ -17,6 +17,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <iostream>
 #include <sstream>
+#include <algorithm>   // for std::max
 
 #include "AmpIO.h"
 #include "BasePort.h"
@@ -25,7 +26,11 @@ http://www.cisst.org/cisst/license.txt.
 #ifdef _MSC_VER
 #include <stdlib.h>
 inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
-#include <algorithm>   // for std::max
+
+#elif defined(__APPLE__)
+#include <libkern/OSByteOrder.h>
+#define bswap_32(x) OSSwapInt32(x)
+
 #else
 #include <byteswap.h>
 #endif
@@ -58,7 +63,7 @@ const AmpIO_UInt32 ENC_VEL_MASK_26  = 0x03ffffff;  /*!< Mask for encoder velocit
 // Following are for Firmware Rev 6, which split the bits among different fields due to packet size limitations.
 const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder freq/acc) for upper 12 bits of most recent quarter-cycle period */
 const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */ 
+const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */
 // Following are for Firmware Rev 7+, which increased the block read packet size, allowing all bits to be grouped together
 const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 24 bits of quarter cycle period */
 
@@ -475,7 +480,7 @@ AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
         return (buff & ENC_VEL_MASK_16);
     }
     // all other cases, fver >= 6
-    AmpIO_Int32 cnter;    
+    AmpIO_Int32 cnter;
     // mask and convert to signed
     if (fver == 6) {
         cnter = buff & ENC_VEL_MASK_22;
@@ -507,22 +512,22 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
             AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
             AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
             AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
-            
+
             AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
-            
+
             if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
                 acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD_REV6 * (double) prev_cnter * VEL_PERD_REV6);
                 if (!GetEncoderDir(index))
                     acc = -acc;
             }
-       } 
+       }
     } else {  // firmware version 7
         if (!GetEncoderVelocityOverflow(index)) {
             AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
             AmpIO_Int32 rec_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
             AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_26;
             // subtract the most recent quarter and add the quarter 5 cycles ago to calculate
-            // the last full-cycle period (over 4 quarters) 
+            // the last full-cycle period (over 4 quarters)
             AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
 
             if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
