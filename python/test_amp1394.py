@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 
-import amp1394
-from amp1394 import bswap32
-
-print 'hello'
+import Amp1394Python as amp1394
+from Amp1394Python import bswap32
 
 def TEST_ReadQuadlet(fw, eth):
     # bid = 1, addr = 0x04 (QLA1)
@@ -29,13 +27,20 @@ def TEST_ReadQuadlet(fw, eth):
 
 if __name__ == '__main__':
     bid = 3;
-    eth = amp1394.Eth1394Port(0)
+    eth = amp1394.EthUdpPort(0)
     bd1eth = amp1394.AmpIO(bid)
     eth.AddBoard(bd1eth)
 
     fw = amp1394.FirewirePort(0)
     bd1fw = amp1394.AmpIO(bid)
     fw.AddBoard(bd1fw)
-    import ipdb; ipdb.set_trace()
 
+    # Do something here
 
+    fw.RemoveBoard(bid)
+    eth.RemoveBoard(bid)
+
+#try:
+#    import ipdb; ipdb.set_trace()
+#except ImportError:
+#    print 'Failed to import ipdb'

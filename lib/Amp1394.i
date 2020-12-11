@@ -1,5 +1,5 @@
 /* File : Amp1394.i */
-%module Amp1394
+%module Amp1394Python
 %{
 #define SWIG_FILE_WITH_INIT
     
@@ -16,6 +16,22 @@
   #include "EthRawPort.h"
 #endif
 
+#ifdef _MSC_VER
+#include <stdlib.h>
+inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
+inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
+#else
+#include <byteswap.h>
+#endif
+
+uint16_t bswap16(uint16_t in) {
+    return bswap_16(in);
+}
+
+uint32_t bswap32(uint32_t in) {
+    return bswap_32(in);
+}
+
 %}
 
 %include stdint.i
@@ -25,6 +41,9 @@
 %init %{
     import_array();
 %}
+
+uint16_t bswap16(uint16_t in);
+uint32_t bswap32(uint32_t in);
 
 /*%apply int *INPUT { Int32 *in };*/
 %typemap(in,numinputs=0)

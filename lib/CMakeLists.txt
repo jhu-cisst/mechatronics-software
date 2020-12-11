@@ -77,9 +77,17 @@ if (Amp1394_BUILD_SWIG)
   add_custom_command(TARGET _Amp1394Python POST_BUILD
                      COMMAND ${CMAKE_COMMAND}
                      ARGS -E copy_if_different
-                             ${CMAKE_CURRENT_BINARY_DIR}/Amp1394.py  # Not sure why not Amp1394Python
-                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/Amp1394Python.py
-                     COMMENT "Copying Amp1394Python to ${LIBRARY_OUTPUT_PATH}" )
+                             ${CMAKE_CURRENT_BINARY_DIR}/Amp1394Python.py
+                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/
+                     COMMAND ${CMAKE_COMMAND}
+                     ARGS -E copy_if_different
+                             ${Amp1394_SOURCE_DIR}/python/test_eth1394.py
+                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/
+                     COMMAND ${CMAKE_COMMAND}
+                     ARGS -E copy_if_different
+                             ${Amp1394_SOURCE_DIR}/python/test_amp1394.py
+                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/
+                     COMMENT "Copying Python files to ${LIBRARY_OUTPUT_PATH}" )
 endif (Amp1394_BUILD_SWIG)
 
 

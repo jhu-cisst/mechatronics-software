@@ -2,3 +2,6 @@ cisstLog.txt
 **/cisstLog.txt
 *~
 CMakeLists.txt.user
+*.so
+*.cxx
+Amp1394Python.py
