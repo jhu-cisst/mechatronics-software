@@ -4,10 +4,17 @@
 #define SWIG_FILE_WITH_INIT
     
 /*Put headers and other declarations here*/
+#include "AmpIORevision.h"
 #include "AmpIO.h"
 #include "EthUdpPort.h"
-#include "EthRawPort.h"
-#include "FirewirePort.h"
+
+#if Amp1394_HAS_RAW1394
+  #include "FirewirePort.h"
+#endif
+
+#if Amp1394_HAS_PCAP
+  #include "EthRawPort.h"
+#endif
 
 %}
 
@@ -124,9 +131,15 @@
 %ignore AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
 %ignore AmpIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
 
+%import "AmpIORevision.h"
+
+%constant int VERSION_MAJOR = Amp1394_VERSION_MAJOR;
+%constant int VERSION_MINOR = Amp1394_VERSION_MINOR;
+%constant int VERSION_PATCH = Amp1394_VERSION_PATCH;
+%constant std::string VERSION = Amp1394_VERSION;
+
 %include "BoardIO.h"
 %include "AmpIO.h"
-
 
 %apply (int* IN_ARRAY1, int DIM1) {(int* data, int size)};
 %apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
@@ -134,6 +147,10 @@
 %apply (quadlet_t* IN_ARRAY1, unsigned int NBYTES) {(quadlet_t *wdata, unsigned int nbytes)};
 %include "BasePort.h"
 %include "EthBasePort.h"
-%include "EthRawPort.h"
 %include "EthUdpPort.h"
-%include "FirewirePort.h"
+#if Amp1394_HAS_RAW1394
+  %include "FirewirePort.h"
+#endif
+#if Amp1394_HAS_PCAP
+  %include "EthRawPort.h"
+#endif

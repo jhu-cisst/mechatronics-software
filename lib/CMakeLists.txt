@@ -61,7 +61,7 @@ if (Amp1394_BUILD_SWIG)
                     ERROR_QUIET
                     OUTPUT_VARIABLE Amp1394_NUMPY_INCLUDE_DIR
                     OUTPUT_STRIP_TRAILING_WHITESPACE)
-    include_directories(${Amp1394_NUMPY_INCLUDE_DIR})
+    include_directories(${Amp1394_NUMPY_INCLUDE_DIR} "${Amp1394_BINARY_DIR}/Amp1394")
   endif()
 
   set_source_files_properties(Amp1394.i PROPERTIES CPLUSPLUS ON)
