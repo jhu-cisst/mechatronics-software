@@ -84,9 +84,46 @@ bool PromProgramCallback(const char *msg)
     return true;   // continue
 }
 
+// Test ability to program the PROM by programming a page/sector not
+// currently used by the firmware (0x1E0000).
+bool PromProgramTest(AmpIO &Board)
+{
+    unsigned char testBuffer[256];
+    unsigned char readBuffer[256];
+    size_t i;
+    for (i = 0; i < sizeof(testBuffer); i++)
+        testBuffer[i] = i;
+
+    std::cout << "Testing PROM programming" << std::endl;
+    std::cout << "  Erasing sector 1E0000 " << std::flush;
+    Board.PromSectorErase(0x1E0000, PromProgramCallback);
+    std::cout << std::endl << "  Programming first page " << std::flush;
+    int ret = Board.PromProgramPage(0x1EFF00, (AmpIO_UInt8*)testBuffer, sizeof(testBuffer), PromProgramCallback);
+    if (ret != sizeof(testBuffer)) {
+        std::cout << std::endl << "  Cannot program test pattern, ret = " << ret << std::endl;
+        return false;
+    }
+    Amp1394_Sleep(0.005);
+    std::cout << std::endl << "  Reading first page " << std::endl;
+    if (!Board.PromReadData(0x1EFF00, readBuffer, sizeof(readBuffer))) {
+        std::cout << "  Error reading PROM data" << std::endl;
+        return false;
+    }
+    // Compare bytes
+    for (i = 0; i < sizeof(testBuffer); i++) {
+        if (testBuffer[i] != readBuffer[i]) {
+            std::cout << "  Mismatch at offset " << i << ": wrote " << testBuffer[i]
+                      << ", read " << readBuffer[i] << std::endl;
+            return false;
+        }
+    }
+    std::cout << "PROM programming test successful" << std::endl;
+    return true;
+}
 
 bool PromProgram(AmpIO &Board, mcsFile &promFile)
 {
+    std::cout << "Starting PROM programming" << std::endl;
     double startTime = Amp1394_GetTime();
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
@@ -416,7 +453,13 @@ int main(int argc, char** argv)
             done = true;
             break;
         case 1:
-            PromProgram(Board, promFile);
+            if (PromProgramTest(Board)) {
+                std::cout << std::endl;
+                PromProgram(Board, promFile);
+            }
+            else {
+                std::cout << "Programming not started. Try power-cycling the FPGA" << std::endl;
+            }
             break;
         case 2:
             PromVerify(Board, promFile);
