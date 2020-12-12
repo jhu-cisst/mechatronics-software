@@ -389,7 +389,7 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
             // Sign extend if necessary
             if (cnter & 0x00008000)
                 cnter |= 0xffff0000;
-            vel = 4.0 * ((double)cnter*VEL_PERD_OLD);
+            vel = 4.0/((double)cnter*VEL_PERD_OLD);
         }
     } else if (fver == 6) {
         // buff[31] = whether full cycle period has overflowed

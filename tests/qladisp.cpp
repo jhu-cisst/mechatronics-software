@@ -623,7 +623,8 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
-                    mvwprintw(stdscr, 6, lm+7+(i+4*j)*13, "%07X", BoardList[j]->GetEncoderPosition(i)+0x800000);
+                    mvwprintw(stdscr, 6, lm+7+(i+4*j)*13, "%07X",
+                              BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidrange());
                     mvwprintw(stdscr, 7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
                         mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
