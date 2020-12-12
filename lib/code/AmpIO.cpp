@@ -67,10 +67,12 @@ const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder QT
 const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
 const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
 
-const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
-const double VEL_PERD               = 1.0/49152000;    /* Clock period for velocity measurements (Rev 7+ firmware) */
+const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
+const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
 const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
 const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
+
+const double WDOG_ClockPeriod       = 256.0/(FPGA_sysclk_MHz*1e6);   /* Watchdog clock period, in seconds */
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
 //                    the parameter is NULL, but the function returns an error if
@@ -360,6 +362,16 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
         return static_cast<AmpIO_Int32>(bswap_32(ReadBuffer[index + ENC_POS_OFFSET]) & ENC_POS_MASK) - ENC_MIDRANGE;
     }
     return 0;
+}
+
+double AmpIO::GetEncoderVelocityClockPeriod(void) const
+{
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    if (fver < 6)
+        return VEL_PERD_OLD;
+    else if (fver == 6)
+        return VEL_PERD_REV6;
+    return VEL_PERD;
 }
 
 // Returns encoder velocity in counts/sec -> 4/period
@@ -884,9 +896,7 @@ AmpIO_Int32 AmpIO::ReadWatchdogPeriod(void) const
 
 double AmpIO::ReadWatchdogPeriodInSeconds(void) const
 {
-    double counts = ReadWatchdogPeriod();
-    const double WATCHDOG_MS_TO_COUNT = 192.0;
-    return counts / (1000.0 * WATCHDOG_MS_TO_COUNT);
+    return ReadWatchdogPeriod()*WDOG_ClockPeriod;
 }
 
 AmpIO_UInt32 AmpIO::ReadDigitalIO(void) const
@@ -1014,11 +1024,10 @@ bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
         // Disable watchdog
         counts = 0;
     } else {
-        // Use at least one tick just to make sure we don't accidentaly disable
+        // Use at least one tick just to make sure we don't accidentaly disable;
         // the truth is that the count will be so low that watchdog will
         // continuously trigger.
-        const size_t WATCHDOG_MS_TO_COUNT = 192;
-        counts = static_cast<AmpIO_UInt32>((seconds * 1000.0) * WATCHDOG_MS_TO_COUNT);
+        counts = static_cast<AmpIO_UInt32>(seconds/WDOG_ClockPeriod);
         counts = std::max(counts, static_cast<AmpIO_UInt32>(1));
     }
     return WriteWatchdogPeriod(counts);

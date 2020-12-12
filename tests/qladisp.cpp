@@ -629,7 +629,7 @@ int main(int argc, char** argv)
                     if (fullvel)
                         mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
                     else
-                        mvwprintw(stdscr, 8, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetEncoderVelocity(i));
+                        mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocity(i));
                     mvwprintw(stdscr, 9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
                     if (fullvel) {
                         if (allRev7) {

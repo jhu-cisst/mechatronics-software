@@ -109,6 +109,10 @@ public:
 
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
+    /*! Returns the encoder velocity clock period, in seconds. Note that this value depends on the
+        firmware version. */
+    double GetEncoderVelocityClockPeriod(void) const;
+
     /*! Returns the encoder velocity, in counts per second, based on the FPGA measurement
         of the encoder period (i.e., time between two consecutive edges). Specifically, the
         velocity is given by 4/(period*clk) counts/sec, where clk is the period of the clock used to measure
