@@ -117,6 +117,17 @@ public:
         but has improved performance starting with Version 6. */
     double GetEncoderVelocityCountsPerSecond(unsigned int index) const;
 
+    /*! Returns the predicted encoder velocity, in counts per second, based on the FPGA measurement of the
+        encoder period (i.e., time between two consecutive edges), with compensation for the measurement delay.
+        For firmware Rev 6+, the predicted encoder velocity uses the estimated acceleration to predict the
+        velocity at the current time. For Rev 7+, the prediction also uses the encoder running counter (time
+        since last edge). There are two limits enforced:
+        1) The predicted velocity will not change sign (i.e., be in the opposite direction from the measured velocity).
+        2) The predicted velocity will not be larger than the velocity that would have caused one encoder count to
+           occur during the time measured by the running counter.
+    */
+    double GetEncoderVelocityPredicted(unsigned int index) const;
+
     /*! Returns the time delay of the encoder velocity measurement, in seconds.
         Currently, this is equal to half the measured period, based on the assumption that measuring the
         period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle. */
@@ -165,6 +176,9 @@ public:
     /*! Get the encoder running counter, which measures the elasped time since the last encoder edge;
         for internal use and testing (Rev 7+). */
     AmpIO_UInt32 GetEncoderRunningCounter(unsigned int index) const;
+
+    /*! Get the encoder running counter, in seconds */
+    double GetEncoderRunningCounterSeconds(unsigned int index) const;
 
     // GetPowerEnable: return power enable control
     bool GetPowerEnable(void) const;

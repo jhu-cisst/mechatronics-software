@@ -428,6 +428,41 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
     return vel;
 }
 
+// Returns predicted encoder velocity in counts/sec, taking into account
+// acceleration and running counter.
+double AmpIO::GetEncoderVelocityPredicted(unsigned int index) const
+{
+    double encVel = GetEncoderVelocityCountsPerSecond(index);
+    double encAcc = GetEncoderAcceleration(index);
+    double encDelay = GetEncoderVelocityDelay(index);
+    double encRun = GetEncoderRunningCounterSeconds(index);
+    double deltaVel = encAcc*(encDelay+encRun);
+    double predVel = encVel+deltaVel;
+    if (encVel < 0) {
+        // Do not change velocity direction
+        if (predVel > 0.0)
+            predVel = 0.0;
+        // Maximum velocity limited by 1 count (i.e., we know
+        // that a count has not happened for encRun seconds)
+        if (predVel*encRun < -1.0)
+            predVel = -1.0/encRun;
+    }
+    else if (encVel > 0.0) {
+        // Do not change velocity direction
+        if (predVel < 0.0)
+            predVel = 0.0;
+        // Maximum velocity limited by 1 count (i.e., we know
+        // that a count has not happened for encRun seconds)
+        if (predVel*encRun > 1.0)
+            predVel = 1.0/encRun;
+    }
+    else {
+        // If not moving, do not attempt to predict
+        predVel = 0.0;
+    }
+    return predVel;
+}
+
 // Returns the time delay of the encoder velocity measurement, in seconds.
 // Currently, this is equal to half the measured period, based on the assumption that measuring the
 // period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
@@ -621,6 +656,12 @@ AmpIO_UInt32 AmpIO::GetEncoderRunningCounter(unsigned int index) const
     if (GetFirmwareVersion() >= 7)
         retVal = GetEncoderQtr(index, ENC_RUN_OFFSET);
     return retVal;
+}
+
+// Only non-zero for Firmware Rev 7+
+double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
+{
+    return VEL_PERD*GetEncoderRunningCounter(index);
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
@@ -977,7 +1018,7 @@ bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
         // the truth is that the count will be so low that watchdog will
         // continuously trigger.
         const size_t WATCHDOG_MS_TO_COUNT = 192;
-        counts = (seconds * 1000.0) * WATCHDOG_MS_TO_COUNT;
+        counts = static_cast<AmpIO_UInt32>((seconds * 1000.0) * WATCHDOG_MS_TO_COUNT);
         counts = std::max(counts, static_cast<AmpIO_UInt32>(1));
     }
     return WriteWatchdogPeriod(counts);
