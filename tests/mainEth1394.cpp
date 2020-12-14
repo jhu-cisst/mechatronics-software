@@ -398,6 +398,59 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     return true;
 }
 
+void TestWaveform(AmpIO *board)
+{
+    const unsigned int WLEN = 256;
+    quadlet_t waveform[WLEN];
+    quadlet_t waveform_read[WLEN];
+    size_t i;
+    // Set up square waves that change every 1 msec
+    double clkPer = board->GetFPGAClockPeriod();
+    AmpIO_UInt32 numTicks = static_cast<AmpIO_UInt32>(0.001/clkPer);
+    std::cout << "Setting waveform with " << numTicks << " counts (1 msec edges)" << std::endl;
+    if ((numTicks&0x7fffff) != numTicks)
+        std::cout << "Warning: numTicks does not fit in 23 bits" << std::endl;
+    unsigned char dout1 = 0;
+    unsigned char dout2 = 0;
+    unsigned char dout3 = 0;
+    unsigned char dout4 = 0;
+    for (i = 0; i < WLEN-1; i++) {
+        if (i%4 == 0) dout1 = 1-dout1;
+        if (i%4 == 1) dout2 = 1-dout2;
+        if (i%4 == 2) dout3 = 1-dout3;
+        if (i%4 == 3) dout4 = 1-dout4;
+        waveform[i] = 0x80000000 | (numTicks << 8) | (dout4 << 3) | (dout3 << 2) | (dout2 << 1) | dout1;
+        waveform_read[i] = 0;
+    }
+    waveform[WLEN-1] = 0;
+    waveform_read[WLEN-1] = 0;
+    std::cout << "Writing test pattern" << std::endl;
+    if (!board->WriteWaveformTable(waveform, 0, WLEN)) {
+        std::cout << "WriteWaveformTable failed" << std::endl;
+        return;
+    }
+    std::cout << "Reading data" << std::endl;
+    if (!board->ReadWaveformTable(waveform_read, 0, WLEN)) {
+        std::cout << "ReadwaveformTable failed" << std::endl;
+        return;
+    }
+    for (i = 0; i < WLEN; i++) {
+        if (waveform_read[i] != waveform[i]) {
+            std::cout << "Mismatch at quadlet " << i << ", read " << std::hex
+                      << waveform_read[i] << ", expected " << waveform[i]
+                      << std::dec << std::endl;
+            return;
+        }
+    }
+    std::cout << "Pattern verified!" << std::endl;
+#if 0
+    // Following code will actually generate waveform on DOUT lines
+    board->WriteDigitalOutput(0x0f,0x00);
+    // Start waveform on all DOUT channels
+    board->WriteWaveformControl(0x0f, 0x0f);
+#endif
+}
+
 static char QuadletReadCallbackBoardId = 0;
 
 bool QuadletReadCallback(EthBasePort &, unsigned char boardId, std::ostream &debugStream)
@@ -578,8 +631,10 @@ int main(int argc, char **argv)
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (curBoardEth)
             std::cout << "  t) Run Ethernet timing analysis" << std::endl;
-        if (curBoard)
+        if (curBoard) {
+            std::cout << "  w) Test waveform buffer" << std::endl;
             std::cout << "  x) Read Ethernet debug data" << std::endl;
+        }
         if (curBoardEth)
             std::cout << "  y) Read Firewire data via Ethernet" << std::endl;
         if (curBoardFw)
@@ -825,6 +880,10 @@ int main(int argc, char **argv)
                 RunTiming("Ethernet", curBoardEth, HubFw, "quadlet write");
             if (curBoardFw)
                 RunTiming("Firewire", curBoardFw, 0, "quadlet write");
+            break;
+
+        case 'w':
+            TestWaveform(curBoard);
             break;
 
         case 'x':
