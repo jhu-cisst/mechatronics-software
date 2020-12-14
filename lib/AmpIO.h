@@ -266,6 +266,14 @@ public:
      */
     bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
 
+    /*! \brief Read the status of the waveform output (i.e., whether waveform table is driving any
+               digital outputs and, if so, the current table index).
+        \param active true if the waveform table is actively driving any digital output
+        \param tableIndex index into waveform table (see WriteWaveformTable)
+        \returns true if successful (results in active and tableIndex)
+    */
+    bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
+
     /*! Read IPv4 address (only relevant for FPGA boards with Ethernet support)
         \returns IPv4 address (uint32) or 0 if error
      */
@@ -293,6 +301,9 @@ public:
 
     // Set digital output state
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
+
+    // Start/stop driving waveform for specified digital outputs (mask)
+    bool WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
     bool WriteWatchdogPeriodInSeconds(const double seconds);
@@ -483,6 +494,13 @@ public:
     //    offset  address offset (in quadlets)
     //    nquads  number of quadlets to read (not more than 64)
     bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
+
+    // ********************** Waveform Generator Methods *****************************
+    // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
+    // any combination of the 4 digital outputs.
+
+    bool ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
+    bool WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
     // *********************** Data Collection Methods *******************************
 
