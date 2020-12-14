@@ -497,9 +497,25 @@ public:
 
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
-    // any combination of the 4 digital outputs.
+    // any combination of the 4 digital outputs. The waveform table length is 1024,
+    // but can be updated while the waveform is active; to do that, call ReadWaveformStatus
+    // to obtain the current readIndex on the FPGA. Note that the FPGA will automatically
+    // wrap when reading/writing the table. For example, writing 10 quadlets to offset 1020
+    // will write to table[1020]-table[1023] and then table[0]-table[5].
 
+    /*! \brief Read the contents of the waveform table.
+        \param buffer Buffer for storing contents of waveform table
+        \param offset Offset into waveform table (0-1023)
+        \param nquads Number of quadlets to read (1-1024)
+        \note Cannot read table while waveform is active.
+    */
     bool ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
+
+    /*! \brief Write the contents of the waveform table.
+        \param buffer Buffer containing data to write to waveform table
+        \param offset Offset into waveform table (0-1023)
+        \param nquads Number of quadlets to write (1-1024)
+    */
     bool WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
     // *********************** Data Collection Methods *******************************
