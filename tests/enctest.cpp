@@ -12,10 +12,15 @@
  *
  *****************************************************************************************/
 
+#ifdef _MSC_VER   // Windows
+#define _USE_MATH_DEFINES
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <iostream>
+#include <string>
 
 #include <Amp1394/AmpIORevision.h>
 #if Amp1394_HAS_RAW1394
