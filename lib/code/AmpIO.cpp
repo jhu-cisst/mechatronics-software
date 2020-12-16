@@ -60,12 +60,13 @@ const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder
 const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
 const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */ 
 // Following are for Firmware Rev 7+, which increased the block read packet size, allowing all bits to be grouped together
-const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 24 bits of quarter cycle period */
+const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x03ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 26 bits of quarter cycle period */
 
 // Following offsets are for FPGA Firmware Version 6 (22 bits) and 7+ (26 bits)
 // (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
 const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
 const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
+const AmpIO_UInt32 ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
 const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
@@ -422,14 +423,15 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         }
     } else if (fver >= 7) {
         // buff[31] = whether full cycle period has overflowed
-        // buff[30] = direction of the encoder
+        // buff[30] = current direction of the encoder
+        // buff[29] = whether a direction change occurred
         // buff[25:0] = velocity (26 bits)
         // Clock = 49.152 MHz
 
         // mask and convert to signed
         cnter = buff & ENC_VEL_MASK_26;
 
-        if (GetEncoderVelocityOverflow(index)) {
+        if (GetEncoderVelocityOverflow(index) || (buff&ENC_DIR_CHANGE_MASK)) {
             vel = 0.0;
         } else if (!GetEncoderDir(index)) {
             vel = -4.0/((double)cnter*VEL_PERD);
