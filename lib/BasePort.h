@@ -243,17 +243,22 @@ public:
     // Helper function for parsing command line options.
     // In particular, this is typically called after a certain option, such as -p, is
     // recognized and it parses the rest of that option string:
-    // N               for FireWire, where N is the port number (backward compatibility)
-    // fwN             for FireWire, where N is the port number
-    // ethN            for raw Ethernet (PCAP), where N is the port number
-    // udpxx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
-    static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr);
+    // N                for FireWire, where N is the port number (backward compatibility)
+    // fw:N             for FireWire, where N is the port number
+    // eth:N            for raw Ethernet (PCAP), where N is the port number
+    // udp:xx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
+                             std::ostream &ostr = std::cerr);
 
     static std::string DefaultPort(void);
 
     //*********************** Pure virtual methods **********************************
 
     virtual PortType GetPortType(void) const = 0;
+
+    inline std::string GetPortTypeString(void) const {
+        return BasePort::PortTypeString(GetPortType());
+    }
 
     virtual int NumberOfUsers(void) = 0;
 
