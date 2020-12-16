@@ -33,6 +33,20 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 
+// Calculates time of 0 crossing of sine or cosine
+//    n_off = 0 --> sine
+//    n_off = -1 or +1 --> cosine
+// Does not yet handle all cases (e.g., negative vel and accel)
+double CalculateTime(double vel, double accel, int n, int n_off)
+{
+    double t;
+    if (accel == 0.0)
+        t = (n_off+2*n)/vel;
+    else
+        t = (sqrt(vel*vel + 2.0*accel*(n_off+2*n))-vel)/accel;
+    return t;
+}
+
 void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
 {
     const int WLEN = 64;
@@ -46,36 +60,40 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
     AmpIO_UInt32 minTicks = 0;  // changed below
     AmpIO_UInt32 maxTicks = 0;
     unsigned int i;
-    for (i = 0; i < WLEN-1; t += 1000*dt) {
-        double theta = vel*t + 0.5*accel*t*t;
-        double A = cos(M_PI*theta/2.0);
-        double B = sin(M_PI*theta/2.0);
-        unsigned int newAstate = Astate;
-        unsigned int newBstate = Bstate;
-        if ((Astate == 0) && (A > 0.0))      // A-up
-            newAstate = 1;
-        else if ((Astate == 1) && (A < 0.0)) // A-down
-            newAstate = 0;
-        else if ((Bstate == 0) && (B > 0.0)) // B-up
-            newBstate = 1;
-        else if ((Bstate == 1) && (B < 0.0)) // B-down
-            newBstate = 0;
-        if ((newAstate != Astate) || (newBstate != Bstate)) {
-            AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt);
-            if (i == 0) minTicks = ticks;
-            if (ticks < minTicks)
-                minTicks = ticks;
-            if (ticks > maxTicks)
-                maxTicks = ticks;
-            lastT = t;
-            //std::cout << "waveform[" << i << "]: ticks = " << std::hex << ticks << std::dec
-            //          << ", A " << Astate << " B " << Bstate << std::endl;
-            waveform[i++] = 0x80000000 | (ticks<<8) | (Bstate << 1) | Astate;
-            Astate = newAstate;
-            Bstate = newBstate;
+    int n = 0;
+    int n_inc = 1;
+    if (vel < 0) {
+        n_inc = -1;
+        Bstate = 0;
+    }
+    bool doCosine = true;
+    for (i = 0; i < WLEN-1; i++) {
+        //double theta = vel*t + 0.5*accel*t*t;
+        //double A = cos(M_PI*theta/2.0);
+        //double B = sin(M_PI*theta/2.0);
+        if (doCosine) {
+            t = CalculateTime(vel, accel, n, n_inc);
+            n += n_inc;
+            Astate = 1-Astate;
         }
+        else {
+            t = CalculateTime(vel, accel, n, 0);
+            Bstate = 1-Bstate;
+        }
+        doCosine = !doCosine;
+        AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt);
+        if (i == 0) minTicks = ticks;
+        if (ticks < minTicks)
+            minTicks = ticks;
+        if (ticks > maxTicks)
+            maxTicks = ticks;
+        lastT = t;
+        //std::cout << "waveform[" << i << "]: ticks = " << std::hex << ticks << std::dec
+        //          << ", A " << Astate << " B " << Bstate << std::endl;
+        waveform[i] = 0x80000000 | (ticks<<8) | (Bstate << 1) | Astate;
     }
     waveform[WLEN-1] = 0;   // Turn off waveform generation
+
     std::cout << "Created table, total time = " << t << ", tick range: "
               << minTicks << "-" << maxTicks << std::endl;
     if (!board->WriteWaveformTable(waveform, 0, WLEN)) {
