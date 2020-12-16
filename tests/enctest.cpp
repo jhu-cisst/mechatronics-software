@@ -105,6 +105,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
                 double mpos = board->GetEncoderPosition(testAxis);
                 double mvel = board->GetEncoderVelocityCountsPerSecond(testAxis);
                 double maccel = board->GetEncoderAcceleration(testAxis);
+                double run = board->GetEncoderRunningCounterSeconds(testAxis);
                 if (read_index > 5) {
                     // First few not accurate?
                     velSum += mvel;
@@ -114,7 +115,8 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
                 if (read_index != last_index) {
                     std::cout << "Waveform index: " << read_index << ", pos = " << mpos
                               << ", vel = " << mvel
-                              << ", accel = " << maccel << std::endl;
+                              << ", accel = " << maccel
+                              << ", run = " << run << std::endl;
                     last_index = read_index;
                 }
             }

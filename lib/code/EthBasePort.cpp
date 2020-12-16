@@ -295,7 +295,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
        if (p->eth_errors&0x01) debugStream << "IPV4Error ";
        debugStream << std::endl;
     }
-    if (p->eth_errors&0xE0) {
+    if (p->eth_errors&0xC0) {
         debugStream << "WriteRequests: ";
         if (p->eth_errors&0x80) debugStream << "Quad ";
         if (p->eth_errors&0x40) debugStream << "Block ";
