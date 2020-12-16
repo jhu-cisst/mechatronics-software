@@ -17,14 +17,16 @@ set (HEADERS
      Amp1394Time.h
      BasePort.h
      EthBasePort.h
-     EthUdpPort.h)
+     EthUdpPort.h
+     PortFactory.h)
 
 set (SOURCE_FILES
      code/AmpIO.cpp
      code/Amp1394Time.cpp
      code/BasePort.cpp
      code/EthBasePort.cpp
-     code/EthUdpPort.cpp)
+     code/EthUdpPort.cpp
+     code/PortFactory.cpp)
 
 
 if (Amp1394_HAS_RAW1394)
