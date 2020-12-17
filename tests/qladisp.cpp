@@ -231,7 +231,7 @@ int main(int argc, char** argv)
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
-    BasePort *Port = PortFactory(portDescription.c_str());
+    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
     if (!Port) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to create port using: " << portDescription << std::endl;

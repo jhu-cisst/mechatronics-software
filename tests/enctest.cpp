@@ -22,14 +22,7 @@
 #include <iostream>
 #include <string>
 
-#include <Amp1394/AmpIORevision.h>
-#if Amp1394_HAS_RAW1394
-#include "FirewirePort.h"
-#endif
-#if Amp1394_HAS_PCAP
-#include "EthRawPort.h"
-#endif
-#include "EthUdpPort.h"
+#include "PortFactory.h"
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 
@@ -149,25 +142,16 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
 int main(int argc, char** argv)
 {
     int i;
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
-#endif
     int port = 0;
     int board = 0;
-    std::string IPaddr(ETH_UDP_DEFAULT_IP);
+    const char *portDescription = "";
 
     if (argc > 1) {
         int args_found = 0;
         for (i = 1; i < argc; i++) {
             if (argv[i][0] == '-') {
                 if (argv[i][1] == 'p') {
-                    if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                        std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                        return 0;
-                    }
-                    std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
+                    portDescription = argv[i]+2;
                 }
                 else {
                     std::cerr << "Usage: enctest [<board-num>] [-pP]" << std::endl
@@ -187,28 +171,13 @@ int main(int argc, char** argv)
         }
     }
 
-    BasePort *Port = 0;
-    if (desiredPort == BasePort::PORT_FIREWIRE) {
-#if Amp1394_HAS_RAW1394
-        Port = new FirewirePort(port, std::cerr);
-#else
-        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
+    BasePort *Port = PortFactory(portDescription);
+    if (!Port) {
+        std::cerr << "Failed to create port using: " << portDescription << std::endl;
         return -1;
-#endif
     }
-    else if (desiredPort == BasePort::PORT_ETH_UDP) {
-        Port = new EthUdpPort(port, IPaddr, std::cerr);
-    }
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-#if Amp1394_HAS_PCAP
-        Port = new EthRawPort(port, std::cerr);
-#else
-        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    if (!Port || !Port->IsOK()) {
-        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+    if (!Port->IsOK()) {
+        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
         return -1;
     }
     AmpIO Board(board);
