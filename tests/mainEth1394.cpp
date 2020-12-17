@@ -621,6 +621,8 @@ int main(int argc, char **argv)
             std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
         }
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
+        if (curBoardFw)
+            std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
         if (curBoardEth)
             std::cout << "  t) Run Ethernet timing analysis" << std::endl;
         if (curBoard) {
@@ -861,6 +863,15 @@ int main(int argc, char **argv)
             if (FwPort.IsOK())
                 FwPort.CheckFwBusGeneration("FwPort", true);
 #endif
+            break;
+
+        case 'R':
+            if (curBoardFw) {
+                unsigned int fw_board = curBoardFw->GetBoardId();
+                addr = 0xfffff0000400;  // Configuration ROM address
+                if (FwPort.ReadQuadlet(fw_board, addr, read_data))
+                    std::cout << "Configuration ROM: " << std::hex << read_data << std::dec << std::endl;
+            }
             break;
 
         case 't':

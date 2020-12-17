@@ -17,6 +17,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EthRawPort.h"
 #include "Amp1394Time.h"
+#include "Amp1394BSwap.h"
 
 #ifdef _MSC_VER
 // Following seems to be necessary on Windows, at least with Npcap
@@ -33,18 +34,14 @@ http://www.cisst.org/cisst/license.txt.
 
 #ifdef _MSC_VER
 #include <memory.h>   // for memcpy
-#include <stdlib.h>   // for byteswap functions
 #include <Packet32.h> // winpcap include for PacketRequest
 #include <ntddndis.h> // for OID_802_3_CURRENT_ADDRESS
-inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
 #include <unistd.h>
-#include <byteswap.h>
 #endif
 
 EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
