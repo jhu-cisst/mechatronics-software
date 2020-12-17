@@ -865,6 +865,7 @@ int main(int argc, char **argv)
 #endif
             break;
 
+#if Amp1394_HAS_RAW1394
         case 'R':
             if (curBoardFw) {
                 unsigned int fw_board = curBoardFw->GetBoardId();
@@ -873,6 +874,7 @@ int main(int argc, char **argv)
                     std::cout << "Configuration ROM: " << std::hex << read_data << std::dec << std::endl;
             }
             break;
+#endif
 
         case 't':
             if (curBoardEth)
