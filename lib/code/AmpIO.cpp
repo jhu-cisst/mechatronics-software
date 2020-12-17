@@ -22,18 +22,7 @@ http://www.cisst.org/cisst/license.txt.
 #include "AmpIO.h"
 #include "BasePort.h"
 #include "Amp1394Time.h"
-
-#ifdef _MSC_VER
-#include <stdlib.h>
-inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
-
-#elif defined(__APPLE__)
-#include <libkern/OSByteOrder.h>
-#define bswap_32(x) OSSwapInt32(x)
-
-#else
-#include <byteswap.h>
-#endif
+#include "Amp1394BSwap.h"
 
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 COLLECT_BIT      = 0x40000000;  /*!< Enable data collection on FPGA */
