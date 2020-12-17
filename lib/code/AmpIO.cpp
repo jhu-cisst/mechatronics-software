@@ -65,17 +65,20 @@ const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder
 const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
 const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */
 // Following are for Firmware Rev 7+, which increased the block read packet size, allowing all bits to be grouped together
-const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x00ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 24 bits of quarter cycle period */
+const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x03ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 26 bits of quarter cycle period */
 
 // Following offsets are for FPGA Firmware Version 6 (22 bits) and 7+ (26 bits)
 // (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
 const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
 const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
+const AmpIO_UInt32 ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
 
-const double FPGA_sysclk_MHz        = 49.152;      /* FPGA sysclk in MHz (from FireWire) */
-const double VEL_PERD               = 1.0/49152000;    /* Clock period for velocity measurements (Rev 7+ firmware) */
+const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
+const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
 const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
 const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
+
+const double WDOG_ClockPeriod       = 256.0/(FPGA_sysclk_MHz*1e6);   /* Watchdog clock period, in seconds */
 
 // PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
 //                    the parameter is NULL, but the function returns an error if
@@ -367,6 +370,16 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
     return 0;
 }
 
+double AmpIO::GetEncoderVelocityClockPeriod(void) const
+{
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+    if (fver < 6)
+        return VEL_PERD_OLD;
+    else if (fver == 6)
+        return VEL_PERD_REV6;
+    return VEL_PERD;
+}
+
 // Returns encoder velocity in counts/sec -> 4/period
 // For clarity and efficiency, this duplicates some code rather than calling GetEncoderVelocity.
 double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
@@ -394,7 +407,7 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
             // Sign extend if necessary
             if (cnter & 0x00008000)
                 cnter |= 0xffff0000;
-            vel = 4.0 * ((double)cnter*VEL_PERD_OLD);
+            vel = 4.0/((double)cnter*VEL_PERD_OLD);
         }
     } else if (fver == 6) {
         // buff[31] = whether full cycle period has overflowed
@@ -415,14 +428,15 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         }
     } else if (fver >= 7) {
         // buff[31] = whether full cycle period has overflowed
-        // buff[30] = direction of the encoder
+        // buff[30] = current direction of the encoder
+        // buff[29] = whether a direction change occurred
         // buff[25:0] = velocity (26 bits)
         // Clock = 49.152 MHz
 
         // mask and convert to signed
         cnter = buff & ENC_VEL_MASK_26;
 
-        if (GetEncoderVelocityOverflow(index)) {
+        if (GetEncoderVelocityOverflow(index) || (buff&ENC_DIR_CHANGE_MASK)) {
             vel = 0.0;
         } else if (!GetEncoderDir(index)) {
             vel = -4.0/((double)cnter*VEL_PERD);
@@ -431,6 +445,41 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
         }
     }
     return vel;
+}
+
+// Returns predicted encoder velocity in counts/sec, taking into account
+// acceleration and running counter.
+double AmpIO::GetEncoderVelocityPredicted(unsigned int index) const
+{
+    double encVel = GetEncoderVelocityCountsPerSecond(index);
+    double encAcc = GetEncoderAcceleration(index);
+    double encDelay = GetEncoderVelocityDelay(index);
+    double encRun = GetEncoderRunningCounterSeconds(index);
+    double deltaVel = encAcc*(encDelay+encRun);
+    double predVel = encVel+deltaVel;
+    if (encVel < 0) {
+        // Do not change velocity direction
+        if (predVel > 0.0)
+            predVel = 0.0;
+        // Maximum velocity limited by 1 count (i.e., we know
+        // that a count has not happened for encRun seconds)
+        if (predVel*encRun < -1.0)
+            predVel = -1.0/encRun;
+    }
+    else if (encVel > 0.0) {
+        // Do not change velocity direction
+        if (predVel < 0.0)
+            predVel = 0.0;
+        // Maximum velocity limited by 1 count (i.e., we know
+        // that a count has not happened for encRun seconds)
+        if (predVel*encRun > 1.0)
+            predVel = 1.0/encRun;
+    }
+    else {
+        // If not moving, do not attempt to predict
+        predVel = 0.0;
+    }
+    return predVel;
 }
 
 // Returns the time delay of the encoder velocity measurement, in seconds.
@@ -626,6 +675,12 @@ AmpIO_UInt32 AmpIO::GetEncoderRunningCounter(unsigned int index) const
     if (GetFirmwareVersion() >= 7)
         retVal = GetEncoderQtr(index, ENC_RUN_OFFSET);
     return retVal;
+}
+
+// Only non-zero for Firmware Rev 7+
+double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
+{
+    return VEL_PERD*GetEncoderRunningCounter(index);
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
@@ -848,9 +903,7 @@ AmpIO_Int32 AmpIO::ReadWatchdogPeriod(void) const
 
 double AmpIO::ReadWatchdogPeriodInSeconds(void) const
 {
-    double counts = ReadWatchdogPeriod();
-    const double WATCHDOG_MS_TO_COUNT = 192.0;
-    return counts / (1000.0 * WATCHDOG_MS_TO_COUNT);
+    return ReadWatchdogPeriod()*WDOG_ClockPeriod;
 }
 
 AmpIO_UInt32 AmpIO::ReadDigitalIO(void) const
@@ -881,6 +934,19 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
         }
     }
     return false;
+}
+
+bool AmpIO::ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    AmpIO_UInt32 read_data = 0;
+    if (!port) return false;
+    bool ret = port->ReadQuadlet(BoardId, 6, read_data);
+    if (ret) {
+        active = read_data&VALID_BIT;
+        tableIndex = (read_data>>16)&0x000003ff;
+    }
+    return ret;
 }
 
 AmpIO_UInt32 AmpIO::ReadIPv4Address(void) const
@@ -965,6 +1031,14 @@ bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
     return port->WriteQuadlet(BoardId, 6, write_data);
 }
 
+bool AmpIO::WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
+{
+    quadlet_t write_data = (mask << 8) | ((~bits)&0x0f);
+    if (mask != 0)
+        write_data |= VALID_BIT;  // Same valid bit as motor current
+    return port->WriteQuadlet(BoardId, 6, write_data);
+}
+
 bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     // period = counts(16 bits) * 5.208333 us (0 = no timeout)
@@ -978,11 +1052,10 @@ bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
         // Disable watchdog
         counts = 0;
     } else {
-        // Use at least one tick just to make sure we don't accidentaly disable
+        // Use at least one tick just to make sure we don't accidentaly disable;
         // the truth is that the count will be so low that watchdog will
         // continuously trigger.
-        const size_t WATCHDOG_MS_TO_COUNT = 192;
-        counts = (seconds * 1000.0) * WATCHDOG_MS_TO_COUNT;
+        counts = static_cast<AmpIO_UInt32>(seconds/WDOG_ClockPeriod);
         counts = std::max(counts, static_cast<AmpIO_UInt32>(1));
     }
     return WriteWatchdogPeriod(counts);
@@ -1358,7 +1431,7 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     }
 
     // block write data to buffer
-    if (!port->WriteBlock(BoardId, 0x3100, data, nquads*4))
+    if (!port->WriteBlock(BoardId, 0x3100, data, nquads*sizeof(quadlet_t)))
         return false;
 
     // enable write
@@ -1566,6 +1639,38 @@ bool AmpIO::ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned in
             buffer[i] = bswap_32(buffer[i]);
     }
     return ret;
+}
+
+bool AmpIO::ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    if (nquads == 0) return true;
+    // Firmware currently cannot read more than 1024 quadlets.
+    if (nquads > 1024) return false;
+    if (offset > 1023) return false;
+    nodeaddr_t address = 0x8000 + offset;   // ADDR_WAVEFORM = 0x8000
+    bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
+    if (ret) {
+        // Byteswap and invert digital output bits (see WriteDigitalOutput and GetDigitalOutput)
+        for (unsigned short i = 0; i < nquads; i++)
+            buffer[i] = bswap_32(buffer[i])^0x0000000f;
+    }
+    return ret;
+}
+
+bool AmpIO::WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, unsigned short nquads)
+{
+    if (GetFirmwareVersion() < 7) return false;
+    if (nquads == 0) return true;
+    // Firmware currently cannot write more than 1024 quadlets.
+    if (nquads > 1024) return false;
+    if (offset > 1023) return false;
+    static quadlet_t localBuffer[1024];
+    nodeaddr_t address = 0x8000 + offset;   // ADDR_WAVEFORM = 0x8000
+    // Byteswap and invert digital output bits (see WriteDigitalOutput and GetDigitalOutput)
+    for (unsigned short i = 0; i < nquads; i++)
+        localBuffer[i] = bswap_32(buffer[i]^0x0000000f);
+    return port->WriteBlock(BoardId, address, localBuffer, nquads*sizeof(quadlet_t));
 }
 
 bool AmpIO::DataCollectionStart(unsigned char chan, CollectCallback collectCB)

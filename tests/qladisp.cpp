@@ -38,14 +38,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <vector>
 
 #include <Amp1394/AmpIORevision.h>
-#if Amp1394_HAS_RAW1394
-#include "FirewirePort.h"
-#endif
-#if Amp1394_HAS_PCAP
-#include "EthRawPort.h"
-#endif
-#include "EthUdpPort.h"
-
+#include "PortFactory.h"
 #include "AmpIO.h"
 
 
@@ -179,13 +172,6 @@ int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
     unsigned int i, j;
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
-#endif
-    int port = 0;
-    std::string IPaddr(ETH_UDP_DEFAULT_IP);
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
     BasePort::ProtocolType protocol = BasePort::PROTOCOL_SEQ_RW;
@@ -199,16 +185,13 @@ int main(int argc, char** argv)
     unsigned int curBoardIndex = 0;
     unsigned int curAxisIndex = 0;
     char axisString[4] = "all";
+    std::string portDescription;
 
     int args_found = 0;
     for (i = 1; i < (unsigned int)argc; i++) {
         if (argv[i][0] == '-') {
             if (argv[i][1] == 'p') {
-                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                    std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                    return 0;
-                }
-                std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
+                portDescription = argv[i]+2;
             }
             else if (argv[i][1] == 'b') {
                 // -br -- enable broadcast read/write
@@ -238,7 +221,7 @@ int main(int argc, char** argv)
         // usage
         std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
-                  << "                 can also specify -pfwP, -pethP or -pudp[xx.xx.xx.xx]" << std::endl
+                  << "                 can also specify -pfw[:P], -peth:P or -pudp[:xx.xx.xx.xx]" << std::endl
                   << "            -br enables broadcast read/write" << std::endl
                   << "            -bw enables broadcast write" << std::endl
                   << "            -v  displays full velocity feedback" << std::endl
@@ -248,30 +231,15 @@ int main(int argc, char** argv)
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
-    BasePort *Port = 0;
-    if (desiredPort == BasePort::PORT_FIREWIRE) {
-#if Amp1394_HAS_RAW1394
-        Port = new FirewirePort(port, debugStream);
-#else
-        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    else if (desiredPort == BasePort::PORT_ETH_UDP) {
-        Port = new EthUdpPort(port, IPaddr, debugStream);
-    }
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-#if Amp1394_HAS_PCAP
-        Port = new EthRawPort(port, debugStream);
-#else
-        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-
-    if (!Port || !Port->IsOK()) {
+    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
+    if (!Port) {
         PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        std::cerr << "Failed to create port using: " << portDescription << std::endl;
+        return -1;
+    }
+    if (!Port->IsOK()) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
         return -1;
     }
 
@@ -623,12 +591,13 @@ int main(int argc, char** argv)
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
-                    mvwprintw(stdscr, 6, lm+7+(i+4*j)*13, "%07X", BoardList[j]->GetEncoderPosition(i)+0x800000);
+                    mvwprintw(stdscr, 6, lm+7+(i+4*j)*13, "%07X",
+                              BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
                     mvwprintw(stdscr, 7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
                         mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
                     else
-                        mvwprintw(stdscr, 8, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetEncoderVelocity(i));
+                        mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocity(i));
                     mvwprintw(stdscr, 9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
                     if (fullvel) {
                         if (allRev7) {

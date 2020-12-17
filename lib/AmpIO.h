@@ -109,6 +109,10 @@ public:
 
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
+    /*! Returns the encoder velocity clock period, in seconds. Note that this value depends on the
+        firmware version. */
+    double GetEncoderVelocityClockPeriod(void) const;
+
     /*! Returns the encoder velocity, in counts per second, based on the FPGA measurement
         of the encoder period (i.e., time between two consecutive edges). Specifically, the
         velocity is given by 4/(period*clk) counts/sec, where clk is the period of the clock used to measure
@@ -116,6 +120,17 @@ public:
         If the counter overflows, the velocity is set to 0. This method should work with all versions of firmware,
         but has improved performance starting with Version 6. */
     double GetEncoderVelocityCountsPerSecond(unsigned int index) const;
+
+    /*! Returns the predicted encoder velocity, in counts per second, based on the FPGA measurement of the
+        encoder period (i.e., time between two consecutive edges), with compensation for the measurement delay.
+        For firmware Rev 6+, the predicted encoder velocity uses the estimated acceleration to predict the
+        velocity at the current time. For Rev 7+, the prediction also uses the encoder running counter (time
+        since last edge). There are two limits enforced:
+        1) The predicted velocity will not change sign (i.e., be in the opposite direction from the measured velocity).
+        2) The predicted velocity will not be larger than the velocity that would have caused one encoder count to
+           occur during the time measured by the running counter.
+    */
+    double GetEncoderVelocityPredicted(unsigned int index) const;
 
     /*! Returns the time delay of the encoder velocity measurement, in seconds.
         Currently, this is equal to half the measured period, based on the assumption that measuring the
@@ -165,6 +180,9 @@ public:
     /*! Get the encoder running counter, which measures the elasped time since the last encoder edge;
         for internal use and testing (Rev 7+). */
     AmpIO_UInt32 GetEncoderRunningCounter(unsigned int index) const;
+
+    /*! Get the encoder running counter, in seconds */
+    double GetEncoderRunningCounterSeconds(unsigned int index) const;
 
     // GetPowerEnable: return power enable control
     bool GetPowerEnable(void) const;
@@ -248,6 +266,14 @@ public:
      */
     bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
 
+    /*! \brief Read the status of the waveform output (i.e., whether waveform table is driving any
+               digital outputs and, if so, the current table index).
+        \param active true if the waveform table is actively driving any digital output
+        \param tableIndex index into waveform table (see WriteWaveformTable)
+        \returns true if successful (results in active and tableIndex)
+    */
+    bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
+
     /*! Read IPv4 address (only relevant for FPGA boards with Ethernet support)
         \returns IPv4 address (uint32) or 0 if error
      */
@@ -275,6 +301,9 @@ public:
 
     // Set digital output state
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
+
+    // Start/stop driving waveform for specified digital outputs (mask)
+    bool WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
     bool WriteWatchdogPeriodInSeconds(const double seconds);
@@ -465,6 +494,29 @@ public:
     //    offset  address offset (in quadlets)
     //    nquads  number of quadlets to read (not more than 64)
     bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
+
+    // ********************** Waveform Generator Methods *****************************
+    // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
+    // any combination of the 4 digital outputs. The waveform table length is 1024,
+    // but can be updated while the waveform is active; to do that, call ReadWaveformStatus
+    // to obtain the current readIndex on the FPGA. Note that the FPGA will automatically
+    // wrap when reading/writing the table. For example, writing 10 quadlets to offset 1020
+    // will write to table[1020]-table[1023] and then table[0]-table[5].
+
+    /*! \brief Read the contents of the waveform table.
+        \param buffer Buffer for storing contents of waveform table
+        \param offset Offset into waveform table (0-1023)
+        \param nquads Number of quadlets to read (1-1024)
+        \note Cannot read table while waveform is active.
+    */
+    bool ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
+
+    /*! \brief Write the contents of the waveform table.
+        \param buffer Buffer containing data to write to waveform table
+        \param offset Offset into waveform table (0-1023)
+        \param nquads Number of quadlets to write (1-1024)
+    */
+    bool WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
     // *********************** Data Collection Methods *******************************
 

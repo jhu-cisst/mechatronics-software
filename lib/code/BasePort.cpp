@@ -394,35 +394,74 @@ std::string BasePort::PortTypeString(PortType portType)
 // fwN             for FireWire, where N is the port number
 // ethN            for raw Ethernet (PCAP), where N is the port number
 // udpxx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
-bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr)
+bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
+                            std::ostream &ostr)
 {
+    // no option, using default
+    if ((arg == 0) || (strlen(arg) == 0)) {
+        ostr << "ParseOptions: no option provided, using default "
+             << DefaultPort() << std::endl;
+        return ParseOptions(DefaultPort().c_str(), portType, portNum, IPaddr);
+    }
+    // expecting proper options
     if (strncmp(arg, "fw", 2) == 0) {
         portType = PORT_FIREWIRE;
-        return (sscanf(arg+2, "%d", &portNum) == 1);
+        // no port specified
+        if (strlen(arg) == 2) {
+            portNum = 0;
+            return true;
+        }
+        // make sure separator is here
+        if (arg[2] != ':') {
+            ostr << "ParseOptions: missing \":\" after \"fw\"" << std::endl;
+            return false;
+        }
+        // scan port number
+        if (sscanf(arg+3, "%d", &portNum) == 1) {
+            return true;
+        }
+        ostr << "ParseOptions: failed to find a port number after \"fw:\" in " << arg+3 << std::endl;
+        return false;
     }
     else if (strncmp(arg, "eth", 3) == 0) {
         portType = PORT_ETH_RAW;
-        return (sscanf(arg+3, "%d", &portNum) == 1);
+        return (sscanf(arg+4, "%d", &portNum) == 1);
     }
     else if (strncmp(arg, "udp", 3) == 0) {
         portType = PORT_ETH_UDP;
+        // no option specified
+        if (strlen(arg) == 3) {
+            IPaddr = "169.254.0.100";
+            return true;
+        }
+        // make sure separator is here
+        if (arg[3] != ':') {
+            ostr << "ParseOptions: missing \":\" after \"udp\"" << std::endl;
+            return false;
+        }
         // For now, if at least 8 characters, assume a valid IP address
-        if (strlen(arg+3) >= 8)
-            IPaddr.assign(arg+3);
-        else if (strlen(arg+3) > 0)
-            sscanf(arg+3, "%d", &portNum);  // TEMP: portNum==1 for UDP means set eth1394 mode
+        if (strlen(arg+4) >= 8)
+            IPaddr.assign(arg+4);
+        else if (strlen(arg+4) > 0)
+            sscanf(arg+4, "%d", &portNum);  // TEMP: portNum==1 for UDP means set eth1394 mode
         return true;
     }
+    // older default, fw and looking for port number
     portType = PORT_FIREWIRE;
-    return (sscanf(arg, "%d", &portNum) == 1);
+    // scan port number
+    if (sscanf(arg, "%d", &portNum) == 1) {
+        return true;
+    }
+    ostr << "ParseOptions: failed to find a FireWire port number in " << arg << std::endl;
+    return false;
 }
 
 std::string BasePort::DefaultPort(void)
 {
 #if Amp1394_HAS_RAW1394
-    return "0";
+    return "fw:0";
 #else
-    return "udp169.254.0.100";
+    return "udp:169.254.0.100";
 #endif
 
 }

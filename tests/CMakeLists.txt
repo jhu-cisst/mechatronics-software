@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -78,3 +78,10 @@ install (TARGETS block1394eth
 install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
          COMPONENT Amp1394-utils
          DESTINATION bin)
+
+add_executable(enctest enctest.cpp)
+target_link_libraries (enctest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+
+install (TARGETS enctest
+         COMPONENT Amp1394-utils
+         RUNTIME DESTINATION bin)
