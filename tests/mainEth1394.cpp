@@ -314,6 +314,30 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
     return true;
 }
 
+void ReadConfigROM(BasePort *port, unsigned int boardNum)
+{
+    nodeaddr_t addr;
+    quadlet_t read_data;
+    quadlet_t block_data[16];
+    addr = 0xfffff0000400;  // Configuration ROM address
+    if (port->ReadQuadlet(boardNum, addr, read_data))
+        std::cout << "Configuration ROM: " << std::hex << read_data << std::endl;
+    std::cout << "Testing with block read (first entry should be ROM):" << std::endl;
+    if (port->ReadBlock(boardNum, addr, block_data, sizeof(block_data))) {
+        for (size_t i = 0; i < sizeof(block_data)/sizeof(quadlet_t); i++) {
+            std::cout << std::hex << std::setw(8) << std::setfill('0') << bswap_32(block_data[i]) << "  ";
+            if (i%4 == 3) std::cout << std::endl;
+        }
+    }
+    std::cout << "Testing again with block read (8th entry should be ROM):" << std::endl;
+    if (port->ReadBlock(boardNum, addr-7, block_data, sizeof(block_data))) {
+        for (size_t i = 0; i < sizeof(block_data)/sizeof(quadlet_t); i++) {
+            std::cout << std::hex << std::setw(8) << std::setfill('0') << bswap_32(block_data[i]) << "  ";
+            if (i%4 == 3) std::cout << std::endl;
+        }
+    }
+}
+
 bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, const std::string &msgType, size_t numIter = 1000)
 {
     size_t i;
@@ -867,12 +891,8 @@ int main(int argc, char **argv)
 
 #if Amp1394_HAS_RAW1394
         case 'R':
-            if (curBoardFw) {
-                unsigned int fw_board = curBoardFw->GetBoardId();
-                addr = 0xfffff0000400;  // Configuration ROM address
-                if (FwPort.ReadQuadlet(fw_board, addr, read_data))
-                    std::cout << "Configuration ROM: " << std::hex << read_data << std::dec << std::endl;
-            }
+            if (curBoardFw)
+                ReadConfigROM(&FwPort, curBoardFw->GetBoardId());
             break;
 #endif
 
