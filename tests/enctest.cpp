@@ -103,33 +103,32 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
               << ", acceleration = " << board->GetEncoderAcceleration(testAxis) << std::endl;
     // Start waveform on DOUT1 and DOUT2 (to produce EncA and EncB using test board)
     board->WriteWaveformControl(0x03, 0x03);
+    double mpos, mvel, maccel, run;
+    double last_mpos = -1000.0;
     double velSum = 0.0;
     double accelSum = 0.0;
     unsigned int mNum = 0;
     bool waveform_active = true;
-    AmpIO_UInt32 last_index = 0;
-    AmpIO_UInt32 read_index;
     while (waveform_active) {
         port->ReadAllBoards();
-        if (board->ReadWaveformStatus(waveform_active, read_index)) {
-            if (waveform_active) {
-                double mpos = board->GetEncoderPosition(testAxis);
-                double mvel = board->GetEncoderVelocityCountsPerSecond(testAxis);
-                double maccel = board->GetEncoderAcceleration(testAxis);
-                double run = board->GetEncoderRunningCounterSeconds(testAxis);
-                if (read_index > 5) {
-                    // First few not accurate?
-                    velSum += mvel;
-                    accelSum += maccel;
-                    mNum++;
-                }
-                if (read_index != last_index) {
-                    std::cout << "Waveform index: " << read_index << ", pos = " << mpos
-                              << ", vel = " << mvel
-                              << ", accel = " << maccel
-                              << ", run = " << run << std::endl;
-                    last_index = read_index;
-                }
+        waveform_active = board->GetDigitalInput()&0x20000000;
+        if (waveform_active) {
+            mpos = board->GetEncoderPosition(testAxis);
+            mvel = board->GetEncoderVelocityCountsPerSecond(testAxis);
+            maccel = board->GetEncoderAcceleration(testAxis);
+            run = board->GetEncoderRunningCounterSeconds(testAxis);
+            if ((mpos > 5) || (mpos < -5)) {
+                // First few not accurate?
+                velSum += mvel;
+                accelSum += maccel;
+                mNum++;
+            }
+            if (mpos != last_mpos) {
+                std::cout << "pos = " << mpos
+                          << ", vel = " << mvel
+                          << ", accel = " << maccel
+                          << ", run = " << run << std::endl;
+                last_mpos = mpos;
             }
         }
         Amp1394_Sleep(0.0005);
