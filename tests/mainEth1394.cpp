@@ -322,15 +322,15 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
     addr = 0xfffff0000400;  // Configuration ROM address
     if (port->ReadQuadlet(boardNum, addr, read_data))
         std::cout << "Configuration ROM: " << std::hex << read_data << std::endl;
-    std::cout << "Testing with block read (first entry should be ROM):" << std::endl;
+    std::cout << "Testing with block read (first entry should be ROM, followed by bus info):" << std::endl;
     if (port->ReadBlock(boardNum, addr, block_data, sizeof(block_data))) {
         for (size_t i = 0; i < sizeof(block_data)/sizeof(quadlet_t); i++) {
             std::cout << std::hex << std::setw(8) << std::setfill('0') << bswap_32(block_data[i]) << "  ";
             if (i%4 == 3) std::cout << std::endl;
         }
     }
-    std::cout << "Testing again with block read (8th entry should be ROM):" << std::endl;
-    if (port->ReadBlock(boardNum, addr-7, block_data, sizeof(block_data))) {
+    std::cout << "Testing again with block read (8th entry should be ROM, followed by bus info):" << std::endl;
+    if (port->ReadBlock(boardNum, addr-7*sizeof(quadlet_t), block_data, sizeof(block_data))) {
         for (size_t i = 0; i < sizeof(block_data)/sizeof(quadlet_t); i++) {
             std::cout << std::hex << std::setw(8) << std::setfill('0') << bswap_32(block_data[i]) << "  ";
             if (i%4 == 3) std::cout << std::endl;

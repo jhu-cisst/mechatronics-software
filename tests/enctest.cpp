@@ -109,7 +109,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
     double accelSum = 0.0;
     unsigned int mNum = 0;
     bool waveform_active = true;
-    while (waveform_active) {
+    while (waveform_active || (mNum == 0)) {
         port->ReadAllBoards();
         waveform_active = board->GetDigitalInput()&0x20000000;
         if (waveform_active) {
