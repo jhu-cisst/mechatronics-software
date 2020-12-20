@@ -475,6 +475,8 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
+    SetGenericBuffer();   // Make sure buffer is allocated
+
     unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
     unsigned int sendPacketSize = GetPrefixOffset(WR_FW_HEADER)+FW_QREAD_SIZE;
 
@@ -526,6 +528,7 @@ bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t dat
         return false;
 
     // Use GenericBuffer, which is much larger than needed
+    SetGenericBuffer();   // Make sure buffer is allocated
     unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
     unsigned int packetSize = GetPrefixOffset(WR_FW_HEADER)+FW_QWRITE_SIZE;
 
@@ -552,6 +555,7 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
         outStr << "ReadBlock: flushed " << numFlushed << " packets" << std::endl;
 
     // Create buffer that is large enough for Firewire packet
+    SetGenericBuffer();   // Make sure buffer is allocated
     unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
     unsigned int sendPacketSize = GetPrefixOffset(WR_FW_HEADER)+FW_BREAD_SIZE;
 
@@ -621,6 +625,7 @@ bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdat
         return false;
 
     // Packet to send
+    SetGenericBuffer();   // Make sure buffer is allocated
     unsigned char *packet = GenericBuffer+GetWriteQuadAlign();
     size_t packetSize = GetPrefixOffset(WR_FW_BDATA) + nbytes + GetWritePostfixSize();
 

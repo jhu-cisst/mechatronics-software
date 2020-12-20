@@ -137,6 +137,9 @@ protected:
     // Sets default protocol based on firmware
     void SetDefaultProtocol(void);
 
+    // Following initializes the generic buffer, if needed
+    void SetGenericBuffer(void);
+
     // Following methods assign the memory used by each board,
     // based on the protocol.
     void SetReadBuffer(void);

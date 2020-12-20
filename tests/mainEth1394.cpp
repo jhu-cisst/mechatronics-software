@@ -414,45 +414,71 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     return true;
 }
 
-void TestBlockWrite(AmpIO *board)
+void TestBlockWrite(AmpIO *wboard, AmpIO *rboard)
 {
     const unsigned int WLEN_MAX = 512;
     quadlet_t waveform[WLEN_MAX];
     quadlet_t waveform_read[WLEN_MAX];
     size_t i;
-    for (size_t wlen = 20; wlen < WLEN_MAX; wlen+=20) {
-        std::cout << "Len=" << std::dec << wlen << ": trigger_des = " << (3*wlen-2)/5.0
-                  << ", trigger_approx = " << (1+wlen/2+wlen/8);
+    unsigned int min_left = WLEN_MAX;
+    unsigned int min_wlen = WLEN_MAX;
+    unsigned int numSilentMismatch = 0;
+    for (size_t wlen = 2; wlen < WLEN_MAX; wlen++) {
+        bool doOut = ((wlen<10)||(wlen%20 == 0));
+        if (doOut) {
+            std::cout << "Len=" << std::dec << wlen << ": trigger = " << (3*wlen-2)/5.0
+                      << ", trigger_approx = " << (1+wlen/2+wlen/8);
+        }
         for (i = 0; i < wlen; i++) {
             waveform[i] = wlen-i;
             waveform_read[i] = 0;
         }
-        if (!board->WriteWaveformTable(waveform, 0, wlen)) {
+        if (!wboard->WriteWaveformTable(waveform, 0, wlen)) {
+            if (!doOut) std::cout << "Len=" << std::dec << wlen << ": ";
             std::cout << "WriteWaveformTable failed" << std::endl;
             return;
         }
-        Amp1394_Sleep(0.1);
-        if (!board->ReadEthernetData(waveform_read, 0x80, 16))
+        Amp1394_Sleep(0.05);
+        if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
             break;
         unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
         unsigned short bw_left = ptr[0];
+        if (bw_left < min_left) {
+            min_left = bw_left;
+            min_wlen = wlen;
+        }
         unsigned short writeTriggerRequest = ptr[1];
-        std::cout << ", trigger = " << writeTriggerRequest << " ("
-                  << (writeTriggerRequest/2-5) << "), bw_left = " << bw_left;
+        if (doOut) {
+            std::cout << ", trigger = " << writeTriggerRequest << " ("
+                      << (writeTriggerRequest/2-5) << "), bw_left = " << bw_left;
+        }
 
-        if (!board->ReadWaveformTable(waveform_read, 0, wlen)) {
+        if (!rboard->ReadWaveformTable(waveform_read, 0, wlen)) {
+            if (!doOut) std::cout << "Len=" << std::dec << wlen << ": ";
             std::cout << "ReadWaveformTable failed" << std::endl;
             break;
         }
         for (i = 0; i < wlen; i++) {
             if (waveform_read[i] != waveform[i]) {
-                std::cout << ", mismatch at quadlet " << i << ", read " << std::hex
-                          << waveform_read[i] << ", expected " << waveform[i];
+                if (doOut) {
+                    std::cout << ", mismatch at quadlet " << std::dec << i << ", read "
+                              << waveform_read[i] << ", expected " << waveform[i];
+                    if (numSilentMismatch > 0) {
+                        std::cout << std::endl << "There were " << numSilentMismatch
+                                  << " additional lengths with mismatches";
+                        numSilentMismatch = 0;
+                    }
+                }
+                else
+                    numSilentMismatch++;
                 break;
             }
         }
-        std::cout << std::endl;
+        if (doOut) std::cout << std::endl;
     }
+    if (numSilentMismatch > 0)
+        std::cout << "There were " << numSilentMismatch << " additional lengths with mismatches" << std::endl;
+    std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
 }
 
 void TestWaveform(AmpIO *board)
@@ -865,7 +891,7 @@ int main(int argc, char **argv)
 
         case 'B':
             if (curBoardEth)
-                TestBlockWrite(curBoardEth);
+                TestBlockWrite(curBoardEth, curBoard);
             break;
 
         case 'b':

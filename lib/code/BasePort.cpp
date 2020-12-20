@@ -53,7 +53,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     }
     ReadBufferBroadcast = 0;
     WriteBufferBroadcast = 0;
-    GenericBuffer = reinterpret_cast<unsigned char *>(new quadlet_t[FW_MAX_PACKET_SIZE/sizeof(quadlet_t)]);
+    GenericBuffer = 0;
     for (i = 0; i < MAX_NODES; i++)
         Node2Board[i] = BoardIO::MAX_BOARDS;
 }
@@ -116,6 +116,15 @@ bool BasePort::SetProtocol(ProtocolType prot) {
             break;
     }
     return (Protocol_ == prot);
+}
+
+void BasePort::SetGenericBuffer(void)
+{
+    if (!GenericBuffer) {
+        size_t maxWritePacket = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+FW_MAX_PACKET_SIZE+GetWritePostfixSize();
+        size_t maxReadPacket = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+FW_MAX_PACKET_SIZE+GetReadPostfixSize();
+        GenericBuffer = reinterpret_cast<unsigned char *>(new quadlet_t[std::max(maxWritePacket,maxReadPacket)/sizeof(quadlet_t)]);
+    }
 }
 
 void BasePort::SetReadBuffer(void)
@@ -522,6 +531,11 @@ bool BasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdat
         outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
+    else if (nbytes > FW_MAX_PACKET_SIZE) {
+        outStr << "ReadBlock: packet size " << std::dec << nbytes << " too large (max = "
+               << FW_MAX_PACKET_SIZE << " bytes)" << std::endl;
+        return false;
+    }
 
     nodeid_t node = ConvertBoardToNode(boardId);
     return (node < MAX_NODES) ? ReadBlockNode(node, addr, rdata, nbytes, boardId&FW_NODE_FLAGS_MASK) : false;
@@ -535,6 +549,11 @@ bool BasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wda
     }
     else if ((nbytes == 0) || ((nbytes%4) != 0)) {
         outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
+        return false;
+    }
+    else if (nbytes > FW_MAX_PACKET_SIZE) {
+        outStr << "WriteBlock: packet size " << std::dec << nbytes << " too large (max = "
+               << FW_MAX_PACKET_SIZE << " bytes)" << std::endl;
         return false;
     }
 
