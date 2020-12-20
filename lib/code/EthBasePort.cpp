@@ -33,7 +33,7 @@ EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType
     BasePort(portNum, debugStream),
     fw_tl(0),
     eth_read_callback(cb),
-    ReceiveTimeout(0.01),
+    ReceiveTimeout(0.02),
     FwBusReset(false)
 {
 }
@@ -128,6 +128,11 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
         outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
         return false;
     }
+    unsigned int tl_recv = packet[2] >> 2;
+    if (tl_recv != tl) {
+        outStr << "WARNING: received tl = " << tl_recv
+               << ", expected tl = " << tl << std::endl;
+    }
     // TODO: could also check QRESPONSE length
     if (tcode == BRESPONSE) {
         size_t length_recv = static_cast<size_t>((packet[12] << 8) | packet[13]);
@@ -135,11 +140,6 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
             outStr << "Inconsistent length: received = " << length_recv << ", expected = " << length << std::endl;
             return false;
         }
-    }
-    unsigned int tl_recv = packet[2] >> 2;
-    if (tl_recv != tl) {
-        outStr << "WARNING: received tl = " << tl_recv
-               << ", expected tl = " << tl << std::endl;
     }
     return true;
 }
@@ -266,7 +266,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint16_t numStateInvalid;  // Quad 13
         uint8_t  numReset;
         uint8_t  numSendStateInvalid;
-        uint32_t unused32;           // Quad 14
+        uint16_t bw_left;          // Quad 14
+        uint16_t writeRequestTrigger;
         //uint32_t timestampEnd;     // Quad 15
         uint32_t errorStateInfo;   // Quad 15
     };
@@ -296,6 +297,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         if (p->eth_errors&0x80) debugStream << "Quad ";
         if (p->eth_errors&0x40) debugStream << "Block ";
     }
+    if (p->eth_errors&0x20)
+        debugStream << "Block write active" << std::endl;
     if (!(p->eth_errors&0x08))
         debugStream << "DMA Recv busy" << std::endl;
     if (!(p->eth_errors&0x10))
@@ -359,6 +362,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     double bits2uS = clockPeriod*1e6;
     debugStream << "timeReceive (us): " << p->timeReceive*bits2uS << std::endl;
     debugStream << "timeSend (us): " << p->timeSend*bits2uS << std::endl;
+    debugStream << "bw_left = " << std::dec << p->bw_left << ", trigger = " << p->writeRequestTrigger << std::endl;
     //debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
     debugStream << "Error state: state = " << std::hex << (p->errorStateInfo&0x003fffff) << std::dec
                 << ", index = " << ((p->errorStateInfo>>22)&0x0000001f) << ", next = " << (p->errorStateInfo>>27)

@@ -414,6 +414,47 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     return true;
 }
 
+void TestBlockWrite(AmpIO *board)
+{
+    const unsigned int WLEN_MAX = 512;
+    quadlet_t waveform[WLEN_MAX];
+    quadlet_t waveform_read[WLEN_MAX];
+    size_t i;
+    for (size_t wlen = 20; wlen < WLEN_MAX; wlen+=20) {
+        std::cout << "Len=" << std::dec << wlen << ": trigger_des = " << (3*wlen-2)/5.0
+                  << ", trigger_approx = " << (1+wlen/2+wlen/8);
+        for (i = 0; i < wlen; i++) {
+            waveform[i] = wlen-i;
+            waveform_read[i] = 0;
+        }
+        if (!board->WriteWaveformTable(waveform, 0, wlen)) {
+            std::cout << "WriteWaveformTable failed" << std::endl;
+            return;
+        }
+        Amp1394_Sleep(0.1);
+        if (!board->ReadEthernetData(waveform_read, 0x80, 16))
+            break;
+        unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
+        unsigned short bw_left = ptr[0];
+        unsigned short writeTriggerRequest = ptr[1];
+        std::cout << ", trigger = " << writeTriggerRequest << " ("
+                  << (writeTriggerRequest/2-5) << "), bw_left = " << bw_left;
+
+        if (!board->ReadWaveformTable(waveform_read, 0, wlen)) {
+            std::cout << "ReadWaveformTable failed" << std::endl;
+            break;
+        }
+        for (i = 0; i < wlen; i++) {
+            if (waveform_read[i] != waveform[i]) {
+                std::cout << ", mismatch at quadlet " << i << ", read " << std::hex
+                          << waveform_read[i] << ", expected " << waveform[i];
+                break;
+            }
+        }
+        std::cout << std::endl;
+    }
+}
+
 void TestWaveform(AmpIO *board)
 {
     const unsigned int WLEN = 256;
@@ -447,7 +488,7 @@ void TestWaveform(AmpIO *board)
     }
     std::cout << "Reading data" << std::endl;
     if (!board->ReadWaveformTable(waveform_read, 0, WLEN)) {
-        std::cout << "ReadwaveformTable failed" << std::endl;
+        std::cout << "ReadWaveformTable failed" << std::endl;
         return;
     }
     for (i = 0; i < WLEN; i++) {
@@ -629,6 +670,7 @@ int main(int argc, char **argv)
         if (curBoardEth) {
             std::cout << "  9) Block write test to 0x4090" << std::endl;
             std::cout << "  a) WriteAllBoards test" << std::endl;
+            std::cout << "  B) BlockWrite test" << std::endl;
         }
         if ((EthBoardList.size() > 0) || (FwBoardList.size() > 0))
             std::cout << "  b) Change Firewire/Ethernet board" << std::endl;
@@ -819,6 +861,11 @@ int main(int argc, char **argv)
         case 'a':
             if (curBoardEth)
                 WriteAllBoardsTest(EthPort, EthBoardList);
+            break;
+
+        case 'B':
+            if (curBoardEth)
+                TestBlockWrite(curBoardEth);
             break;
 
         case 'b':
