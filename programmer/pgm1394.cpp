@@ -112,8 +112,8 @@ bool PromProgramTest(AmpIO &Board)
     // Compare bytes
     for (i = 0; i < sizeof(testBuffer); i++) {
         if (testBuffer[i] != readBuffer[i]) {
-            std::cout << "  Mismatch at offset " << i << ": wrote " << testBuffer[i]
-                      << ", read " << readBuffer[i] << std::endl;
+            std::cout << "  Mismatch at offset " << i << ": wrote " << static_cast<unsigned int>(testBuffer[i])
+                      << ", read " << static_cast<unsigned int>(readBuffer[i]) << std::endl;
             return false;
         }
     }
