@@ -51,6 +51,11 @@ const unsigned long QLA1_String = 0x514C4131;
 // Maximum Firewire packet size in bytes (at 400 Mbits/sec)
 const unsigned int FW_MAX_PACKET_SIZE = 2048;
 
+// We subtract 24 bytes for the Block Write or Block Read Response header and CRC.
+// The Firewire specification will actually allow the full 2048 bytes for the data,
+// but this would require a firmware update.
+const unsigned int FW_MAX_DATA_SIZE = FW_MAX_PACKET_SIZE-24;
+
 // The FireWire node number is represented by an unsigned char (8 bits), but only 6
 // bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
 // uses the upper two bits as flags to indicate whether the packet should be sent

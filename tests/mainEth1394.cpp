@@ -416,7 +416,7 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
 
 void TestBlockWrite(AmpIO *wboard, AmpIO *rboard)
 {
-    const unsigned int WLEN_MAX = 512;
+    const unsigned int WLEN_MAX = (FW_MAX_DATA_SIZE/sizeof(quadlet_t));
     quadlet_t waveform[WLEN_MAX];
     quadlet_t waveform_read[WLEN_MAX];
     size_t i;
@@ -424,7 +424,7 @@ void TestBlockWrite(AmpIO *wboard, AmpIO *rboard)
     unsigned int min_wlen = WLEN_MAX;
     unsigned int numSilentMismatch = 0;
     for (size_t wlen = 2; wlen < WLEN_MAX; wlen++) {
-        bool doOut = ((wlen<10)||(wlen%20 == 0));
+        bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
         if (doOut) {
             std::cout << "Len=" << std::dec << wlen << ": trigger = " << (3*wlen-2)/5.0
                       << ", trigger_approx = " << (1+wlen/2+wlen/8);

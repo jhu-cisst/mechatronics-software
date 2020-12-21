@@ -121,8 +121,8 @@ bool BasePort::SetProtocol(ProtocolType prot) {
 void BasePort::SetGenericBuffer(void)
 {
     if (!GenericBuffer) {
-        size_t maxWritePacket = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+FW_MAX_PACKET_SIZE+GetWritePostfixSize();
-        size_t maxReadPacket = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+FW_MAX_PACKET_SIZE+GetReadPostfixSize();
+        size_t maxWritePacket = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+FW_MAX_DATA_SIZE+GetWritePostfixSize();
+        size_t maxReadPacket = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+FW_MAX_DATA_SIZE+GetReadPostfixSize();
         GenericBuffer = reinterpret_cast<unsigned char *>(new quadlet_t[std::max(maxWritePacket,maxReadPacket)/sizeof(quadlet_t)]);
     }
 }
@@ -148,7 +148,7 @@ void BasePort::SetWriteBuffer(void)
 void BasePort::SetReadBufferBroadcast(void)
 {
     if (!ReadBufferBroadcast) {
-        size_t numReadBytes = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+FW_MAX_PACKET_SIZE+GetReadPostfixSize();
+        size_t numReadBytes = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+FW_MAX_DATA_SIZE+GetReadPostfixSize();
         quadlet_t *buf = new quadlet_t[numReadBytes/sizeof(quadlet_t)];
         ReadBufferBroadcast = reinterpret_cast<unsigned char *>(buf);
     }
@@ -157,7 +157,7 @@ void BasePort::SetReadBufferBroadcast(void)
 void BasePort::SetWriteBufferBroadcast(void)
 {
     if (!WriteBufferBroadcast) {
-        size_t numWriteBytes = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+FW_MAX_PACKET_SIZE+GetWritePostfixSize();
+        size_t numWriteBytes = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+FW_MAX_DATA_SIZE+GetWritePostfixSize();
         quadlet_t *buf = new quadlet_t[numWriteBytes/sizeof(quadlet_t)];
         WriteBufferBroadcast = reinterpret_cast<unsigned char *>(buf);
     }
@@ -531,9 +531,9 @@ bool BasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdat
         outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
-    else if (nbytes > FW_MAX_PACKET_SIZE) {
+    else if (nbytes > FW_MAX_DATA_SIZE) {
         outStr << "ReadBlock: packet size " << std::dec << nbytes << " too large (max = "
-               << FW_MAX_PACKET_SIZE << " bytes)" << std::endl;
+               << FW_MAX_DATA_SIZE << " bytes)" << std::endl;
         return false;
     }
 
@@ -551,9 +551,9 @@ bool BasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wda
         outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
-    else if (nbytes > FW_MAX_PACKET_SIZE) {
+    else if (nbytes > FW_MAX_DATA_SIZE) {
         outStr << "WriteBlock: packet size " << std::dec << nbytes << " too large (max = "
-               << FW_MAX_PACKET_SIZE << " bytes)" << std::endl;
+               << FW_MAX_DATA_SIZE << " bytes)" << std::endl;
         return false;
     }
 

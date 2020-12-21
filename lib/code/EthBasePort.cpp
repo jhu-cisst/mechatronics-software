@@ -197,8 +197,13 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
         data_length /= sizeof(quadlet_t);   // data_length in quadlets
         unsigned int lim = (data_length <= max_quads-5) ? data_length : max_quads-5;
-        for (unsigned int i = 0; i < lim; i++)
-            out << "  data[" << std::dec << i << "]: " << std::hex << packet[5+i] << std::endl;
+        for (unsigned int i = 0; i < lim; i += 4) {
+            out << "  data[" << std::dec << std::setfill(' ') << std::setw(3) << i << ":"
+                << std::setw(3) << (i+3) << "]:  ";
+            for (unsigned int j = 0; (j < 4) && ((i+j) < lim); j++)
+                out << std::hex << std::setw(8) << std::setfill('0') << packet[5+i+j] << "  ";
+            out << std::endl;
+        }
         if ((data_length > 0) && (data_length < max_quads-5))
             out << "  data_crc: " << std::hex << packet[5+data_length] << std::endl;
     }
@@ -753,7 +758,7 @@ void EthBasePort::make_qwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_
 void EthBasePort::make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl)
 {
     make_1394_header(packet, node, addr, EthBasePort::BREAD, tl);
-    packet[3] = bswap_32((nBytes & 0xffff) << 16);
+    packet[3] = bswap_32((nBytes & 0x0000ffff) << 16);
     // CRC
     packet[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet, FW_BREAD_SIZE-FW_CRC_SIZE)));
 }
