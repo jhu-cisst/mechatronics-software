@@ -1634,8 +1634,7 @@ bool AmpIO::ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned
 {
     if (GetFirmwareVersion() < 7) return false;
     if (nquads == 0) return true;
-    // Firmware currently cannot read more than 1024 quadlets.
-    if (nquads > 1024) return false;
+    if (nquads > (port->GetMaxReadDataSize()/sizeof(quadlet_t))) return false;
     if (offset > 1023) return false;
     nodeaddr_t address = 0x8000 + offset;   // ADDR_WAVEFORM = 0x8000
     bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
@@ -1651,10 +1650,9 @@ bool AmpIO::WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, u
 {
     if (GetFirmwareVersion() < 7) return false;
     if (nquads == 0) return true;
-    // Firmware currently cannot write more than 1024 quadlets.
-    if (nquads > 1024) return false;
+    if (nquads > (port->GetMaxWriteDataSize()/sizeof(quadlet_t))) return false;
     if (offset > 1023) return false;
-    static quadlet_t localBuffer[1024];
+    static quadlet_t localBuffer[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
     nodeaddr_t address = 0x8000 + offset;   // ADDR_WAVEFORM = 0x8000
     // Byteswap and invert digital output bits (see WriteDigitalOutput and GetDigitalOutput)
     for (unsigned short i = 0; i < nquads; i++)
@@ -1687,8 +1685,8 @@ bool AmpIO::IsCollecting() const
 bool AmpIO::ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
 {
     if (GetFirmwareVersion() < 7) return false;
-    // Firmware currently cannot read more than 1024 quadlets.
-    if (nquads > 1024) return false;
+    if (nquads > (port->GetMaxReadDataSize()/sizeof(quadlet_t))) return false;
+    if (offset > 1023) return false;
     nodeaddr_t address = 0x7000 + offset;   // ADDR_DATA_BUF = 0x7000
     bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
     if (ret) {

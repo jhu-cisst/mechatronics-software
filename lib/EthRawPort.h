@@ -28,6 +28,9 @@ typedef struct pcap pcap_t;
 const unsigned int ETH_FRAME_HEADER_SIZE = 14;    // dest addr (6), src addr (6), length (2)
 const unsigned int ETH_FRAME_LENGTH_OFFSET = 12;  // offset to length
 
+//const unsigned int ETH_RAW_FRAME_MAX_SIZE = 1500; // maximum raw Ethernet frame size
+const unsigned int ETH_RAW_FRAME_MAX_SIZE = 1024;   // Temporary firmware limit
+
 class EthRawPort : public EthBasePort
 {
 protected:
@@ -84,6 +87,11 @@ public:
         { return ((ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE)%sizeof(quadlet_t)); }
     unsigned int GetReadQuadAlign(void) const
         { return (ETH_FRAME_HEADER_SIZE%sizeof(quadlet_t)); }
+
+    // Get the maximum number of data bytes that can be read
+    // (via ReadBlock) or written (via WriteBlock).
+    unsigned int GetMaxReadDataSize(void) const;
+    unsigned int GetMaxWriteDataSize(void) const;
 };
 
 #endif  // __EthRawPort_H__

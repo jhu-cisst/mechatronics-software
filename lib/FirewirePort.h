@@ -28,6 +28,14 @@ struct raw1394_handle;
 typedef struct raw1394_handle *raw1394handle_t;
 typedef int (*bus_reset_handler_t)(raw1394handle_t, unsigned int generation);
 
+// Maximum Firewire packet size in bytes (at 400 Mbits/sec)
+const unsigned int FW_MAX_PACKET_SIZE = 2048;
+
+// We subtract 24 bytes for the Block Write or Block Read Response header and CRC.
+// The Firewire specification will actually allow the full 2048 bytes for the data,
+// but this would require a firmware update.
+const unsigned int FW_MAX_DATA_SIZE = FW_MAX_PACKET_SIZE-24;
+
 class FirewirePort : public BasePort {
 public:
 protected:
@@ -108,6 +116,11 @@ public:
 
     unsigned int GetWriteQuadAlign(void) const    { return 0; }
     unsigned int GetReadQuadAlign(void) const     { return 0; }
+
+    // Get the maximum number of data bytes that can be read
+    // (via ReadBlock) or written (via WriteBlock).
+    unsigned int GetMaxReadDataSize(void) const  { return FW_MAX_DATA_SIZE; }
+    unsigned int GetMaxWriteDataSize(void) const { return FW_MAX_DATA_SIZE; }
 
     // Adds board(s)
     bool AddBoard(BoardIO *board);

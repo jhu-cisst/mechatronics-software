@@ -414,11 +414,11 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     return true;
 }
 
-void TestBlockWrite(AmpIO *wboard, AmpIO *rboard)
+void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
 {
-    const unsigned int WLEN_MAX = (FW_MAX_DATA_SIZE/sizeof(quadlet_t));
-    quadlet_t waveform[WLEN_MAX];
-    quadlet_t waveform_read[WLEN_MAX];
+    quadlet_t waveform[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
+    quadlet_t waveform_read[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
+    const unsigned int WLEN_MAX = (wport->GetMaxWriteDataSize()/sizeof(quadlet_t));
     size_t i;
     unsigned int min_left = WLEN_MAX;
     unsigned int min_wlen = WLEN_MAX;
@@ -891,7 +891,7 @@ int main(int argc, char **argv)
 
         case 'B':
             if (curBoardEth)
-                TestBlockWrite(curBoardEth, curBoard);
+                TestBlockWrite(EthPort, curBoardEth, curBoard);
             break;
 
         case 'b':

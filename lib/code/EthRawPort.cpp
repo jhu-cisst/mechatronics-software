@@ -273,6 +273,16 @@ unsigned int EthRawPort::GetPrefixOffset(MsgType msg) const
     return 0;
 }
 
+unsigned int EthRawPort::GetMaxReadDataSize(void) const
+{
+    return ETH_RAW_FRAME_MAX_SIZE - GetPrefixOffset(RD_FW_BDATA) - GetReadPostfixSize();
+}
+
+unsigned int EthRawPort::GetMaxWriteDataSize(void) const
+{
+    return ETH_RAW_FRAME_MAX_SIZE - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
+}
+
 bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool)
 {
     if (pcap_sendpacket(handle, packet, nbytes) != 0)  {

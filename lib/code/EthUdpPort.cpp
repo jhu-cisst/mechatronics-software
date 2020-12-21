@@ -330,6 +330,16 @@ unsigned int EthUdpPort::GetPrefixOffset(MsgType msg) const
     return 0;
 }
 
+unsigned int EthUdpPort::GetMaxReadDataSize(void) const
+{
+    return ETH_UDP_MAX_SIZE - GetPrefixOffset(RD_FW_BDATA) - GetReadPostfixSize();
+}
+
+unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
+{
+    return ETH_UDP_MAX_SIZE - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
+}
+
 bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
     int nSent = sockPtr->Send(packet, nbytes, useEthernetBroadcast);

@@ -48,13 +48,9 @@ http://www.cisst.org/cisst/license.txt.
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
 
-// Maximum Firewire packet size in bytes (at 400 Mbits/sec)
-const unsigned int FW_MAX_PACKET_SIZE = 2048;
-
-// We subtract 24 bytes for the Block Write or Block Read Response header and CRC.
-// The Firewire specification will actually allow the full 2048 bytes for the data,
-// but this would require a firmware update.
-const unsigned int FW_MAX_DATA_SIZE = FW_MAX_PACKET_SIZE-24;
+// Maximum possible data size in bytes; this should only be used for sizing static buffers;
+// the actual limit is port-specific and generally less than this.
+const unsigned int MAX_POSSIBLE_DATA_SIZE = 2048;
 
 // The FireWire node number is represented by an unsigned char (8 bits), but only 6
 // bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
@@ -296,6 +292,11 @@ public:
     // Probably not necessary for modern processors/compilers.
     virtual unsigned int GetWriteQuadAlign(void) const = 0;
     virtual unsigned int GetReadQuadAlign(void) const = 0;
+
+    // Get the maximum number of data bytes that can be read
+    // (via ReadBlock) or written (via WriteBlock).
+    virtual unsigned int GetMaxReadDataSize(void) const = 0;
+    virtual unsigned int GetMaxWriteDataSize(void) const = 0;
 
     //*********************** Virtual methods **********************************
 

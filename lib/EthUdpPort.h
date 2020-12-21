@@ -26,6 +26,10 @@ struct SocketInternals;
 
 #define ETH_UDP_DEFAULT_IP "169.254.0.100"
 
+// Following is a conservative limit, based on MTU=1500 (1518 including Ethernet
+// frame and CRC), minus 20 for the IPv4 header and 8 for the UDP header.
+const unsigned int ETH_UDP_MAX_SIZE = 1472;
+
 class EthUdpPort : public EthBasePort
 {
 protected:
@@ -72,6 +76,11 @@ public:
 
     unsigned int GetWriteQuadAlign(void) const    { return (FW_CTRL_SIZE%sizeof(quadlet_t)); }
     unsigned int GetReadQuadAlign(void) const     { return 0; }
+
+    // Get the maximum number of data bytes that can be read
+    // (via ReadBlock) or written (via WriteBlock).
+    unsigned int GetMaxReadDataSize(void) const;
+    unsigned int GetMaxWriteDataSize(void) const;
 
     //****************** Static methods ***************************
 
