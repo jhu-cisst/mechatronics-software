@@ -282,7 +282,10 @@ bool FirewirePort::WriteBroadcastReadRequest(unsigned int seq)
         bcReqAddr = 0x1800;              // special address to trigger broadcast read
 
 #if 1
-    return WriteQuadletNode(0, bcReqAddr, bcReqData);
+    WriteQuadletNode(0, bcReqAddr, bcReqData);
+    // WriteQuadletNode returns false because the "fake" broadcast packet to node 0 does not
+    // return an ACK.
+    return true;
 #else
     return WriteQuadlet(FW_NODE_BROADCAST, bcReqAddr, bcReqData);
 #endif

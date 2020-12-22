@@ -430,7 +430,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
                       << ", trigger_approx = " << (1+wlen/2+wlen/8);
         }
         for (i = 0; i < wlen; i++) {
-            waveform[i] = wlen-i;
+            waveform[i] = ((wlen+i)<< 16) | (wlen-i);
             waveform_read[i] = 0;
         }
         if (!wboard->WriteWaveformTable(waveform, 0, wlen)) {

@@ -650,7 +650,11 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         ReadSequence_ = 1;
     }
 
-    WriteBroadcastReadRequest(ReadSequence_);
+    if (!WriteBroadcastReadRequest(ReadSequence_)) {
+        outStr << "ReadAllBoardsBroadcast: failed to send broadcast read request, seq = " << ReadSequence_ << std::endl;
+        OnNoneRead();
+        return false;
+    }
 
     // Wait for broadcast read data
     WaitBroadcastRead();
@@ -682,20 +686,28 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     unsigned boardMax = IsAllBoardsRev7_ ? NumOfBoards_ : max_board;
     for (unsigned int boardNum = 0; boardNum < boardMax; boardNum++) {
         unsigned int seq = (bswap_32(curPtr[0]) >> 16);
-        unsigned int thisBoard = (bswap_32(curPtr[2])&0x0f000000)>>24;
+        quadlet_t statusQuad = bswap_32(curPtr[2]);
+        unsigned int numAxes = (statusQuad&0xf0000000)>>28;
+        unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
         BoardIO *board = 0;
-        if (IsAllBoardsRev7_) {
-            // Should check against BoardInUseMask_
-            board = BoardList[thisBoard];
-        }
-        else {
-            board = BoardList[boardNum];
-            if (board) {
-                if (board->GetBoardId() != thisBoard) {
-                    outStr << "Board mismatch: expecting " << board << ", found " << thisBoard << std::endl;
-                    board = 0;
+        if (numAxes == 4) {
+            if (IsAllBoardsRev7_) {
+                // Should check against BoardInUseMask_
+                board = BoardList[thisBoard];
+            }
+            else {
+                board = BoardList[boardNum];
+                if (board) {
+                    if (board->GetBoardId() != thisBoard) {
+                        outStr << "Board mismatch: expecting " << static_cast<unsigned int>(board->GetBoardId())
+                               << ", found " << thisBoard << std::endl;
+                        board = 0;
+                    }
                 }
             }
+        }
+        else {
+            outStr << "Invalid status (not a 4 axis board): " << std::hex << statusQuad << std::dec << std::endl;
         }
         if (board) {
             if (seq == ReadSequence_) {
