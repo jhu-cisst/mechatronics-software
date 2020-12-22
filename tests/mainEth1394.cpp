@@ -422,12 +422,16 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     size_t i;
     unsigned int min_left = WLEN_MAX;
     unsigned int min_wlen = WLEN_MAX;
+    unsigned int max_wait = 0;
+    unsigned int max_wlen = WLEN_MAX;
     unsigned int numSilentMismatch = 0;
     for (size_t wlen = 2; wlen < WLEN_MAX; wlen++) {
         bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
+        unsigned int len16 = 2*wlen;  // length in words
+        unsigned int trigger_comp = 10 + len16/2+len16/8 + 2;   // computation on FPGA
         if (doOut) {
             std::cout << "Len=" << std::dec << wlen << ": trigger = " << (3*wlen-2)/5.0
-                      << ", trigger_approx = " << (1+wlen/2+wlen/8);
+                      << ", trigger_fpga = " << (trigger_comp-10)/2;
         }
         for (i = 0; i < wlen; i++) {
             waveform[i] = ((wlen+i)<< 16) | (wlen-i);
@@ -447,15 +451,17 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             min_left = bw_left;
             min_wlen = wlen;
         }
-        unsigned short writeTriggerRequest = ptr[1];
-        if (doOut) {
-            std::cout << ", trigger = " << writeTriggerRequest << " ("
-                      << (writeTriggerRequest/2-5) << "), bw_left = " << bw_left;
+        unsigned short bw_wait = ptr[1];
+        if (bw_wait > max_wait) {
+            max_wait = bw_wait;
+            max_wlen = wlen;
         }
-
+        if (doOut) {
+            std::cout << ", bw_left = " << bw_left << ", bw_wait = " << bw_wait;
+        }
         if (!rboard->ReadWaveformTable(waveform_read, 0, wlen)) {
-            if (!doOut) std::cout << "Len=" << std::dec << wlen << ": ";
-            std::cout << "ReadWaveformTable failed" << std::endl;
+            if (!doOut) std::cout << "Len=" << std::dec << wlen << ":";
+            std::cout << " ReadWaveformTable failed" << std::endl;
             break;
         }
         for (i = 0; i < wlen; i++) {
@@ -479,6 +485,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     if (numSilentMismatch > 0)
         std::cout << "There were " << numSilentMismatch << " additional lengths with mismatches" << std::endl;
     std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
+    std::cout << "Maximum bw_wait = " << std::dec << max_wait << " at wlen = " << max_wlen << std::endl;
 }
 
 void TestWaveform(AmpIO *board)
