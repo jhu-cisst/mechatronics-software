@@ -65,14 +65,13 @@ protected:
 
     // For real-time block reads and writes, the board class (i.e., derived classes from BoardIO)
     // determines the data size (NumBytes), but the port classes (i.e., derived classes from BasePort)
-    // allocate the memory and call SetReadBuffer/SetWriteBuffer.
+    // allocate the memory.
 
     // Following methods are for real-time block reads
     void SetReadValid(bool flag)
     { readValid = flag; if (!readValid) numReadErrors++; }
     virtual unsigned int GetReadNumBytes() const = 0;
-    virtual quadlet_t *GetReadBuffer() const = 0;
-    virtual void SetReadBuffer(quadlet_t *buf) = 0;
+    virtual void ProcessReadData(const quadlet_t *buf) = 0;
 
     // Following methods are for real-time block writes
     void SetWriteValid(bool flag)

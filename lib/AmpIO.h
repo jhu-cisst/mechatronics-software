@@ -44,6 +44,7 @@ typedef uint8_t  AmpIO_UInt8;
 class AmpIO : public BoardIO
 {
 public:
+
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
@@ -94,8 +95,6 @@ public:
     AmpIO_UInt8 GetEncoderChannelB(void) const;
     bool GetEncoderChannelB(unsigned int index) const;
 
-    bool GetEncoderOverflow(unsigned int index) const;
-
     AmpIO_UInt8 GetEncoderIndex(void) const;
     //@}
 
@@ -107,11 +106,17 @@ public:
 
     AmpIO_UInt32 GetAnalogInput(unsigned int index) const;
 
+    //********************** Encoder position/velocity/acceleration *****************************
+
+    /*! Returns the encoder position in counts. */
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
 
-    /*! Returns the encoder velocity clock period, in seconds. Note that this value depends on the
+    /*! Returns true if encoder position has overflowed. */
+    bool GetEncoderOverflow(unsigned int index) const;
+
+    /*! Returns the encoder clock period, in seconds. Note that this value depends on the
         firmware version. */
-    double GetEncoderVelocityClockPeriod(void) const;
+    double GetEncoderClockPeriod(void) const;
 
     /*! Returns the encoder velocity, in counts per second, based on the FPGA measurement
         of the encoder period (i.e., time between two consecutive edges). Specifically, the
@@ -183,6 +188,8 @@ public:
 
     /*! Get the encoder running counter, in seconds */
     double GetEncoderRunningCounterSeconds(unsigned int index) const;
+
+    //********************************************************************************************
 
     // GetPowerEnable: return power enable control
     bool GetPowerEnable(void) const;
@@ -555,17 +562,14 @@ protected:
            ReadBufSize = 4+6*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
-    // Buffer for real-time block reads. The constructor sets this to read_buffer_internal
-    // so that it is always valid, but the Port may set it differently, e.g., to point to
-    // the appropriate offset within a larger broadcast buffer.
-    quadlet_t *ReadBuffer;
-    quadlet_t read_buffer_internal[ReadBufSize];
+    // Buffer for real-time block reads. The Port class calls ProcessReadData to copy the
+    // most recent data into this buffer, while also byteswapping.
+    quadlet_t ReadBuffer[ReadBufSize];
 
     // Buffer for real-time block writes. The constructor sets this to write_buffer_internal
     // so that it is always valid, but the Port may set it differently, e.g., to point to
     // the appropriate offset within a larger broadcast buffer.
     quadlet_t *WriteBuffer;     // buffer for real-time writes
-    quadlet_t *WriteBufferData; // buffer for data part
     quadlet_t write_buffer_internal[WriteBufSize];
 
     // Data collection
@@ -584,9 +588,8 @@ protected:
     unsigned short collect_rquads;     // current block read request size (in quadlets)
 
     // Virtual methods
-    quadlet_t *GetReadBuffer() const { return ReadBuffer; }
     unsigned int GetReadNumBytes() const;
-    void SetReadBuffer(quadlet_t *buf);
+    void ProcessReadData(const quadlet_t *buf);
 
     quadlet_t *GetWriteBuffer() const { return WriteBuffer; }
     unsigned int GetWriteNumBytes() const { return WriteBufSize*sizeof(quadlet_t); }
@@ -618,12 +621,19 @@ protected:
     */
     void CheckCollectCallback();
 
-    // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
-    // Note that there are two velocity measurements. The first one (ENC_VEL_OFFSET)
-    // measures the time between consecutive encoder edges of the same type.
-    // The second one (ENC_FRQ_OFFSET) returns the number of encoder counts over
-    // a fixed time period (currently, about 8.5 ms, based on 11.72 Hz clock on FPGA).
-    // Only the first one (ENC_VEL_OFFSET) is currently used.
+    // Offsets of real-time read buffer contents, 28 = 4 + 4 * 6 quadlets
+    // Offsets from TIMESTAMP_OFFSET to ENC_POS_OFFSET have remained stable through
+    // all releases of firmware. The other offsets are related to velocity (and
+    // acceleration) estimation and have varied based on the firmware.
+    // ENC_VEL_OFFSET has always measured the encoder period (time between consecutive
+    // encoder edges of th same type), though the resolution of that measurement (i.e.,
+    // clock ticks per second) varies between different firmware versions.
+    // ENC_FRQ_OFFSET originally measured the number of encoder counts over a fixed
+    // time period (about 8.5 ms), but was never used by the higher-level software.
+    // It was later changed to ENC_QTR1_OFFSET, which measures the number of encoder
+    // counts over the last quarter-cycle, which is used for acceleration estimation.
+    // Firmware V7 added ENC_QTR5_OFFSET and ENC_RUN_OFFSET; in V6, the QTR5 data
+    // was stuffed into unused bits in other fields.
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet

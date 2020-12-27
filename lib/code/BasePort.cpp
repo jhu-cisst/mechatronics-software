@@ -86,7 +86,6 @@ bool BasePort::SetProtocol(ProtocolType prot) {
         case BasePort::PROTOCOL_SEQ_RW:
             outStr << "System running in NON broadcast mode" << std::endl;
             if (Protocol_ != prot) {
-                SetReadBuffer();
                 SetWriteBuffer();
             }
             Protocol_ = prot;
@@ -94,7 +93,6 @@ bool BasePort::SetProtocol(ProtocolType prot) {
         case BasePort::PROTOCOL_SEQ_R_BC_W:
             outStr << "System running with broadcast write" << std::endl;
             if (Protocol_ != prot) {
-                SetReadBuffer();
                 SetWriteBufferBroadcast();
                 if (IsNoBoardsRev7_)
                     SetWriteBuffer();
@@ -124,15 +122,6 @@ void BasePort::SetGenericBuffer(void)
         size_t maxWritePacket = GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)+GetMaxWriteDataSize()+GetWritePostfixSize();
         size_t maxReadPacket = GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)+GetMaxReadDataSize()+GetReadPostfixSize();
         GenericBuffer = reinterpret_cast<unsigned char *>(new quadlet_t[std::max(maxWritePacket,maxReadPacket)/sizeof(quadlet_t)]);
-    }
-}
-
-void BasePort::SetReadBuffer(void)
-{
-    for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
-        BoardIO *board = BoardList[i];
-        if (board)
-            board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[i]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)));
     }
 }
 
@@ -329,11 +318,9 @@ bool BasePort::AddBoard(BoardIO *board)
     // Now, set the BoardIO buffers based on the current protocol. Note that we have to do this here
     // and in SetProtocol because we do not make any assumptions about which is called last.
     if (Protocol_ == BasePort::PROTOCOL_SEQ_RW) {
-        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)));
         board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
     }
     else if (Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) {
-        board->SetReadBuffer(reinterpret_cast<quadlet_t *>(ReadBuffer[id]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA)));
         SetWriteBufferBroadcast();
         if (IsNoBoardsRev7_)
             board->SetWriteBuffer(reinterpret_cast<quadlet_t *>(WriteBuffer[id]+GetWriteQuadAlign()+GetPrefixOffset(WR_FW_BDATA)));
@@ -364,7 +351,6 @@ bool BasePort::RemoveBoard(unsigned char boardId)
     BoardInUseMask_ = (BoardInUseMask_ & (~(1 << boardId)));
 
     // set board to use internal buffers
-    board->SetReadBuffer(0);
     board->SetWriteBuffer(0);
 
     BoardList[boardId] = 0;
@@ -585,15 +571,20 @@ bool BasePort::ReadAllBoards(void)
     bool rtRead = true;
     for (unsigned int board = 0; board < max_board; board++) {
         if (BoardList[board]) {
-            bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(), BoardList[board]->GetReadNumBytes());
+            quadlet_t *readBuffer = reinterpret_cast<quadlet_t *>(ReadBuffer[board]+GetReadQuadAlign()+GetPrefixOffset(RD_FW_BDATA));
+            bool ret = ReadBlock(board, 0, readBuffer, BoardList[board]->GetReadNumBytes());
             if (ret) {
+                BoardList[board]->ProcessReadData(readBuffer);
                 noneRead = false;
             } else {
                 allOK = false;
             }
             BoardList[board]->SetReadValid(ret);
 
-            if (!ret) {
+            if (ret) {
+                ReadErrorCounter_ = 0;
+            }
+            else {
                 if (ReadErrorCounter_ == 0) {
                     outStr << "ReadAllBoards: read failed on port "
                            << PortNum << ", board " << board << std::endl;
@@ -604,8 +595,6 @@ bool BasePort::ReadAllBoards(void)
                            << PortNum << ", board " << board << " occurred 10,000 times" << std::endl;
                     ReadErrorCounter_ = 0;
                 }
-            } else {
-                ReadErrorCounter_ = 0;
             }
         }
     }
@@ -711,15 +700,15 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         }
         if (board) {
             if (seq == ReadSequence_) {
-               board->SetReadBuffer(curPtr+1);
-               board->SetReadValid(true);
-               noneRead = false;
-               allOK = true; // PK TEMP
+                board->SetReadValid(true);
+                board->ProcessReadData(curPtr+1);
+                noneRead = false;
+                allOK = true; // PK TEMP
             }
             else {
-               outStr << "Board " << thisBoard << ", seq = " << seq << ", expected = " << ReadSequence_ << std::endl;
-               board->SetReadValid(false);
-               allOK = false; // PK TEMP
+                outStr << "Board " << thisBoard << ", seq = " << seq << ", expected = " << ReadSequence_ << std::endl;
+                board->SetReadValid(false);
+                allOK = false; // PK TEMP
             }
         }
         curPtr += readSize;
@@ -744,9 +733,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 outStr << "block read error: counter = " << std::dec << errorcounter << ", read = "
                        << seq << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
             }
-            BoardList[board]->SetReadBuffer(&(hubReadBuffer[boardOffset+1]));
             BoardList[board]->SetReadValid(ret);
-            if (ret) noneRead = false;
+            if (ret) noneRead = false;  // also call ProcessReadData(&(hubReadBuffer[boardOffset+1]));
             else allOK = false;
         }
     }
