@@ -89,11 +89,34 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
                                 0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
+void AmpIO::EncoderVelocityData::Init()
+{
+    clkPeriod = 1.0;
+    velPeriod = 0;
+    velOverflow = false;
+    velDir = false;
+    dirChange = false;
+    encError = false;
+    partialCycle = true;
+    qtr1Period = 0;
+    qtr1Overflow = false;
+    qtr1Dir = false;
+    qtr1Edges = 0;
+    qtr5Period = 0;
+    qtr5Overflow = false;
+    qtr5Dir = false;
+    qtr5Edges = 0;
+    runPeriod = 0;
+    runOverflow = false;
+}
+
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes),
                                                            collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
     InitWriteBuffer();
+    for (size_t i = 0; i < NUM_CHANNELS; i++)
+        encVelData[i].Init();
 }
 
 AmpIO::~AmpIO()
@@ -113,8 +136,11 @@ unsigned int AmpIO::GetReadNumBytes() const
 void AmpIO::SetReadData(const quadlet_t *buf)
 {
     unsigned int numQuads = (GetFirmwareVersion() < 7) ? ReadBufSize_Old : ReadBufSize;
-    for (size_t i = 0; i < numQuads; i++)
+    size_t i;
+    for (i = 0; i < numQuads; i++)
         ReadBuffer[i] = bswap_32(buf[i]);
+    for (i = 0; i < NUM_CHANNELS; i++)
+        SetEncoderVelocityData(i);
 }
 
 void AmpIO::InitWriteBuffer(void)
@@ -377,63 +403,19 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
     if (index >= NUM_CHANNELS)
         return 0L;
 
-    quadlet_t buff = GetEncoderVelocityRaw(index);
+    double clkPeriod = encVelData[index].clkPeriod;
+    AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;
 
-    AmpIO_Int32 cnter;
-    double vel;
-    AmpIO_UInt32 fver = GetFirmwareVersion();
-    if (fver < 6) {
-        // Prior to Firmware Version 6, the latched counter value is returned
-        // as the lower 16 bits. The upper 16 bits are the free-running counter,
-        // which is not used in this implementation, but could be used to better
-        // handle deceleration (i.e., when the free-running counter value is greater than
-        // the latched counter value). But, for firmware prior to Version 6, the
-        // returned free-running counter value is for the last encoder edge type rather
-        // than for the next expected encoder edge, so it will not work as well.
-        cnter = buff & ENC_VEL_MASK_16;
-        if (cnter == 0x00008000)  // if overflow
-            vel = 0.0;
-        else {
-            // Sign extend if necessary
-            if (cnter & 0x00008000)
-                cnter |= 0xffff0000;
-            vel = 4.0/((double)cnter*VEL_PERD_OLD);
-        }
-    } else if (fver == 6) {
-        // buff[31] = whether full cycle period has overflowed
-        // buff[30] = direction of the encoder
-        // buff[29:22] = upper 8 bits of most recent quarter-cycle period (for acceleration)
-        // buff[21:0] = velocity (22 bits)
-        // Clock = 3.072 MHz
+    // Avoid divide by 0 (should never happen)
+    if (velPeriod == 0) velPeriod = 1;
 
-        // mask and convert to signed
-        cnter = buff & ENC_VEL_MASK_22;
-
-        if (GetEncoderVelocityOverflow(index)) {
-            vel = 0.0;
-        } else if (!GetEncoderDir(index)) {
-            vel = -4.0/((double)cnter*VEL_PERD_REV6);
-        } else {
-            vel = 4.0/((double)cnter*VEL_PERD_REV6);
-        }
-    } else if (fver >= 7) {
-        // buff[31] = whether full cycle period has overflowed
-        // buff[30] = current direction of the encoder
-        // buff[29] = whether a direction change occurred
-        // buff[25:0] = velocity (26 bits)
-        // Clock = 49.152 MHz
-
-        // mask and convert to signed
-        cnter = buff & ENC_VEL_MASK_26;
-
-        if (GetEncoderVelocityOverflow(index) || (buff&ENC_DIR_CHANGE_MASK)) {
-            vel = 0.0;
-        } else if (!GetEncoderDir(index)) {
-            vel = -4.0/((double)cnter*VEL_PERD);
-        } else {
-            vel = 4.0/((double)cnter*VEL_PERD);
-        }
+    double vel = 0.0;
+    if (!encVelData[index].velOverflow && !encVelData[index].dirChange) {
+        vel = 4.0/(velPeriod*clkPeriod);
+        if (!encVelData[index].velDir)
+            vel = -vel;
     }
+
     return vel;
 }
 
@@ -538,43 +520,32 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
 {
 
     if (index >= NUM_CHANNELS)
-        return 0L;
+        return 0.0;
+
+    if (encVelData[index].velOverflow)
+        return 0.0;
+
+    double clkPeriod = encVelData[index].clkPeriod;
+    AmpIO_UInt32 qtr1Period = encVelData[index].qtr1Period;               // Current quarter-cycle period
+    AmpIO_UInt32 qtr5Period = encVelData[index].qtr5Period;               // Previous quarter-cycle period of same type
+    AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;                 // Current full-cycle period
+    AmpIO_UInt32 velPeriodPrev = velPeriod - qtr1Period + qtr5Period;     // Previous full-cycle period
+
+    // Should never happen
+    if ((qtr1Period == 0) || (qtr5Period == 0) || (velPeriod == 0) || (velPeriodPrev == 0))
+        return 0.0;
+
+    if (encVelData[index].qtr1Edges != encVelData[index].qtr5Edges)
+        return 0.0;
 
     double acc = 0.0;
-    AmpIO_UInt32 fver = GetFirmwareVersion();
-    if (fver < 6) {
-        return 0.0;
-    }
-    else if (fver == 6) {
-
-        if (!GetEncoderVelocityOverflow(index)) {
-            AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
-            AmpIO_Int32 rec_perd = GetEncoderAccRec(index);
-            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
-
-            AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
-
-            if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
-                acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD_REV6 * (double) prev_cnter * VEL_PERD_REV6);
-                if (!GetEncoderDir(index))
-                    acc = -acc;
-            }
-       }
-    } else {  // firmware version 7
-        if (!GetEncoderVelocityOverflow(index)) {
-            AmpIO_Int32 prev_perd = GetEncoderQtr(index, ENC_QTR5_OFFSET);
-            AmpIO_Int32 rec_perd = GetEncoderQtr(index, ENC_QTR1_OFFSET);
-            AmpIO_Int32 cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_26;
-            // subtract the most recent quarter and add the quarter 5 cycles ago to calculate
-            // the last full-cycle period (over 4 quarters)
-            AmpIO_Int32 prev_cnter = cnter - rec_perd + prev_perd;
-
-            if ((1.0/rec_perd <= percent_threshold) && (1.0/rec_perd >= -percent_threshold)) {
-                acc = 8.0*((double) (prev_perd - rec_perd)/(prev_perd + rec_perd))/((double) cnter * VEL_PERD * (double) prev_cnter * VEL_PERD);
-                if (!GetEncoderDir(index))
-                    acc = -acc;
-            }
-        }
+    if ((1.0/qtr1Period <= percent_threshold) && (1.0/qtr1Period >= -percent_threshold)) {
+        double qtrDiff = static_cast<double>(qtr5Period) - static_cast<double>(qtr1Period);
+        double qtrSum = static_cast<double>(qtr5Period + qtr1Period);
+        double velProd = static_cast<double>(velPeriod)*static_cast<double>(velPeriodPrev)*clkPeriod*clkPeriod;
+        acc = (8.0*qtrDiff)/(velProd*qtrSum);
+        if (!encVelData[index].velDir)
+            acc = -acc;
     }
     return acc;
 }
@@ -672,6 +643,91 @@ double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
 {
     return ENC_MIDRANGE;
+}
+
+bool AmpIO::SetEncoderVelocityData(unsigned int index)
+{
+    if (index >= NUM_CHANNELS)
+        return false;
+
+    encVelData[index].Init();  // Set default values
+    AmpIO_UInt32 fver = GetFirmwareVersion();
+
+    if (fver < 6) {
+        // Prior to Firmware Version 6, the latched counter value is returned
+        // as the lower 16 bits. Starting with Firmware Version 4, the upper 16 bits are
+        // the free-running counter, which was not used.
+        // Note that the counter values are signed, so we convert to unsigned and set a direction bit
+        // to be consistent with later versions of firmware.
+        encVelData[index].clkPeriod = VEL_PERD_OLD;
+        AmpIO_UInt16 velPeriod = static_cast<AmpIO_UInt16>(ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_16);
+        // Convert from signed count to unsigned count and direction
+        if (velPeriod == 0x8000) { // if overflow
+            encVelData[index].velPeriod = 0x00007fff;
+            encVelData[index].velOverflow = true;
+            // Firmware also sets velPeriod to overflow when direction change occurred, so could potentially
+            // set encVelData[index].dirChange = true.
+        }
+        else if (velPeriod & 0x8000) {  // if negative
+            encVelData[index].velPeriod = (~velPeriod) + 1;
+            encVelData[index].velDir = false;
+        }
+        else {
+            encVelData[index].velPeriod = velPeriod;
+            encVelData[index].velDir = true;
+        }
+        if (fver >= 4) {
+            AmpIO_UInt16 runCtr = static_cast<AmpIO_UInt16>((ReadBuffer[ENC_VEL_OFFSET+index]>>16) & ENC_VEL_MASK_16);
+            // Convert from signed count to unsigned count and direction
+            if (runCtr == 0x8000) {  // if overflow
+                encVelData[index].runOverflow = true;
+                runCtr = 0x7fff;
+            }
+            else if (runCtr & 0x8000)
+                runCtr = (~runCtr) + 1;
+            encVelData[index].runPeriod = static_cast<AmpIO_UInt32>(runCtr);
+        }
+    }
+    else if (fver == 6) {
+        encVelData[index].clkPeriod = VEL_PERD_REV6;
+        // Firmware 6 has bits stuffed in different places:
+        //   Q1: lower 8 bits in velPeriod[29:22] and upper 12 bits in accQtr1[31:20]
+        //   Q5: all 20 bits in accQtr1[19:0]
+        encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_22;
+        encVelData[index].qtr1Period = (((ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_REC_MS_MASK)>>12) |
+                          ((ReadBuffer[ENC_VEL_OFFSET+index] & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
+        encVelData[index].qtr5Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_PREV_MASK;
+        encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
+        encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
+    }
+    else {  // V7+
+        encVelData[index].clkPeriod = VEL_PERD;
+        encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_26;
+        encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
+        encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
+        encVelData[index].dirChange = ReadBuffer[ENC_VEL_OFFSET+index] & 0x20000000;
+        encVelData[index].encError = ReadBuffer[ENC_VEL_OFFSET+index] & 0x10000000;
+        encVelData[index].partialCycle = ReadBuffer[ENC_VEL_OFFSET+index] & 0x08000000;
+        encVelData[index].qtr1Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_VEL_QTR_MASK;
+        encVelData[index].qtr1Overflow = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_VEL_OVER_MASK;
+        encVelData[index].qtr1Dir = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_DIR_MASK;
+        encVelData[index].qtr1Edges = (ReadBuffer[ENC_QTR1_OFFSET+index]>>26)&0x0f;
+        encVelData[index].qtr5Period = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_VEL_QTR_MASK;
+        encVelData[index].qtr5Overflow = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_VEL_OVER_MASK;
+        encVelData[index].qtr5Dir = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_DIR_MASK;
+        encVelData[index].qtr5Edges = (ReadBuffer[ENC_QTR5_OFFSET+index]>>26)&0x0f;
+        encVelData[index].runPeriod = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_QTR_MASK;
+        encVelData[index].runOverflow = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_OVER_MASK;
+    }
+    return true;
+}
+
+bool AmpIO::GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data) const
+{
+    if (index >= NUM_CHANNELS)
+        return false;
+    data = encVelData[index];
+    return true;
 }
 
 bool AmpIO::GetPowerEnable(void) const

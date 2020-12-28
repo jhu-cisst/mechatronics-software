@@ -40,11 +40,46 @@ typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
 typedef uint8_t  AmpIO_UInt8;
 
+// Conditional compilation so that EncoderVelocityData is internal to AmpIO, except when
+// parsing with SWIG, since SWIG cannot handle internal classes.
+
+#ifndef SWIG
 /*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
 class AmpIO : public BoardIO
 {
 public:
+#endif
 
+    struct EncoderVelocityData {
+        double clkPeriod;            // Clock period, in seconds
+        AmpIO_UInt32 velPeriod;      // Encoder full-cycle period (for velocity)
+        bool velOverflow;            // Velocity (period) overflow
+        bool velDir;                 // Velocity direction (true -> positive direction)
+        bool dirChange;              // Direction change during last velocity period, V7+
+        bool encError;               // Encoder error detected, V7+
+        bool partialCycle;           // No full cycle yet, V7+
+        AmpIO_UInt32 qtr1Period;     // Encoder quarter-cycle period 1 (for accel), V6+
+        bool qtr1Overflow;           // Qtr1 overflow, V7+
+        bool qtr1Dir;                // Qtr1 direction (true -> positive direction), V7+
+        unsigned char qtr1Edges;     // Qtr1 edge mask (A-up, B-up, A-down, B-down), V7+
+        AmpIO_UInt32 qtr5Period;     // Encoder quarter-cycle period 5 (for accel), V6+
+        bool qtr5Overflow;           // Qtr5 overflow, V7+
+        bool qtr5Dir;                // Qtr5 direction (true -> positive direction), V7+
+        unsigned char qtr5Edges;     // Qtr5 edge mask (A-up, B-up, A-down, B-down), V7+
+        AmpIO_UInt32 runPeriod;      // Time since last encoder edge, Firmware V4,5,7+
+        bool runOverflow;            // Running counter overflow, V7+
+
+        EncoderVelocityData() { Init(); }
+        ~EncoderVelocityData() {}
+        void Init();
+    };
+
+#ifdef SWIG
+/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
+class AmpIO : public BoardIO
+{
+public:
+#endif
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
@@ -188,6 +223,9 @@ public:
 
     /*! Get the encoder running counter, in seconds */
     double GetEncoderRunningCounterSeconds(unsigned int index) const;
+
+    /*! Returns the data available for computing encoder velocity (and acceleration). */
+    bool GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data) const;
 
     //********************************************************************************************
 
@@ -570,6 +608,9 @@ protected:
     // this buffer, while also byteswapping if needed.
     quadlet_t WriteBuffer[WriteBufSize];
 
+    // Encoder velocity data (per axis)
+    EncoderVelocityData encVelData[NUM_CHANNELS];
+
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.
     // Data collection is enabled by setting the COLLECT_BIT when writing the desired motor current.
@@ -612,6 +653,9 @@ protected:
     /*! Returns the latched quarter cycle periods.
       Used internally to calculate acceleration in firmware Rev >6. */
     AmpIO_Int32 GetEncoderQtr(unsigned int index, unsigned int offset) const;
+
+    /*! Extract the data used for velocity estimation */
+    bool SetEncoderVelocityData(unsigned int index);
 
     /*! \brief If user-supplied callback is not NULL, read data collection buffer and then call callback.
         \note Called by relevant Port class.

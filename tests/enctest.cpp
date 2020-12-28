@@ -104,6 +104,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
     // Start waveform on DOUT1 and DOUT2 (to produce EncA and EncB using test board)
     board->WriteWaveformControl(0x03, 0x03);
     double mpos, mvel, maccel, run;
+    AmpIO::EncoderVelocityData encVelData;
     double last_mpos = -1000.0;
     double velSum = 0.0;
     double accelSum = 0.0;
@@ -117,19 +118,35 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
             mvel = board->GetEncoderVelocityCountsPerSecond(testAxis);
             maccel = board->GetEncoderAcceleration(testAxis);
             run = board->GetEncoderRunningCounterSeconds(testAxis);
+            if (!board->GetEncoderVelocityData(testAxis, encVelData))
+                std::cout << "GetEncoderVelocityData failed" << std::endl;
             if ((mpos > 5) || (mpos < -5)) {
                 // First few not accurate?
                 velSum += mvel;
                 accelSum += maccel;
                 mNum++;
             }
+            bool doEndl = false;
             if (mpos != last_mpos) {
                 std::cout << "pos = " << mpos
                           << ", vel = " << mvel
                           << ", accel = " << maccel
-                          << ", run = " << run << std::endl;
+                          << ", run = " << run;
                 last_mpos = mpos;
+                doEndl = true;
             }
+            if (encVelData.velOverflow) {doEndl = true; std::cout << " VEL_OVF"; }
+            if (encVelData.dirChange)  {doEndl = true; std::cout << " DIR_CHG"; }
+            if (encVelData.encError)  {doEndl = true; std::cout << " ENC_ERR"; }
+            if (encVelData.qtr1Overflow)  {doEndl = true; std::cout << " Q1_OVF"; }
+            if (encVelData.qtr5Overflow)  {doEndl = true; std::cout << " Q5_OVF"; }
+            if (encVelData.qtr1Edges!= encVelData.qtr5Edges) {
+                doEndl = true;
+                std::cout << " EDGES(" << std::hex << static_cast<unsigned int>(encVelData.qtr1Edges)
+                          << ", " << static_cast<unsigned int>(encVelData.qtr5Edges) << std::dec << ")";
+            }
+            if (encVelData.runOverflow)  {doEndl = true; std::cout << " RUN_OVF"; }
+            if (doEndl) std::cout << std::endl;
         }
         Amp1394_Sleep(0.0005);
     }
