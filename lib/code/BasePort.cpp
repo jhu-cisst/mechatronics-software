@@ -17,6 +17,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <stdio.h>
 #include <string>
+#include <algorithm>   // for std::max
 
 #include <Amp1394/AmpIORevision.h>
 #include "BasePort.h"
@@ -386,7 +387,7 @@ std::string BasePort::DefaultPort(void)
 #if Amp1394_HAS_RAW1394
     return "fw:0";
 #else
-    return "udp:"ETH_UDP_DEFAULT_IP;
+    return "udp:" ETH_UDP_DEFAULT_IP;
 #endif
 
 }
