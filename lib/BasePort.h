@@ -44,6 +44,9 @@ http://www.cisst.org/cisst/license.txt.
  *     EthRawPort:    sends FireWire packets via raw Ethernet frames (using PCAP)
  */
 
+// Defined here for static methods ParseOptions and DefaultPort
+#define ETH_UDP_DEFAULT_IP "169.254.0.100"
+
 // Some useful constants
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
@@ -109,10 +112,8 @@ protected:
     unsigned int max_board;         // highest index of used (non-zero) entry in BoardList
     unsigned char HubBoard;         // board number of hub/bridge
 
-    // Memory for ReadAllBoards/WriteAllBoards
-    unsigned char *ReadBuffer[BoardIO::MAX_BOARDS];
-    unsigned char *WriteBuffer[BoardIO::MAX_BOARDS];
-    // Memory for ReadAllBoardsBroadcast/WriteAllBoardsBroadcast
+    // Memory for ReadAllBoards/WriteAllBoards and ReadAllBoardsBroadcast/WriteAllBoardsBroadcast
+    // (used for both sequential and broadcast protocols)
     unsigned char *WriteBufferBroadcast;
     unsigned char *ReadBufferBroadcast;
     // Memory for generic use
@@ -141,10 +142,8 @@ protected:
     // Following initializes the generic buffer, if needed
     void SetGenericBuffer(void);
 
-    // Following methods assign the memory used by each board,
-    // based on the protocol.
-    void SetReadBuffer(void);
-    void SetWriteBuffer(void);
+    // Following methods initialize the buffers, if needed, for
+    // the real-time read and write.
     void SetReadBufferBroadcast(void);
     void SetWriteBufferBroadcast(void);
 

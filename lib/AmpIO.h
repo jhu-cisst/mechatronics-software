@@ -562,15 +562,13 @@ protected:
            ReadBufSize = 4+6*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
-    // Buffer for real-time block reads. The Port class calls ProcessReadData to copy the
+    // Buffer for real-time block reads. The Port class calls SetReadData to copy the
     // most recent data into this buffer, while also byteswapping.
     quadlet_t ReadBuffer[ReadBufSize];
 
-    // Buffer for real-time block writes. The constructor sets this to write_buffer_internal
-    // so that it is always valid, but the Port may set it differently, e.g., to point to
-    // the appropriate offset within a larger broadcast buffer.
-    quadlet_t *WriteBuffer;     // buffer for real-time writes
-    quadlet_t write_buffer_internal[WriteBufSize];
+    // Buffer for real-time block writes. The Port class calls GetWriteData to copy from
+    // this buffer, while also byteswapping if needed.
+    quadlet_t WriteBuffer[WriteBufSize];
 
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.
@@ -589,11 +587,10 @@ protected:
 
     // Virtual methods
     unsigned int GetReadNumBytes() const;
-    void ProcessReadData(const quadlet_t *buf);
+    void SetReadData(const quadlet_t *buf);
 
-    quadlet_t *GetWriteBuffer() const { return WriteBuffer; }
     unsigned int GetWriteNumBytes() const { return WriteBufSize*sizeof(quadlet_t); }
-    void SetWriteBuffer(quadlet_t *buf);
+    bool GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap = true) const;
     void InitWriteBuffer(void);
 
     // Test if the current write buffer contains commands that will

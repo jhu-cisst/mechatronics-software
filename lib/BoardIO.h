@@ -71,16 +71,14 @@ protected:
     void SetReadValid(bool flag)
     { readValid = flag; if (!readValid) numReadErrors++; }
     virtual unsigned int GetReadNumBytes() const = 0;
-    virtual void ProcessReadData(const quadlet_t *buf) = 0;
+    virtual void SetReadData(const quadlet_t *buf) = 0;
 
     // Following methods are for real-time block writes
     void SetWriteValid(bool flag)
     { writeValid = flag; if (!writeValid) numWriteErrors++; }
     virtual unsigned int GetWriteNumBytes() const = 0;
-    virtual quadlet_t *GetWriteBuffer() const = 0;
-    virtual void SetWriteBuffer(quadlet_t *buf) = 0;
-    virtual void InitWriteBuffer(void)
-    { memset(GetWriteBuffer(), 0, GetWriteNumBytes()); }
+    virtual bool GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap = true) const = 0;
+    virtual void InitWriteBuffer(void) = 0;
 
     virtual bool WriteBufferResetsWatchdog(void) const = 0;
     virtual void CheckCollectCallback() = 0;

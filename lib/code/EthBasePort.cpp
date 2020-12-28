@@ -591,13 +591,6 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
     if (rdata_base == ReadBufferBroadcast) {
         packet = ReadBufferBroadcast;
     }
-    else {
-        unsigned char boardId = Node2Board[node];
-        if ((boardId < BoardIO::MAX_BOARDS) &&
-            (rdata_base == ReadBuffer[boardId])) {
-            packet = ReadBuffer[boardId];
-        }
-    }
 
     int nRecv = PacketReceive(packet, packetSize);
     if (nRecv != static_cast<int>(packetSize)) {
@@ -638,13 +631,6 @@ bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdat
     unsigned char *wdata_base = reinterpret_cast<unsigned char *>(wdata)-GetWriteQuadAlign()-GetPrefixOffset(WR_FW_BDATA);
     if (wdata_base == WriteBufferBroadcast) {
         packet = WriteBufferBroadcast+GetWriteQuadAlign();
-    }
-    else {
-        unsigned char boardId = Node2Board[node];
-        if ((boardId < BoardIO::MAX_BOARDS) &&
-            (wdata_base == WriteBuffer[boardId])) {
-            packet = WriteBuffer[boardId]+GetWriteQuadAlign();
-        }
     }
 
     // Increment transaction label

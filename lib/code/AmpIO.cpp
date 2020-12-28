@@ -93,8 +93,7 @@ AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), Nu
                                                            collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
-    memset(write_buffer_internal, 0, sizeof(write_buffer_internal));
-    SetWriteBuffer(0);
+    InitWriteBuffer();
 }
 
 AmpIO::~AmpIO()
@@ -111,7 +110,7 @@ unsigned int AmpIO::GetReadNumBytes() const
     return (GetFirmwareVersion() < 7) ? (ReadBufSize_Old*sizeof(quadlet_t)) : (ReadBufSize*sizeof(quadlet_t));
 }
 
-void AmpIO::ProcessReadData(const quadlet_t *buf)
+void AmpIO::SetReadData(const quadlet_t *buf)
 {
     unsigned int numQuads = (GetFirmwareVersion() < 7) ? ReadBufSize_Old : ReadBufSize;
     for (size_t i = 0; i < numQuads; i++)
@@ -120,30 +119,31 @@ void AmpIO::ProcessReadData(const quadlet_t *buf)
 
 void AmpIO::InitWriteBuffer(void)
 {
-    quadlet_t data = bswap_32((BoardId & 0x0F) << 24);
+    quadlet_t data = (BoardId & 0x0F) << 24;
     for (size_t i = 0; i < NUM_CHANNELS; i++)
         WriteBuffer[WB_CURR_OFFSET+i] = data;
     WriteBuffer[WB_CTRL_OFFSET] = 0;
 }
 
-void AmpIO::SetWriteBuffer(quadlet_t *buf)
+bool AmpIO::GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap) const
 {
-    if (buf) {
-        WriteBuffer = buf;
+    if ((offset+numQuads) > WriteBufSize) {
+        std::cerr << "AmpIO:GetWriteData: invalid args: " << offset << ", " << numQuads << std::endl;
+        return false;
     }
-    else {
-        WriteBuffer = write_buffer_internal;
-    }
-    InitWriteBuffer();
+
+    for (size_t i = 0; i < numQuads; i++)
+        buf[i] = doSwap ? bswap_32(WriteBuffer[offset+i]) : WriteBuffer[offset+i];
+    return true;
 }
 
 bool AmpIO::WriteBufferResetsWatchdog(void) const
 {
     return
-        (bswap_32(WriteBuffer[WB_CURR_OFFSET + 0]) & VALID_BIT)
-        | (bswap_32(WriteBuffer[WB_CURR_OFFSET + 1]) & VALID_BIT)
-        | (bswap_32(WriteBuffer[WB_CURR_OFFSET + 2]) & VALID_BIT)
-        | (bswap_32(WriteBuffer[WB_CURR_OFFSET + 3]) & VALID_BIT);
+        (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
+        | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
+        | (WriteBuffer[WB_CURR_OFFSET + 2] & VALID_BIT)
+        | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
 }
 
 AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
@@ -734,19 +734,12 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 
 /*******************************************************************************
  * Set commands
- * Note that for Firmware 7+, the power control quadlet is byteswapped because it
- * is sent using a block write, rather than a quadlet write, in WriteAllBoards or
- * WriteAllBoardsBroadcast.
  */
 
 void AmpIO::SetPowerEnable(bool state)
 {
     AmpIO_UInt32 enable_mask = 0x00080000;
     AmpIO_UInt32 state_mask  = 0x00040000;
-    if (GetFirmwareVersion() >= 7) {
-        enable_mask = bswap_32(enable_mask);
-        state_mask = bswap_32(state_mask);
-    }
     WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
     if (state)
         WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
@@ -759,10 +752,6 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
     if (index < NUM_CHANNELS) {
         AmpIO_UInt32 enable_mask = 0x00000100 << index;
         AmpIO_UInt32 state_mask  = 0x00000001 << index;
-        if (GetFirmwareVersion() >= 7) {
-            enable_mask = bswap_32(enable_mask);
-            state_mask = bswap_32(state_mask);
-        }
         WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
         if (state)
             WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
@@ -778,11 +767,6 @@ bool AmpIO::SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state)
     AmpIO_UInt32 enable_mask = static_cast<AmpIO_UInt32>(mask) << 8;
     AmpIO_UInt32 state_clr_mask = static_cast<AmpIO_UInt32>(mask);
     AmpIO_UInt32 state_set_mask = static_cast<AmpIO_UInt32>(state);
-    if (GetFirmwareVersion() >= 7) {
-        enable_mask = bswap_32(enable_mask);
-        state_clr_mask = bswap_32(state_clr_mask);
-        state_set_mask = bswap_32(state_set_mask);
-    }
     // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
     // with different masks
     WriteBuffer[WB_CTRL_OFFSET] = (WriteBuffer[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
@@ -793,10 +777,6 @@ void AmpIO::SetSafetyRelay(bool state)
 {
     AmpIO_UInt32 enable_mask = 0x00020000;
     AmpIO_UInt32 state_mask  = 0x00010000;
-    if (GetFirmwareVersion() >= 7) {
-        enable_mask = bswap_32(enable_mask);
-        state_mask = bswap_32(state_mask);
-    }
     WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
     if (state)
         WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
@@ -811,7 +791,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
         data |= COLLECT_BIT;
 
     if (index < NUM_CHANNELS) {
-        WriteBuffer[index+WB_CURR_OFFSET] = bswap_32(data);
+        WriteBuffer[index+WB_CURR_OFFSET] = data;
         return true;
     }
     else
