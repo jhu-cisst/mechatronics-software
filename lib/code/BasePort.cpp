@@ -715,7 +715,7 @@ bool BasePort::WriteAllBoards(void)
                 else allOK = false;
                 // Get last quadlet (false -> no byteswapping)
                 quadlet_t ctrl;
-                BoardList[board]->GetWriteData(&ctrl, numQuads, 1, false);
+                BoardList[board]->GetWriteData(&ctrl, numQuads-1, 1, false);
                 bool ret2 = true;
                 if (ctrl) {    // if anything non-zero, write it
                     ret2 = WriteQuadlet(board, 0, ctrl);

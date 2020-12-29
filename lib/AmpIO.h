@@ -211,15 +211,15 @@ public:
     AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
 
     /*! Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+). */
-    AmpIO_UInt32 GetEncoderQtr1(unsigned int index) const;
+    AmpIO_UInt32 GetEncoderQtr1Raw(unsigned int index) const;
 
     /*! Get the encoder quarter cycle period from 5 cycles ago (i.e., 4 cycles prior to the one returned
         by GetEncoderQtr1) for internal use and testing (Rev 7+). */
-    AmpIO_UInt32 GetEncoderQtr5(unsigned int index) const;
+    AmpIO_UInt32 GetEncoderQtr5Raw(unsigned int index) const;
 
     /*! Get the encoder running counter, which measures the elasped time since the last encoder edge;
         for internal use and testing (Rev 7+). */
-    AmpIO_UInt32 GetEncoderRunningCounter(unsigned int index) const;
+    AmpIO_UInt32 GetEncoderRunningCounterRaw(unsigned int index) const;
 
     /*! Get the encoder running counter, in seconds */
     double GetEncoderRunningCounterSeconds(unsigned int index) const;
@@ -638,21 +638,6 @@ protected:
     // reset the watchdog on the board.  In practice, checks if
     // there's any valid bit on the 4 requested currents.
     bool WriteBufferResetsWatchdog(void) const;
-
-    /*! Returns whether the full cycle counter has overflows (22 bits) */
-    bool GetEncoderVelocityOverflow(unsigned int index) const;
-
-    /*! Returns the direction the encoder is moving in. */
-    bool GetEncoderDir(unsigned int index) const;
-
-    /*! Returns the latched period of the most recent encoder
-      quarter cycle. Used internally to calculate acceleration
-      in firmware Rev 6 and deprecated in >6. */
-    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
-
-    /*! Returns the latched quarter cycle periods.
-      Used internally to calculate acceleration in firmware Rev >6. */
-    AmpIO_Int32 GetEncoderQtr(unsigned int index, unsigned int offset) const;
 
     /*! Extract the data used for velocity estimation */
     bool SetEncoderVelocityData(unsigned int index);

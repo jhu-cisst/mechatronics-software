@@ -8,6 +8,8 @@
 #include "AmpIO.h"
 #include "EthUdpPort.h"
 
+typedef AmpIO::EncoderVelocityData EncoderVelocityData;
+
 #if Amp1394_HAS_RAW1394
   #include "FirewirePort.h"
 #endif

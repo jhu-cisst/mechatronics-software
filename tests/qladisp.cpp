@@ -601,9 +601,9 @@ int main(int argc, char** argv)
                     mvwprintw(stdscr, 9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
                     if (fullvel) {
                         if (allRev7) {
-                            mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "%06X", BoardList[j]->GetEncoderQtr1(i));
-                            mvwprintw(stdscr, 12, lm+8+(i+4*j)*13, "%06X", BoardList[j]->GetEncoderQtr5(i));
-                            mvwprintw(stdscr, 13, lm+8+(i+4*j)*13, "%06X", BoardList[j]->GetEncoderRunningCounter(i));
+                            mvwprintw(stdscr, 11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
+                            mvwprintw(stdscr, 12, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
+                            mvwprintw(stdscr, 13, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
                         }
                         else
                             mvwprintw(stdscr, 11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));

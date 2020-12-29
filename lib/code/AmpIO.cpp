@@ -388,6 +388,7 @@ bool AmpIO::GetEncoderOverflow(unsigned int index) const
 
 double AmpIO::GetEncoderClockPeriod(void) const
 {
+    // Could instead return encVelData[0].clkPeriod
     AmpIO_UInt32 fver = GetFirmwareVersion();
     if (fver < 6)
         return VEL_PERD_OLD;
@@ -459,26 +460,8 @@ double AmpIO::GetEncoderVelocityPredicted(unsigned int index) const
 // period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
 double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
 {
-    double delay = 0.0;
-    AmpIO_Int32 cnter;
-    AmpIO_UInt32 fver = GetFirmwareVersion();
-    if (fver < 6) {
-        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_16;
-        // This is a 16-bit signed value, but we want an unsigned period
-        if (cnter & 0x00008000) {
-            cnter |= 0xffff0000;   // sign extend
-            cnter = -cnter;        // negate to get a positive number
-        }
-        delay = ((double)cnter * VEL_PERD_OLD)/2.0;
-    }
-    else if (fver == 6) {
-        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_22;
-        delay = ((double)cnter * VEL_PERD_REV6)/2.0;
-    }
-    else if (fver >= 7) {
-        cnter = GetEncoderVelocityRaw(index) & ENC_VEL_MASK_26;
-        delay = ((double)cnter * VEL_PERD)/2.0  + GetEncoderQtr(index, ENC_RUN_OFFSET);
-    }
+    double delay = encVelData[index].velPeriod*encVelData[index].clkPeriod/2.0;
+    //delay += GetEncoderRunningCounterSeconds();
     return delay;
 }
 
@@ -550,43 +533,6 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
     return acc;
 }
 
-// Counter over full cycle has overflowed; only valid for Rev 6+ firmware
-bool AmpIO::GetEncoderVelocityOverflow(unsigned int index) const
-{
-    quadlet_t buff = GetEncoderVelocityRaw(index);
-    return buff & ENC_VEL_OVER_MASK;
-}
-
-// Direction of encoder at last velocity reading
-bool AmpIO::GetEncoderDir(unsigned int index) const
-{
-    quadlet_t buff = GetEncoderVelocityRaw(index);
-    return buff & ENC_DIR_MASK;
-}
-
-// Latch from quarter cycles for acceleration calculation
-AmpIO_Int32 AmpIO::GetEncoderQtr(unsigned int index, unsigned int offset) const
-{
-    AmpIO_Int32 perd = 0;
-    quadlet_t buff = ReadBuffer[index+offset];
-    if (GetFirmwareVersion() == 6) {
-        perd = buff & ENC_ACC_PREV_MASK;
-    } else if (GetFirmwareVersion() >= 7) {
-        perd = buff & ENC_VEL_QTR_MASK;
-    }
-    return perd;
-}
-
-// Latch last quarter cycle for acceleration calculation
-// Valid for firmware version 6.
-AmpIO_Int32 AmpIO::GetEncoderAccRec(unsigned int index) const
-{
-    AmpIO_UInt32 ms_buff = ReadBuffer[index+ENC_QTR1_OFFSET];
-    AmpIO_UInt32 ls_buff = GetEncoderVelocityRaw(index);
-    AmpIO_Int32 cur_perd = (((ms_buff & ENC_ACC_REC_MS_MASK) >> 12) | ((ls_buff & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
-    return cur_perd;
-}
-
 // Raw velocity field; includes period of velocity and other data, depending on firmware version.
 // For firmware version 6, includes part of AccRec. For later firmware versions, no AccRec
 AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
@@ -596,48 +542,40 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 
 // Raw acceleration field; for firmware prior to Version 6, this was actually the encoder "frequency"
 // (i.e., number of pulses in specified time period, which can be used to estimate velocity), but was never used.
-// Starting with Firmware Version 6, it has been reused to return some data that can be used to estimate
-// the acceleration. For testing only.
+// For Firmware Version 6, it was reused to return some data that can be used to estimate the acceleration.
+// For Firmware Version 7+, it returns QTR1; note that this method is equivalent to GetEncoderQtr1Raw because
+// ENC_FRQ_OFFSET == ENC_QTR1_OFFSET. For testing only.
 AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
 {
     return ReadBuffer[index+ENC_FRQ_OFFSET];
 }
 
-// Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+). */
-AmpIO_UInt32 AmpIO::GetEncoderQtr1(unsigned int index) const
+// Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+).
+// Note that this is equivalent to GetEncoderAccelerationRaw because ENC_FRQ_OFFSET == ENC_QTR1_OFFSET
+AmpIO_UInt32 AmpIO::GetEncoderQtr1Raw(unsigned int index) const
 {
-    AmpIO_UInt32 retVal = 0;
-    // Could also implement for Rev 6
-    if (GetFirmwareVersion() >= 7)
-        retVal = GetEncoderQtr(index, ENC_QTR1_OFFSET);
-    return retVal;
+    return ReadBuffer[index+ENC_QTR1_OFFSET];
 }
 
 // Get the encoder quarter cycle period from 5 cycles ago (i.e., 4 cycles prior to the one returned
-// by GetEncoderQtr1) for internal use and testing (Rev 7+). */
-AmpIO_UInt32 AmpIO::GetEncoderQtr5(unsigned int index) const
+// by GetEncoderQtr1) for internal use and testing (Rev 7+).
+AmpIO_UInt32 AmpIO::GetEncoderQtr5Raw(unsigned int index) const
 {
-    AmpIO_UInt32 retVal = 0;
-    // Could also implement for Rev 6
-    if (GetFirmwareVersion() >= 7)
-        retVal = GetEncoderQtr(index, ENC_QTR5_OFFSET);
-    return retVal;
+    return ReadBuffer[index+ENC_QTR5_OFFSET];
 }
 
 // Get the encoder running counter, which measures the elasped time since the last encoder edge;
 // for internal use and testing (Rev 7+).
-AmpIO_UInt32 AmpIO::GetEncoderRunningCounter(unsigned int index) const
+AmpIO_UInt32 AmpIO::GetEncoderRunningCounterRaw(unsigned int index) const
 {
-    AmpIO_UInt32 retVal = 0;
-    if (GetFirmwareVersion() >= 7)
-        retVal = GetEncoderQtr(index, ENC_RUN_OFFSET);
-    return retVal;
+    return ReadBuffer[index+ENC_RUN_OFFSET];
 }
 
-// Only non-zero for Firmware Rev 7+
+// Get the encoder running counter, in seconds. This is primarily used for Firmware Rev 7+, but
+// also supports the running counter in Firmware Rev 4-5.
 double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
 {
-    return VEL_PERD*GetEncoderRunningCounter(index);
+    return (encVelData[index].runPeriod)*(encVelData[index].clkPeriod);
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
@@ -669,7 +607,8 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
             // set encVelData[index].dirChange = true.
         }
         else if (velPeriod & 0x8000) {  // if negative
-            encVelData[index].velPeriod = (~velPeriod) + 1;
+            velPeriod = ~velPeriod;     // ones complement (16-bits)
+            encVelData[index].velPeriod = velPeriod + 1;  // twos complement (32-bits)
             encVelData[index].velDir = false;
         }
         else {
@@ -683,8 +622,10 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
                 encVelData[index].runOverflow = true;
                 runCtr = 0x7fff;
             }
-            else if (runCtr & 0x8000)
-                runCtr = (~runCtr) + 1;
+            else if (runCtr & 0x8000) {  // if negative
+                runCtr = ~runCtr;        // ones complement (16-bits)
+                runCtr += 1;             // twos complement (16-bits)
+            }
             encVelData[index].runPeriod = static_cast<AmpIO_UInt32>(runCtr);
         }
     }
