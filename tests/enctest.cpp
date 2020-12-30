@@ -27,16 +27,35 @@
 #include "Amp1394Time.h"
 
 // Calculates time of 0 crossing of sine or cosine
-//    n_off = 0 --> sine
-//    n_off = -1 or +1 --> cosine
-// Does not yet handle all cases (e.g., negative vel and accel)
-double CalculateTime(double vel, double accel, int n, int n_off)
+double CalculateTime(double vel, double accel, double t0, bool &dirChange)
 {
     double t;
-    if (accel == 0.0)
-        t = (n_off+2*n)/vel;
-    else
-        t = (sqrt(vel*vel + 2.0*accel*(n_off+2*n))-vel)/accel;
+    if (accel == 0.0) {
+        t = t0 + (1.0/fabs(vel));
+        dirChange = false;
+    }
+    else {
+        double curVel = vel + accel*t0;
+        if (curVel == 0.0) {
+            t = t0 + sqrt(2/fabs(accel));
+            dirChange = true;
+        }
+        else {
+            double posTemp = curVel*curVel+2.0*accel;
+            double negTemp = curVel*curVel-2.0*accel;
+            if (((curVel < 0.0) && (negTemp >= 0)) || (posTemp < 0))
+                t = t0 + (-sqrt(negTemp)-curVel)/accel;
+            else if (posTemp >= 0)
+                t = t0 + (sqrt(posTemp)-curVel)/accel;
+            else {
+                // Should never happen; if it does, return solution for 0 velocity
+                std::cout << "Error finding solution at t0 = " << t0 << std::endl;
+                t = t0 + sqrt(2/fabs(accel));
+            }
+            double newVel = vel + accel*t;
+            dirChange = (newVel*curVel < 0.0);
+        }
+    }
     return t;
 }
 
@@ -47,33 +66,29 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
     quadlet_t waveform[WLEN];
     double dt = board->GetFPGAClockPeriod();
     unsigned int Astate = 1;
-    unsigned int Bstate = 1;
+    unsigned int Bstate = (vel < 0) ? 0 : 1;
+    bool Bnext = false;
+    bool dirChange;
     double t = 0.0;
     double lastT = 0.0;
     AmpIO_UInt32 minTicks = 0;  // changed below
     AmpIO_UInt32 maxTicks = 0;
     unsigned int i;
-    int n = 0;
-    int n_inc = 1;
-    if (vel < 0) {
-        n_inc = -1;
-        Bstate = 0;
-    }
-    bool doCosine = true;
     for (i = 0; i < WLEN-1; i++) {
         //double theta = vel*t + 0.5*accel*t*t;
         //double A = cos(M_PI*theta/2.0);
         //double B = sin(M_PI*theta/2.0);
-        if (doCosine) {
-            t = CalculateTime(vel, accel, n, n_inc);
-            n += n_inc;
-            Astate = 1-Astate;
+        t = CalculateTime(vel, accel, t, dirChange);
+        if (dirChange) {
+            double theta = vel*t + 0.5*accel*t*t;
+            std::cout << "Direction change at t = " << t << ", pos = " << theta << std::endl;
+            Bnext = !Bnext;
         }
-        else {
-            t = CalculateTime(vel, accel, n, 0);
+        if (Bnext)
             Bstate = 1-Bstate;
-        }
-        doCosine = !doCosine;
+        else
+            Astate = 1-Astate;
+        if (!dirChange) Bnext = !Bnext;
         AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt);
         if (i == 0) minTicks = ticks;
         if (ticks < minTicks)
