@@ -88,7 +88,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
             Bstate = 1-Bstate;
         else
             Astate = 1-Astate;
-        if (!dirChange) Bnext = !Bnext;
+        Bnext = !Bnext;
         AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt);
         if (i == 0) minTicks = ticks;
         if (ticks < minTicks)
