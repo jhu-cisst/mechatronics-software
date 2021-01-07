@@ -55,6 +55,7 @@ protected:
     double pf;     // final position
     double v0;     // initial velocity
     double vf;     // final velocity
+    double accel;  // acceleration
 public:
     MotionBase(const MotionBase *prevMotion = 0);
     virtual ~MotionBase() {}
@@ -64,6 +65,9 @@ public:
 
     // Returns -1.0 when motion is finished
     virtual double CalculateNextTime(double tCur, int &pos, bool &dirChange) = 0;
+
+    // Get position, velocity and acceleration at specified time t
+    bool GetValuesAtTime(double t, double &p, double &v, double &a) const;
 
     void GetInitialValues(double &t, double &p, double &v) const
     { t = t0; p = p0; v = v0; }
@@ -98,12 +102,11 @@ public:
 //    Move at current (non-zero) acceleration to desired velocity
 class ConstantAccel : public MotionBase {
 protected:
-    double accel;     // desired acceleration
     double pExtreme;  // extreme position (if direction changes)
     int initDir;      // initial direction (+1 or -1)
     int dir;          // current direction (+1 or -1)
 public:
-    ConstantAccel(double accel, double vEnd, bool isInfinite = false, const MotionBase *prevMotion = 0);
+    ConstantAccel(double acc, double vEnd, bool isInfinite = false, const MotionBase *prevMotion = 0);
     ~ConstantAccel() {}
 
     double CalculateNextTime(double tCur, int &pos, bool &dirChange);
@@ -140,7 +143,7 @@ public:
 
     // Add a motion segment
     bool AddConstantVel(double pEnd, bool isInfinite = false);
-    bool AddConstantAccel(double accel, double vEnd, bool isInfinite = false);
+    bool AddConstantAccel(double acc, double vEnd, bool isInfinite = false);
     bool AddDwell(double deltaT);
 
     void Restart(void) { tCur = 0.0; curIndex = 0; pos = 0; }
@@ -153,7 +156,7 @@ public:
 
 //*********************************** Motion Class Methods ****************************************
 
-MotionBase::MotionBase(const MotionBase *prevMotion)
+MotionBase::MotionBase(const MotionBase *prevMotion) : accel(0.0)
 {
     if (prevMotion) {
         t0 = prevMotion->tf;
@@ -165,13 +168,26 @@ MotionBase::MotionBase(const MotionBase *prevMotion)
         p0 = 0.0;
         v0 = 0.0;
     }
+    // Derived classes should override these default values.
+    // Note that (tf == t0) is used to indicate an error.
+    tf = t0;
+    pf = p0;
+    vf = v0;
+}
+
+bool MotionBase::GetValuesAtTime(double t, double &p, double &v, double &a) const
+{
+    if ((tf < 0) || (t <= tf)) {
+        p = p0 + v0*t + 0.5*accel*t*t;
+        v = v0 + accel*t;
+        a = accel;
+        return true;
+    }
+    return false;
 }
 
 ConstantVel::ConstantVel(double pEnd, bool isInfinite, const MotionBase *prevMotion) : MotionBase(prevMotion)
 {
-    vf = v0;
-    pf = p0;   // will be updated if not error and not infinite
-    tf = t0;   // will be updated if not error
     if (t0 < 0.0) {
         std::cout << "ConstantVel: previous motion is infinite" << std::endl;
     }
@@ -218,11 +234,9 @@ double ConstantVel::CalculateNextTime(double tCur, int &pos, bool &dirChange)
     }
 }
 
-ConstantAccel::ConstantAccel(double acc, double vEnd, bool isInfinite, const MotionBase *prevMotion) : MotionBase(prevMotion), accel(acc)
+ConstantAccel::ConstantAccel(double acc, double vEnd, bool isInfinite, const MotionBase *prevMotion) : MotionBase(prevMotion)
 {
-    vf = v0;   // Will be updated if not error and not infinite
-    pf = p0;   // Will be updated if not error and not infinite
-    tf = t0;   // Will be updated if not error
+    accel = acc;
     if (t0 < 0.0) {
         std::cout << "ConstantAccel: previous motion is infinite" << std::endl;
     }
@@ -267,43 +281,41 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, bool &dirChange)
     }
     double dt = 0.0;
     double vCur = v0 + accel*tCur;
+    dirChange = false;
     if ((initDir == 1) && ((pos+dir) > pExtreme)) {
         dirChange = true;
         dir = -1;
-        dt = -2.0*vCur/accel;
-        std::cout << "Dir change: dt = " << dt << ", init " << initDir << ", pos " << pos << ", dir " << dir << ", e " << pExtreme << std::endl;
     }
     else if ((initDir == -1) && ((pos+dir) < pExtreme)) {
         dirChange = true;
         dir = 1;
-        dt = -2.0*vCur/accel;
-        std::cout << "Dir change: dt = " << dt << ", init " << initDir << ", pos " << pos << ", dir " << dir << ", e " << pExtreme << std::endl;
+    }
+
+    // Next position update:
+    // p(t) = p(tCur) + v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2, where v(tCur) = v(t0) + a*tCur
+    // dir = increment in direction of motion (+1 or -1)
+    //   dir = 1: p(t) = p(tCur) + 1 --> v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2 = +1
+    //                --> 1/2*a*(t-tCur)^2 + v(tCur)*(t-tCur) - 1 = 0
+    //                --> t = tCur + (-v + sqrt(v^2+2*a))/a    (where v = v(tCur))
+    //       if a < 0, v^2+2a becomes negative when a < -v^2/2
+    //   dir = -1: p(t) = p(tCur) - 1 --> v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2 = -1
+    //                --> 1/2*a*(t-tCur)^2 + v(tCur)*(t-tCur) + 1 = 0
+    //                --> t = tCur + (-v - sqrt(v^2-2*a))/a    (where v = v(tCur))
+    // These two equations can be combined as follows:
+    //                    t = tCur + (-v + dir*sqrt(v^2+dir*2*a))/a
+    double temp = vCur*vCur+dir*2.0*accel;
+    if (temp < 0) {
+        std::cout << "Error: negative square root: " << temp << std::endl;
+        dt = -vCur/accel;
     }
     else {
-        dirChange = false;
-        // Next position update:
-        // p(t) = p(tCur) + v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2, where v(tCur) = v(t0) + a*tCur
-        // dir = increment in direction of motion (+1 or -1)
-        //   dir = 1: p(t) = p(tCur) + 1 --> v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2 = +1
-        //                --> 1/2*a*(t-tCur)^2 + v(tCur)*(t-tCur) - 1 = 0
-        //                --> t = tCur + (-v + sqrt(v^2+2a))/a    (where v = v(tCur))
-        //       if a < 0, v^2+2a becomes negative when a < -v^2/2
-        //   dir = -1: p(t) = p(tCur) - 1 --> v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2 = -1
-        //                --> 1/2*a*(t-tCur)^2 + v(tCur)*(t-tCur) + 1 = 0
-        //                --> t = tCur + (-v + sqrt(v^2-2a))/a    (where v = v(tCur))
-        double temp = vCur*vCur+dir*2.0*accel;
-        if (temp < 0) {
-            std::cout << "Error: negative square root: " << temp << std::endl;
-            dt = -vCur/accel;
-        }
-        else {
-            dt = (dir*sqrt(temp)-vCur)/accel;
-        }
-        if (dt < 0) {
-            std::cout << "Error: negative dt: " << dt << std::endl;
-            dt = -dt;
-        }
+        dt = (dir*sqrt(temp)-vCur)/accel;
     }
+    if (dt < 0) {
+        std::cout << "Error: negative dt: " << dt << std::endl;
+        dt = -dt;
+    }
+
     tCur += dt;
     // Update position for next time
     if ((tf < 0) || (tCur <= tf)) {
@@ -356,10 +368,10 @@ bool MotionTrajectory::AddConstantVel(double pEnd, bool isInfinite)
     return motion->IsOK();
 }
 
-bool MotionTrajectory::AddConstantAccel(double accel, double vEnd, bool isInfinite)
+bool MotionTrajectory::AddConstantAccel(double acc, double vEnd, bool isInfinite)
 {
     const MotionBase *prevMotion = GetLastMotion();
-    MotionBase *motion = new ConstantAccel(accel, vEnd, isInfinite, prevMotion);
+    MotionBase *motion = new ConstantAccel(acc, vEnd, isInfinite, prevMotion);
     if (motion->IsOK())
         motionList.push_back(motion);
     return motion->IsOK();
@@ -384,6 +396,16 @@ double MotionTrajectory::CalculateNextTime(bool &dirChange)
     if (t >= 0.0)
         tCur = t;
     return t;
+}
+
+bool MotionTrajectory::GetValuesAtTime(double t, double &p, double &v, double &a) const
+{
+    for (size_t i = 0; i < motionList.size(); i++) {
+        // GetValuesAtTime returns true if (t <= tf) or infinite move (tf < 0)
+        if (motionList[i]->GetValuesAtTime(t, p, v, a))
+            return true;
+    }
+    return false;
 }
 
 //************************************************************************************************
@@ -413,11 +435,8 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
 
     for (i = 0; i < WLEN-1; i++) {
         t = motion.CalculateNextTime(dirChange);
-        if (dirChange) {
-            double theta = vel*t + 0.5*accel*t*t;
-            std::cout << "Direction change at t = " << t << ", pos = " << theta << std::endl;
+        if (dirChange)
             Bnext = !Bnext;
-        }
         if (Bnext)
             Bstate = 1-Bstate;
         else
