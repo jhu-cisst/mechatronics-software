@@ -44,7 +44,7 @@ int main(int argc, char** argv)
     quadlet_t *data = &data1;
     bool isQuad1394 = (strstr(argv[0], "quad1394eth") != 0);
 
-    int i,j;
+    int i, j = 0;
     int bid = 0;
     bool verbose = false;
 #if Amp1394_HAS_RAW1394

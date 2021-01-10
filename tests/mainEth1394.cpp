@@ -292,7 +292,7 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
         return false;
     if (!port->ReadQuadlet(boardNum, 2, read_data))
         return false;
-    std::cout << "Node: " << std::dec << ((read_data >> 2) && 0x000003f);
+    std::cout << "Node: " << std::dec << ((read_data >> 2) & 0x000003f);
     if (read_data & 0x02) std::cout << " (root)";
     if (read_data & 0x01) std::cout << " (power)";
     std::cout << std::endl;
