@@ -64,26 +64,26 @@ public:
     bool IsOK() const { return (tf != t0); }
 
     // Returns -1.0 when motion is finished
-    virtual double CalculateNextTime(double tCur, int &pos, bool &dirChange) = 0;
+    virtual double CalculateNextTime(double tCur, int &pos, int &curDir) = 0;
 
     // Get position, velocity and acceleration at specified time t
     bool GetValuesAtTime(double t, double &p, double &v, double &a) const;
 
-    void GetInitialValues(double &t, double &p, double &v) const
-    { t = t0; p = p0; v = v0; }
+    void GetInitialValues(double &t, double &p, double &v, double &a) const
+    { t = t0; p = p0; v = v0; a = accel; }
 
-    void GetFinalValues(double &t, double &p, double &v) const
-    { t = tf; p = pf; v = vf; }
+    void GetFinalValues(double &t, double &p, double &v, double &a) const
+    { t = tf; p = pf; v = vf; a = accel; }
 };
 
 // MotionInit: sets starting values for a trajectory
 class MotionInit : public MotionBase {
 public:
-    MotionInit(double vel = 0.0) : MotionBase(0) { tf = 0.0; pf = 0.0; vf = vel; }
+    MotionInit(double vel = 0.0) : MotionBase(0) { v0 = vel; tf = 0.0; pf = 0.0; vf = vel; }
     ~MotionInit() {}
 
-    double CalculateNextTime(double /*tCur*/, int &pos, bool &dirChange)
-    { pos = 0; dirChange = false; return -1.0; }
+    double CalculateNextTime(double /*tCur*/, int &/*pos*/, int &/*curDir*/)
+    { return -1.0; }
 };
 
 // ConstantVel:
@@ -95,7 +95,7 @@ public:
     ConstantVel(double pEnd, bool isInfinite = false, const MotionBase *prevMotion = 0);
     ~ConstantVel() {}
 
-    double CalculateNextTime(double tCur, int &pos, bool &dirChange);
+    double CalculateNextTime(double tCur, int &pos, int &curDir);
 };
 
 // ConstantAccel:
@@ -103,13 +103,13 @@ public:
 class ConstantAccel : public MotionBase {
 protected:
     double pExtreme;  // extreme position (if direction changes)
-    int initDir;      // initial direction (+1 or -1)
+    int initDir;      // initial direction (0, +1 or -1)
     int dir;          // current direction (+1 or -1)
 public:
     ConstantAccel(double acc, double vEnd, bool isInfinite = false, const MotionBase *prevMotion = 0);
     ~ConstantAccel() {}
 
-    double CalculateNextTime(double tCur, int &pos, bool &dirChange);
+    double CalculateNextTime(double tCur, int &pos, int &curDir);
 };
 
 // Dwell:
@@ -119,8 +119,8 @@ public:
     Dwell(double deltaT, const MotionBase *prevMotion = 0);
     ~Dwell() {};
 
-    double CalculateNextTime(double /*tCur*/, int &/*pos*/, bool &dirChange)
-    { dirChange = false; return -1.0; }
+    double CalculateNextTime(double /*tCur*/, int &/*pos*/, int &/*curDir*/)
+    { return -1.0; }
 };
 
 // MotionTrajectory:
@@ -148,10 +148,15 @@ public:
 
     void Restart(void) { tCur = 0.0; curIndex = 0; pos = 0; }
     double GetCurrentTime(void) const { return tCur; }
-    double CalculateNextTime(bool &dirChange);
+    double CalculateNextTime(int &curDir);
 
     int  GetEncoderPosition(void) const { return pos; }
     bool GetValuesAtTime(double t, double &p, double &v, double &a) const;
+
+    void GetFinalValues(double &t, double &p, double &v, double &a) const;
+
+    // Create waveform table to be sent to FPGA
+    unsigned int CreateWaveform(quadlet_t *waveform, unsigned int max_entries, double dt);
 };
 
 //*********************************** Motion Class Methods ****************************************
@@ -212,7 +217,7 @@ ConstantVel::ConstantVel(double pEnd, bool isInfinite, const MotionBase *prevMot
     dir = (v0 > 0) ? 1 : -1;
 }
 
-double ConstantVel::CalculateNextTime(double tCur, int &pos, bool &dirChange)
+double ConstantVel::CalculateNextTime(double tCur, int &pos, int &curDir)
 {
     if ((tf >= 0) && (tCur >= tf)) {
         return -1.0;
@@ -222,7 +227,7 @@ double ConstantVel::CalculateNextTime(double tCur, int &pos, bool &dirChange)
     //   v > 0, p(t) = p(tCur) + 1 --> v*(t-tCur) = +1 --> t = tCur + 1/v
     //   v < 0, p(t) = p(tCur) - 1 --> v*(t-tCur) = -1 --> t = tCur - 1/v
     // Combining both cases, t = tCur + 1/fabs(v)
-    dirChange = false;
+    curDir = dir;
     double dt = 1.0/fabs(v0);
     tCur += dt;
     if ((tf < 0) || (tCur <= tf)) {
@@ -274,22 +279,20 @@ ConstantAccel::ConstantAccel(double acc, double vEnd, bool isInfinite, const Mot
     }
 }
 
-double ConstantAccel::CalculateNextTime(double tCur, int &pos, bool &dirChange)
+double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
 {
     if ((tf >= 0) && (tCur >= tf)) {
         return -1.0;
     }
     double dt = 0.0;
     double vCur = v0 + accel*tCur;
-    dirChange = false;
     if ((initDir == 1) && ((pos+dir) > pExtreme)) {
-        dirChange = true;
         dir = -1;
     }
     else if ((initDir == -1) && ((pos+dir) < pExtreme)) {
-        dirChange = true;
         dir = 1;
     }
+    curDir = dir;
 
     // Next position update:
     // p(t) = p(tCur) + v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2, where v(tCur) = v(t0) + a*tCur
@@ -386,12 +389,12 @@ bool MotionTrajectory::AddDwell(double deltaT)
     return motion->IsOK();
 }
 
-double MotionTrajectory::CalculateNextTime(bool &dirChange)
+double MotionTrajectory::CalculateNextTime(int &curDir)
 {
-    double t = motionList[curIndex]->CalculateNextTime(tCur, pos, dirChange);
+    double t = motionList[curIndex]->CalculateNextTime(tCur, pos, curDir);
     if ((t < 0.0) && (curIndex < motionList.size()-1)) {
         curIndex++;
-        t = motionList[curIndex]->CalculateNextTime(tCur, pos, dirChange);
+        t = motionList[curIndex]->CalculateNextTime(tCur, pos, curDir);
     }
     if (t >= 0.0)
         tCur = t;
@@ -408,42 +411,66 @@ bool MotionTrajectory::GetValuesAtTime(double t, double &p, double &v, double &a
     return false;
 }
 
-//************************************************************************************************
-
-void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
+void MotionTrajectory::GetFinalValues(double &t, double &p, double &v, double &a) const
 {
-    const int WLEN = 64;
-    const int testAxis = 0;   // All axes should be the same when using test board
-    quadlet_t waveform[WLEN];
-    double dt = board->GetFPGAClockPeriod();
+    size_t num = motionList.size();
+    if (num > 0) {
+        motionList[num-1]->GetFinalValues(t, p, v, a);
+    }
+    else {
+        t = 0.0;
+        p = 0.0;
+        v = 0.0;
+        a = 0.0;
+    }
+}
+
+unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int max_entries, double dt)
+{
     unsigned int Astate = 1;
-    unsigned int Bstate = (vel < 0) ? 0 : 1;
+    unsigned int Bstate = 0;    // initialized below
     bool Bnext = false;
-    bool dirChange;
-    double t = 0.0;
+    int curDir;
+    int lastDir = 0;            // initialized below
+    double t;
     double lastT = 0.0;
+    const AmpIO_UInt32 max_ticks = 0x007fffff;   // 23 bits
     AmpIO_UInt32 minTicks = 0;  // changed below
     AmpIO_UInt32 maxTicks = 0;
-    unsigned int i;
-
-    MotionTrajectory motion;
-    motion.Init(vel);
-    if (accel == 0)
-        motion.AddConstantVel(0.0, true);              // true --> infinite motion
-    else
-        motion.AddConstantAccel(accel, 0.0, true);     // true --> infinite motion
-
-    for (i = 0; i < WLEN-1; i++) {
-        t = motion.CalculateNextTime(dirChange);
-        if (dirChange)
+    unsigned int i = 0;
+    for (i = 0; i < max_entries-1; i++) {
+        t = CalculateNextTime(curDir);
+        if (t < 0.0)
+            break;
+        if (curDir == 0) {
+            std::cout << "CreateWaveform: i = " << i << ", invalid direction" << std::endl;
+            break;
+        }
+        AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt);
+        if (i == 0) {
+            minTicks = ticks;
+            lastDir = curDir;
+            Bstate = (curDir < 0) ? 0 : 1;
+        }
+        while (ticks > max_ticks) {
+            // If we exceed max_ticks (23 bits) add waveform table entries that maintain
+            // current setting of A and B.
+            std::cout << "waveform[" << i << "]: ticks = " << std::hex << ticks
+                      << " (max = " << max_ticks << ")" << std::endl;
+            if (i < max_entries-2)
+                waveform[i++] = 0x80000000 | (max_ticks<<8) | (Bstate << 1) | Astate;
+            ticks -= max_ticks;
+        }
+        // Check for direction change
+        if (curDir != lastDir) {
+            lastDir = curDir;
             Bnext = !Bnext;
+        }
         if (Bnext)
             Bstate = 1-Bstate;
         else
             Astate = 1-Astate;
         Bnext = !Bnext;
-        AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt);
-        if (i == 0) minTicks = ticks;
         if (ticks < minTicks)
             minTicks = ticks;
         if (ticks > maxTicks)
@@ -453,15 +480,45 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
         //          << ", A " << Astate << " B " << Bstate << std::endl;
         waveform[i] = 0x80000000 | (ticks<<8) | (Bstate << 1) | Astate;
     }
-    waveform[WLEN-1] = 0;   // Turn off waveform generation
-
-    std::cout << "Created table, total time = " << t << ", tick range: "
+    waveform[i++] = 0;   // Turn off waveform generation
+    std::cout << "CreateWaveform: total time = " << t << ", tick range: "
               << minTicks << "-" << maxTicks << std::endl;
-    if (!board->WriteWaveformTable(waveform, 0, WLEN)) {
+    return i;
+}
+
+//************************************************************************************************
+
+std::string GetEdgeString(unsigned char edges)
+{
+    std::string str;
+    if (edges & 0x08) str += " A-up";
+    if (edges & 0x04) str += " B-up";
+    if (edges & 0x02) str += " A-dn";
+    if (edges & 0x01) str += " B-dn";
+    return str;
+}
+
+
+void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
+{
+    const int WLEN = 64;
+    const int testAxis = 0;   // All axes should be the same when using test board
+    quadlet_t waveform[WLEN];
+    double dt = board->GetFPGAClockPeriod();
+
+    unsigned int numEntries = motion.CreateWaveform(waveform, WLEN, dt);
+
+    std::cout << "Writing waveform table with " << numEntries << " entries" << std::endl;
+    if (!board->WriteWaveformTable(waveform, 0, numEntries)) {
         std::cout << "WriteWaveformTable failed" << std::endl;
         return;
     }
 
+    double pos, vel, accel;
+    if (!motion.GetValuesAtTime(0.0, pos, vel, accel)) {
+        std::cout << "TestEncoderVelocity: failed to get initial values" << std::endl;
+        return;
+    }
     // Initial movements to initialize firmware
     if (vel >= 0) {
          board->WriteDigitalOutput(0x03, 0x02);
@@ -476,7 +533,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
         board->WriteDigitalOutput(0x03, 0x01);
     }
     // Initialize encoder position
-    for (i = 0; i < 4; i++)
+    for (unsigned int i = 0; i < 4; i++)
         board->WriteEncoderPreload(i, 0);
     port->ReadAllBoards();
     std::cout << "Starting position = " << board->GetEncoderPosition(testAxis)
@@ -492,6 +549,9 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
     double velSum = 0.0;
     double accelSum = 0.0;
     unsigned int mNum = 0;
+    unsigned int numSame = 0;
+    unsigned int numRunOvf = 0;
+    double maxRun = 0.0;
     bool waveform_active = true;
     while (waveform_active || (mNum == 0)) {
         port->ReadAllBoards();
@@ -509,27 +569,41 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, double vel, double accel)
                 accelSum += maccel;
                 mNum++;
             }
-            bool doEndl = false;
             if (mpos != last_mpos) {
+                if (numSame > 0) {
+                    std::cout << " Read " << numSame << " entries, max run time = " << maxRun;
+                    if (numRunOvf > 0)
+                        std::cout << ", run overflow " << numRunOvf << " times";
+                    std::cout << std::endl;
+                }
                 std::cout << "pos = " << mpos
                           << ", vel = " << mvel
                           << ", accel = " << maccel
                           << ", run = " << run;
+                if (encVelData.velOverflow)   std::cout << " VEL_OVF";
+                if (encVelData.dirChange)     std::cout << " DIR_CHG";
+                if (encVelData.encError)      std::cout << " ENC_ERR";
+                if (encVelData.qtr1Overflow)  std::cout << " Q1_OVF";
+                if (encVelData.qtr5Overflow)  std::cout << " Q5_OVF";
+                if (encVelData.qtr1Edges!= encVelData.qtr5Edges) {
+                    std::cout << " EDGES(" << GetEdgeString(encVelData.qtr1Edges)
+                              << ", " <<  GetEdgeString(encVelData.qtr5Edges) << ")";
+                }
+                if (encVelData.runOverflow)  std::cout << " RUN_OVF";
+                std::cout << std::endl;
                 last_mpos = mpos;
-                doEndl = true;
+                numSame = 0;
+                maxRun = run;
+                numRunOvf = 0;
             }
-            if (encVelData.velOverflow) {doEndl = true; std::cout << " VEL_OVF"; }
-            if (encVelData.dirChange)  {doEndl = true; std::cout << " DIR_CHG"; }
-            if (encVelData.encError)  {doEndl = true; std::cout << " ENC_ERR"; }
-            if (encVelData.qtr1Overflow)  {doEndl = true; std::cout << " Q1_OVF"; }
-            if (encVelData.qtr5Overflow)  {doEndl = true; std::cout << " Q5_OVF"; }
-            if (encVelData.qtr1Edges!= encVelData.qtr5Edges) {
-                doEndl = true;
-                std::cout << " EDGES(" << std::hex << static_cast<unsigned int>(encVelData.qtr1Edges)
-                          << ", " << static_cast<unsigned int>(encVelData.qtr5Edges) << std::dec << ")";
+            else {
+                numSame++;
+                if (encVelData.runOverflow) numRunOvf++;
+                if (run >= maxRun)
+                    maxRun = run;
+                else
+                    std::cout << "Unexpected run time: " << run << " (previous = " << maxRun << ")" << std::endl;
             }
-            if (encVelData.runOverflow)  {doEndl = true; std::cout << " RUN_OVF"; }
-            if (doEndl) std::cout << std::endl;
         }
         Amp1394_Sleep(0.0005);
     }
@@ -587,6 +661,9 @@ int main(int argc, char** argv)
     double temp;
     bool done = false;
     int opt;
+
+    MotionTrajectory motion;
+
     while (!done) {
         std::cout << std::endl
                   << "0) Exit" << std::endl
@@ -622,7 +699,12 @@ int main(int argc, char** argv)
                 break;
             case 3:
                 std::cout << std::endl;
-                TestEncoderVelocity(Port, &Board, vel, accel);
+                motion.Init(vel);
+                if (accel == 0)
+                    motion.AddConstantVel(0.0, true);              // true --> infinite motion
+                else
+                    motion.AddConstantAccel(accel, 0.0, true);     // true --> infinite motion
+                TestEncoderVelocity(Port, &Board, motion);
                 break;
             default:
                 std::cout << "  Invalid option!" << std::endl;
