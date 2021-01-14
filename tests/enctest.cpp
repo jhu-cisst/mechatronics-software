@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,8 @@ public:
 
     void GetFinalValues(double &t, double &p, double &v, double &a) const
     { t = tf; p = pf; v = vf; a = accel; }
+
+    virtual void Print(std::ostream &out) const = 0;
 };
 
 // MotionInit: sets starting values for a trajectory
@@ -84,6 +87,9 @@ public:
 
     double CalculateNextTime(double /*tCur*/, int &/*pos*/, int &/*curDir*/)
     { return -1.0; }
+
+    void Print(std::ostream &out) const
+    { out << "Init: v = " << vf << std::endl; }
 };
 
 // ConstantVel:
@@ -96,6 +102,9 @@ public:
     ~ConstantVel() {}
 
     double CalculateNextTime(double tCur, int &pos, int &curDir);
+
+    void Print(std::ostream &out) const
+    { out << "ConstantVel: v = " << vf << ", pf = " << pf << ", tf = " << tf << std::endl; }
 };
 
 // ConstantAccel:
@@ -110,6 +119,9 @@ public:
     ~ConstantAccel() {}
 
     double CalculateNextTime(double tCur, int &pos, int &curDir);
+
+    void Print(std::ostream &out) const
+    { out << "ConstantAccel: a = " << accel << ", pf = " << pf << ", vf = " << vf << ", tf = " << tf << std::endl; }
 };
 
 // Dwell:
@@ -121,22 +133,33 @@ public:
 
     double CalculateNextTime(double /*tCur*/, int &/*pos*/, int &/*curDir*/)
     { return -1.0; }
+
+    void Print(std::ostream &out) const
+    { out << "Dwell: tf = " << tf << std::endl; }
 };
 
 // MotionTrajectory:
 //   Manages the list of motions
 class MotionTrajectory {
+protected:
     std::vector<MotionBase *> motionList;
     size_t curIndex;    // current index into motionList
     double tCur;        // current time
     int pos;            // current encoder position (counts)
 
+    typedef std::pair<double, int> EncTime;   // time, pos
+    typedef std::vector<EncTime> EncTimeList;
+    EncTimeList encList;
+    size_t encIndex;
+
     // Returns last motion in list (0 if list is empty)
     const MotionBase *GetLastMotion(void) const;
 
 public:
-    MotionTrajectory() : curIndex(0), tCur(0.0), pos(0) {}
+    MotionTrajectory() : curIndex(0), tCur(0.0), pos(0), encIndex(0) {}
     ~MotionTrajectory() { Init(); }
+
+    size_t GetNumPhases(void) const { return motionList.size(); }
 
     // Delete all existing motion segments
     void Init(double vel = 0.0);
@@ -155,8 +178,14 @@ public:
 
     void GetFinalValues(double &t, double &p, double &v, double &a) const;
 
+    void Print(std::ostream &out) const;
+
     // Create waveform table to be sent to FPGA
     unsigned int CreateWaveform(quadlet_t *waveform, unsigned int max_entries, double dt);
+
+    // Return encoder time corresponding to specified position (pos).
+    // Will look for first occurence of position starting at refTime.
+    double GetEncoderTime(double refTime, int pos);
 };
 
 //*********************************** Motion Class Methods ****************************************
@@ -183,8 +212,9 @@ MotionBase::MotionBase(const MotionBase *prevMotion) : accel(0.0)
 bool MotionBase::GetValuesAtTime(double t, double &p, double &v, double &a) const
 {
     if ((tf < 0) || (t <= tf)) {
-        p = p0 + v0*t + 0.5*accel*t*t;
-        v = v0 + accel*t;
+        double tr = t-t0;   // time relative to start of motion
+        p = p0 + v0*tr + 0.5*accel*tr*tr;
+        v = v0 + accel*tr;
         a = accel;
         return true;
     }
@@ -263,7 +293,7 @@ ConstantAccel::ConstantAccel(double acc, double vEnd, bool isInfinite, const Mot
             // Final time
             tf = t0 + dt;
             // Final position
-            pf = p0 + v0*tf + 0.5*accel*tf*tf;
+            pf = p0 + v0*dt + 0.5*accel*dt*dt;
         }
     }
     if (IsOK()) {
@@ -273,7 +303,7 @@ ConstantAccel::ConstantAccel(double acc, double vEnd, bool isInfinite, const Mot
         else
             dir = -1;
         // Set initDir (0 means no direction change)
-        initDir = (v0*accel < 0) ? dir : 0;
+        initDir = (v0*vf < 0) ? dir : 0;
         // Extreme position if there is a direction change (i.e., position when V=0)
         pExtreme = p0 - (v0*v0)/(2.0*accel);
     }
@@ -285,7 +315,7 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
         return -1.0;
     }
     double dt = 0.0;
-    double vCur = v0 + accel*tCur;
+    double vCur = v0 + accel*(tCur-t0);
     if ((initDir == 1) && ((pos+dir) > pExtreme)) {
         dir = -1;
     }
@@ -293,6 +323,15 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
         dir = 1;
     }
     curDir = dir;
+    if (initDir != dir) {
+        // If initDir==0 (no direction change) or we have already changed direction,
+        // then check whether against the position limit.
+        if (((dir == 1) && ((pos+dir) > pf)) || ((dir == -1) && ((pos+dir) < pf))) {
+            std::cout << "ConstantAccel: " << (pos+dir) << " past position limit (pf = " << pf << ")" << std::endl;
+            std::cout << "  tCur = " << tCur << ", dir = " << dir << ", initDir = " << initDir << std::endl;
+            return -1.0;
+        }
+    }
 
     // Next position update:
     // p(t) = p(tCur) + v(tCur)*(t-tCur) + 1/2*a*(t-tCur)^2, where v(tCur) = v(t0) + a*tCur
@@ -308,14 +347,16 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
     //                    t = tCur + (-v + dir*sqrt(v^2+dir*2*a))/a
     double temp = vCur*vCur+dir*2.0*accel;
     if (temp < 0) {
-        std::cout << "Error: negative square root: " << temp << std::endl;
+        std::cout << "ConstantAccel: tCur = " << tCur << ", pos = " << pos << ", negative square root: " << temp
+                  << ", vCur = " << vCur << ", accel = " << accel << std::endl;
         dt = -vCur/accel;
     }
     else {
         dt = (dir*sqrt(temp)-vCur)/accel;
     }
     if (dt < 0) {
-        std::cout << "Error: negative dt: " << dt << std::endl;
+        std::cout << "ConstantAccel: tCur = " << tCur << ", pos = " << pos << ", negative dt: " << dt
+                  << ", dir = " << dir << ", vCur = " << vCur << std::endl;
         dt = -dt;
     }
 
@@ -352,8 +393,10 @@ void MotionTrajectory::Init(double vStart)
         delete motionList[i];
     motionList.clear();
     Restart();
-    MotionBase *motion = new MotionInit(vStart);
-    motionList.push_back(motion);
+    if (vStart != 0.0) {
+        MotionBase *motion = new MotionInit(vStart);
+        motionList.push_back(motion);
+    }
 }
 
 const MotionBase *MotionTrajectory::GetLastMotion(void) const
@@ -392,13 +435,19 @@ bool MotionTrajectory::AddDwell(double deltaT)
 double MotionTrajectory::CalculateNextTime(int &curDir)
 {
     double t = motionList[curIndex]->CalculateNextTime(tCur, pos, curDir);
-    if ((t < 0.0) && (curIndex < motionList.size()-1)) {
+    while ((t < 0.0) && (curIndex < motionList.size()-1)) {
         curIndex++;
         t = motionList[curIndex]->CalculateNextTime(tCur, pos, curDir);
     }
     if (t >= 0.0)
         tCur = t;
     return t;
+}
+
+void MotionTrajectory::Print(std::ostream &out) const
+{
+    for (size_t i = 0; i < motionList.size(); i++)
+        motionList[i]->Print(out);
 }
 
 bool MotionTrajectory::GetValuesAtTime(double t, double &p, double &v, double &a) const
@@ -432,12 +481,13 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
     bool Bnext = false;
     int curDir;
     int lastDir = 0;            // initialized below
-    double t;
+    double t = 0.0;
     double lastT = 0.0;
     const AmpIO_UInt32 max_ticks = 0x007fffff;   // 23 bits
     AmpIO_UInt32 minTicks = 0;  // changed below
     AmpIO_UInt32 maxTicks = 0;
     unsigned int i = 0;
+    encList.clear();
     for (i = 0; i < max_entries-1; i++) {
         t = CalculateNextTime(curDir);
         if (t < 0.0)
@@ -456,7 +506,7 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
             // If we exceed max_ticks (23 bits) add waveform table entries that maintain
             // current setting of A and B.
             std::cout << "waveform[" << i << "]: ticks = " << std::hex << ticks
-                      << " (max = " << max_ticks << ")" << std::endl;
+                      << " (max = " << max_ticks << ")" << std::dec << std::endl;
             if (i < max_entries-2)
                 waveform[i++] = 0x80000000 | (max_ticks<<8) | (Bstate << 1) | Astate;
             ticks -= max_ticks;
@@ -476,14 +526,33 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
         if (ticks > maxTicks)
             maxTicks = ticks;
         lastT = t;
+        encList.push_back(EncTime(t, pos));
         //std::cout << "waveform[" << i << "]: ticks = " << std::hex << ticks << std::dec
         //          << ", A " << Astate << " B " << Bstate << std::endl;
         waveform[i] = 0x80000000 | (ticks<<8) | (Bstate << 1) | Astate;
     }
     waveform[i++] = 0;   // Turn off waveform generation
+    if (t < 0) t = lastT;
     std::cout << "CreateWaveform: total time = " << t << ", tick range: "
               << minTicks << "-" << maxTicks << std::endl;
     return i;
+}
+
+double MotionTrajectory::GetEncoderTime(double refTime, int pos)
+{
+    // Reset encIndex if necessary
+    if (encList[encIndex].first > refTime)
+        encIndex = 0;
+    // Find refTime in list
+    while ((encList[encIndex].first <= refTime) && (encIndex < encList.size()))
+        encIndex++;
+    // Now, find pos in list
+    int rpos = encList[encIndex].second;
+    while ((pos != rpos) && (encIndex < encList.size())) {
+        encIndex++;
+        rpos = encList[encIndex].second;
+    }
+    return (pos == rpos) ? encList[encIndex].first : -1.0;
 }
 
 //************************************************************************************************
@@ -501,7 +570,7 @@ std::string GetEdgeString(unsigned char edges)
 
 void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
 {
-    const int WLEN = 64;
+    const int WLEN = 1024;
     const int testAxis = 0;   // All axes should be the same when using test board
     quadlet_t waveform[WLEN];
     double dt = board->GetFPGAClockPeriod();
@@ -533,26 +602,46 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
         board->WriteDigitalOutput(0x03, 0x01);
     }
     // Initialize encoder position
-    for (unsigned int i = 0; i < 4; i++)
+    unsigned int i;
+    for (i = 0; i < 4; i++)
         board->WriteEncoderPreload(i, 0);
+
+    Amp1394_Sleep(0.05);
     port->ReadAllBoards();
-    std::cout << "Starting position = " << board->GetEncoderPosition(testAxis)
+    int startPos = board->GetEncoderPosition(testAxis);
+    // Sometimes, position is non-zero after preload
+    for (i = 0; (i < 5) && (startPos != 0); i++) {
+        std::cout << "WriteEncoderPreload: retrying (pos = " << startPos << ")" << std::endl;
+        board->WriteEncoderPreload(testAxis, 0);
+        Amp1394_Sleep(0.05);
+        port->ReadAllBoards();
+        startPos = board->GetEncoderPosition(testAxis);
+    }
+    if (startPos != 0) {
+        std::cout << "Failed to preload encoder" << std::endl;
+        return;
+    }
+    std::cout << "Starting position = " << startPos
               << ", velocity = " << board->GetEncoderVelocityCountsPerSecond(testAxis)
               << ", acceleration = " << board->GetEncoderAcceleration(testAxis) << std::endl;
 
     // Start waveform on DOUT1 and DOUT2 (to produce EncA and EncB using test board)
     board->WriteWaveformControl(0x03, 0x03);
 
+    // Reference encoder position
+    double rtime = 0.0;
+    int epos = 0;
+
     double mpos, mvel, maccel, run;
     AmpIO::EncoderVelocityData encVelData;
     double last_mpos = -1000.0;
-    double velSum = 0.0;
-    double accelSum = 0.0;
     unsigned int mNum = 0;
     unsigned int numSame = 0;
     unsigned int numRunOvf = 0;
     double maxRun = 0.0;
     bool waveform_active = true;
+    std::ofstream outFile("waveform.csv", std::ios_base::trunc);
+    outFile << "rtime, mpos, mvel, maccel, run, time, rpos, rvel, raccel" << std::endl;
     while (waveform_active || (mNum == 0)) {
         port->ReadAllBoards();
         waveform_active = board->GetDigitalInput()&0x20000000;
@@ -563,20 +652,31 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
             run = board->GetEncoderRunningCounterSeconds(testAxis);
             if (!board->GetEncoderVelocityData(testAxis, encVelData))
                 std::cout << "GetEncoderVelocityData failed" << std::endl;
-            if ((mpos > 5) || (mpos < -5)) {
-                // First few not accurate?
-                velSum += mvel;
-                accelSum += maccel;
-                mNum++;
+            mNum++;
+            // Find mpos in encoder list
+            if (mpos != epos) {
+                rtime = motion.GetEncoderTime(rtime, mpos);
+                if (rtime < 0.0) {
+                    std::cout << "GetEncoderTime failed, mpos = " << mpos
+                              << ", epos = " << epos << std::endl;
+                    break;
+                }
+                epos = mpos;
+            }
+            double rpos, rvel, raccel;
+            double curTime = rtime+run;
+            if (motion.GetValuesAtTime(curTime, rpos, rvel, raccel)) {
+                outFile << rtime << ", " << mpos << ", " << mvel << ", " << maccel << ", " << run
+                        << ", " << curTime << ", " << rpos << ", " << rvel << ", " << raccel << std::endl;
             }
             if (mpos != last_mpos) {
                 if (numSame > 0) {
-                    std::cout << " Read " << numSame << " entries, max run time = " << maxRun;
+                    std::cout << "  + " << numSame << " entries, max run = " << maxRun;
                     if (numRunOvf > 0)
-                        std::cout << ", run overflow " << numRunOvf << " times";
-                    std::cout << std::endl;
+                        std::cout << " (" << numRunOvf << " overflows)";
                 }
-                std::cout << "pos = " << mpos
+                std::cout << std::endl;
+                std::cout << "t = " << rtime << ", pos = " << mpos
                           << ", vel = " << mvel
                           << ", accel = " << maccel
                           << ", run = " << run;
@@ -590,7 +690,6 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
                               << ", " <<  GetEdgeString(encVelData.qtr5Edges) << ")";
                 }
                 if (encVelData.runOverflow)  std::cout << " RUN_OVF";
-                std::cout << std::endl;
                 last_mpos = mpos;
                 numSame = 0;
                 maxRun = run;
@@ -607,9 +706,12 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
         }
         Amp1394_Sleep(0.0005);
     }
-    std::cout << "Average velocity = " << velSum/mNum
-              << ", acceleration = " << accelSum/mNum
-              << " (" << mNum << " samples)" << std::endl;
+    if (numSame > 0) {
+        std::cout << "  + " << numSame << " entries, max run = " << maxRun;
+        if (numRunOvf > 0)
+            std::cout << " (" << numRunOvf << " overflows)";
+    }
+    std::cout << std::endl << "Processed " << mNum << " samples" << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -655,9 +757,8 @@ int main(int argc, char** argv)
     AmpIO Board(board);
     Port->AddBoard(&Board);
 
-    double vel = 400.0;
-    double accel = 0.0;
     char buf[80];
+    double accel;
     double temp;
     bool done = false;
     int opt;
@@ -665,11 +766,18 @@ int main(int argc, char** argv)
     MotionTrajectory motion;
 
     while (!done) {
+        double tf, pf, vf, af;
+        motion.GetFinalValues(tf, pf, vf, af);
+        std::cout << std::endl << "Current motion:" << std::endl;
+        motion.Print(std::cout);
         std::cout << std::endl
                   << "0) Exit" << std::endl
-                  << "1) Set velocity (vel = " << vel << ")" << std::endl
-                  << "2) Set acceleration (accel = " << accel << ")" << std::endl
-                  << "3) Run test" << std::endl
+                  << "1) Clear motion" << std::endl
+                  << "2) Add velocity phase" << std::endl
+                  << "3) Add acceleration phase" << std::endl
+                  << "4) Add dwell" << std::endl
+                  << "5) Run test" << std::endl
+                  << "6) Set test motion" << std::endl
                   << "Select option: ";
 
         std::cin.getline(buf, sizeof(buf));
@@ -677,35 +785,87 @@ int main(int argc, char** argv)
             opt = -1;
 
         switch (opt) {
+
             case 0:   // Quit
                 done = true;
                 std::cout << std::endl;
                 break;
+
             case 1:
-                std::cout << "  New velocity: ";
-                std::cin.getline(buf, sizeof(buf));
-                if (sscanf(buf, "%lf", &temp) == 1)
-                    vel = temp;
-                else
-                    std::cout << "  Invalid velocity: " << buf << std::endl;
+                motion.Init();
                 break;
+
             case 2:
-                std::cout << "  New acceleration: ";
+                if (vf != 0.0) {
+                    std::cout << "  Enter final position: ";
+                    std::cin.getline(buf, sizeof(buf));
+                    if (sscanf(buf, "%lf", &temp) == 1)
+                        motion.AddConstantVel(temp);
+                    else
+                        std::cout << "  Invalid final position: " << buf << std::endl;
+                }
+                else {
+                    std::cout << "  Must first accelerate to non-zero velocity" << std::endl;
+                }
+                break;
+
+            case 3:
+                std::cout << "  Enter acceleration: ";
                 std::cin.getline(buf, sizeof(buf));
-                if (sscanf(buf, "%lf", &temp) == 1)
+                if (sscanf(buf, "%lf", &temp) == 1) {
                     accel = temp;
+                    std::cout << "  Enter final velocity: ";
+                    std::cin.getline(buf, sizeof(buf));
+                    if (sscanf(buf, "%lf", &temp) == 1)
+                        motion.AddConstantAccel(accel, temp);
+                    else
+                        std::cout << "  Invalid final velocity: " << buf << std::endl;
+                }
                 else
                     std::cout << "  Invalid acceleration: " << buf << std::endl;
                 break;
-            case 3:
-                std::cout << std::endl;
-                motion.Init(vel);
-                if (accel == 0)
-                    motion.AddConstantVel(0.0, true);              // true --> infinite motion
+
+            case 4:
+                if (vf == 0.0) {
+                    std::cout << "  Enter dwell time: ";
+                    std::cin.getline(buf, sizeof(buf));
+                    if (sscanf(buf, "%lf", &temp) == 1) {
+                        if (temp > 0.0)
+                            motion.AddDwell(temp);
+                        else
+                            std::cout << "  Invalid dwell time: " << temp << std::endl;
+                    }
+                    else
+                        std::cout << "  Invalid dwell time: " << buf << std::endl;
+                }
                 else
-                    motion.AddConstantAccel(accel, 0.0, true);     // true --> infinite motion
-                TestEncoderVelocity(Port, &Board, motion);
+                    std::cout << "  Cannot dwell with non-zero velocity (vf = " << vf << ")" << std::endl;
                 break;
+
+            case 5:
+                if (motion.GetNumPhases() > 0) {
+                    std::cout << std::endl;
+                    TestEncoderVelocity(Port, &Board, motion);
+                }
+                else
+                    std::cout << "  No motion defined" << std::endl;
+                break;
+
+            case 6:
+                motion.Init();
+                motion.AddConstantAccel(1000.0, 400.0);
+                motion.AddConstantVel(120.0);
+                motion.AddConstantAccel(-1000.0, 0.0);
+#if 0
+                motion.AddDwell(0.05);
+                motion.AddConstantAccel(-1000.0, -400.0);
+                motion.AddConstantAccel(1000.0, -300.0);
+                motion.AddConstantAccel(10000.0, 100.0);
+                motion.AddConstantAccel(1000.0, 200.0);
+                motion.AddConstantAccel(-1000.0, 0.0);
+#endif
+                break;
+
             default:
                 std::cout << "  Invalid option!" << std::endl;
         }
