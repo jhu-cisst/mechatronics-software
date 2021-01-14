@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -513,12 +513,17 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
     AmpIO_UInt32 qtr5Period = encVelData[index].qtr5Period;               // Previous quarter-cycle period of same type
     AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;                 // Current full-cycle period
     AmpIO_UInt32 velPeriodPrev = velPeriod - qtr1Period + qtr5Period;     // Previous full-cycle period
+    if (encVelData[index].qtr5Overflow)
+        velPeriodPrev = ENC_VEL_MASK_26;
 
     // Should never happen
     if ((qtr1Period == 0) || (qtr5Period == 0) || (velPeriod == 0) || (velPeriodPrev == 0))
         return 0.0;
 
     if (encVelData[index].qtr1Edges != encVelData[index].qtr5Edges)
+        return 0.0;
+
+    if ((encVelData[index].qtr1Dir != encVelData[index].qtr5Dir) || (encVelData[index].qtr1Dir != encVelData[index].velDir))
         return 0.0;
 
     double acc = 0.0;

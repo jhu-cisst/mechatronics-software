@@ -588,19 +588,30 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
         std::cout << "TestEncoderVelocity: failed to get initial values" << std::endl;
         return;
     }
+    std::cout << "Initializing encoders (about 6 seconds)" << std::endl;
     // Initial movements to initialize firmware
+    // Wait long enough for encoder period to overflow
     if (vel >= 0) {
-         board->WriteDigitalOutput(0x03, 0x02);
-         board->WriteDigitalOutput(0x03, 0x00);
-         board->WriteDigitalOutput(0x03, 0x01);
-         board->WriteDigitalOutput(0x03, 0x03);
+        board->WriteDigitalOutput(0x03, 0x02);
+        Amp1394_Sleep(1.4);
+        board->WriteDigitalOutput(0x03, 0x00);
+        Amp1394_Sleep(1.4);
+        board->WriteDigitalOutput(0x03, 0x01);
+        Amp1394_Sleep(1.4);
+        board->WriteDigitalOutput(0x03, 0x03);
+        Amp1394_Sleep(1.4);
     }
     else {
         board->WriteDigitalOutput(0x03, 0x00);
+        Amp1394_Sleep(1.4);
         board->WriteDigitalOutput(0x03, 0x02);
+        Amp1394_Sleep(1.4);
         board->WriteDigitalOutput(0x03, 0x03);
+        Amp1394_Sleep(1.4);
         board->WriteDigitalOutput(0x03, 0x01);
+        Amp1394_Sleep(1.4);
     }
+
     // Initialize encoder position
     unsigned int i;
     for (i = 0; i < 4; i++)
@@ -624,6 +635,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
     std::cout << "Starting position = " << startPos
               << ", velocity = " << board->GetEncoderVelocityCountsPerSecond(testAxis)
               << ", acceleration = " << board->GetEncoderAcceleration(testAxis) << std::endl;
+    std::cout << "Running test" << std::endl;
 
     // Start waveform on DOUT1 and DOUT2 (to produce EncA and EncB using test board)
     board->WriteWaveformControl(0x03, 0x03);
@@ -632,22 +644,25 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
     double rtime = 0.0;
     int epos = 0;
 
-    double mpos, mvel, maccel, run;
+    double mpos, mvel, mvelpred, maccel, run;
     AmpIO::EncoderVelocityData encVelData;
-    double last_mpos = -1000.0;
     unsigned int mNum = 0;
+#ifdef OUTPUT_VALUES
+    double last_mpos = -1000.0;
     unsigned int numSame = 0;
     unsigned int numRunOvf = 0;
     double maxRun = 0.0;
+#endif
     bool waveform_active = true;
     std::ofstream outFile("waveform.csv", std::ios_base::trunc);
-    outFile << "rtime, mpos, mvel, maccel, run, time, rpos, rvel, raccel" << std::endl;
+    outFile << "rtime, mpos, mvel, mvelpred, maccel, run, time, rpos, rvel, raccel, velper, qtr1, qtr5, flags" << std::endl;
     while (waveform_active || (mNum == 0)) {
         port->ReadAllBoards();
         waveform_active = board->GetDigitalInput()&0x20000000;
         if (waveform_active) {
             mpos = board->GetEncoderPosition(testAxis);
             mvel = board->GetEncoderVelocityCountsPerSecond(testAxis);
+            mvelpred = board->GetEncoderVelocityPredicted(testAxis);
             maccel = board->GetEncoderAcceleration(testAxis);
             run = board->GetEncoderRunningCounterSeconds(testAxis);
             if (!board->GetEncoderVelocityData(testAxis, encVelData))
@@ -666,9 +681,23 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
             double rpos, rvel, raccel;
             double curTime = rtime+run;
             if (motion.GetValuesAtTime(curTime, rpos, rvel, raccel)) {
-                outFile << rtime << ", " << mpos << ", " << mvel << ", " << maccel << ", " << run
-                        << ", " << curTime << ", " << rpos << ", " << rvel << ", " << raccel << std::endl;
+                outFile << rtime << ", " << mpos << ", " << mvel << ", " << mvelpred << ", " << maccel << ", "
+                        << run << ", " << curTime << ", " << rpos << ", " << rvel << ", " << raccel
+                        << ", " << std::hex << encVelData.velPeriod << ", " << encVelData.qtr1Period
+                        << ", " << encVelData.qtr5Period << std::dec << ", ";
+                if (encVelData.velOverflow)   outFile << " VEL_OVF";
+                if (encVelData.dirChange)     outFile << " DIR_CHG";
+                if (encVelData.encError)      outFile << " ENC_ERR";
+                if (encVelData.qtr1Overflow)  outFile << " Q1_OVF";
+                if (encVelData.qtr5Overflow)  outFile << " Q5_OVF";
+                if (encVelData.qtr1Edges!= encVelData.qtr5Edges) {
+                    outFile << " EDGES(" << GetEdgeString(encVelData.qtr1Edges)
+                            << ", " <<  GetEdgeString(encVelData.qtr5Edges) << ")";
+                }
+                if (encVelData.runOverflow)  outFile << " RUN_OVF";
+                outFile << std::endl;
             }
+#ifdef OUTPUT_VALUES
             if (mpos != last_mpos) {
                 if (numSame > 0) {
                     std::cout << "  + " << numSame << " entries, max run = " << maxRun;
@@ -703,14 +732,17 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
                 else
                     std::cout << "Unexpected run time: " << run << " (previous = " << maxRun << ")" << std::endl;
             }
+#endif
         }
         Amp1394_Sleep(0.0005);
     }
+#ifdef OUTPUT_VALUES
     if (numSame > 0) {
         std::cout << "  + " << numSame << " entries, max run = " << maxRun;
         if (numRunOvf > 0)
             std::cout << " (" << numRunOvf << " overflows)";
     }
+#endif
     std::cout << std::endl << "Processed " << mNum << " samples" << std::endl;
 }
 
