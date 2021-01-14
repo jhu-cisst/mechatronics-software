@@ -228,6 +228,17 @@ public:
     /*! Returns the data available for computing encoder velocity (and acceleration). */
     bool GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data) const;
 
+    /*! Returns the number of encoder errors (invalid transitions on the A or B channel). The errors
+        are detected on the FPGA, with Firmware V7+, which sets an error bit in the encoder period used
+        for velocity estimation. The error bit is cleared with the next valid transition.
+        The number of errors reported here is only the number of errors received by the PC; it does
+        not include any errors detected on the FPGA that were cleared before being read by the PC. */
+    unsigned int GetEncoderErrorCount(unsigned int index) const;
+
+    /*! Clears the count of encoder errors for the specified channel. Specifying NUM_CHANNELS (default
+        value) clears the counter for all channels. */
+    bool ClearEncoderErrorCount(unsigned int index = NUM_CHANNELS);
+
     //********************************************************************************************
 
     // GetPowerEnable: return power enable control
@@ -611,6 +622,9 @@ protected:
 
     // Encoder velocity data (per axis)
     EncoderVelocityData encVelData[NUM_CHANNELS];
+
+    // Counts received encoder errors
+    unsigned int encErrorCount[NUM_CHANNELS];
 
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.

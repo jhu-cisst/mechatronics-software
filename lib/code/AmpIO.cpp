@@ -115,8 +115,10 @@ AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), Nu
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
     InitWriteBuffer();
-    for (size_t i = 0; i < NUM_CHANNELS; i++)
+    for (size_t i = 0; i < NUM_CHANNELS; i++) {
         encVelData[i].Init();
+        encErrorCount[i] = 0;
+    }
 }
 
 AmpIO::~AmpIO()
@@ -665,6 +667,11 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
         encVelData[index].runPeriod = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_QTR_MASK;
         encVelData[index].runOverflow = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_OVER_MASK;
     }
+
+    // Increment error counter if necessary
+    if (encVelData[index].encError)
+        encErrorCount[index]++;
+
     return true;
 }
 
@@ -673,6 +680,30 @@ bool AmpIO::GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data
     if (index >= NUM_CHANNELS)
         return false;
     data = encVelData[index];
+    return true;
+}
+
+unsigned int AmpIO::GetEncoderErrorCount(unsigned int index) const
+{
+    if (index >= NUM_CHANNELS)
+        return 0;
+    return encErrorCount[index];
+}
+
+bool AmpIO::ClearEncoderErrorCount(unsigned int index)
+{
+    if (index > NUM_CHANNELS)
+        return false;
+
+    if (index == NUM_CHANNELS) {
+        // Clear all counters
+        for (unsigned int i = 0; i < NUM_CHANNELS; i++)
+            encErrorCount[i] = 0;
+    }
+    else {
+        encErrorCount[index] = 0;
+    }
+
     return true;
 }
 
