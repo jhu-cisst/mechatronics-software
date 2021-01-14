@@ -422,10 +422,10 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
 
 // Returns predicted encoder velocity in counts/sec, taking into account
 // acceleration and running counter.
-double AmpIO::GetEncoderVelocityPredicted(unsigned int index) const
+double AmpIO::GetEncoderVelocityPredicted(unsigned int index, double percent_threshold) const
 {
     double encVel = GetEncoderVelocityCountsPerSecond(index);
-    double encAcc = GetEncoderAcceleration(index);
+    double encAcc = GetEncoderAcceleration(index, percent_threshold);
     double encDelay = GetEncoderVelocityDelay(index);
     double encRun = GetEncoderRunningCounterSeconds(index);
     double deltaVel = encAcc*(encDelay+encRun);
@@ -527,7 +527,7 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
         return 0.0;
 
     double acc = 0.0;
-    if ((1.0/qtr1Period <= percent_threshold) && (1.0/qtr1Period >= -percent_threshold)) {
+    if (1.0/qtr1Period <= percent_threshold) {
         double qtrDiff = static_cast<double>(qtr5Period) - static_cast<double>(qtr1Period);
         double qtrSum = static_cast<double>(qtr5Period + qtr1Period);
         double velProd = static_cast<double>(velPeriod)*static_cast<double>(velPeriodPrev)*clkPeriod*clkPeriod;

@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -169,8 +169,9 @@ public:
         1) The predicted velocity will not change sign (i.e., be in the opposite direction from the measured velocity).
         2) The predicted velocity will not be larger than the velocity that would have caused one encoder count to
            occur during the time measured by the running counter.
+        For an explanation of percent_threshold, see GetEncoderAcceleration.
     */
-    double GetEncoderVelocityPredicted(unsigned int index) const;
+    double GetEncoderVelocityPredicted(unsigned int index, double percent_threshold = 1.0) const;
 
     /*! Returns the time delay of the encoder velocity measurement, in seconds.
         Currently, this is equal to half the measured period, based on the assumption that measuring the
