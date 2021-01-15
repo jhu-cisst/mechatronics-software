@@ -598,7 +598,7 @@ int main(int argc, char** argv)
                     if (fullvel)
                         mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
                     else {
-                        BoardList[j]->GetEncoderVelocityData(i, encVelData))
+                        BoardList[j]->GetEncoderVelocityData(i, encVelData);
                         mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", encVelData.velPeriod);
                     }
                     mvwprintw(stdscr, 9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
