@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
 
-  (C) Copyright 2012-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -586,6 +586,7 @@ int main(int argc, char** argv)
                 strcpy(nodeStr[1], "??");
         }
 
+        AmpIO::EncoderVelocityData encVelData;
         Port->ReadAllBoards();
         unsigned int j = 0;
         for (j = 0; j < BoardList.size(); j++) {
@@ -596,8 +597,10 @@ int main(int argc, char** argv)
                     mvwprintw(stdscr, 7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
                         mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
-                    else
-                        mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocity(i));
+                    else {
+                        BoardList[j]->GetEncoderVelocityData(i, encVelData))
+                        mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", encVelData.velPeriod);
+                    }
                     mvwprintw(stdscr, 9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
                     if (fullvel) {
                         if (allRev7) {

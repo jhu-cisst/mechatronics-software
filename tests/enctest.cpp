@@ -633,7 +633,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
         return;
     }
     std::cout << "Starting position = " << startPos
-              << ", velocity = " << board->GetEncoderVelocityCountsPerSecond(testAxis)
+              << ", velocity = " << board->GetEncoderVelocity(testAxis)
               << ", acceleration = " << board->GetEncoderAcceleration(testAxis) << std::endl;
     std::cout << "Running test" << std::endl;
 
@@ -661,7 +661,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
         waveform_active = board->GetDigitalInput()&0x20000000;
         if (waveform_active) {
             mpos = board->GetEncoderPosition(testAxis);
-            mvel = board->GetEncoderVelocityCountsPerSecond(testAxis);
+            mvel = board->GetEncoderVelocity(testAxis);
             mvelpred = board->GetEncoderVelocityPredicted(testAxis);
             maccel = board->GetEncoderAcceleration(testAxis);
             run = board->GetEncoderRunningCounterSeconds(testAxis);

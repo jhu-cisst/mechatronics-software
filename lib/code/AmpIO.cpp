@@ -400,8 +400,7 @@ double AmpIO::GetEncoderClockPeriod(void) const
 }
 
 // Returns encoder velocity in counts/sec -> 4/period
-// For clarity and efficiency, this duplicates some code rather than calling GetEncoderVelocity.
-double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
+double AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
@@ -426,9 +425,11 @@ double AmpIO::GetEncoderVelocityCountsPerSecond(unsigned int index) const
 // acceleration and running counter.
 double AmpIO::GetEncoderVelocityPredicted(unsigned int index, double percent_threshold) const
 {
-    double encVel = GetEncoderVelocityCountsPerSecond(index);
+    double encVel = GetEncoderVelocity(index);
     double encAcc = GetEncoderAcceleration(index, percent_threshold);
-    double encDelay = GetEncoderVelocityDelay(index);
+    // The encoder measurement delay is half the measured period, based on the assumption that measuring the
+    // period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
+    double encDelay = encVelData[index].velPeriod*encVelData[index].clkPeriod/2.0;
     double encRun = GetEncoderRunningCounterSeconds(index);
     double deltaVel = encAcc*(encDelay+encRun);
     double predVel = encVel+deltaVel;
@@ -455,48 +456,6 @@ double AmpIO::GetEncoderVelocityPredicted(unsigned int index, double percent_thr
         predVel = 0.0;
     }
     return predVel;
-}
-
-// Returns the time delay of the encoder velocity measurement, in seconds.
-// Currently, this is equal to half the measured period, based on the assumption that measuring the
-// period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
-double AmpIO::GetEncoderVelocityDelay(unsigned int index) const
-{
-    double delay = encVelData[index].velPeriod*encVelData[index].clkPeriod/2.0;
-    //delay += GetEncoderRunningCounterSeconds();
-    return delay;
-}
-
-// Deprecated: returns encoder period; encoder velocity is 4/period.
-// Note that number of bits used for encoder period has changed in later firmware,
-// so this function should not be used.
-AmpIO_Int32 AmpIO::GetEncoderVelocity(unsigned int index) const
-{
-    if (index >= NUM_CHANNELS)
-        return 0L;
-
-    quadlet_t buff = GetEncoderVelocityRaw(index);
-
-    AmpIO_UInt32 fver = GetFirmwareVersion();
-    if (fver < 6) {
-        // buff: latched counter value
-        // Clock = 768 kHz
-        // PROGRAMMER NOTE: the 16-bit signed value is not sign extended
-        //                  to 32 bits (backward compatible behavior)
-        return (buff & ENC_VEL_MASK_16);
-    }
-    // all other cases, fver >= 6
-    AmpIO_Int32 cnter;
-    // mask and convert to signed
-    if (fver == 6) {
-        cnter = buff & ENC_VEL_MASK_22;
-    } else {
-        cnter = buff & ENC_VEL_MASK_26;
-    }
-    if (!(buff & ENC_DIR_MASK)) {
-        cnter = -cnter;
-    }
-    return cnter;
 }
 
 // Estimate acceleration from two quarters of the same type; units are counts/second**2
