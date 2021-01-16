@@ -28,6 +28,8 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 
+const double TINY = 1e-9;   // Threshold for floating point comparisons
+
 //**************************************** Approach *******************************************************
 //
 // The encoder position, p(t), is given by the standard equation:  p(t) = p(0) + v(0)*t + 0.5*a*t*t,
@@ -250,6 +252,11 @@ ConstantVel::ConstantVel(double pEnd, bool isInfinite, const MotionBase *prevMot
 double ConstantVel::CalculateNextTime(double tCur, int &pos, int &curDir)
 {
     if ((tf >= 0) && (tCur >= tf)) {
+        int endPos = static_cast<int>(pf + ((dir == -1) ? (1-TINY) : 0));
+        if (pos != endPos) {
+            std::cout << "ConstantVel: end position not reached, pos = " << pos << ", pf = "
+                      << pf << ", dir = " << dir << std::endl;
+        }
         return -1.0;
     }
     // Next position update:
@@ -260,11 +267,16 @@ double ConstantVel::CalculateNextTime(double tCur, int &pos, int &curDir)
     curDir = dir;
     double dt = 1.0/fabs(v0);
     tCur += dt;
-    if ((tf < 0) || (tCur <= tf)) {
+    if ((tf < 0) || (tCur <= (tf+TINY))) {
         pos += dir;
         return tCur;
     }
     else {
+        int endPos = static_cast<int>(pf + ((dir == -1) ? (1-TINY) : 0));
+        if (pos != endPos) {
+            std::cout << "ConstantVel: end position not reached, pos = " << pos << ", pf = "
+                      << pf << ", dir = " << dir << std::endl;
+        }
         return -1.0;
     }
 }
@@ -312,6 +324,11 @@ ConstantAccel::ConstantAccel(double acc, double vEnd, bool isInfinite, const Mot
 double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
 {
     if ((tf >= 0) && (tCur >= tf)) {
+        int endPos = static_cast<int>(pf + ((dir == -1) ? (1-TINY) : 0));
+        if (pos != endPos) {
+            std::cout << "ConstantAccel: end position not reached (time), pos = " << pos << ", pf = "
+                      << pf << ", dir = " << dir << std::endl;
+        }
         return -1.0;
     }
     double dt = 0.0;
@@ -326,9 +343,12 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
     if (initDir != dir) {
         // If initDir==0 (no direction change) or we have already changed direction,
         // then check whether against the position limit.
-        if (((dir == 1) && ((pos+dir) > pf)) || ((dir == -1) && ((pos+dir) < pf))) {
-            std::cout << "ConstantAccel: " << (pos+dir) << " past position limit (pf = " << pf << ")" << std::endl;
-            std::cout << "  tCur = " << tCur << ", dir = " << dir << ", initDir = " << initDir << std::endl;
+        if (((dir == 1) && ((pos+dir) > (pf+TINY))) || ((dir == -1) && ((pos+dir) < (pf-TINY)))) {
+            int endPos = static_cast<int>(pf) + ((dir == -1) ? (1-TINY) : 0);
+            if (pos != endPos) {
+                std::cout << "ConstantAccel: end position not reached, pos = " << pos << ", pf = "
+                          << pf << ", dir = " << dir << std::endl;
+            }
             return -1.0;
         }
     }
@@ -347,8 +367,9 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
     //                    t = tCur + (-v + dir*sqrt(v^2+dir*2*a))/a
     double temp = vCur*vCur+dir*2.0*accel;
     if (temp < 0) {
-        std::cout << "ConstantAccel: tCur = " << tCur << ", pos = " << pos << ", negative square root: " << temp
-                  << ", vCur = " << vCur << ", accel = " << accel << std::endl;
+        if (temp < -TINY)  // ignore very small negative values
+            std::cout << "ConstantAccel: tCur = " << tCur << ", pos = " << pos << ", negative square root: " << temp
+                      << ", vCur = " << vCur << ", accel = " << accel << std::endl;
         dt = -vCur/accel;
     }
     else {
@@ -362,11 +383,16 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
 
     tCur += dt;
     // Update position for next time
-    if ((tf < 0) || (tCur <= tf)) {
+    if ((tf < 0) || (tCur <= (tf+TINY))) {
         pos += dir;
         return tCur;
     }
     else {
+        int endPos = static_cast<int>(pf) + ((dir == -1) ? (1-TINY) : 0);
+        if (pos != endPos) {
+            std::cout << "ConstantAccel: end position not reached, pos = " << pos << ", pf = "
+                      << pf << ", dir = " << dir << std::endl;
+        }
         return -1.0;
     }
 }
@@ -436,6 +462,13 @@ double MotionTrajectory::CalculateNextTime(int &curDir)
 {
     double t = motionList[curIndex]->CalculateNextTime(tCur, pos, curDir);
     while ((t < 0.0) && (curIndex < motionList.size()-1)) {
+        double tf, pf, vf, af;
+        motionList[curIndex]->GetFinalValues(tf, pf, vf, af);
+        if (tCur < tf)
+            tCur = tf;
+        int endPos = static_cast<int>(pf + ((curDir == -1) ? (1-TINY) : 0));
+        if (pos != endPos)
+            std::cout << "CalculateNextTime: pos = " << pos << ", pf = " << pf << ", dir = " << curDir << std::endl;
         curIndex++;
         t = motionList[curIndex]->CalculateNextTime(tCur, pos, curDir);
     }
@@ -541,10 +574,11 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
 double MotionTrajectory::GetEncoderTime(double refTime, int pos)
 {
     // Reset encIndex if necessary
-    if (encList[encIndex].first > refTime)
+    if ((encIndex >= encList.size()) || (encList[encIndex].first > refTime))
         encIndex = 0;
     // Find refTime in list
-    while ((encList[encIndex].first <= refTime) && (encIndex < encList.size()))
+    size_t savedIndex = encIndex;
+    while ((encList[encIndex].first < refTime) && (encIndex < encList.size()))
         encIndex++;
     // Now, find pos in list
     int rpos = encList[encIndex].second;
@@ -552,7 +586,13 @@ double MotionTrajectory::GetEncoderTime(double refTime, int pos)
         encIndex++;
         rpos = encList[encIndex].second;
     }
-    return (pos == rpos) ? encList[encIndex].first : -1.0;
+    if (pos == rpos) {
+        return encList[encIndex].first;
+    }
+    else {
+        encIndex = savedIndex;
+        return -1.0;
+    }
 }
 
 //************************************************************************************************
@@ -644,11 +684,12 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
     double rtime = 0.0;
     int epos = 0;
 
-    double mpos, mvel, mvelpred, maccel, run;
+    int mpos;
+    double mvel, mvelpred, maccel, run;
     AmpIO::EncoderVelocityData encVelData;
     unsigned int mNum = 0;
 #ifdef OUTPUT_VALUES
-    double last_mpos = -1000.0;
+    int last_mpos = -1000;
     unsigned int numSame = 0;
     unsigned int numRunOvf = 0;
     double maxRun = 0.0;
@@ -670,21 +711,24 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
             mNum++;
             // Find mpos in encoder list
             if (mpos != epos) {
-                rtime = motion.GetEncoderTime(rtime, mpos);
-                if (rtime < 0.0) {
+                double temp = motion.GetEncoderTime(rtime, mpos);
+                if (temp < 0.0) {
                     std::cout << "GetEncoderTime failed, mpos = " << mpos
                               << ", epos = " << epos << std::endl;
-                    break;
+                    epos = mpos;
                 }
-                epos = mpos;
+                else {
+                    rtime = temp;
+                    epos = mpos;
+                }
             }
             double rpos, rvel, raccel;
             double curTime = rtime+run;
             if (motion.GetValuesAtTime(curTime, rpos, rvel, raccel)) {
                 outFile << rtime << ", " << mpos << ", " << mvel << ", " << mvelpred << ", " << maccel << ", "
                         << run << ", " << curTime << ", " << rpos << ", " << rvel << ", " << raccel
-                        << ", " << std::hex << encVelData.velPeriod << ", " << encVelData.qtr1Period
-                        << ", " << encVelData.qtr5Period << std::dec << ", ";
+                        << ", " << encVelData.velPeriod << ", " << encVelData.qtr1Period
+                        << ", " << encVelData.qtr5Period << ", ";
                 if (encVelData.velOverflow)   outFile << " VEL_OVF";
                 if (encVelData.dirChange)     outFile << " DIR_CHG";
                 if (encVelData.encError)      outFile << " ENC_ERR";
@@ -888,7 +932,7 @@ int main(int argc, char** argv)
                 motion.AddConstantAccel(1000.0, 400.0);
                 motion.AddConstantVel(120.0);
                 motion.AddConstantAccel(-1000.0, 0.0);
-#if 0
+#if 1
                 motion.AddDwell(0.05);
                 motion.AddConstantAccel(-1000.0, -400.0);
                 motion.AddConstantAccel(1000.0, -300.0);
