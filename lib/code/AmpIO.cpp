@@ -273,6 +273,11 @@ AmpIO_UInt32 AmpIO::GetTimestamp(void) const
     return ReadBuffer[TIMESTAMP_OFFSET];
 }
 
+double AmpIO::GetTimestampSeconds(void) const
+{
+    return GetTimestamp()*GetFPGAClockPeriod();
+}
+
 AmpIO_UInt32 AmpIO::GetDigitalInput(void) const
 {
     return ReadBuffer[DIGIO_OFFSET];

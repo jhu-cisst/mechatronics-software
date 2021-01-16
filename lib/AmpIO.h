@@ -106,6 +106,9 @@ public:
 
     AmpIO_UInt32 GetTimestamp(void) const;
 
+    // Get timestamp in seconds (time between two consecutive reads)
+    double GetTimestampSeconds(void) const;
+
     // Return digital output state
     AmpIO_UInt8 GetDigitalOutput(void) const;
 
