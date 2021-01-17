@@ -70,7 +70,7 @@ public:
     virtual double CalculateNextTime(double tCur, int &pos, int &curDir) = 0;
 
     // Get position, velocity and acceleration at specified time t
-    bool GetValuesAtTime(double t, double &p, double &v, double &a) const;
+    bool GetValuesAtTime(double t, double &p, double &v, double &a, bool extend = false) const;
 
     void GetInitialValues(double &t, double &p, double &v, double &a) const
     { t = t0; p = p0; v = v0; a = accel; }
@@ -183,7 +183,8 @@ public:
     void Print(std::ostream &out) const;
 
     // Create waveform table to be sent to FPGA
-    unsigned int CreateWaveform(quadlet_t *waveform, unsigned int max_entries, double dt);
+    unsigned int CreateWaveform(quadlet_t *waveform, unsigned int max_entries, double dt,
+                                unsigned int Astate = 1, unsigned int Bstate = 1);
 
     // Get number of encoder events
     size_t GetNumEncoderEvents(void) const
@@ -221,9 +222,9 @@ MotionBase::MotionBase(const MotionBase *prevMotion) : accel(0.0)
     vf = v0;
 }
 
-bool MotionBase::GetValuesAtTime(double t, double &p, double &v, double &a) const
+bool MotionBase::GetValuesAtTime(double t, double &p, double &v, double &a, bool extend) const
 {
-    if ((tf < 0) || (t <= (tf+TINY))) {
+    if ((tf < 0) || (t <= (tf+TINY)) || extend) {
         double tr = t-t0;   // time relative to start of motion
         p = p0 + v0*tr + 0.5*accel*tr*tr;
         v = v0 + accel*tr;
@@ -497,7 +498,7 @@ bool MotionTrajectory::GetValuesAtTime(double t, double &p, double &v, double &a
 {
     for (size_t i = 0; i < motionList.size(); i++) {
         // GetValuesAtTime returns true if (t <= tf) or infinite move (tf < 0)
-        if (motionList[i]->GetValuesAtTime(t, p, v, a))
+        if (motionList[i]->GetValuesAtTime(t, p, v, a, (i == (motionList.size()-1))))
             return true;
     }
     return false;
@@ -517,20 +518,22 @@ void MotionTrajectory::GetFinalValues(double &t, double &p, double &v, double &a
     }
 }
 
-unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int max_entries, double dt)
+unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int max_entries, double dt,
+                                              unsigned int Astate, unsigned int Bstate)
 {
-    unsigned int Astate = 1;
-    unsigned int Bstate = 0;    // initialized below
-    bool Bnext = false;
+    // We set Bnext true and lastDir=0. This will cause a direction change for waveform[1], since
+    // curDir will be +1 or -1, and therefore not equal to lastDir.
+    bool Bnext = true;
     int curDir;
-    int lastDir = 0;            // initialized below
+    int lastDir = 0;
     double t = 0.0;
     double lastT = 0.0;
     const AmpIO_UInt32 max_ticks = 0x007fffff;   // 23 bits
-    AmpIO_UInt32 minTicks = 0;  // changed below
+    AmpIO_UInt32 minTicks = max_ticks;
     AmpIO_UInt32 maxTicks = 0;
-    unsigned int i = 0;
+    unsigned int i;
     encList.clear();
+    encList.push_back(EncTime(0.0, 0));
     for (i = 0; i < max_entries-1; i++) {
         t = CalculateNextTime(curDir);
         if (t < 0.0)
@@ -539,12 +542,8 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
             std::cout << "CreateWaveform: i = " << i << ", invalid direction" << std::endl;
             break;
         }
-        AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt);
-        if (i == 0) {
-            minTicks = ticks;
-            lastDir = curDir;
-            Bstate = (curDir < 0) ? 0 : 1;
-        }
+        AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt + 0.5);
+        lastT = t;
         while (ticks > max_ticks) {
             // If we exceed max_ticks (23 bits) add waveform table entries that maintain
             // current setting of A and B.
@@ -554,6 +553,10 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
                 waveform[i++] = 0x80000000 | (max_ticks<<8) | (Bstate << 1) | Astate;
             ticks -= max_ticks;
         }
+        encList.push_back(EncTime(t, pos));
+        //std::cout << "waveform[" << i << "]: ticks = " << std::hex << ticks << std::dec
+        //          << ", A " << Astate << " B " << Bstate << std::endl;
+        waveform[i] = 0x80000000 | (ticks<<8) | (Bstate << 1) | Astate;
         // Check for direction change
         if (curDir != lastDir) {
             lastDir = curDir;
@@ -568,11 +571,6 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
             minTicks = ticks;
         if (ticks > maxTicks)
             maxTicks = ticks;
-        lastT = t;
-        encList.push_back(EncTime(t, pos));
-        //std::cout << "waveform[" << i << "]: ticks = " << std::hex << ticks << std::dec
-        //          << ", A " << Astate << " B " << Bstate << std::endl;
-        waveform[i] = 0x80000000 | (ticks<<8) | (Bstate << 1) | Astate;
     }
     waveform[i++] = 0;   // Turn off waveform generation
     if (t < 0) t = lastT;
@@ -617,6 +615,16 @@ std::string GetEdgeString(unsigned char edges)
     return str;
 }
 
+// Data collected from board
+struct EncData {
+    int mpos;
+    double mvel;
+    double mvelpred;
+    double maccel;
+    double run;
+    double ts;
+    AmpIO::EncoderVelocityData encVelData;
+};
 
 void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
 {
@@ -687,135 +695,128 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
               << ", acceleration = " << board->GetEncoderAcceleration(testAxis) << std::endl;
     std::cout << "Running test" << std::endl;
 
-    // Reference encoder position
-    double rtime = 0.0;
-    int epos = 0;
-    size_t curIndex = 0;
+    std::vector<EncData> measuredData;
+    // Estimate data size
+    const double loopTime = 0.0005;  // Loop time in seconds (~2 kHz)
+    double tf, pf, vf, af;
+    motion.GetFinalValues(tf, pf, vf, af);
+    // Overestimates datasize because the actual loop time will be less than loopTime.
+    size_t dataSize = tf/loopTime;
+    measuredData.reserve(dataSize);
 
-    int mpos;
-    double mvel, mvelpred, maccel, run, ts;
-    AmpIO::EncoderVelocityData encVelData;
-    unsigned int mNum = 0;
-#ifdef OUTPUT_VALUES
-    int last_mpos = -1000;
-    unsigned int numSame = 0;
-    unsigned int numRunOvf = 0;
-    double maxRun = 0.0;
-#endif
-    std::ofstream outFile("waveform.csv", std::ios_base::trunc);
-    outFile << "rtime, mpos, mvel, mvelpred, maccel, run, time, rpos, rvel, raccel, ts, velper, qtr1, qtr5, flags" << std::endl;
+    EncData encData;
+    encData.mpos = 0;
+    bool waveform_active = true;
 
     // Start waveform on DOUT1 and DOUT2 (to produce EncA and EncB using test board)
     board->WriteWaveformControl(0x03, 0x03);
 
-    while (curIndex < motion.GetNumEncoderEvents()) {
+    // Collect the data, storing it in measuredData
+    while (waveform_active || (encData.mpos == 0)) {
         port->ReadAllBoards();
-        bool waveform_active = board->GetDigitalInput()&0x20000000;
-        mpos = board->GetEncoderPosition(testAxis);
-        mvel = board->GetEncoderVelocity(testAxis);
-        mvelpred = board->GetEncoderVelocityPredicted(testAxis);
-        maccel = board->GetEncoderAcceleration(testAxis);
-        run = board->GetEncoderRunningCounterSeconds(testAxis);
-        ts = board->GetTimestampSeconds();
-        if (!board->GetEncoderVelocityData(testAxis, encVelData))
-            std::cout << "GetEncoderVelocityData failed" << std::endl;
-        mNum++;
+        waveform_active = board->GetDigitalInput()&0x20000000;
+        if (waveform_active) {
+            encData.mpos = board->GetEncoderPosition(testAxis);
+            encData.mvel = board->GetEncoderVelocity(testAxis);
+            encData.mvelpred = board->GetEncoderVelocityPredicted(testAxis);
+            encData.maccel = board->GetEncoderAcceleration(testAxis);
+            encData.run = board->GetEncoderRunningCounterSeconds(testAxis);
+            encData.ts = board->GetTimestampSeconds();
+            if (!board->GetEncoderVelocityData(testAxis, encData.encVelData))
+                std::cout << "GetEncoderVelocityData failed" << std::endl;
+            measuredData.push_back(encData);
+        }
+        Amp1394_Sleep(loopTime);
+    }
+    std::cout << "Read " << measuredData.size() << " samples" << std::endl;
+
+    // Synchronize time
+    // Time as measured by FPGA (accumulated timestamp values)
+    double clkTime = 0.0;
+
+    // Reference encoder position
+    int epos = motion.GetEncoderEventPosition(0);
+    size_t curIndex = 1;
+
+    // For computing mean time difference
+    double sumDiff = 0.0;
+    unsigned int numDiff = 0;
+
+    size_t dataIndex;
+    for (dataIndex = 0; dataIndex < measuredData.size(); dataIndex++) {
+        encData = measuredData[dataIndex];
+        clkTime += encData.ts;
         // Find mpos in encoder list
-        if (mpos != epos) {
+        if (encData.mpos != epos) {
+            double rtime = 0.0;
             epos = motion.GetEncoderEventPosition(curIndex);
-            if (mpos == epos) {
+            if (encData.mpos == epos) {
                 rtime = motion.GetEncoderEventTime(curIndex);
                 curIndex++;
             }
             else {
-                std::cout << "Unexpected encoder position: " << mpos << ", expecting " << epos
+                std::cout << "Unexpected encoder position: " << encData.mpos << ", expecting " << epos
                           << " (index = " << curIndex << ")" << std::endl;
                 size_t testIndex;
                 int testPos = epos;
-                unsigned int lastDiff = abs(epos-mpos);
+                unsigned int lastDiff = abs(epos-encData.mpos);
                 unsigned int curDiff = lastDiff;
-                for (testIndex = curIndex; (testIndex < motion.GetNumEncoderEvents()) && (testPos != mpos)
+                for (testIndex = curIndex; (testIndex < motion.GetNumEncoderEvents()) && (curDiff != 0)
                          && (curDiff <= lastDiff) ; testIndex++) {
                     testPos = motion.GetEncoderEventPosition(testIndex);
                     lastDiff = curDiff;
-                    curDiff = abs(testPos-mpos);
+                    curDiff = abs(testPos-encData.mpos);
                     if (curDiff == 0) {
                         std::cout << "Found match at index " << testIndex << std::endl;
                         rtime = motion.GetEncoderEventTime(testIndex);
                         curIndex = testIndex+1;
                     }
                 }
-                epos = mpos;
+                epos = encData.mpos;
             }
+            // For now, consider first few encoder transitions when computing time difference
+            if ((rtime > 0.0) && (!encData.encVelData.runOverflow) && (curIndex < 10)) {
+                double timeDiff = clkTime-(rtime+encData.run);
+                sumDiff += timeDiff;
+                numDiff++;
+            }
+            epos = encData.mpos;
         }
+    }
+    double tOffset = 0.0;
+    if (numDiff > 0)
+        tOffset = sumDiff/numDiff;
+    std::cout << "Time offset = " << tOffset << " (" << numDiff << " samples)" << std::endl;
+
+    // Output data to file
+    std::ofstream outFile("waveform.csv", std::ios_base::trunc);
+    outFile << "time, mpos, mvel, mvelpred, maccel, run, rpos, rvel, raccel, ts, velper, qtr1, qtr5, flags" << std::endl;
+
+    clkTime = -tOffset;
+    for (dataIndex = 0; dataIndex < measuredData.size(); dataIndex++) {
+        encData = measuredData[dataIndex];
+        clkTime += encData.ts;
         double rpos, rvel, raccel;
-        double curTime = rtime+run;
-        if (motion.GetValuesAtTime(curTime, rpos, rvel, raccel)) {
-            outFile << rtime << ", " << mpos << ", " << mvel << ", " << mvelpred << ", " << maccel << ", "
-                    << run << ", " << curTime << ", " << rpos << ", " << rvel << ", " << raccel << ", " << ts
-                    << ", " << encVelData.velPeriod << ", " << encVelData.qtr1Period
-                    << ", " << encVelData.qtr5Period << ", ";
-            if (encVelData.velOverflow)   outFile << " VEL_OVF";
-            if (encVelData.dirChange)     outFile << " DIR_CHG";
-            if (encVelData.encError)      outFile << " ENC_ERR";
-            if (encVelData.qtr1Overflow)  outFile << " Q1_OVF";
-            if (encVelData.qtr5Overflow)  outFile << " Q5_OVF";
-            if (encVelData.qtr1Edges!= encVelData.qtr5Edges) {
-                outFile << " EDGES(" << GetEdgeString(encVelData.qtr1Edges)
-                        << ", " <<  GetEdgeString(encVelData.qtr5Edges) << ")";
+        if (motion.GetValuesAtTime(clkTime, rpos, rvel, raccel)) {
+            outFile << clkTime << ", " << encData.mpos << ", " << encData.mvel << ", " << encData.mvelpred << ", " << encData.maccel << ", "
+                    << encData.run << ", " << rpos << ", " << rvel << ", " << raccel << ", " << encData.ts
+                    << ", " << encData.encVelData.velPeriod << ", " << encData.encVelData.qtr1Period
+                    << ", " << encData.encVelData.qtr5Period << ", ";
+            if (encData.encVelData.velOverflow)   outFile << " VEL_OVF";
+            if (encData.encVelData.dirChange)     outFile << " DIR_CHG";
+            if (encData.encVelData.encError)      outFile << " ENC_ERR";
+            if (encData.encVelData.qtr1Overflow)  outFile << " Q1_OVF";
+            if (encData.encVelData.qtr5Overflow)  outFile << " Q5_OVF";
+            if (encData.encVelData.qtr1Edges!= encData.encVelData.qtr5Edges) {
+                outFile << " EDGES(" << GetEdgeString(encData.encVelData.qtr1Edges)
+                        << ":" <<  GetEdgeString(encData.encVelData.qtr5Edges) << ")";
             }
-            if (encVelData.runOverflow)  outFile << " RUN_OVF";
+            if (encData.encVelData.runOverflow)  outFile << " RUN_OVF";
             outFile << std::endl;
         }
         else
-            std::cout << "GetValuesAtTime failed for curTime = " << curTime << std::endl;
-#ifdef OUTPUT_VALUES
-        if (mpos != last_mpos) {
-            if (numSame > 0) {
-                std::cout << "  + " << numSame << " entries, max run = " << maxRun;
-                if (numRunOvf > 0)
-                    std::cout << " (" << numRunOvf << " overflows)";
-            }
-            std::cout << std::endl;
-            std::cout << "t = " << rtime << ", pos = " << mpos
-                      << ", vel = " << mvel
-                      << ", accel = " << maccel
-                      << ", run = " << run;
-            if (encVelData.velOverflow)   std::cout << " VEL_OVF";
-            if (encVelData.dirChange)     std::cout << " DIR_CHG";
-            if (encVelData.encError)      std::cout << " ENC_ERR";
-            if (encVelData.qtr1Overflow)  std::cout << " Q1_OVF";
-            if (encVelData.qtr5Overflow)  std::cout << " Q5_OVF";
-            if (encVelData.qtr1Edges!= encVelData.qtr5Edges) {
-                std::cout << " EDGES(" << GetEdgeString(encVelData.qtr1Edges)
-                          << ", " <<  GetEdgeString(encVelData.qtr5Edges) << ")";
-            }
-            if (encVelData.runOverflow)  std::cout << " RUN_OVF";
-            last_mpos = mpos;
-            numSame = 0;
-            maxRun = run;
-            numRunOvf = 0;
-        }
-        else {
-            numSame++;
-            if (encVelData.runOverflow) numRunOvf++;
-            if (run >= maxRun)
-                maxRun = run;
-            else
-                std::cout << "Unexpected run time: " << run << " (previous = " << maxRun << ")" << std::endl;
-        }
-#endif
-        if (!waveform_active && (curIndex > 0)) break;
-        Amp1394_Sleep(0.0005);
+            std::cout << "GetValuesAtTime failed for time = " << clkTime << std::endl;
     }
-#ifdef OUTPUT_VALUES
-    if (numSame > 0) {
-        std::cout << "  + " << numSame << " entries, max run = " << maxRun;
-        if (numRunOvf > 0)
-            std::cout << " (" << numRunOvf << " overflows)";
-    }
-#endif
-    std::cout << std::endl << "Processed " << mNum << " samples" << std::endl;
 }
 
 int main(int argc, char** argv)
