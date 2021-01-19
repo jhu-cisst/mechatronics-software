@@ -94,6 +94,7 @@ void AmpIO::EncoderVelocityData::Init()
     clkPeriod = 1.0;
     velPeriod = 0;
     velOverflow = false;
+    velPeriodMax = 0;
     velDir = false;
     dirChange = false;
     encError = false;
@@ -106,6 +107,7 @@ void AmpIO::EncoderVelocityData::Init()
     qtr5Overflow = false;
     qtr5Dir = false;
     qtr5Edges = 0;
+    qtrPeriodMax = 0;
     runPeriod = 0;
     runOverflow = false;
 }
@@ -480,7 +482,7 @@ double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshol
     AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;                 // Current full-cycle period
     AmpIO_UInt32 velPeriodPrev = velPeriod - qtr1Period + qtr5Period;     // Previous full-cycle period
     if (encVelData[index].qtr5Overflow)
-        velPeriodPrev = ENC_VEL_MASK_26;
+        velPeriodPrev = encVelData[index].velPeriodMax;
 
     // Should never happen
     if ((qtr1Period == 0) || (qtr5Period == 0) || (velPeriod == 0) || (velPeriodPrev == 0))
@@ -569,6 +571,7 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
         // Note that the counter values are signed, so we convert to unsigned and set a direction bit
         // to be consistent with later versions of firmware.
         encVelData[index].clkPeriod = VEL_PERD_OLD;
+        encVelData[index].velPeriodMax = ENC_VEL_MASK_16;
         AmpIO_UInt16 velPeriod = static_cast<AmpIO_UInt16>(ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_16);
         // Convert from signed count to unsigned count and direction
         if (velPeriod == 0x8000) { // if overflow
@@ -602,6 +605,8 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
     }
     else if (fver == 6) {
         encVelData[index].clkPeriod = VEL_PERD_REV6;
+        encVelData[index].velPeriodMax = ENC_VEL_MASK_22;
+        encVelData[index].qtrPeriodMax = ENC_ACC_PREV_MASK;  // 20 bits
         // Firmware 6 has bits stuffed in different places:
         //   Q1: lower 8 bits in velPeriod[29:22] and upper 12 bits in accQtr1[31:20]
         //   Q5: all 20 bits in accQtr1[19:0]
@@ -611,9 +616,16 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
         encVelData[index].qtr5Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_PREV_MASK;
         encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
         encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
+        // Qtr1 and Qtr5 overflow at 0x000fffff (no overflow bit is set by firmware)
+        if (encVelData[index].qtr1Period == encVelData[index].qtrPeriodMax)
+            encVelData[index].qtr1Overflow = true;
+        if (encVelData[index].qtr5Period == encVelData[index].qtrPeriodMax)
+            encVelData[index].qtr5Overflow = true;
     }
     else {  // V7+
         encVelData[index].clkPeriod = VEL_PERD;
+        encVelData[index].velPeriodMax = ENC_VEL_MASK_26;
+        encVelData[index].qtrPeriodMax = ENC_VEL_QTR_MASK;  // 26 bits
         encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_26;
         encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
         encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;

@@ -54,6 +54,7 @@ public:
         double clkPeriod;            // Clock period, in seconds
         AmpIO_UInt32 velPeriod;      // Encoder full-cycle period (for velocity)
         bool velOverflow;            // Velocity (period) overflow
+        AmpIO_UInt32 velPeriodMax;   // Maximum possible velocity period
         bool velDir;                 // Velocity direction (true -> positive direction)
         bool dirChange;              // Direction change during last velocity period, V7+
         bool encError;               // Encoder error detected, V7+
@@ -66,6 +67,7 @@ public:
         bool qtr5Overflow;           // Qtr5 overflow, V7+
         bool qtr5Dir;                // Qtr5 direction (true -> positive direction), V7+
         unsigned char qtr5Edges;     // Qtr5 edge mask (A-up, B-up, A-down, B-down), V7+
+        AmpIO_UInt32 qtrPeriodMax;   // Maximum Qtr1 or Qtr5 period
         AmpIO_UInt32 runPeriod;      // Time since last encoder edge, Firmware V4,5,7+
         bool runOverflow;            // Running counter overflow, V7+
 
