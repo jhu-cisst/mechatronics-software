@@ -40,6 +40,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <Amp1394/AmpIORevision.h>
 #include "PortFactory.h"
 #include "AmpIO.h"
+#include "Amp1394Time.h"
 
 
 /*!
@@ -176,6 +177,7 @@ int main(int argc, char** argv)
     int board2 = BoardIO::MAX_BOARDS;
     BasePort::ProtocolType protocol = BasePort::PROTOCOL_SEQ_RW;
     bool fullvel = false;  // whether to display full velocity feedback
+    bool showTime = false; // whether to display time information
 
     // measure time between reads
     AmpIO_UInt32 maxTime = 0;
@@ -203,6 +205,8 @@ int main(int argc, char** argv)
             }
             else if (argv[i][1] == 'v')
                 fullvel = true;
+            else if (argv[i][1] == 't')
+                showTime = true;
         }
         else {
             if (args_found == 0) {
@@ -219,12 +223,13 @@ int main(int argc, char** argv)
 
     if (args_found < 1) {
         // usage
-        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v]" << std::endl
+        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v] [-t]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
                   << "                 can also specify -pfw[:P], -peth:P or -pudp[:xx.xx.xx.xx]" << std::endl
                   << "            -br enables broadcast read/write" << std::endl
                   << "            -bw enables broadcast write" << std::endl
                   << "            -v  displays full velocity feedback" << std::endl
+                  << "            -t  displays time information" << std::endl
                   << std::endl
                   << "Trying to detect boards on port:" << std::endl;
     }
@@ -368,10 +373,15 @@ int main(int argc, char** argv)
 
     unsigned int loop_cnt = 0;
     const int STATUS_LINE = fullvel ? 15 : 13;
-    const int DEBUG_START_LINE = fullvel ? 22 : 19;
+    const int DEBUG_START_LINE = fullvel ? (showTime ? 23 : 22) : (showTime ? 20 : 19);
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
+
+    if (showTime)
+        mvwprintw(stdscr, STATUS_LINE+5, lm, "Time (s):");
+    double startTime = -1.0;   // indicates that startTime not yet set
+    double pcTime = 0.0;
 
     // control loop
     while ((c = getch()) != ESC_CHAR) {
@@ -588,7 +598,18 @@ int main(int argc, char** argv)
 
         AmpIO::EncoderVelocityData encVelData;
         Port->ReadAllBoards();
-        unsigned int j = 0;
+        unsigned int j;
+        if (showTime) {
+            if (startTime < 0.0) {
+                startTime = Amp1394_GetTime();
+                pcTime = 0.0;
+                for (j = 0; j < BoardList.size(); j++)
+                    BoardList[j]->SetFirmwareTime(0.0);
+            }
+            else {
+                pcTime = Amp1394_GetTime()-startTime;
+            }
+        }
         for (j = 0; j < BoardList.size(); j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
@@ -647,12 +668,17 @@ int main(int argc, char** argv)
             mvwprintw(stdscr, STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
                       BoardList[j]->GetReadErrors(),
                       BoardList[j]->GetWriteErrors());
+            if (showTime)
+                mvwprintw(stdscr, STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
+                          pcTime-BoardList[j]->GetFirmwareTime());
             for (i = 0; i < 4; i++) {
                 mvwprintw(stdscr, 10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
             loop_cnt++;
         }
+        if (showTime)
+            mvwprintw(stdscr, STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
         Port->WriteAllBoards();
 
         mvwprintw(stdscr, 1, lm+42, "Gen: %d",  Port->GetBusGeneration());
@@ -661,7 +687,7 @@ int main(int argc, char** argv)
         mvwprintw(stdscr, 1, lm+85, "Ct: %8u", loop_cnt++);
 
         wrefresh(stdscr);
-        usleep(500);
+        Amp1394_Sleep(0.0005);  // 500 usec
     }
 
     for (j = 0; j < BoardList.size(); j++) {

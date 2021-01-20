@@ -113,7 +113,7 @@ void AmpIO::EncoderVelocityData::Init()
 }
 
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes),
-                                                           collect_state(false), collect_cb(0)
+                                                           firmwareTime(0.0), collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
     InitWriteBuffer();
@@ -145,6 +145,8 @@ void AmpIO::SetReadData(const quadlet_t *buf)
         ReadBuffer[i] = bswap_32(buf[i]);
     for (i = 0; i < NUM_CHANNELS; i++)
         SetEncoderVelocityData(i);
+    // Add 1 to timestamp because block read clears counter, rather than incrementing
+    firmwareTime += (GetTimestamp()+1)*GetFPGAClockPeriod();
 }
 
 void AmpIO::InitWriteBuffer(void)

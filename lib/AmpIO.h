@@ -111,6 +111,14 @@ public:
     // Get timestamp in seconds (time between two consecutive reads)
     double GetTimestampSeconds(void) const;
 
+    // Get elapsed time, in seconds, based on FPGA clock. This is computed by accumulating
+    // the timestamp values in the real-time read packet; thus, it is only accurate when
+    // there are periodic calls to ReadAllBoards or ReadAllBoardsBroadcast.
+    double GetFirmwareTime(void) const { return firmwareTime; }
+
+    // Set firmware time
+    void SetFirmwareTime(double newTime = 0.0) { firmwareTime = newTime; }
+
     // Return digital output state
     AmpIO_UInt8 GetDigitalOutput(void) const;
 
@@ -621,6 +629,9 @@ protected:
 
     // Counts received encoder errors
     unsigned int encErrorCount[NUM_CHANNELS];
+
+    // Accumulated firmware time
+    double firmwareTime;
 
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.
