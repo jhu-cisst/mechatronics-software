@@ -606,6 +606,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     unsigned boardMax = IsAllBoardsRev7_ ? NumOfBoards_ : max_board;
     for (unsigned int boardNum = 0; boardNum < boardMax; boardNum++) {
         unsigned int seq = (bswap_32(curPtr[0]) >> 16);
+        unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
         quadlet_t statusQuad = bswap_32(curPtr[2]);
         unsigned int numAxes = (statusQuad&0xf0000000)>>28;
         unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
@@ -633,11 +634,29 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             if (seq == ReadSequence_) {
                 board->SetReadValid(true);
                 board->SetReadData(curPtr+1);
+#if 0
+                if (IsAllBoardsRev7_) {
+                    outStr << "Board: " << thisBoard;
+                    if (quad0_lsb&0x8000)
+                        outStr << ", updated at time = ";
+                    else
+                        outStr << ", not updated, read time = ";
+                    outStr << ((quad0_lsb&0x3fff)/49.152) << " us" << std::endl;
+                }
+#endif
                 noneRead = false;
                 allOK = true; // PK TEMP
             }
             else {
-                outStr << "Board " << thisBoard << ", seq = " << seq << ", expected = " << ReadSequence_ << std::endl;
+                outStr << "Board " << thisBoard << ", seq = " << seq << ", expected = " << ReadSequence_;
+                if (IsAllBoardsRev7_) {
+                    if (quad0_lsb&0x8000)
+                        outStr << ", updated at time = ";
+                    else
+                        outStr << ", not updated, read time = ";
+                    outStr << ((quad0_lsb&0x3fff)/49.152) << " us";
+                }
+                outStr << std::endl;
                 board->SetReadValid(false);
                 allOK = false; // PK TEMP
             }
