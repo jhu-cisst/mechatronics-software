@@ -5,7 +5,7 @@
   Author(s):  Zihan Chen, Anton Deguet
   Created on: 2015
 
-  (C) Copyright 2015-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2015-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -26,6 +26,11 @@ http://www.cisst.org/cisst/license.txt.
 
 int main(int argc, char** argv)
 {
+    std::cerr << "qlacloserelays will soon be deprecated, use `qlacommand` instead.  Examples:" << std::endl
+              << "> qlacommand -c close-relays" << std::endl
+              << "> qlacommand -pfw:0 -c close-relays" << std::endl
+              << "> qlacommand -c open-relays" << std::endl;
+
     unsigned int i, j;
     BasePort * port = 0;
     std::string portArgs;
