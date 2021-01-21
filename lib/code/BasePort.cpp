@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -67,31 +67,33 @@ BasePort::~BasePort()
 bool BasePort::SetProtocol(ProtocolType prot) {
     if (prot != BasePort::PROTOCOL_SEQ_RW) {
         if (!IsAllBoardsBroadcastCapable_) {
-            outStr << "***Error: not all boards support broadcasting, " << std::endl
+            outStr << "BasePort::SetProtocol" << std::endl
+                   << "***Error: not all boards support broadcasting, " << std::endl
                    << "          please upgrade your firmware"  << std::endl;
             return false;
         }
         if (!(IsAllBoardsRev7_ || IsNoBoardsRev7_)) {
-            outStr << "***Error: cannot use broadcast mode with mix of Rev 7 and older boards, " << std::endl
+            outStr << "BasePort::SetProtocol" << std::endl
+                   << "***Error: cannot use broadcast mode with mix of Rev 7 and older boards, " << std::endl
                    << "          please upgrade your firmware to Rev 7" << std::endl;
             return false;
         }
     }
     switch (prot) {
         case BasePort::PROTOCOL_SEQ_RW:
-            outStr << "System running in NON broadcast mode" << std::endl;
+            outStr << "BasePort::SetProtocol: system running in NON broadcast mode" << std::endl;
             Protocol_ = prot;
             break;
         case BasePort::PROTOCOL_SEQ_R_BC_W:
-            outStr << "System running with broadcast write" << std::endl;
+            outStr << "BasePort::SetProtocol: system running with broadcast write" << std::endl;
             Protocol_ = prot;
             break;
         case BasePort::PROTOCOL_BC_QRW:
-            outStr << "System running with broadcast query, read, and write" << std::endl;
+            outStr << "BasePort::SetProtocol: system running with broadcast query, read, and write" << std::endl;
             Protocol_ = prot;
             break;
         default:
-            outStr << "Unknown protocol (ignored): " << prot << std::endl;
+            outStr << "BasePort::SetProtocol: warning: unknown protocol (ignored): " << prot << std::endl;
             break;
     }
     return (Protocol_ == prot);
@@ -156,18 +158,18 @@ bool BasePort::ScanNodes(void)
 
     nodeid_t max_nodes = InitNodes();
 
-    outStr << "ScanNodes: building node map for " << max_nodes << " nodes:" << std::endl;
+    outStr << "BasePort::ScanNodes: building node map for " << max_nodes << " nodes:" << std::endl;
     // Iterate through all possible nodes
     for (node = 0; node < max_nodes; node++) {
         quadlet_t data;
         // check hardware version
         if (!ReadQuadletNode(node, 4, data)) {
             if (GetPortType() == PORT_FIREWIRE)
-                outStr << "ScanNodes: unable to read from node " << node << std::endl;
+                outStr << "BasePort::ScanNodes: unable to read from node " << node << std::endl;
             continue;
         }
         if (data != QLA1_String) {
-            outStr << "ScanNodes: node " << node << " is not a QLA board (data = "
+            outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
                    << std::hex << data << ")" << std::endl;
             continue;
         }
@@ -175,7 +177,7 @@ bool BasePort::ScanNodes(void)
         // read firmware version
         unsigned long fver = 0;
         if (!ReadQuadletNode(node, 7, data)) {
-            outStr << "ScanNodes: unable to read firmware version from node "
+            outStr << "BasePort::ScanNodes: unable to read firmware version from node "
                    << node << std::endl;
             continue;
         }
@@ -183,7 +185,7 @@ bool BasePort::ScanNodes(void)
 
         // read board id
         if (!ReadQuadletNode(node, 0, data)) {
-            outStr << "ScanNodes: unable to read status from node " << node << std::endl;
+            outStr << "BasePort::ScanNodes: unable to read status from node " << node << std::endl;
             continue;
         }
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
@@ -210,7 +212,7 @@ bool BasePort::ScanNodes(void)
         else          IsNoBoardsRev7_ = false;
         NumOfNodes_++;
     }
-    outStr << "ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
+    outStr << "BasePort::ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
 
     // update Board2Node
     for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
@@ -220,7 +222,7 @@ bool BasePort::ScanNodes(void)
         for (node = 0; node < max_nodes; node++) {
             if (Node2Board[node] == board) {
                 if (Board2Node[board] < MAX_NODES)
-                    outStr << "ScanNodes: warning: duplicate node id for board " << board
+                    outStr << "BasePort::ScanNodes: warning: duplicate node id for board " << board
                            << "(" << Board2Node[board] << ", " << node << ")" << std::endl;
                 Board2Node[board] = node;
             }
@@ -238,14 +240,14 @@ void BasePort::SetDefaultProtocol(void)
         if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
             Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
             if (IsAllBoardsBroadcastShorterWait_)
-                outStr << "All nodes broadcast capable and support shorter wait" << std::endl;
+                outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and support shorter wait" << std::endl;
             else if (IsNoBoardsBroadcastShorterWait_)
-                outStr << "All nodes broadcast capable and do not support shorter wait" << std::endl;
+                outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and do not support shorter wait" << std::endl;
             else
-                outStr << "All nodes broadcast capable and some support shorter wait" << std::endl;
+                outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and some support shorter wait" << std::endl;
         }
         else
-            outStr << "All nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
+            outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
     }
 }
 
@@ -253,7 +255,7 @@ bool BasePort::AddBoard(BoardIO *board)
 {
     unsigned int id = board->BoardId;
     if (id >= BoardIO::MAX_BOARDS) {
-        outStr << "AddBoard: board number out of range: " << id << std::endl;
+        outStr << "BasePort::AddBoard: board number out of range: " << id << std::endl;
         return false;
     }
     BoardList[id] = board;
@@ -276,12 +278,12 @@ bool BasePort::AddBoard(BoardIO *board)
 bool BasePort::RemoveBoard(unsigned char boardId)
 {
     if (boardId >= BoardIO::MAX_BOARDS) {
-        outStr << "RemoveBoard: board number out of range: " << static_cast<unsigned int>(boardId) << std::endl;
+        outStr << "BasePort::RemoveBoard: board number out of range: " << static_cast<unsigned int>(boardId) << std::endl;
         return false;
     }
     BoardIO *board = BoardList[boardId];
     if (!board) {
-        outStr << "RemoveBoard: board not found: " << static_cast<unsigned int>(boardId) << std::endl;
+        outStr << "BasePort::RemoveBoard: board not found: " << static_cast<unsigned int>(boardId) << std::endl;
         return false;
     }
 
@@ -445,11 +447,11 @@ bool BasePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdat
     if (nbytes == 4)
         return ReadQuadlet(boardId, addr, *rdata);
     else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
+        outStr << "BasePort::ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
     else if (nbytes > GetMaxReadDataSize()) {
-        outStr << "ReadBlock: packet size " << std::dec << nbytes << " too large (max = "
+        outStr << "BasePort::ReadBlock: packet size " << std::dec << nbytes << " too large (max = "
                << GetMaxReadDataSize() << " bytes)" << std::endl;
         return false;
     }
@@ -465,11 +467,11 @@ bool BasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wda
         return WriteQuadlet(boardId, addr, *wdata);
     }
     else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
+        outStr << "BasePort::WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
         return false;
     }
     else if (nbytes > GetMaxWriteDataSize()) {
-        outStr << "WriteBlock: packet size " << std::dec << nbytes << " too large (max = "
+        outStr << "BasePort::WriteBlock: packet size " << std::dec << nbytes << " too large (max = "
                << GetMaxWriteDataSize() << " bytes)" << std::endl;
         return false;
     }
@@ -481,7 +483,7 @@ bool BasePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wda
 bool BasePort::ReadAllBoards(void)
 {
     if (!IsOK()) {
-        outStr << "ReadAllBoards: port not initialized" << std::endl;
+        outStr << "BasePort::ReadAllBoards: port not initialized" << std::endl;
         OnNoneRead();
         return false;
     }
@@ -517,12 +519,12 @@ bool BasePort::ReadAllBoards(void)
             }
             else {
                 if (ReadErrorCounter_ == 0) {
-                    outStr << "ReadAllBoards: read failed on port "
+                    outStr << "BasePort::ReadAllBoards: read failed on port "
                            << PortNum << ", board " << board << std::endl;
                 }
                 ReadErrorCounter_++;
                 if (ReadErrorCounter_ == 10000) {
-                    outStr << "ReadAllBoards: read failed on port "
+                    outStr << "BasePort::ReadAllBoards: read failed on port "
                            << PortNum << ", board " << board << " occurred 10,000 times" << std::endl;
                     ReadErrorCounter_ = 0;
                 }
@@ -530,7 +532,7 @@ bool BasePort::ReadAllBoards(void)
         }
     }
     if (!rtRead)
-        outStr << "ReadAllBoards: rtRead is false" << std::endl;
+        outStr << "BasePort::ReadAllBoards: rtRead is false" << std::endl;
 
     if (noneRead) {
         OnNoneRead();
@@ -541,13 +543,13 @@ bool BasePort::ReadAllBoards(void)
 bool BasePort::ReadAllBoardsBroadcast(void)
 {
     if (!IsOK()) {
-        outStr << "ReadAllBoardsBroadcast: port not initialized" << std::endl;
+        outStr << "BasePort::ReadAllBoardsBroadcast: port not initialized" << std::endl;
         OnNoneRead();
         return false;
     }
 
     if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
-        outStr << "ReadAllBoardsBroadcast: invalid mix of firmware" << std::endl;
+        outStr << "BasePort::ReadAllBoardsBroadcast: invalid mix of firmware" << std::endl;
         OnNoneRead();
         return false;
     }
@@ -571,7 +573,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     }
 
     if (!WriteBroadcastReadRequest(ReadSequence_)) {
-        outStr << "ReadAllBoardsBroadcast: failed to send broadcast read request, seq = " << ReadSequence_ << std::endl;
+        outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = " << ReadSequence_ << std::endl;
         OnNoneRead();
         return false;
     }
@@ -620,7 +622,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 board = BoardList[boardNum];
                 if (board) {
                     if (board->GetBoardId() != thisBoard) {
-                        outStr << "Board mismatch: expecting " << static_cast<unsigned int>(board->GetBoardId())
+                        outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting " << static_cast<unsigned int>(board->GetBoardId())
                                << ", found " << thisBoard << std::endl;
                         board = 0;
                     }
@@ -628,7 +630,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             }
         }
         else {
-            outStr << "Invalid status (not a 4 axis board): " << std::hex << statusQuad << std::dec << std::endl;
+            outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad << std::dec << std::endl;
         }
         if (board) {
             if (seq == ReadSequence_) {
@@ -648,7 +650,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 allOK = true; // PK TEMP
             }
             else {
-                outStr << "Board " << thisBoard << ", seq = " << seq << ", expected = " << ReadSequence_;
+                outStr << "BasePort::ReadAllBoardsBroadcast: board " << thisBoard
+                       << ", seq = " << seq << ", expected = " << ReadSequence_;
                 if (IsAllBoardsRev7_) {
                     if (quad0_lsb&0x8000)
                         outStr << ", updated at time = ";
@@ -674,14 +677,16 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 // Sanity check on board number (from status register)
                 unsigned int thisBoard = (bswap_32(hubReadBuffer[boardOffset+2])&0x0f000000)>>24;
                 if (board != thisBoard)
-                    outStr << "board mismatch: expecting " << board << ", found " << thisBoard << std::endl;
+                    outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting " << board
+                           << ", found " << thisBoard << std::endl;
             }
 
             static int errorcounter = 0;
             if (ReadSequence_ != seq) {
                 errorcounter++;
-                outStr << "block read error: counter = " << std::dec << errorcounter << ", read = "
-                       << seq << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
+                outStr << "BasePort::ReadAllBoardsBroadcast: block read error: counter = " << std::dec << errorcounter
+                       << ", read = " << seq
+                       << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
             }
             BoardList[board]->SetReadValid(ret);
             if (ret) noneRead = false;  // also call SetReadData(&(hubReadBuffer[boardOffset+1]));
@@ -694,7 +699,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         OnNoneRead();
     }
     if (!rtRead)
-        outStr << "ReadAllBoardsBroadcast: rtRead is false" << std::endl;
+        outStr << "BasePort::ReadAllBoardsBroadcast: rtRead is false" << std::endl;
 
     return allOK;
 }
@@ -702,7 +707,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 bool BasePort::WriteAllBoards(void)
 {
     if (!IsOK()) {
-        outStr << "WriteAllBoards: port not initialized" << std::endl;
+        outStr << "BasePort::WriteAllBoards: port not initialized" << std::endl;
         OnNoneWritten();
         return false;
     }
@@ -769,20 +774,20 @@ bool BasePort::WriteAllBoards(void)
         OnNoneWritten();
     }
     if (!rtWrite)
-        outStr << "WriteAllBoards: rtWrite is false" << std::endl;
+        outStr << "BasePort::WriteAllBoards: rtWrite is false" << std::endl;
     return allOK;
 }
 
 bool BasePort::WriteAllBoardsBroadcast(void)
 {
     if (!IsOK()) {
-        outStr << "WriteAllBoardsBroadcast: port not initialized" << std::endl;
+        outStr << "BasePort::WriteAllBoardsBroadcast: port not initialized" << std::endl;
         OnNoneWritten();
         return false;
     }
 
     if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
-        outStr << "WriteAllBoardsBroadcast: invalid mix of firmware" << std::endl;
+        outStr << "BasePort::WriteAllBoardsBroadcast: invalid mix of firmware" << std::endl;
         OnNoneWritten();
         return false;
     }
@@ -867,7 +872,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         OnNoneWritten();
     }
     if (!rtWrite)
-        outStr << "WriteAllBoardsBroadcast: rtWrite is false" << std::endl;
+        outStr << "BasePort::WriteAllBoardsBroadcast: rtWrite is false" << std::endl;
 
     // return
     return allOK;
