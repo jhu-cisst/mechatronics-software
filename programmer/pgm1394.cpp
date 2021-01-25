@@ -23,6 +23,12 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 
+static int RESULT_OK = 0;
+static int RESULT_NO_BOARD = -1;
+static int RESULT_NO_PROM_FILE = -2;
+static int RESULT_PROGRAM_FAILED = -3;
+static int RESULT_VERIFY_FAILED = -4;
+
 int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 {
 #ifndef _MSC_VER
@@ -106,7 +112,7 @@ bool PromProgramTest(AmpIO &Board)
     Amp1394_Sleep(0.005);
     std::cout << std::endl << "  Reading first page " << std::endl;
     if (!Board.PromReadData(0x1EFF00, readBuffer, sizeof(readBuffer))) {
-        std::cout << "  Error reading PROM data" << std::endl;
+        std::cerr << "  Error reading PROM data" << std::endl;
         return false;
     }
     // Compare bytes
@@ -131,7 +137,8 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         std::cout << "Erasing sector " << std::hex << addr << std::dec << std::flush;
         Callback_StartTime = Amp1394_GetTime();
         if (!Board.PromSectorErase(addr, PromProgramCallback)) {
-            std::cout << "Failed to erase sector " << addr << std::endl;
+            std::cout << std::endl;
+            std::cerr << "Failed to erase sector " << addr << std::endl;
             return false;
         }
         std::cout << std::endl << "Programming sector " << std::hex << addr
@@ -144,7 +151,8 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
             unsigned int bytesToProgram = ((numBytes-page)<256UL) ? (numBytes-page) : 256UL;
             int nRet = Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram, PromProgramCallback);
             if ((nRet < 0) || (static_cast<unsigned int>(nRet) != bytesToProgram)) {
-                std::cout << "Failed to program page " << addr << ", rc = " << nRet << std::endl;
+                std::cout << std::endl;
+                std::cerr << "Failed to program page " << addr << ", rc = " << nRet << std::endl;
                 return false;
             }
             page += bytesToProgram;
@@ -167,15 +175,17 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
         unsigned long numBytes = promFile.GetSectorNumBytes();
         std::cout << "Verifying sector " << std::hex << addr << std::flush;
         if (numBytes > sizeof(DownloadedSector)) {
-            std::cout << "Error: sector too large = " << numBytes << std::endl;
+            std::cerr << "Error: sector too large = " << numBytes << std::endl;
             return false;
         }
         if (!Board.PromReadData(addr, DownloadedSector, numBytes)) {
-            std::cout << "Error reading PROM data" << std::endl;
+            std::cerr << "Error reading PROM data" << std::endl;
             return false;
         }
-        if (!promFile.VerifySector(DownloadedSector, numBytes))
+        if (!promFile.VerifySector(DownloadedSector, numBytes)) {
+            std::cerr << "Error verifying sector" << std::endl;
             return false;
+        }
         std::cout << std::endl;
     }
     std::cout << std::dec;
@@ -350,6 +360,7 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
 int main(int argc, char** argv)
 {
     int i;
+    int result = RESULT_OK;
 #if Amp1394_HAS_RAW1394
     BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
 #else
@@ -416,7 +427,7 @@ int main(int argc, char** argv)
     }
     if (!Port || !Port->IsOK()) {
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
-        return -1;
+        return RESULT_NO_BOARD;
     }
     AmpIO Board(board);
     Port->AddBoard(&Board);
@@ -430,7 +441,7 @@ int main(int argc, char** argv)
     mcsFile promFile;
     if (!promFile.OpenFile(mcsName)) {
         std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
-        return -1;
+        return RESULT_NO_PROM_FILE;
     }
 
     unsigned long addr;
@@ -440,8 +451,17 @@ int main(int argc, char** argv)
         std::cout << std::endl
                   << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
                   << "MCS file: " << mcsName << std::endl;
-        PromProgram(Board, promFile);
-        PromVerify(Board, promFile);
+        // test first ...
+        if (!PromProgramTest(Board)) {
+            std::cerr << "Error: programming test failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+            result = RESULT_PROGRAM_FAILED;
+        } else if (!PromProgram(Board, promFile)) { // ... then program
+            std::cerr << "Error: programming failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+            result = RESULT_PROGRAM_FAILED;
+        } else if (!PromVerify(Board, promFile)) { // ... and verify
+            std::cerr << "Error: verification failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+            result = RESULT_VERIFY_FAILED;
+        }
         goto cleanup;
     }
 
@@ -455,14 +475,15 @@ int main(int argc, char** argv)
         case 1:
             if (PromProgramTest(Board)) {
                 std::cout << std::endl;
-                PromProgram(Board, promFile);
+                result = PromProgram(Board, promFile) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             }
             else {
                 std::cout << "Programming not started. Try power-cycling the FPGA" << std::endl;
+                result = RESULT_PROGRAM_FAILED;
             }
             break;
         case 2:
-            PromVerify(Board, promFile);
+            result = PromVerify(Board, promFile) ? RESULT_OK : RESULT_VERIFY_FAILED;
             break;
         case 3:
             std::cout << "Enter address (hex): ";
@@ -471,10 +492,10 @@ int main(int argc, char** argv)
             PromDisplayPage(Board, addr);
             break;
         case 4:
-            PromFPGASerialNumberProgram(Board);
+            result = PromFPGASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 5:
-            PromQLASerialNumberProgram(Board);
+            result = PromQLASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 6:
             sn = Board.GetFPGASerialNumber();
@@ -500,4 +521,5 @@ cleanup:
     promFile.CloseFile();
     Port->RemoveBoard(board);
     delete Port;
+    return result;
 }
