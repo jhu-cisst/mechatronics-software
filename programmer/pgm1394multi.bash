@@ -20,4 +20,8 @@ do
     fi
 done
 
+echo "------> If your PC is connected to the controllers via FireWire"
+echo "------> you might need to unplug/replug the FireWire cable to"
+echo "------> rediscover the boards (or use sudo qlareloadfw.bash)"
+
 exit 0
