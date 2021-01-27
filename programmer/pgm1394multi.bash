@@ -15,7 +15,7 @@ do
     if [[ "$result" -ne 0 ]]; then
        echo "------> pgm1394 -a failed for board $boardId"
        echo "------> DO NOT REBOOT OR POWER OFF this board"
-       echo "------> Try to reprogram this board unsing pgm1394 with pgm1394"
+       echo "------> Try to reprogram this board using pgm1394"
        exit $result
     fi
 done
