@@ -173,11 +173,12 @@ int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
     unsigned int i, j;
-    int board1 = BoardIO::MAX_BOARDS;
-    int board2 = BoardIO::MAX_BOARDS;
     BasePort::ProtocolType protocol = BasePort::PROTOCOL_SEQ_RW;
     bool fullvel = false;  // whether to display full velocity feedback
     bool showTime = false; // whether to display time information
+
+    std::vector<AmpIO*> BoardList;
+    std::vector<AmpIO_UInt32> BoardStatusList;
 
     // measure time between reads
     AmpIO_UInt32 maxTime = 0;
@@ -189,7 +190,6 @@ int main(int argc, char** argv)
     char axisString[4] = "all";
     std::string portDescription;
 
-    int args_found = 0;
     for (i = 1; i < (unsigned int)argc; i++) {
         if (argv[i][0] == '-') {
             if (argv[i][1] == 'p') {
@@ -209,19 +209,17 @@ int main(int argc, char** argv)
                 showTime = true;
         }
         else {
-            if (args_found == 0) {
-                board1 = atoi(argv[i]);
-                std::cerr << "Selecting board " << board1 << std::endl;
+            int bnum = atoi(argv[i]);
+            if ((bnum >= 0) && (bnum < BoardIO::MAX_BOARDS)) {
+                BoardList.push_back(new AmpIO(bnum));
+                std::cerr << "Selecting board " << bnum << std::endl;
             }
-            else if (args_found == 1) {
-                board2 = atoi(argv[i]);
-                std::cerr << "Selecting board " << board2 << std::endl;
-            }
-            args_found++;
+            else
+                std::cerr << "Invalid board number: " << argv[i] << std::endl;
         }
     }
 
-    if (args_found < 1) {
+    if (BoardList.size() < 1) {
         // usage
         std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v] [-t]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
@@ -248,7 +246,7 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    if (args_found < 1) {
+    if (BoardList.size() < 1) {
         PrintDebugStream(debugStream);
         // keys
         std::cerr << std::endl << "Keys:" << std::endl
@@ -275,6 +273,9 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    for (i = 0; i < BoardList.size(); i++)
+        Port->AddBoard(BoardList[i]);
+
     // Set protocol; default is PROTOCOL_SEQ_RW (not broadcast), but can be changed to
     // one of the broadcast protocols by specifying -br or -bw command line parameter.
     if (protocol == BasePort::PROTOCOL_BC_QRW)
@@ -283,18 +284,12 @@ int main(int argc, char** argv)
         std::cerr << "Setting protocol to broadcast write" << std::endl;
     Port->SetProtocol(protocol);
 
+    // Number of boards to display (currently 1 or 2)
+    unsigned int numDisp = (BoardList.size() >= 2) ? 2 : 1;
+
     // Currently hard-coded for up to 2 boards; initialize at mid-range
     AmpIO_UInt32 MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
-
-    std::vector<AmpIO*> BoardList;
-    std::vector<AmpIO_UInt32> BoardStatusList;
-    BoardList.push_back(new AmpIO(board1));
-    Port->AddBoard(BoardList[0]);
-    if (board2 < BoardIO::MAX_BOARDS) {
-        BoardList.push_back(new AmpIO(board2));
-        Port->AddBoard(BoardList[1]);
-    }
 
     bool allRev7 = true;
     BoardStatusList.clear();
@@ -304,10 +299,10 @@ int main(int argc, char** argv)
     }
 
     for (i = 0; i < 4; i++) {
-        for (j = 0; j < BoardList.size(); j++)
+        for (j = 0; j < numDisp; j++)
             BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
     }
-    for (j = 0; j < BoardList.size(); j++) {
+    for (j = 0; j < numDisp; j++) {
         BoardList[j]->WriteSafetyRelay(false);
         BoardList[j]->WritePowerEnable(false);
         BoardList[j]->WriteAmpEnable(0x0f, 0);
@@ -323,7 +318,9 @@ int main(int argc, char** argv)
     noecho();
     nodelay(stdscr, TRUE);
 
-    if (BoardList.size() > 1) {
+    int board1 = BoardList[0]->GetBoardId();
+    if (numDisp > 1) {
+       int board2 = BoardList[1]->GetBoardId();
        if (protocol == BasePort::PROTOCOL_BC_QRW)
            mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
        else
@@ -334,7 +331,7 @@ int main(int argc, char** argv)
     mvwprintw(stdscr, 2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
     mvwprintw(stdscr, 3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
 
-    unsigned int numAxes = (BoardList.size() > 1)?8:4;
+    unsigned int numAxes = (numDisp > 1) ? 8 : 4;
     for (i = 0; i < numAxes; i++) {
         mvwprintw(stdscr, 5, lm+8+i*13, "Axis %d", i);
     }
@@ -387,7 +384,7 @@ int main(int argc, char** argv)
     while ((c = getch()) != ESC_CHAR) {
 
         unsigned int startIndex = (curAxis == 0) ? 0 : curBoardIndex;
-        unsigned int endIndex = (curAxis == 0) ? BoardList.size() : curBoardIndex+1;
+        unsigned int endIndex = (curAxis == 0) ? numDisp : curBoardIndex+1;
 
         if (c == 'r') {
             Port->Reset();
@@ -487,11 +484,11 @@ int main(int argc, char** argv)
         else if (c == 'i') {
             if (curAxis == 0) {
                 bool anyAxisPowered = false;
-                for (j = 0; j < BoardList.size(); j++) {
+                for (j = 0; j < numDisp; j++) {
                     if (BoardList[j]->GetAmpEnableMask() != 0)
                         anyAxisPowered = true;
                 }
-                for (j = 0; j < BoardList.size(); j++) {
+                for (j = 0; j < numDisp; j++) {
                     if (anyAxisPowered) {
                         BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
                     }
@@ -507,7 +504,7 @@ int main(int argc, char** argv)
         }
         else if (c == '=') {
             if (curAxis == 0) {
-                for (j = 0; j < BoardList.size(); j++) {
+                for (j = 0; j < numDisp; j++) {
                     for (i = 0; i < 4; i++)
                         MotorCurrents[j][i] += 0x100;   // 0x100 is about 50 mA
                 }
@@ -518,7 +515,7 @@ int main(int argc, char** argv)
         }
         else if (c == '-') {
             if (curAxis == 0) {
-                for (j = 0; j < BoardList.size(); j++) {
+                for (j = 0; j < numDisp; j++) {
                     for (i = 0; i < 4; i++)
                         MotorCurrents[j][i] -= 0x100;   // 0x100 is about 50 mA
                 }
@@ -551,7 +548,7 @@ int main(int argc, char** argv)
             }
         }
         else if (c == 'z') {
-            for (j = 0; j < BoardList.size(); j++) {
+            for (j = 0; j < numDisp; j++) {
                 memset(statusStr1[j], ' ', STATUS_STR_LENGTH-1);
                 statusStr1[j][STATUS_STR_LENGTH-1] = 0;
                 memset(statusStr2[j], ' ', STATUS_STR_LENGTH-1);
@@ -582,14 +579,14 @@ int main(int argc, char** argv)
         if (!Port->IsOK()) continue;
 
         char nodeStr[2][3];
-        int node = Port->GetNodeId(board1);
+        int node = Port->GetNodeId(BoardList[0]->GetBoardId());
         if (node < BoardIO::MAX_BOARDS)
             sprintf(nodeStr[0], "%2d", node);
         else
             strcpy(nodeStr[0], "none");
 
-        if (BoardList.size() > 1) {
-            node = Port->GetNodeId(board2);
+        if (numDisp > 1) {
+            node = Port->GetNodeId(BoardList[1]->GetBoardId());
             if (node < BasePort::MAX_NODES)
                 sprintf(nodeStr[1], "%2d", node);
             else
@@ -603,14 +600,14 @@ int main(int argc, char** argv)
             if (startTime < 0.0) {
                 startTime = Amp1394_GetTime();
                 pcTime = 0.0;
-                for (j = 0; j < BoardList.size(); j++)
+                for (j = 0; j < numDisp; j++)
                     BoardList[j]->SetFirmwareTime(0.0);
             }
             else {
                 pcTime = Amp1394_GetTime()-startTime;
             }
         }
-        for (j = 0; j < BoardList.size(); j++) {
+        for (j = 0; j < numDisp; j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
                     mvwprintw(stdscr, 6, lm+7+(i+4*j)*13, "%07X",
@@ -690,14 +687,17 @@ int main(int argc, char** argv)
         Amp1394_Sleep(0.0005);  // 500 usec
     }
 
-    for (j = 0; j < BoardList.size(); j++) {
+    for (j = 0; j < numDisp; j++) {
         BoardList[j]->WritePowerEnable(false);      // Turn power off
         BoardList[j]->WriteAmpEnable(0x0f, 0x00);   // Turn power off
         BoardList[j]->WriteSafetyRelay(false);
-        Port->RemoveBoard(BoardList[j]->GetBoardId());
     }
 
     endwin();
+
+    for (j = 0; j < BoardList.size(); j++)
+        Port->RemoveBoard(BoardList[j]->GetBoardId());
+
     delete Port;
     // Process any data collection files (convert from binary to text)
     for (j = 1; j <= collectFileNum; j++) {
