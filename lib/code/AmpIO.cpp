@@ -623,6 +623,10 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
             encVelData[index].qtr1Overflow = true;
         if (encVelData[index].qtr5Period == encVelData[index].qtrPeriodMax)
             encVelData[index].qtr5Overflow = true;
+        // Qtr1 and Qtr5 direction are not recorded, so set them same as velDir;
+        // i.e., assume that there hasn't been a direction change.
+        encVelData[index].qtr1Dir = encVelData[index].velDir;
+        encVelData[index].qtr5Dir = encVelData[index].velDir;
     }
     else {  // V7+
         encVelData[index].clkPeriod = VEL_PERD;
