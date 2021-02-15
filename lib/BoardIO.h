@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -103,6 +103,9 @@ public:
 
     inline void ClearReadErrors() { numReadErrors = 0; }
     inline void ClearWriteErrors() { numWriteErrors = 0; }
+
+    // Returns FPGA clock period in seconds
+    virtual double GetFPGAClockPeriod(void) const = 0;
 };
 
 #endif // __BOARDIO_H__

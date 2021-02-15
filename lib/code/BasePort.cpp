@@ -15,6 +15,8 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
+#include <iostream>
+#include <iomanip>
 #include <stdio.h>
 #include <string>
 #include <algorithm>   // for std::max
@@ -24,6 +26,21 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
+void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr, bool newLine) const
+{
+    outStr << "Updates (usec): ";
+    for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
+        if (boardInfo[bnum].inUse) {
+            outStr << bnum << ": " << std::fixed << std::setprecision(2) << (boardInfo[bnum].updateTime*1e6)
+                   << (boardInfo[bnum].updateValid ? "   " : "*  ");
+        }
+    }
+    outStr << "Read start: " << std::fixed << std::setprecision(2) << (readStartTime*1e6)
+           << "  finish: " << (readFinishTime*1e6) << "  delta: " << ((readFinishTime-readStartTime)*1e6);
+    if (newLine)
+        outStr << std::endl;
+}
+
 BasePort::BasePort(int portNum, std::ostream &ostr):
         outStr(ostr),
         Protocol_(BasePort::PROTOCOL_SEQ_RW),
@@ -32,7 +49,6 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         IsNoBoardsBroadcastShorterWait_(true),
         IsAllBoardsRev7_(false),
         IsNoBoardsRev7_(false),
-        ReadSequence_(0),
         ReadErrorCounter_(0),
         PortNum(portNum),
         FwBusGeneration(0),
@@ -269,7 +285,7 @@ bool BasePort::AddBoard(BoardIO *board)
         max_board = id+1;
     // update BoardInUseMask_
     BoardInUseMask_ = (BoardInUseMask_ | (1 << id));
-
+    bcReadInfo.boardInfo[id].inUse = true;
     NumOfBoards_++;   // increment board counts
 
     return true;
@@ -289,6 +305,7 @@ bool BasePort::RemoveBoard(unsigned char boardId)
 
     // update BoardInuseMask_
     BoardInUseMask_ = (BoardInUseMask_ & (~(1 << boardId)));
+    bcReadInfo.boardInfo[boardId].inUse = false;
 
     BoardList[boardId] = 0;
     board->port = 0;
@@ -567,13 +584,14 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 
     bool rtRead = true;
     // sequence number from 16 bits 0 to 65535
-    ReadSequence_++;
-    if (ReadSequence_ == 65536) {
-        ReadSequence_ = 1;
+    bcReadInfo.readSequence++;
+    if (bcReadInfo.readSequence == 65536) {
+        bcReadInfo.readSequence = 1;
     }
 
-    if (!WriteBroadcastReadRequest(ReadSequence_)) {
-        outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = " << ReadSequence_ << std::endl;
+    if (!WriteBroadcastReadRequest(bcReadInfo.readSequence)) {
+        outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = " 
+               << bcReadInfo.readSequence << std::endl;
         OnNoneRead();
         return false;
     }
@@ -591,115 +609,89 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     if (IsNoBoardsRev7_)
         hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
     else
-        hubReadSize = readSize*NumOfBoards_;         // Rev 7: NumOfBoards * 29
+        hubReadSize = readSize*NumOfBoards_+1;         // Rev 7: NumOfBoards * 29 + 1
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
-    //memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
-
+    memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
     bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
-
     if (!ret) {
         SetReadInvalid();
         OnNoneRead();
         return false;
     }
 
+    if (IsAllBoardsRev7_) {
+        quadlet_t timingInfo = bswap_32(hubReadBuffer[hubReadSize-1]);
+        double clkPeriod = BoardList[HubBoard]->GetFPGAClockPeriod();
+        bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
+        bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
+    }
+
     quadlet_t *curPtr = hubReadBuffer;
-    unsigned boardMax = IsAllBoardsRev7_ ? NumOfBoards_ : max_board;
-    for (unsigned int boardNum = 0; boardNum < boardMax; boardNum++) {
-        unsigned int seq = (bswap_32(curPtr[0]) >> 16);
-        unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
-        quadlet_t statusQuad = bswap_32(curPtr[2]);
-        unsigned int numAxes = (statusQuad&0xf0000000)>>28;
-        unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
-        BoardIO *board = 0;
-        if (numAxes == 4) {
-            if (IsAllBoardsRev7_) {
-                // Should check against BoardInUseMask_
-                board = BoardList[thisBoard];
+    // Loop through all boards, processing the boards in use.
+    // Note that prior to Firmware Rev 7, we always read data for all 16 boards.
+    for (unsigned int boardNum = 0; boardNum < BoardIO::MAX_BOARDS; boardNum++) {
+        BoardIO *board = BoardList[boardNum];
+        if (bcReadInfo.boardInfo[boardNum].inUse && board) {
+            quadlet_t statusQuad = bswap_32(curPtr[2]);
+            unsigned int numAxes = (statusQuad&0xf0000000)>>28;
+            unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
+            bool thisOK = false;
+            if (numAxes != 4) {
+                outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
+                       << std::dec << std::endl;
+            }
+            else if (boardNum != thisBoard) {
+                outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting "
+                       << boardNum << ", found " << thisBoard << std::endl;
             }
             else {
-                board = BoardList[boardNum];
-                if (board) {
-                    if (board->GetBoardId() != thisBoard) {
-                        outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting " << static_cast<unsigned int>(board->GetBoardId())
-                               << ", found " << thisBoard << std::endl;
-                        board = 0;
-                    }
+                bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
+                if (IsAllBoardsRev7_) {
+                    unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
+                    double clkPeriod = board->GetFPGAClockPeriod();
+                    bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
+                    // Currently, not using updateValid (should be redundant with sequence check)
+                    bcReadInfo.boardInfo[boardNum].updateValid = (quad0_lsb&0x8000);
+                }
+                if (bcReadInfo.boardInfo[boardNum].sequence == bcReadInfo.readSequence) {
+                    thisOK = true;
+                }
+                else {
+                    outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
+                           << ", seq = " << bcReadInfo.boardInfo[boardNum].sequence
+                           << ", expected = " << bcReadInfo.readSequence
+                           << ", diff = " << (bcReadInfo.readSequence-bcReadInfo.boardInfo[boardNum].sequence)
+                           << std::endl;
                 }
             }
-        }
-        else {
-            outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad << std::dec << std::endl;
-        }
-        if (board) {
-            if (seq == ReadSequence_) {
-                board->SetReadValid(true);
+            board->SetReadValid(thisOK);
+            if (thisOK) {
                 board->SetReadData(curPtr+1);
-#if 0
-                if (IsAllBoardsRev7_) {
-                    outStr << "Board: " << thisBoard;
-                    if (quad0_lsb&0x8000)
-                        outStr << ", updated at time = ";
-                    else
-                        outStr << ", not updated, read time = ";
-                    outStr << ((quad0_lsb&0x3fff)/49.152) << " us" << std::endl;
-                }
-#endif
                 noneRead = false;
-                allOK = true; // PK TEMP
             }
             else {
-                outStr << "BasePort::ReadAllBoardsBroadcast: board " << thisBoard
-                       << ", seq = " << seq << ", expected = " << ReadSequence_;
-                if (IsAllBoardsRev7_) {
-                    if (quad0_lsb&0x8000)
-                        outStr << ", updated at time = ";
-                    else
-                        outStr << ", not updated, read time = ";
-                    outStr << ((quad0_lsb&0x3fff)/49.152) << " us";
-                }
-                outStr << std::endl;
-                board->SetReadValid(false);
-                allOK = false; // PK TEMP
+                allOK = false;
             }
+            curPtr += readSize;
         }
-        curPtr += readSize;
-    }
-
-#if 0
-    for (unsigned int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            unsigned int boardOffset = IsNoBoardsRev7_ ? (readSize*board) : (readSize*curIndex);
-            curIndex++;
-            unsigned int seq = (bswap_32(hubReadBuffer[boardOffset+0]) >> 16);
-            if (IsAllBoardsRev7_) {
-                // Sanity check on board number (from status register)
-                unsigned int thisBoard = (bswap_32(hubReadBuffer[boardOffset+2])&0x0f000000)>>24;
-                if (board != thisBoard)
-                    outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting " << board
-                           << ", found " << thisBoard << std::endl;
-            }
-
-            static int errorcounter = 0;
-            if (ReadSequence_ != seq) {
-                errorcounter++;
-                outStr << "BasePort::ReadAllBoardsBroadcast: block read error: counter = " << std::dec << errorcounter
-                       << ", read = " << seq
-                       << ", expected = " << ReadSequence_ << ", board =  " << (int)board << std::endl;
-            }
-            BoardList[board]->SetReadValid(ret);
-            if (ret) noneRead = false;  // also call SetReadData(&(hubReadBuffer[boardOffset+1]));
-            else allOK = false;
+        else if (IsNoBoardsRev7_) {
+            // Skip unused boards for firmware < 7
+            curPtr += readSize;
         }
     }
-#endif
 
     if (noneRead) {
         OnNoneRead();
     }
     if (!rtRead)
         outStr << "BasePort::ReadAllBoardsBroadcast: rtRead is false" << std::endl;
+
+#if 0
+    if (IsAllBoardsRev7_) {
+        bcReadInfo.PrintTiming(outStr);
+    }
+#endif
 
     return allOK;
 }

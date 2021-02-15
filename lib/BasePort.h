@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -82,6 +82,29 @@ public:
     //   PROTOCOL_BC_QRW      broadcast query, read, and write to/from all boards
     enum ProtocolType { PROTOCOL_SEQ_RW, PROTOCOL_SEQ_R_BC_W, PROTOCOL_BC_QRW };
 
+    // Information about broadcast read.
+    // With Firmware V7+, each FPGA starts a timer when it receives the broadcast query command
+    // sent by the host PC. The following times are relative to this timer.
+    struct BroadcastReadInfo {
+        unsigned int readSequence;    // The sequence number sent with the broadcast query command
+        double readStartTime;         // When the PC started reading the hub feedback data
+        double readFinishTime;        // When the PC finished reading the hub feedback data
+        struct BroadcastBoardInfo {   // For each board:
+            bool inUse;               //   Whether board is participating in broadcast read
+            unsigned int sequence;    //   The sequence number received (should be same as readSequence)
+            double updateTime;        //   When the hub feedback data was updated
+            double updateValid;       //   If an update occurred since the broadcast query command
+
+            BroadcastBoardInfo() : inUse(false), sequence(0), updateTime(0.0), updateValid(false) {}
+            ~BroadcastBoardInfo() {}
+        };
+        BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
+
+        BroadcastReadInfo() : readSequence(0), readStartTime(0.0), readFinishTime(0.0) {}
+        ~BroadcastReadInfo() {}
+        void PrintTiming(std::ostream &outStr, bool newLine = true) const;
+    };
+
 protected:
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
@@ -91,7 +114,6 @@ protected:
     bool IsNoBoardsBroadcastShorterWait_;    // TRUE if no nodes support the shorter wait
     bool IsAllBoardsRev7_;                   // TRUE if all boards are Firmware Rev 7
     bool IsNoBoardsRev7_;                    // TRUE if no boards are Firmware Rev 7
-    unsigned int ReadSequence_;   // sequence number for WABB
 
     size_t ReadErrorCounter_;
 
@@ -122,6 +144,9 @@ protected:
     // For debugging
     bool rtWrite;
     bool rtRead;
+
+    // Information about broadcast read
+    BroadcastReadInfo bcReadInfo;
 
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
