@@ -686,7 +686,8 @@ int main(int argc, char** argv)
             BasePort::BroadcastReadInfo bcReadInfo;
             bcReadInfo = Port->GetBroadcastReadInfo();
             std::stringstream timingStr;
-            bcReadInfo.PrintTiming(timingStr);
+            bcReadInfo.PrintTiming(timingStr, false);  // false --> no std::endl
+            timingStr << "   ";
             mvwprintw(stdscr, STATUS_LINE+6, lm, timingStr.str().c_str());
         }
         Port->WriteAllBoards();
