@@ -265,6 +265,10 @@ public:
     unsigned long GetFirmwareVersion(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
 
+    // Get BroadcastReadInfo
+    BroadcastReadInfo GetBroadcastReadInfo(void) const
+    { return bcReadInfo; }
+
     // Return string version of PortType
     static std::string PortTypeString(PortType portType);
 

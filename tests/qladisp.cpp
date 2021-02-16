@@ -282,7 +282,8 @@ int main(int argc, char** argv)
         std::cerr << "Setting protocol to broadcast read/write" << std::endl;
     else if (protocol == BasePort::PROTOCOL_SEQ_R_BC_W)
         std::cerr << "Setting protocol to broadcast write" << std::endl;
-    Port->SetProtocol(protocol);
+    if (!Port->SetProtocol(protocol))
+        protocol = Port->GetProtocol();  // on failure, get current protocol
 
     // Number of boards to display (currently 1 or 2)
     unsigned int numDisp = (BoardList.size() >= 2) ? 2 : 1;
@@ -370,7 +371,13 @@ int main(int argc, char** argv)
 
     unsigned int loop_cnt = 0;
     const int STATUS_LINE = fullvel ? 15 : 13;
-    const int DEBUG_START_LINE = fullvel ? (showTime ? 23 : 22) : (showTime ? 20 : 19);
+    int timeLines = 0;   // how many lines for timing info
+    if (showTime) {
+        timeLines++;
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            timeLines++;
+    }
+    const int DEBUG_START_LINE = fullvel ? (22+timeLines) : (19+timeLines);
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
@@ -674,8 +681,14 @@ int main(int argc, char** argv)
             }
             loop_cnt++;
         }
-        if (showTime)
+        if (showTime) {
             mvwprintw(stdscr, STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
+            BasePort::BroadcastReadInfo bcReadInfo;
+            bcReadInfo = Port->GetBroadcastReadInfo();
+            std::stringstream timingStr;
+            bcReadInfo.PrintTiming(timingStr);
+            mvwprintw(stdscr, STATUS_LINE+6, lm, timingStr.str().c_str());
+        }
         Port->WriteAllBoards();
 
         mvwprintw(stdscr, 1, lm+42, "Gen: %d",  Port->GetBusGeneration());
