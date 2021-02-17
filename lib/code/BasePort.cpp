@@ -620,13 +620,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    if (IsAllBoardsRev7_) {
-        quadlet_t timingInfo = bswap_32(hubReadBuffer[hubReadSize-1]);
-        double clkPeriod = BoardList[HubBoard]->GetFPGAClockPeriod();
-        bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
-        bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
-    }
-
+    double clkPeriod = 0.0;  // will be assigned below
     quadlet_t *curPtr = hubReadBuffer;
     // Loop through all boards, processing the boards in use.
     // Note that prior to Firmware Rev 7, we always read data for all 16 boards.
@@ -649,7 +643,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
                 if (IsAllBoardsRev7_) {
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
-                    double clkPeriod = board->GetFPGAClockPeriod();
+                    clkPeriod = board->GetFPGAClockPeriod();
                     bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
                     // Currently, not using updateValid (should be redundant with sequence check)
                     bcReadInfo.boardInfo[boardNum].updateValid = (quad0_lsb&0x8000);
@@ -679,6 +673,12 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             // Skip unused boards for firmware < 7
             curPtr += readSize;
         }
+    }
+
+    if (IsAllBoardsRev7_) {
+        quadlet_t timingInfo = bswap_32(hubReadBuffer[hubReadSize-1]);
+        bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
+        bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
     }
 
     if (noneRead) {
