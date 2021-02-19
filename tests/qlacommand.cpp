@@ -17,12 +17,13 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <stdlib.h> // for atoi
-#include <unistd.h> // for usleep
 #include <iostream>
 #include <vector>
+#include <string>
 
 #include <PortFactory.h>
 #include <AmpIO.h>
+#include "Amp1394Time.h"
 
 int main(int argc, char** argv)
 {
@@ -84,7 +85,7 @@ int main(int argc, char** argv)
         } else if (command == "reboot") {
             boardList[j]->WriteReboot();
         }
-        usleep(40000); // sleep 40 ms
+        Amp1394_Sleep(0.04); // sleep 40 ms
     }
 
     delete port;
