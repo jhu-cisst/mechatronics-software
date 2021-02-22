@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -38,6 +38,14 @@ http://www.cisst.org/cisst/license.txt.
 typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1];
 #endif
 
+// to go through address and find interface name
+#include <sys/types.h>
+#include <ifaddrs.h>
+
+// to query MTU setting
+#include <sys/ioctl.h>
+#include <net/if.h>
+
 struct SocketInternals {
     std::ostream &outStr;
 #ifdef _MSC_VER
@@ -45,6 +53,9 @@ struct SocketInternals {
 #else
     int    SocketFD;
 #endif
+    std::string InterfaceName;
+    int InterfaceMTU;
+
     struct sockaddr_in ServerAddr;
     struct sockaddr_in ServerAddrBroadcast;
 
@@ -95,6 +106,36 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
         outStr << "Failed to open UDP socket" << std::endl;
         return false;
     }
+
+    // Get interface name by iterating through all interfaces and take
+    // the first one that matches 169.254.  This won't work if we have
+    // multiple link local IPs.
+    struct ifaddrs *addrs, *iap;
+    struct sockaddr_in *sa;
+    char buf[32];
+
+    getifaddrs(&addrs);
+    for (iap = addrs; iap != NULL; iap = iap->ifa_next) {
+        if (iap->ifa_addr && (iap->ifa_flags & IFF_UP) && iap->ifa_addr->sa_family == AF_INET) {
+            sa = (struct sockaddr_in *)(iap->ifa_addr);
+            inet_ntop(iap->ifa_addr->sa_family, (void *)&(sa->sin_addr), buf, sizeof(buf));
+            if (strncmp("169.254", buf, 7) == 0) {
+                InterfaceName = iap->ifa_name;
+                iap->ifa_next = NULL; // interrupt loop
+            }
+        }
+    }
+    freeifaddrs(addrs);
+
+    // Check MTU size
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, InterfaceName.c_str());
+    if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
+        InterfaceMTU = ifr.ifr_mtu;
+    }
+
+    outStr << "Using interface: " << InterfaceName << ", MTU: " << InterfaceMTU << std::endl;
 
     // Enable broadcasts
 #ifdef _MSC_VER
@@ -332,12 +373,12 @@ unsigned int EthUdpPort::GetPrefixOffset(MsgType msg) const
 
 unsigned int EthUdpPort::GetMaxReadDataSize(void) const
 {
-    return ETH_UDP_MAX_SIZE - GetPrefixOffset(RD_FW_BDATA) - GetReadPostfixSize();
+    return sockPtr->InterfaceMTU - ETH_UDP_HEADER - GetPrefixOffset(RD_FW_BDATA) - GetReadPostfixSize();
 }
 
 unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
 {
-    return ETH_UDP_MAX_SIZE - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
+    return sockPtr->InterfaceMTU - ETH_UDP_HEADER - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
 }
 
 bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
