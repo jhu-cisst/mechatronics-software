@@ -54,7 +54,8 @@ void Amp1394Console::Print(int row, int col, const char *cstr, ...)
 {
     va_list args;
     va_start(args, cstr);
-    vwprintw(stdstr, row, col, cstr, args);
+    wmove(stdscr, row, col);
+    vwprintw(stdscr, cstr, args);
     va_end(args);
 }
 
