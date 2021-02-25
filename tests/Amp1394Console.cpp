@@ -15,15 +15,19 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
+#include <stdio.h>
+#include <string.h>
 #include <iostream>
-#ifdef _MSC_VER
 #include <cstdarg>
+#ifdef _MSC_VER
 #include <conio.h>
 #include <Windows.h>
 #else
 #include <unistd.h>
 #ifdef Amp1394_HAS_CURSES
 #include <curses.h>
+#else
+#include <termios.h>
 #endif
 #endif
 
@@ -77,9 +81,15 @@ bool Amp1394Console::GetString(char *str, int n)
 #else
 
 // Implementation using VT-100 escape codes
+#ifndef _MSC_VER
+struct Amp1394Console::ConsoleInternals {
+    struct termios savedAttr;
+};
+#endif
 
 bool Amp1394Console::Init()
 {
+#ifdef _MSC_VER
     HANDLE stdscr = GetStdHandle(STD_OUTPUT_HANDLE);
     if (stdscr == INVALID_HANDLE_VALUE) {
         std::cerr << "Could not get Std handle" << std::endl;
@@ -95,6 +105,27 @@ bool Amp1394Console::Init()
         std::cerr << "Failed to set VT100 mode" << std::endl;
         return false;
     }
+#else
+    Internals = new Amp1394Console::ConsoleInternals;
+    struct termios termAttr;
+    tcgetattr(STDIN_FILENO, &termAttr);
+    Internals->savedAttr = termAttr;
+    if (noBlock) {
+        termAttr.c_lflag &= ~ICANON;
+        termAttr.c_cc[VMIN] = 0;
+        termAttr.c_cc[VTIME] = 0;
+    }
+    else
+        termAttr.c_lflag |= ICANON;
+    if (noEcho)
+        termAttr.c_lflag &= ~ECHO;
+    else
+        termAttr.c_lflag |= ECHO;
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &termAttr) != 0) {
+        std::cerr << "Failed to set terminal attributes" << std::endl;
+        return false;
+    }
+#endif
     if (noEcho)
         printf("\x1b[?25l");  // Hide cursor
     printf("\x1b[2J");        // Erase screen
@@ -104,9 +135,18 @@ bool Amp1394Console::Init()
 void Amp1394Console::End()
 {
     if (isOk) {
+        printf("\x1b[0;0H");  // Move cursor to (0,0)
         printf("\x1b[!p");    // Soft reset (restore defaults)
         printf("\x1b[2J");    // Erase screen
     }
+#ifndef _MSC_VER
+    if (Internals) {
+        // Restore settings
+        tcsetattr(STDIN_FILENO, TCSANOW, &(Internals->savedAttr));
+        delete Internals;
+        Internals = 0;
+    }
+#endif
     isOk = false;
 }
 
@@ -114,7 +154,6 @@ void Amp1394Console::Print(int row, int col, const char *cstr, ...)
 {
     va_list args;
     va_start(args, cstr);
-    const char ESC_CHAR = 0x1b;
     printf("\x1b[%d;%dH", row, col);
     vprintf(cstr, args);
     va_end(args);
@@ -126,10 +165,14 @@ void Amp1394Console::Refresh()
 
 int Amp1394Console::GetChar()
 {
+#ifdef _MSC_VER
     int c = -1;   // ERR in curses
     // If blocking, or if key pressed, call _getch
     if (!noBlock || _kbhit())
         c = noEcho ? _getch() : _getche();
+#else
+    int c = getchar();
+#endif
     return c;
 }
 

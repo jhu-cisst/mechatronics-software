@@ -25,11 +25,13 @@ class Amp1394Console {
     bool isOk;
     bool noEcho;   // Whether to echo input characters and show cursor
     bool noBlock;  // Whether character input is blocking
+    struct ConsoleInternals;
+    ConsoleInternals *Internals;
 public:
     enum { FLAG_DEFAULT = 0x00, FLAG_ECHO = 0x01, FLAG_BLOCKING = 0x02 };
 
     Amp1394Console(unsigned int flags = FLAG_DEFAULT) :
-        isOk(false), noEcho(!(flags&FLAG_ECHO)), noBlock(!(flags&FLAG_BLOCKING))
+        isOk(false), noEcho(!(flags&FLAG_ECHO)), noBlock(!(flags&FLAG_BLOCKING)), Internals(0)
     { isOk = Init(); }
     ~Amp1394Console()
     { End(); }
