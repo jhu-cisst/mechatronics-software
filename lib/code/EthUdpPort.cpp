@@ -59,6 +59,8 @@ struct SocketInternals {
     struct sockaddr_in ServerAddr;
     struct sockaddr_in ServerAddrBroadcast;
 
+    bool FirstRun;
+
     SocketInternals(std::ostream &ostr);
     ~SocketInternals();
 
@@ -75,7 +77,7 @@ struct SocketInternals {
     int FlushRecv(void);
 };
 
-SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET)
+SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET), FirstRun(true)
 {
     memset(&ServerAddr, 0, sizeof(ServerAddr));
     memset(&ServerAddrBroadcast, 0, sizeof(ServerAddrBroadcast));
@@ -107,36 +109,6 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
         return false;
     }
 
-    // Get interface name by iterating through all interfaces and take
-    // the first one that matches 169.254.  This won't work if we have
-    // multiple link local IPs.
-    struct ifaddrs *addrs, *iap;
-    struct sockaddr_in *sa;
-    char buf[32];
-
-    getifaddrs(&addrs);
-    for (iap = addrs; iap != NULL; iap = iap->ifa_next) {
-        if (iap->ifa_addr && (iap->ifa_flags & IFF_UP) && iap->ifa_addr->sa_family == AF_INET) {
-            sa = (struct sockaddr_in *)(iap->ifa_addr);
-            inet_ntop(iap->ifa_addr->sa_family, (void *)&(sa->sin_addr), buf, sizeof(buf));
-            if (strncmp("169.254", buf, 7) == 0) {
-                InterfaceName = iap->ifa_name;
-                iap->ifa_next = NULL; // interrupt loop
-            }
-        }
-    }
-    freeifaddrs(addrs);
-
-    // Check MTU size
-    struct ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
-    strcpy(ifr.ifr_name, InterfaceName.c_str());
-    if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
-        InterfaceMTU = ifr.ifr_mtu;
-    }
-
-    outStr << "Using interface: " << InterfaceName << ", MTU: " << InterfaceMTU << std::endl;
-
     // Enable broadcasts
 #ifdef _MSC_VER
     char broadcastEnable = 1;
@@ -146,6 +118,11 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
     if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
         outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
         return false;
+    }
+
+    int packetInfo = 1;
+    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, &packetInfo, sizeof(packetInfo)) != 0) {;
+        outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
     }
 
     // Determine the broadcast address. For simplicity, we assume that this is a Class A, B, or C network,
@@ -244,10 +221,70 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
 #endif
     }
     else if (retval > 0) {
-        //struct sockaddr_in fromAddr;
-        //socklen_t length = sizeof(fromAddr);
-        //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
-        retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+
+        // FirstRun = false;
+
+        if (FirstRun) {
+
+            struct iovec vec;
+            vec.iov_base = bufrecv;
+            vec.iov_len = maxlen;
+
+            const size_t CONTROL_DATA_SIZE = 1000;  // THIS NEEDS TO BE BIG ENOUGH.
+            char controldata[CONTROL_DATA_SIZE];
+            struct msghdr hdr = {};
+            sockaddr_storage addrRemote = {};
+
+            hdr.msg_name = &addrRemote;
+            hdr.msg_namelen = sizeof(addrRemote);
+            hdr.msg_iov = &vec;
+            hdr.msg_iovlen = 1;
+            hdr.msg_control = controldata;
+            hdr.msg_controllen = CONTROL_DATA_SIZE;
+
+            retval = recvmsg(SocketFD, &hdr, 0);
+
+            int interface_index = -1;
+            // iterate through all the control headers
+            for (struct cmsghdr * cmsg = CMSG_FIRSTHDR(&hdr);
+                 cmsg != NULL;
+                 cmsg = CMSG_NXTHDR(&hdr, cmsg)) {
+                // ignore the control headers that don't match what we want
+                if (cmsg->cmsg_level != IPPROTO_IP ||
+                    cmsg->cmsg_type != IP_PKTINFO) {
+                    continue;
+                }
+                // struct in_pktinfo * pi = CMSG_DATA(cmsg)->ipi;
+                // at this point, peeraddr is the source sockaddr
+                // pi->ipi_spec_dst is the destination in_addr
+                interface_index = ((struct in_pktinfo*)CMSG_DATA(cmsg))->ipi_ifindex;
+            }
+
+            // should check if index != -1
+
+            // get interface name and MTU
+            char ifName[256];
+            if (if_indextoname(interface_index, ifName) == NULL) {
+                outStr << "Recv: failed if_indextoname: " << strerror(errno) << std::endl;
+            }
+            InterfaceName = ifName;
+
+            struct ifreq ifr;
+            memset(&ifr, 0, sizeof(ifr));
+            strcpy(ifr.ifr_name, InterfaceName.c_str());
+            if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
+                InterfaceMTU = ifr.ifr_mtu;
+            }
+
+            outStr << "Using interface " << InterfaceName << " (" << interface_index << "), MTU: " << InterfaceMTU << std::endl;
+
+            FirstRun = false;
+        } else {
+            //struct sockaddr_in fromAddr;
+            //socklen_t length = sizeof(fromAddr);
+            //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
+            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+        }
         if (retval == SOCKET_ERROR) {
 #ifdef _MSC_VER
             outStr << "Recv: failed to receive: " << WSAGetLastError() << std::endl;
