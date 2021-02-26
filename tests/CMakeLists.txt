@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -15,28 +15,32 @@ project(Amp1394Tests)
 include_directories(${Amp1394_INCLUDE_DIR})
 link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 
-if (WIN32)
-  message ("Cannot compile curses based test programs for Amp1394 on Windows")
-else (WIN32)
-  find_package (Curses)
-  if (CURSES_FOUND)
+set (CONSOLE_LIBRARIES "")
 
-    include_directories (${CURSES_INCLUDE_DIR})
+if (NOT WIN32)
+  option (Amp1394_HAS_CURSES "Build Amp1394 test programs with curses (OFF --> VT100 mode)" ON)
 
-    add_executable(qladisp qladisp.cpp)
-    target_link_libraries(qladisp ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES} ${CURSES_LIBRARIES})
+  if (Amp1394_HAS_CURSES)
+    find_package (Curses)
+    if (CURSES_FOUND)
+      add_definitions(-DAmp1394_HAS_CURSES)
+      include_directories (${CURSES_INCLUDE_DIR})
+      set (CONSOLE_LIBRARIES ${CONSOLE_LIBRARIES} ${CURSES_LIBRARIES})
+    else (CURSES_FOUND)
+      message ("Cannot find Curses library, changing to VT100 mode")
+    endif (CURSES_FOUND)
+  endif (Amp1394_HAS_CURSES)
+endif (NOT WIN32)
 
-    add_executable(qlatest qlatest.cpp)
-    target_link_libraries(qlatest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES} ${CURSES_LIBRARIES})
+add_executable(qladisp qladisp.cpp Amp1394Console.h Amp1394Console.cpp)
+target_link_libraries(qladisp ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES} ${CONSOLE_LIBRARIES})
 
-    install (TARGETS qladisp qlatest
-             COMPONENT Amp1394-utils
-             RUNTIME DESTINATION bin)
+add_executable(qlatest qlatest.cpp Amp1394Console.h Amp1394Console.cpp)
+target_link_libraries(qlatest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES} ${CONSOLE_LIBRARIES})
 
-  else (CURSES_FOUND)
-    message ("Cannot compile curses based test programs for Amp1394, make sure you have libcurses dev installed")
-  endif (CURSES_FOUND)
-endif (WIN32)
+install (TARGETS qladisp qlatest
+         COMPONENT Amp1394-utils
+         RUNTIME DESTINATION bin)
 
 if (Amp1394_HAS_RAW1394)
   add_executable(fwPortTest fwPortTest.cpp)

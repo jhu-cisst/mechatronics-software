@@ -30,8 +30,6 @@ http://www.cisst.org/cisst/license.txt.
  ******************************************************************************/
 
 #include <stdlib.h>
-#include <unistd.h>
-#include <curses.h>
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -41,7 +39,7 @@ http://www.cisst.org/cisst/license.txt.
 #include "PortFactory.h"
 #include "AmpIO.h"
 #include "Amp1394Time.h"
-
+#include "Amp1394Console.h"
 
 /*!
  \brief Increment encoder counts
@@ -86,10 +84,10 @@ bool CollectCB(quadlet_t *buffer, short nquads, unsigned short readSize)
 {
     collectFile.write(reinterpret_cast<const char *>(buffer), nquads*sizeof(quadlet_t));
     if (isCollecting)
-        mvwprintw(stdscr, 1, 76, "%4d,%4u", nquads, readSize);
+        Amp1394Console::Print(1, 76, "%4d,%4u", nquads, readSize);
     else {
         collectFile.close();
-        mvwprintw(stdscr, 1, 76, "         ");
+        Amp1394Console::Print(1, 76, "         ");
     }
     return true;
 }
@@ -313,45 +311,45 @@ int main(int argc, char** argv)
 
     bool watchdog_on = false;
 
-    initscr();
-    cbreak();
-    keypad(stdscr, TRUE);
-    noecho();
-    nodelay(stdscr, TRUE);
+    Amp1394Console console;
+    if (!console.IsOK()) {
+        std::cerr << "Failed to initialize console" << std::endl;
+        return -1;
+    }
 
     int board1 = BoardList[0]->GetBoardId();
     if (numDisp > 1) {
        int board2 = BoardList[1]->GetBoardId();
        if (protocol == BasePort::PROTOCOL_BC_QRW)
-           mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
+           console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
        else
-           mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+           console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
     } else {
-        mvwprintw(stdscr, 1, lm, "Sensor Feedback for Board %d", board1);
+        console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
-    mvwprintw(stdscr, 2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
-    mvwprintw(stdscr, 3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
+    console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
+    console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
 
     unsigned int numAxes = (numDisp > 1) ? 8 : 4;
     for (i = 0; i < numAxes; i++) {
-        mvwprintw(stdscr, 5, lm+8+i*13, "Axis %d", i);
+        console.Print(5, lm+8+i*13, "Axis %d", i);
     }
-    mvwprintw(stdscr, 6, lm, "Enc:");
-    mvwprintw(stdscr, 7, lm, "Pot:");
-    mvwprintw(stdscr, 8, lm, "Vel:");
-    mvwprintw(stdscr, 9, lm, "Cur:");
-    mvwprintw(stdscr, 10, lm, "DAC:");
+    console.Print(6, lm, "Enc:");
+    console.Print(7, lm, "Pot:");
+    console.Print(8, lm, "Vel:");
+    console.Print(9, lm, "Cur:");
+    console.Print(10, lm, "DAC:");
     if (fullvel) {
         if (allRev7) {
-            mvwprintw(stdscr, 11, lm, "Qtr1:");
-            mvwprintw(stdscr, 12, lm, "Qtr5:");
-            mvwprintw(stdscr, 13, lm, "Run:");
+            console.Print(11, lm, "Qtr1:");
+            console.Print(12, lm, "Qtr5:");
+            console.Print(13, lm, "Run:");
         }
         else
-            mvwprintw(stdscr, 11, lm, "Acc:");
+            console.Print(11, lm, "Acc:");
     }
 
-    wrefresh(stdscr);
+    console.Refresh();
 
     unsigned char dig_out = 0x0f;
     unsigned char collect_axis = 1;
@@ -383,12 +381,13 @@ int main(int argc, char** argv)
     int c;
 
     if (showTime)
-        mvwprintw(stdscr, STATUS_LINE+5, lm, "Time (s):");
+        console.Print(STATUS_LINE+5, lm, "Time (s):");
     double startTime = -1.0;   // indicates that startTime not yet set
     double pcTime = 0.0;
 
     // control loop
-    while ((c = getch()) != ESC_CHAR) {
+    while ((c = console.GetChar()) != ESC_CHAR)
+    {
 
         unsigned int startIndex = (curAxis == 0) ? 0 : curBoardIndex;
         unsigned int endIndex = (curAxis == 0) ? numDisp : curBoardIndex+1;
@@ -535,7 +534,7 @@ int main(int argc, char** argv)
             int collect_board = (collect_axis <= 4) ? 0 : 1;
             if (BoardList[collect_board]->IsCollecting()) {
                 BoardList[collect_board]->DataCollectionStop();
-                mvwprintw(stdscr, 1, 62, "             ");
+                console.Print(1, 62, "             ");
                 if (collect_axis > collectFileNum)
                     collectFileNum = collect_axis;
                 collect_axis = (collect_axis == numAxes) ? 1 : collect_axis+1;
@@ -550,7 +549,7 @@ int main(int argc, char** argv)
                 unsigned char collect_chan = collect_axis-4*collect_board;
                 if (BoardList[collect_board]->DataCollectionStart(collect_chan, CollectCB)) {
                     isCollecting = true;
-                    mvwprintw(stdscr, 1, 62, "Collecting %d:", collect_axis);
+                    console.Print(1, 62, "Collecting %d:", collect_axis);
                 }
             }
         }
@@ -562,7 +561,7 @@ int main(int argc, char** argv)
                 statusStr2[j][STATUS_STR_LENGTH-1] = 0;
                 BoardList[j]->ClearReadErrors();
                 BoardList[j]->ClearWriteErrors();
-                mvwprintw(stdscr, STATUS_LINE+4, lm+45+58*j, "            ");
+                console.Print(STATUS_LINE+4, lm+45+58*j, "            ");
             }
         }
 
@@ -572,11 +571,11 @@ int main(int argc, char** argv)
             memset(line, ' ', sizeof(line)-1);
             line[sizeof(line)-1] = 0;
             for (i = cur_line; i < last_debug_line; i++)
-                mvwprintw(stdscr, i, lm, line);
+                console.Print(i, lm, line);
             while (!debugStream.eof()) {
                 std::string stringLine;
                 std::getline(debugStream, stringLine);
-                mvwprintw(stdscr, cur_line++, lm, stringLine.c_str());
+                console.Print(cur_line++, lm, stringLine.c_str());
             }
             debugStream.clear();
             debugStream.str("");
@@ -617,24 +616,24 @@ int main(int argc, char** argv)
         for (j = 0; j < numDisp; j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
-                    mvwprintw(stdscr, 6, lm+7+(i+4*j)*13, "%07X",
+                    console.Print(6, lm+7+(i+4*j)*13, "%07X",
                               BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
-                    mvwprintw(stdscr, 7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
+                    console.Print(7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
-                        mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
+                        console.Print(8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
                     else {
                         BoardList[j]->GetEncoderVelocityData(i, encVelData);
-                        mvwprintw(stdscr, 8, lm+6+(i+4*j)*13, "%08X", encVelData.velPeriod);
+                        console.Print(8, lm+6+(i+4*j)*13, "%08X", encVelData.velPeriod);
                     }
-                    mvwprintw(stdscr, 9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
+                    console.Print(9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
                     if (fullvel) {
                         if (allRev7) {
-                            mvwprintw(stdscr, 11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
-                            mvwprintw(stdscr, 12, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
-                            mvwprintw(stdscr, 13, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
+                            console.Print(11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
+                            console.Print(12, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
+                            console.Print(13, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
                         }
                         else
-                            mvwprintw(stdscr, 11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                            console.Print(11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
                     }
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
@@ -644,22 +643,22 @@ int main(int argc, char** argv)
                     BoardStatusList[j] = status;
                     UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status);
                 }
-                mvwprintw(stdscr, STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
+                console.Print(STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
                           status, BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
-                mvwprintw(stdscr, STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
+                console.Print(STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
                           statusStr1[j],
                           BoardList[j]->GetNegativeLimitSwitches(),
                           BoardList[j]->GetPositiveLimitSwitches(),
                           BoardList[j]->GetHomeSwitches());
-                mvwprintw(stdscr, STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
+                console.Print(STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
                           statusStr2[j],
                           BoardList[j]->GetEncoderChannelA(),
                           BoardList[j]->GetEncoderChannelB(),
                           BoardList[j]->GetEncoderIndex());
 
-                mvwprintw(stdscr, STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
-                mvwprintw(stdscr, STATUS_LINE+4, lm+14+58*j, "Temp:  %02X    %02X",
+                console.Print(STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
+                console.Print(STATUS_LINE+4, lm+14+58*j, "Temp:  %02X    %02X",
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
                 if (loop_cnt > 500) {
@@ -669,35 +668,35 @@ int main(int argc, char** argv)
                     }
                 }
             }
-            mvwprintw(stdscr, STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
+            console.Print(STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
                       BoardList[j]->GetReadErrors(),
                       BoardList[j]->GetWriteErrors());
             if (showTime)
-                mvwprintw(stdscr, STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
+                console.Print(STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
                           pcTime-BoardList[j]->GetFirmwareTime());
             for (i = 0; i < 4; i++) {
-                mvwprintw(stdscr, 10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
+                console.Print(10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
             loop_cnt++;
         }
         if (showTime) {
-            mvwprintw(stdscr, STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
+            console.Print(STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
             BasePort::BroadcastReadInfo bcReadInfo;
             bcReadInfo = Port->GetBroadcastReadInfo();
             std::stringstream timingStr;
             bcReadInfo.PrintTiming(timingStr, false);  // false --> no std::endl
             timingStr << "   ";
-            mvwprintw(stdscr, STATUS_LINE+6, lm, timingStr.str().c_str());
+            console.Print(STATUS_LINE+6, lm, timingStr.str().c_str());
         }
         Port->WriteAllBoards();
 
-        mvwprintw(stdscr, 1, lm+42, "Gen: %d",  Port->GetBusGeneration());
-        mvwprintw(stdscr, 1, lm+54, "Axis: %4s", axisString);
-        mvwprintw(stdscr, 1, lm+70, "dt: %.3f",  (1.0 / 49125.0) * maxTime);
-        mvwprintw(stdscr, 1, lm+85, "Ct: %8u", loop_cnt++);
+        console.Print(1, lm+42, "Gen: %d",  Port->GetBusGeneration());
+        console.Print(1, lm+54, "Axis: %4s", axisString);
+        console.Print(1, lm+70, "dt: %.3f",  (1.0 / 49125.0) * maxTime);
+        console.Print(1, lm+85, "Ct: %8u", loop_cnt++);
 
-        wrefresh(stdscr);
+        console.Refresh();
         Amp1394_Sleep(0.0005);  // 500 usec
     }
 
@@ -707,7 +706,7 @@ int main(int argc, char** argv)
         BoardList[j]->WriteSafetyRelay(false);
     }
 
-    endwin();
+    console.End();
 
     for (j = 0; j < BoardList.size(); j++)
         Port->RemoveBoard(BoardList[j]->GetBoardId());
