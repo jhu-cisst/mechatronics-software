@@ -50,10 +50,12 @@ int main(int argc, char** argv)
     // check that command is supported before creating anything
     if (! ((command == "open-relays")
            || (command == "close-relays")
-           || (command == "reboot"))) {
+           || (command == "reboot")
+           || (command == "reset-eth")
+           )) {
         std::cerr << "Invalid command \"" << command
-                  << "\".  Supported commands: `qlacommand -c {open-relays,close-relays,reboot}`" << std::endl
-                  << "Port can be specified using `-p`: -pupd, -pupd:X.X.X.X, -pfw, -pfw:X" << std::endl;  
+                  << "\".  Supported commands: `qlacommand -c {open-relays,close-relays,reboot,reset-eth}`" << std::endl
+                  << "Port can be specified using `-p`: -pupd, -pupd:X.X.X.X, -pfw, -pfw:X" << std::endl;
         return -1;
     }
 
@@ -84,8 +86,9 @@ int main(int argc, char** argv)
             boardList[j]->WriteSafetyRelay(true);
         } else if (command == "reboot") {
             boardList[j]->WriteReboot();
+        } else if (command == "reset-eth") {
+            boardList[j]->ResetKSZ8851();
         }
-        Amp1394_Sleep(0.04); // sleep 40 ms
     }
 
     delete port;
