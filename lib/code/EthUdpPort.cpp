@@ -270,7 +270,7 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
 
             // get interface name and MTU
             char ifName[256];
-            if (if_indextoname(interface_index, ifName) == NULL) {
+            if (if_indextoname(InterfaceIndex, ifName) == NULL) {
                 outStr << "Recv: failed if_indextoname: " << strerror(errno) << std::endl;
             }
             InterfaceName = ifName;
