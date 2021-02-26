@@ -25,7 +25,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #define WINSOCKVERSION MAKEWORD(2,2)
-#else
+#else // Linux, Mac
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -36,7 +36,6 @@ http://www.cisst.org/cisst/license.txt.
 // Following assertion checks that sizeof(struct in_addr) is equal to sizeof(unsigned long).
 // In C++11, could instead use static_assert.
 typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1];
-#endif
 
 // to go through address and find interface name
 #include <sys/types.h>
@@ -46,6 +45,8 @@ typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1
 #include <sys/ioctl.h>
 #include <net/if.h>
 
+#endif
+
 struct SocketInternals {
     std::ostream &outStr;
 #ifdef _MSC_VER
@@ -53,6 +54,7 @@ struct SocketInternals {
 #else
     int    SocketFD;
 #endif
+    int InterfaceIndex;
     std::string InterfaceName;
     int InterfaceMTU;
 
@@ -112,15 +114,16 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
     // Enable broadcasts
 #ifdef _MSC_VER
     char broadcastEnable = 1;
+    char packetInfo = 1;
 #else
     int broadcastEnable = 1;
+    int packetInfo = 1;
 #endif
     if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
         outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
         return false;
     }
 
-    int packetInfo = 1;
     if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, &packetInfo, sizeof(packetInfo)) != 0) {;
         outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
     }
@@ -222,10 +225,13 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
     }
     else if (retval > 0) {
 
-        // FirstRun = false;
-
         if (FirstRun) {
-
+#ifdef _MSC_VER
+            // not implemented yet
+            InterfaceIndex = 0;
+            InterfaceName = "undefined";
+            InterfaceMTU = ETH_UDP_MAX_SIZE;
+#else
             struct iovec vec;
             vec.iov_base = bufrecv;
             vec.iov_len = maxlen;
@@ -244,7 +250,7 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
 
             retval = recvmsg(SocketFD, &hdr, 0);
 
-            int interface_index = -1;
+            InterfaceIndex = -1;
             // iterate through all the control headers
             for (struct cmsghdr * cmsg = CMSG_FIRSTHDR(&hdr);
                  cmsg != NULL;
@@ -257,7 +263,7 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
                 // struct in_pktinfo * pi = CMSG_DATA(cmsg)->ipi;
                 // at this point, peeraddr is the source sockaddr
                 // pi->ipi_spec_dst is the destination in_addr
-                interface_index = ((struct in_pktinfo*)CMSG_DATA(cmsg))->ipi_ifindex;
+                InterfaceIndex = ((struct in_pktinfo*)CMSG_DATA(cmsg))->ipi_ifindex;
             }
 
             // should check if index != -1
@@ -275,8 +281,8 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
             if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
                 InterfaceMTU = ifr.ifr_mtu;
             }
-
-            outStr << "Using interface " << InterfaceName << " (" << interface_index << "), MTU: " << InterfaceMTU << std::endl;
+#endif
+            outStr << "Using interface " << InterfaceName << " (" << InterfaceIndex << "), MTU: " << InterfaceMTU << std::endl;
 
             FirstRun = false;
         } else {
