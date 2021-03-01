@@ -1733,10 +1733,16 @@ void AmpIO::CheckCollectCallback()
     // (this implementation works correctly for unsigned integers)
     unsigned short numAvail = (collect_windex >= collect_rindex) ? (collect_windex-collect_rindex)
                                                                  : (COLLECT_BUFSIZE +collect_windex-collect_rindex);
-    if ((numAvail > 0) && ReadCollectedData(collect_data, collect_rindex, numAvail)) {
-        collect_rindex += numAvail;
-        if (collect_rindex >= COLLECT_BUFSIZE)
-            collect_rindex -= COLLECT_BUFSIZE;
+    if (numAvail > 0) {
+        if (numAvail > (port->GetMaxReadDataSize()/sizeof(quadlet_t)))
+            numAvail = port->GetMaxReadDataSize()/sizeof(quadlet_t);
+        if (ReadCollectedData(collect_data, collect_rindex, numAvail)) {
+            collect_rindex += numAvail;
+            if (collect_rindex >= COLLECT_BUFSIZE)
+                collect_rindex -= COLLECT_BUFSIZE;
+        }
+        else
+            numAvail = 0;
     }
     if (!(*collect_cb)(collect_data, numAvail))
         DataCollectionStop();
