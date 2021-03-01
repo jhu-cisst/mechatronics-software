@@ -583,11 +583,10 @@ public:
 
     /*! \brief User-supplied callback function for data collection
         \param buffer pointer to collected data
-        \param nquads number of elements in buffer (-1 if error)
-        \param readSize size of most recent block read request (informational)
+        \param nquads number of elements in buffer
         \returns returning false stops data collection (same as calling DataCollectionStop)
     */
-    typedef bool (*CollectCallback)(quadlet_t *buffer, short nquads, unsigned short readSize);
+    typedef bool (*CollectCallback)(quadlet_t *buffer, short nquads);
 
     /*! \brief Start data collection on FPGA (Firmware Rev 7+)
         \param chan which channel to collect (1-4)
@@ -600,6 +599,23 @@ public:
     void DataCollectionStop();
     /*! \brief Returns true if data collection is active */
     bool IsCollecting() const;
+
+    /*! \brief Gets FPGA data collection status, from real-time block read (Firmware Rev 7+)
+        \param collecting Whether FPGA is currently collecting data
+        \param chan Channel being collected (1-4)
+        \param writeAddr Buffer address being written by FPGA (can read up to writeAddr-1)
+        \returns true if successful
+        \sa ReadCollectionStatus  */
+    bool GetCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const;
+
+    /*! \brief Reads FPGA data collection status, via quadlet read command (Firmware Rev 7+)
+        \param collecting Whether FPGA is currently collecting data
+        \param chan Channel being collected (1-4)
+        \param writeAddr Buffer address being written by FPGA (can read up to writeAddr-1)
+        \returns true if successful
+        \sa GetCollectionStatus  */
+    bool ReadCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const;
+
     /*! \brief Read collected data from FPGA memory buffer */
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
@@ -638,15 +654,13 @@ protected:
     // Data collection is enabled by setting the COLLECT_BIT when writing the desired motor current.
     // Data can only be collected on one channel, specified by collect_chan.
     enum { COLLECT_BUFSIZE = 1024,     // must match firmware buffer size
-           COLLECT_MAX = 512,          // maximum read request size (at 400 MBit/sec)
-           COLLECT_MIN = 16            // minimum read request size (arbitrary)
+           COLLECT_MAX = 512           // maximum read request size (at 400 MBit/sec)
          };
     quadlet_t collect_data[COLLECT_MAX];
     bool collect_state;                // true if collecting data
     unsigned char collect_chan;        // which channel is being collected
     CollectCallback collect_cb;        // user-supplied callback (if non-zero)
     unsigned short collect_rindex;     // current read index
-    unsigned short collect_rquads;     // current block read request size (in quadlets)
 
     // Virtual methods
     unsigned int GetReadNumBytes() const;

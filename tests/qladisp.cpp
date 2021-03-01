@@ -80,15 +80,11 @@ unsigned int collectFileNum = 0;
 std::ofstream collectFile;
 bool isCollecting = false;
 
-bool CollectCB(quadlet_t *buffer, short nquads, unsigned short readSize)
+bool CollectCB(quadlet_t *buffer, short nquads)
 {
     collectFile.write(reinterpret_cast<const char *>(buffer), nquads*sizeof(quadlet_t));
-    if (isCollecting)
-        Amp1394Console::Print(1, 76, "%4d,%4u", nquads, readSize);
-    else {
+    if (!isCollecting)
         collectFile.close();
-        Amp1394Console::Print(1, 76, "         ");
-    }
     return true;
 }
 
@@ -109,10 +105,10 @@ bool CollectFileConvert(const char *inFilename, const char *outFilename)
     while (inFile.good()) {
         inFile.read(reinterpret_cast<char *>(&value), sizeof(quadlet_t));
         outFile << std::dec
-                << ((value&0xC0000000)>>30) << ", "    // flag
-                << ((value&0x3FF00000)>>20) << ", "    // write index
-                << ((value&0x000F0000)>>16) << ", "    // channel
-                << std::hex << (value&0x0000FFFF)      // data
+                << ((value&0x80000000)>>31) << ", "    // type (0->commanded current, 1-> measured current)
+                << ((value&0x40000000)>>30) << ", "    // timer overflow
+                << ((value&0x3FFF0000)>>16) << ", "    // timer (14-bits)
+                << (value&0x0000FFFF)                  // data
                 << std::endl;
     }
     inFile.close();
@@ -368,7 +364,7 @@ int main(int argc, char** argv)
     statusStr2[1][STATUS_STR_LENGTH-1] = 0;
 
     unsigned int loop_cnt = 0;
-    const int STATUS_LINE = fullvel ? 15 : 13;
+    const int STATUS_LINE = fullvel ? 16 : 13;
     int timeLines = 0;   // how many lines for timing info
     if (showTime) {
         timeLines++;
@@ -534,7 +530,8 @@ int main(int argc, char** argv)
             int collect_board = (collect_axis <= 4) ? 0 : 1;
             if (BoardList[collect_board]->IsCollecting()) {
                 BoardList[collect_board]->DataCollectionStop();
-                console.Print(1, 62, "             ");
+                console.Print(STATUS_LINE-1, lm, "             ");
+                console.Print(STATUS_LINE-1, lm+15, "                ");
                 if (collect_axis > collectFileNum)
                     collectFileNum = collect_axis;
                 collect_axis = (collect_axis == numAxes) ? 1 : collect_axis+1;
@@ -549,7 +546,7 @@ int main(int argc, char** argv)
                 unsigned char collect_chan = collect_axis-4*collect_board;
                 if (BoardList[collect_board]->DataCollectionStart(collect_chan, CollectCB)) {
                     isCollecting = true;
-                    console.Print(1, 62, "Collecting %d:", collect_axis);
+                    console.Print(STATUS_LINE-1, lm, "Collecting %d:", collect_axis);
                 }
             }
         }
@@ -636,6 +633,14 @@ int main(int argc, char** argv)
                             console.Print(11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
                     }
                 }
+                if (isCollecting) {
+                    bool fpgaCollecting;
+                    unsigned char fpgaChan;
+                    unsigned short fpgaAddr;
+                    if (BoardList[j]->GetCollectionStatus(fpgaCollecting, fpgaChan, fpgaAddr)) {
+                        console.Print(STATUS_LINE-1, lm+15, "writeAddr: %4d", fpgaAddr);
+                    }
+                }
                 dig_out = BoardList[j]->GetDigitalOutput();
                 status = BoardList[j]->GetStatus();
                 if (status != BoardStatusList[j]) {
@@ -682,12 +687,14 @@ int main(int argc, char** argv)
         }
         if (showTime) {
             console.Print(STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
-            BasePort::BroadcastReadInfo bcReadInfo;
-            bcReadInfo = Port->GetBroadcastReadInfo();
-            std::stringstream timingStr;
-            bcReadInfo.PrintTiming(timingStr, false);  // false --> no std::endl
-            timingStr << "   ";
-            console.Print(STATUS_LINE+6, lm, timingStr.str().c_str());
+            if (protocol == BasePort::PROTOCOL_BC_QRW) {
+                BasePort::BroadcastReadInfo bcReadInfo;
+                bcReadInfo = Port->GetBroadcastReadInfo();
+                std::stringstream timingStr;
+                bcReadInfo.PrintTiming(timingStr, false);  // false --> no std::endl
+                timingStr << "   ";
+                console.Print(STATUS_LINE+6, lm, timingStr.str().c_str());
+            }
         }
         Port->WriteAllBoards();
 
