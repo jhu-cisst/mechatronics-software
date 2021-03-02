@@ -52,9 +52,10 @@ int main(int argc, char** argv)
            || (command == "close-relays")
            || (command == "reboot")
            || (command == "reset-eth")
+           || (command == "reset-encoder-preload")
            )) {
         std::cerr << "Invalid command \"" << command
-                  << "\".  Supported commands: `qlacommand -c {open-relays,close-relays,reboot,reset-eth}`" << std::endl
+                  << "\".  Supported commands: `qlacommand -c {open-relays,close-relays,reboot,reset-eth,reset-encoder-preload}`" << std::endl
                   << "Port can be specified using `-p`: -pupd, -pupd:X.X.X.X, -pfw, -pfw:X" << std::endl;
         return -1;
     }
@@ -88,6 +89,10 @@ int main(int argc, char** argv)
             boardList[j]->WriteReboot();
         } else if (command == "reset-eth") {
             boardList[j]->ResetKSZ8851();
+        } else if (command == "reset-encoder-preload") {
+            for (i = 0; i < 4; i++) {
+                boardList[j]->WriteEncoderPreload(i, 0);
+            }
         }
     }
 
