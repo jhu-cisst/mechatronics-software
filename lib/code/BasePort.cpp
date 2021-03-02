@@ -186,7 +186,7 @@ bool BasePort::ScanNodes(void)
         }
         if (data != QLA1_String) {
             outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
-                   << std::hex << data << ")" << std::endl;
+                   << std::hex << data << std::dec << ")" << std::endl;
             continue;
         }
 
@@ -590,7 +590,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     }
 
     if (!WriteBroadcastReadRequest(bcReadInfo.readSequence)) {
-        outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = " 
+        outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = "
                << bcReadInfo.readSequence << std::endl;
         OnNoneRead();
         return false;

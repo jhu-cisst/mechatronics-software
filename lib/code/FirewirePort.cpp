@@ -226,7 +226,7 @@ nodeid_t FirewirePort::InitNodes(void)
 {
     // Get base node id (zero out 6 lsb)
     baseNodeId = raw1394_get_local_id(handle) & 0xFFC0;
-    outStr << "FirewirePort::InitNodes: base node id = " << std::hex << baseNodeId << std::endl;
+    outStr << "FirewirePort::InitNodes: base node id = " << std::hex << baseNodeId << std::dec << std::endl;
 
     // Get Firewire bus generation
     FwBusGeneration = raw1394_get_generation(handle);
