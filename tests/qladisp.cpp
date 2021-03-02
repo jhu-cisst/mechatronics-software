@@ -713,6 +713,12 @@ int main(int argc, char** argv)
         BoardList[j]->WriteSafetyRelay(false);
     }
 
+    // Reset encoder preloads to default
+    for (i = 0; i < 4; i++) {
+        for (j = 0; j < numDisp; j++)
+            BoardList[j]->WriteEncoderPreload(i, 0);
+    }
+
     console.End();
 
     for (j = 0; j < BoardList.size(); j++)
