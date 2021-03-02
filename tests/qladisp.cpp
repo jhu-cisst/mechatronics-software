@@ -556,9 +556,11 @@ int main(int argc, char** argv)
                 statusStr1[j][STATUS_STR_LENGTH-1] = 0;
                 memset(statusStr2[j], ' ', STATUS_STR_LENGTH-1);
                 statusStr2[j][STATUS_STR_LENGTH-1] = 0;
+                console.Print(STATUS_LINE+4, lm+45+58*j, "            ");
+            }
+            for (j = 0; j < BoardList.size(); j++) {
                 BoardList[j]->ClearReadErrors();
                 BoardList[j]->ClearWriteErrors();
-                console.Print(STATUS_LINE+4, lm+45+58*j, "            ");
             }
         }
 
@@ -698,10 +700,18 @@ int main(int argc, char** argv)
         }
         Port->WriteAllBoards();
 
+        unsigned int readErrors = 0;
+        unsigned int writeErrors = 0;
+        for (j = 0; j < BoardList.size(); j++) {
+            readErrors += BoardList[j]->GetReadErrors();
+            writeErrors += BoardList[j]->GetWriteErrors();
+        }
+
         console.Print(1, lm+42, "Gen: %d",  Port->GetBusGeneration());
         console.Print(1, lm+54, "Axis: %4s", axisString);
         console.Print(1, lm+70, "dt: %.3f",  (1.0 / 49125.0) * maxTime);
         console.Print(1, lm+85, "Ct: %8u", loop_cnt++);
+        console.Print(1, lm+100, "Err(r/w): %2d %2d", readErrors, writeErrors);
 
         console.Refresh();
         Amp1394_Sleep(0.0005);  // 500 usec
