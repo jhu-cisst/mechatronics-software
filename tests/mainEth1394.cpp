@@ -71,7 +71,7 @@ AmpIO_UInt16 ComputeCRC16(unsigned char *data, size_t len)
 
 void ComputeConfigCRC()
 {
-    AmpIO_UInt16 crc16;
+    AmpIO_UInt16 crc16, crc16Eth;
     quadlet_t bus_info[4];
     bus_info[0] = bswap_32(0x31333934);  // "1394"
     bus_info[1] = bswap_32(0x00ffa000);
@@ -92,12 +92,37 @@ void ComputeConfigCRC()
         std::cout << "        endcase" << std::endl;
         std::cout << "    end" << std::endl;
     }
-    quadlet_t root_dir[2];
-    root_dir[0] = bswap_32(0x03fa610e);
-    root_dir[1] = bswap_32(0x0c0083c0);
+    quadlet_t root_dir[5];
+    root_dir[0] = bswap_32(0x0c0083c0);
+    root_dir[1] = bswap_32(0x03fa610e);
+    root_dir[2] = bswap_32(0x81000003);
+    root_dir[3] = bswap_32(0x17000001);
+    root_dir[4] = bswap_32(0x81000006);
     crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(root_dir), sizeof(root_dir));
-    std::cout << "    Root Directory CRC: " << std::setw(4) << std::setfill('0') << crc16
-              << std::dec << std::endl;
+    root_dir[3] = bswap_32(0x17000002);
+    crc16Eth = ComputeCRC16(reinterpret_cast<unsigned char *>(root_dir), sizeof(root_dir));
+    std::cout << "    Root Directory CRC (Rev 1,2): " << std::setw(4) << std::setfill('0') << crc16
+              << ", " << crc16Eth << std::endl;
+    quadlet_t vendor_desc[4];
+    vendor_desc[0] = bswap_32(0x00000000);
+    vendor_desc[1] = bswap_32(0x00000000);
+    vendor_desc[2] = bswap_32(0x4A485520);  // "JHU "
+    vendor_desc[3] = bswap_32(0x4C435352);  // "LCSR"
+    crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(vendor_desc), sizeof(vendor_desc));
+    std::cout << "    Vendor Descriptor CRC: " << std::setw(4) << std::setfill('0') << crc16
+              << std::endl;
+    quadlet_t model_desc[5];
+    model_desc[0] = bswap_32(0x00000000);
+    model_desc[1] = bswap_32(0x00000000);
+    model_desc[2] = bswap_32(0x46504741);   // "FPGA"
+    model_desc[3] = bswap_32(0x312F514C);   // "1/QL"
+    model_desc[4] = bswap_32(0x41000000);   // "A"
+    crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(model_desc), sizeof(model_desc));
+    model_desc[3] = bswap_32(0x322F514C);   // "2/QL"
+    crc16Eth = ComputeCRC16(reinterpret_cast<unsigned char *>(model_desc), sizeof(model_desc));
+    std::cout << "    Model Descriptor CRC (Rev 1,2): " << std::setw(4) << std::setfill('0') << crc16
+              << ", " << crc16Eth << std::endl;
+    std::cout << std::dec;
 }
 
 AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
@@ -393,7 +418,7 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
 {
     nodeaddr_t addr;
     quadlet_t read_data;
-    quadlet_t block_data[16];
+    quadlet_t block_data[24];
     addr = 0xfffff0000400;  // Configuration ROM address
     if (port->ReadQuadlet(boardNum, addr, read_data))
         std::cout << "Configuration ROM: " << std::hex << read_data << std::endl;
@@ -406,14 +431,16 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
     }
     unsigned int bus_info_len = (bswap_32(block_data[0])&0xff000000) >> 24;
     std::cout << "Bus_Info length = " << bus_info_len << std::endl;
-    unsigned int bus_info_crc = bswap_32(block_data[0])&0x0000ffff;
-    AmpIO_UInt16 crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[1]), bus_info_len*sizeof(quadlet_t));
-    std::cout << "Bus_Info CRC: ROM = " << std::hex << bus_info_crc << ", Computed = " << crc16 << std::dec << std::endl;
-    unsigned int root_len = (bswap_32(block_data[bus_info_len+1])&0xffff0000) >> 16;
-    unsigned int root_dir_crc = bswap_32(block_data[bus_info_len+1])&0x0000ffff;
-    std::cout << "Root_Directory length = " << root_len << std::endl;
-    crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[bus_info_len+2]), root_len*sizeof(quadlet_t));
-    std::cout << "Root_Dir CRC: ROM = " << std::hex << root_dir_crc << ", Computed = " << crc16 << std::dec << std::endl;
+    if (bus_info_len > 1) {
+        unsigned int bus_info_crc = bswap_32(block_data[0])&0x0000ffff;
+        AmpIO_UInt16 crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[1]), bus_info_len*sizeof(quadlet_t));
+        std::cout << "Bus_Info CRC: ROM = " << std::hex << bus_info_crc << ", Computed = " << crc16 << std::dec << std::endl;
+        unsigned int root_len = (bswap_32(block_data[bus_info_len+1])&0xffff0000) >> 16;
+        unsigned int root_dir_crc = bswap_32(block_data[bus_info_len+1])&0x0000ffff;
+        std::cout << "Root_Directory length = " << root_len << std::endl;
+        crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[bus_info_len+2]), root_len*sizeof(quadlet_t));
+        std::cout << "Root_Dir CRC: ROM = " << std::hex << root_dir_crc << ", Computed = " << crc16 << std::dec << std::endl;
+    }
     std::cout << std::endl;
     std::cout << "Testing again with block read (8th entry should be ROM, followed by bus info):" << std::endl;
     if (port->ReadBlock(boardNum, addr-7*sizeof(quadlet_t), block_data, sizeof(block_data))) {
