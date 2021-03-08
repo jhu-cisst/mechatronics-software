@@ -41,14 +41,17 @@ if (WIN32)
   # On Windows, can build with WinPcap or Npcap (Ethernet support)
   #    Use WinPcap for Windows XP and earlier (no longer maintained)
   #    Use Npcap for Windows 7 and higher (use Npcap SDK)
-  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap or npcap)" ON)
+  # OFF by default because UDP interface is preferred
+  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap or npcap)" OFF)
 
-  # Need to specify where WinPcap Developer's Pack or Npcap SDK is installed
-  find_path (PCAP_INCLUDE_DIR pcap.h)
-  # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
-  # Make sure to use correct version (32 or 64 bit)
-  find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap/Npcap wpcap and Packet libraries")
-  set (PCAP_LIBRARIES "wpcap" "Packet")
+  if (Amp1394_HAS_PCAP)
+    # Need to specify where WinPcap Developer's Pack or Npcap SDK is installed
+    find_path (PCAP_INCLUDE_DIR pcap.h)
+    # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
+    # Make sure to use correct version (32 or 64 bit)
+    find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap/Npcap wpcap and Packet libraries")
+    set (PCAP_LIBRARIES "wpcap" "Packet")
+  endif (Amp1394_HAS_PCAP)
 
 else (WIN32)
 
@@ -56,16 +59,14 @@ else (WIN32)
   option (Amp1394_HAS_PCAP   "Build Amp1394 with Ethernet support (pcap)"       OFF)
   option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
 
-  # For now, assume pcap is installed somewhere standard
-  # To install:  sudo apt-get install libpcap-dev
-  set (PCAP_INCLUDE_DIR "")
-  set (PCAP_LIBRARIES "pcap")
+  if (Amp1394_HAS_PCAP)
+    # For now, assume pcap is installed somewhere standard
+    # To install:  sudo apt-get install libpcap-dev
+    set (PCAP_INCLUDE_DIR "")
+    set (PCAP_LIBRARIES "pcap")
+  endif (Amp1394_HAS_PCAP)
 
 endif (WIN32)
-
-# if (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
-#   message (SEND_ERROR "Amp1394 requires at least one of Amp1394_HAS_RAW1394 or Amp1394_HAS_PCAP")
-# endif (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
 
 # TODO: Determine whether it is necessary to have separate EXTRA variables for LIBRARY_DIR
 #       and LIBRARIES. Currently, it seems that both are always used together.
