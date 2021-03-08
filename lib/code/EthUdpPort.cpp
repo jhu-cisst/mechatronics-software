@@ -37,10 +37,6 @@ http://www.cisst.org/cisst/license.txt.
 // In C++11, could instead use static_assert.
 typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1];
 
-// to go through address and find interface name
-#include <sys/types.h>
-#include <ifaddrs.h>
-
 // to query MTU setting
 #include <sys/ioctl.h>
 #include <net/if.h>
@@ -79,7 +75,8 @@ struct SocketInternals {
     int FlushRecv(void);
 };
 
-SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET), FirstRun(true)
+SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET),
+                 InterfaceIndex(0), InterfaceName("undefined"), InterfaceMTU(ETH_UDP_MAX_SIZE), FirstRun(true)
 {
     memset(&ServerAddr, 0, sizeof(ServerAddr));
     memset(&ServerAddrBroadcast, 0, sizeof(ServerAddrBroadcast));
@@ -227,10 +224,7 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
 
         if (FirstRun) {
 #ifdef _MSC_VER
-            // not implemented yet
-            InterfaceIndex = 0;
-            InterfaceName = "undefined";
-            InterfaceMTU = ETH_UDP_MAX_SIZE;
+            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
 #else
             struct iovec vec;
             vec.iov_base = bufrecv;
@@ -283,7 +277,6 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
             }
 #endif
             outStr << "Using interface " << InterfaceName << " (" << InterfaceIndex << "), MTU: " << InterfaceMTU << std::endl;
-
             FirstRun = false;
         } else {
             //struct sockaddr_in fromAddr;
