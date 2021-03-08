@@ -21,17 +21,21 @@ install (TARGETS pgm1394
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
 
+if (NOT WIN32)
+
 # script to program multiple boards
-add_custom_command(TARGET pgm1394 POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E
-                   copy "${Amp1394Programmer_SOURCE_DIR}/pgm1394multi.bash" ${EXECUTABLE_OUTPUT_PATH})
+  add_custom_command(TARGET pgm1394 POST_BUILD
+                     COMMAND ${CMAKE_COMMAND} -E
+                     copy "${Amp1394Programmer_SOURCE_DIR}/pgm1394multi.bash" ${EXECUTABLE_OUTPUT_PATH})
 
-# script to unload/reload FireWire kernel modules
-add_custom_command(TARGET pgm1394 POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E
-  copy "${Amp1394Programmer_SOURCE_DIR}/qlareloadfw.bash" ${EXECUTABLE_OUTPUT_PATH})
+  # script to unload/reload FireWire kernel modules
+  add_custom_command(TARGET pgm1394 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E
+    copy "${Amp1394Programmer_SOURCE_DIR}/qlareloadfw.bash" ${EXECUTABLE_OUTPUT_PATH})
 
-# install scripts
-install (FILES "${Amp1394Programmer_SOURCE_DIR}/pgm1394multi.bash" "${Amp1394Programmer_SOURCE_DIR}/qlareloadfw.bash"
+  # install scripts
+  install (FILES "${Amp1394Programmer_SOURCE_DIR}/pgm1394multi.bash" "${Amp1394Programmer_SOURCE_DIR}/qlareloadfw.bash"
          COMPONENT Amp1394-utils
          DESTINATION bin)
+
+endif (NOT WIN32)
