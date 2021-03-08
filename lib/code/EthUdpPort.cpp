@@ -110,20 +110,30 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
 
     // Enable broadcasts
 #ifdef _MSC_VER
-    char broadcastEnable = 1;
-    char packetInfo = 1;
+    BOOL broadcastEnable = TRUE;
+    DWORD packetInfo = 1;
+    if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char *>(&broadcastEnable),
+                   sizeof(broadcastEnable)) != 0) {
+        outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
+        return false;
+    }
+
+    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, reinterpret_cast<const char *>(&packetInfo),
+                   sizeof(packetInfo)) != 0) {
+        outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
+    }
 #else
     int broadcastEnable = 1;
     int packetInfo = 1;
-#endif
     if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
         outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
         return false;
     }
 
-    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, &packetInfo, sizeof(packetInfo)) != 0) {;
+    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, &packetInfo, sizeof(packetInfo)) != 0) {
         outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
     }
+#endif
 
     // Determine the broadcast address. For simplicity, we assume that this is a Class A, B, or C network,
     // as defined by the InterNIC:
