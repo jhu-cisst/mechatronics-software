@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -24,6 +24,12 @@ set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp139
 if (NOT LIBRARY_OUTPUT_PATH)
   set (LIBRARY_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/lib")
 endif (NOT LIBRARY_OUTPUT_PATH)
+
+# If EXECUTABLE_OUTPUT_PATH is not defined, define it here (note that if this
+# is built within cisst, then EXECUTABLE_OUTPUT_PATH is defined by cisst).
+if (NOT EXECUTABLE_OUTPUT_PATH)
+  set (EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/bin")
+endif (NOT EXECUTABLE_OUTPUT_PATH)
 
 # TODO: Move include files to Amp1394 subdirectory, i.e., lib/Amp1394 or lib/include/Amp1394.
 set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Amp1394_BINARY_DIR}")
