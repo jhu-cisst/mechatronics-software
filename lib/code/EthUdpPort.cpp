@@ -242,8 +242,8 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
 
             const size_t CONTROL_DATA_SIZE = 1000;  // THIS NEEDS TO BE BIG ENOUGH.
             char controldata[CONTROL_DATA_SIZE];
-            struct msghdr hdr = {};
-            sockaddr_storage addrRemote = {};
+            struct msghdr hdr;
+            sockaddr_storage addrRemote;
 
             hdr.msg_name = &addrRemote;
             hdr.msg_namelen = sizeof(addrRemote);
