@@ -73,6 +73,9 @@ struct SocketInternals {
 
     // Flush the receive buffer
     int FlushRecv(void);
+
+    // Extract interface info (index, name and MTU) from message header
+    bool ExtractInterfaceInfo(struct msghdr *hdr);
 };
 
 SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET),
@@ -253,38 +256,7 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
             hdr.msg_controllen = CONTROL_DATA_SIZE;
 
             retval = recvmsg(SocketFD, &hdr, 0);
-
-            InterfaceIndex = -1;
-            // iterate through all the control headers
-            for (struct cmsghdr * cmsg = CMSG_FIRSTHDR(&hdr);
-                 cmsg != NULL;
-                 cmsg = CMSG_NXTHDR(&hdr, cmsg)) {
-                // ignore the control headers that don't match what we want
-                if (cmsg->cmsg_level != IPPROTO_IP ||
-                    cmsg->cmsg_type != IP_PKTINFO) {
-                    continue;
-                }
-                // struct in_pktinfo * pi = CMSG_DATA(cmsg)->ipi;
-                // at this point, peeraddr is the source sockaddr
-                // pi->ipi_spec_dst is the destination in_addr
-                InterfaceIndex = ((struct in_pktinfo*)CMSG_DATA(cmsg))->ipi_ifindex;
-            }
-
-            // should check if index != -1
-
-            // get interface name and MTU
-            char ifName[256];
-            if (if_indextoname(InterfaceIndex, ifName) == NULL) {
-                outStr << "Recv: failed if_indextoname: " << strerror(errno) << std::endl;
-            }
-            InterfaceName = ifName;
-
-            struct ifreq ifr;
-            memset(&ifr, 0, sizeof(ifr));
-            strcpy(ifr.ifr_name, InterfaceName.c_str());
-            if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
-                InterfaceMTU = ifr.ifr_mtu;
-            }
+            ExtractInterfaceInfo(&hdr);
 #endif
             outStr << "Using interface " << InterfaceName << " (" << InterfaceIndex << "), MTU: " << InterfaceMTU << std::endl;
             FirstRun = false;
@@ -313,6 +285,44 @@ int SocketInternals::FlushRecv(void)
     while (Recv(buffer, FW_QRESPONSE_SIZE, 0.0) > 0)
         numFlushed++;
     return numFlushed;
+}
+
+bool SocketInternals::ExtractInterfaceInfo(struct msghdr *hdr)
+{
+    InterfaceIndex = -1;
+    // iterate through all the control headers
+    for (struct cmsghdr * cmsg = CMSG_FIRSTHDR(hdr);
+         cmsg != NULL;
+         cmsg = CMSG_NXTHDR(hdr, cmsg)) {
+        // ignore the control headers that don't match what we want
+        if (cmsg->cmsg_level != IPPROTO_IP ||
+            cmsg->cmsg_type != IP_PKTINFO) {
+            continue;
+        }
+        // struct in_pktinfo * pi = CMSG_DATA(cmsg)->ipi;
+        // at this point, peeraddr is the source sockaddr
+        // pi->ipi_spec_dst is the destination in_addr
+        InterfaceIndex = ((struct in_pktinfo*)CMSG_DATA(cmsg))->ipi_ifindex;
+    }
+
+    // should check if index != -1
+
+    // get interface name and MTU
+    char ifName[256];
+    if (if_indextoname(InterfaceIndex, ifName) == NULL) {
+        outStr << "Recv: failed if_indextoname: " << strerror(errno) << std::endl;
+        return false;
+    }
+    InterfaceName = ifName;
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, InterfaceName.c_str());
+    if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
+        InterfaceMTU = ifr.ifr_mtu;
+        return true;
+    }
+    return false;
 }
 
 EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, EthCallbackType cb):
