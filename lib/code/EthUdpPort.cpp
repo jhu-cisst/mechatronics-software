@@ -24,6 +24,8 @@ http://www.cisst.org/cisst/license.txt.
 #include <string>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <Iphlpapi.h>
+#include <mswsock.h>
 #define WINSOCKVERSION MAKEWORD(2,2)
 #else // Linux, Mac
 #include <unistd.h>
@@ -41,6 +43,28 @@ typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1
 #include <sys/ioctl.h>
 #include <net/if.h>
 
+#endif
+
+#ifdef _MSC_VER
+typedef WSAMSG     MsgHeaderType;
+typedef WSACMSGHDR CMsgHdrType;
+
+#ifndef CMSG_FIRSTHDR
+inline CMsgHdrType *CMSG_FIRSTHDR(MsgHeaderType *hdr)
+{ return WSA_CMSG_FIRSTHDR(hdr); }
+#endif
+#ifndef CMSG_NXTHDR
+inline CMsgHdrType *CMSG_NXTHDR(MsgHeaderType *hdr, CMsgHdrType *cmsg)
+{ return WSA_CMSG_NXTHDR(hdr, cmsg); }
+#endif
+#ifndef CMSG_DATA
+inline unsigned char *CMSG_DATA(CMsgHdrType *cmsg)
+{ return WSA_CMSG_DATA(cmsg); }
+#endif
+
+#else
+typedef struct msghdr  MsgHeaderType;
+typedef struct cmsghdr CMsgHdrType;
 #endif
 
 struct SocketInternals {
@@ -75,7 +99,7 @@ struct SocketInternals {
     int FlushRecv(void);
 
     // Extract interface info (index, name and MTU) from message header
-    bool ExtractInterfaceInfo(struct msghdr *hdr);
+    bool ExtractInterfaceInfo(MsgHeaderType *hdr);
 };
 
 SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET),
@@ -236,17 +260,51 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
     else if (retval > 0) {
 
         if (FirstRun) {
-#ifdef _MSC_VER
-            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
-#else
-            struct iovec vec;
-            vec.iov_base = bufrecv;
-            vec.iov_len = maxlen;
 
             const size_t CONTROL_DATA_SIZE = 1000;  // THIS NEEDS TO BE BIG ENOUGH.
             char controldata[CONTROL_DATA_SIZE];
-            struct msghdr hdr;
+            MsgHeaderType hdr;
+
+#ifdef _MSC_VER
+            SOCKADDR addrRemote;
+            GUID WSARecvMsg_GUID = WSAID_WSARECVMSG;
+            LPFN_WSARECVMSG WSARecvMsg;
+            DWORD nBytes;
+            retval = WSAIoctl(SocketFD, SIO_GET_EXTENSION_FUNCTION_POINTER, &WSARecvMsg_GUID,
+                              sizeof(WSARecvMsg_GUID), &WSARecvMsg, sizeof(WSARecvMsg), &nBytes,
+                              NULL, NULL);
+            if (retval == SOCKET_ERROR) {
+                outStr << "Recv: could not get WSARecvMsg function pointer" << std::endl;
+            }
+            else {
+                WSABUF WSAbuf;
+                WSAbuf.buf = reinterpret_cast<char *>(bufrecv);
+                WSAbuf.len = maxlen;
+
+                hdr.name = &addrRemote;
+                hdr.namelen = sizeof(addrRemote);
+                hdr.lpBuffers = &WSAbuf;
+                hdr.dwBufferCount = 1;
+                hdr.Control.buf = controldata;
+                hdr.Control.len = CONTROL_DATA_SIZE;
+                hdr.dwFlags = MSG_PEEK;  // Do not remove message from queue
+
+                retval = WSARecvMsg(SocketFD, &hdr, &nBytes, NULL, NULL);
+                if (retval == SOCKET_ERROR)
+                    outStr << "Recv: WSARecvMsg failed" << std::endl;
+                else
+                    ExtractInterfaceInfo(&hdr);
+            }
+            // For some reason, the call to WSARecvMsg (without MSG_PEEK flag) does
+            // not work, so we instead specify MSG_PEEK above and call recv again.
+            // This also handles the error case (unable to get WSARecvMsg pointer).
+            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+#else
             sockaddr_storage addrRemote;
+
+            struct iovec vec;
+            vec.iov_base = bufrecv;
+            vec.iov_len = maxlen;
 
             hdr.msg_name = &addrRemote;
             hdr.msg_namelen = sizeof(addrRemote);
@@ -258,6 +316,7 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
             retval = recvmsg(SocketFD, &hdr, 0);
             ExtractInterfaceInfo(&hdr);
 #endif
+
             outStr << "Using interface " << InterfaceName << " (" << InterfaceIndex << "), MTU: " << InterfaceMTU << std::endl;
             FirstRun = false;
         } else {
@@ -287,11 +346,11 @@ int SocketInternals::FlushRecv(void)
     return numFlushed;
 }
 
-bool SocketInternals::ExtractInterfaceInfo(struct msghdr *hdr)
+bool SocketInternals::ExtractInterfaceInfo(MsgHeaderType *hdr)
 {
     InterfaceIndex = -1;
     // iterate through all the control headers
-    for (struct cmsghdr * cmsg = CMSG_FIRSTHDR(hdr);
+    for (CMsgHdrType * cmsg = CMSG_FIRSTHDR(hdr);
          cmsg != NULL;
          cmsg = CMSG_NXTHDR(hdr, cmsg)) {
         // ignore the control headers that don't match what we want
@@ -307,6 +366,42 @@ bool SocketInternals::ExtractInterfaceInfo(struct msghdr *hdr)
 
     // should check if index != -1
 
+#ifdef _MSC_VER
+    // Windows supports if_indextoname, but the name returned does not appear to be
+    // meaningful. Also, Windows does not appear to support ioctl (or WSAIoctl) to
+    // query the MTU value. Thus, we instead use GetAdaptersAddresses, which gives us
+    // both the InterfaceName and InterfaceMTU for the specified InterfaceIndex.
+    //
+    // We first call GetAdaptersAddresses with a null buffer to query the required buffer size.
+    PIP_ADAPTER_ADDRESSES addrList = 0;
+    ULONG bufSize = 0;
+    ULONG retval;
+    retval = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                  NULL, addrList, &bufSize);
+    if (retval != ERROR_BUFFER_OVERFLOW) {
+        outStr << "Recv: GetAdaptersAddresses failed to return buffer size" << std::endl;
+        return false;
+    }
+    // Now, bufSize indicates the correct buffer size. Allocate memory and then call
+    // GetAdaptersAddresses again to get the information.
+    char *buffer = new char[bufSize];
+    addrList = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer);
+    retval = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                  NULL, addrList, &bufSize);
+    if (retval == NO_ERROR) {
+        for (PIP_ADAPTER_ADDRESSES addr = addrList;  addr != 0; addr = addr->Next) {
+            if (addr->IfIndex == InterfaceIndex) {
+                char fname[256];  // Should be large enough
+                if (WideCharToMultiByte(CP_ACP, 0, addr->FriendlyName, -1, fname, sizeof(fname), NULL, NULL) > 0) {
+                        InterfaceName = fname;
+                        InterfaceMTU = addr->Mtu;
+                        break;
+                }
+            }
+        }
+    }
+    delete [] buffer;
+#else
     // get interface name and MTU
     char ifName[256];
     if (if_indextoname(InterfaceIndex, ifName) == NULL) {
@@ -322,6 +417,7 @@ bool SocketInternals::ExtractInterfaceInfo(struct msghdr *hdr)
         InterfaceMTU = ifr.ifr_mtu;
         return true;
     }
+#endif
     return false;
 }
 

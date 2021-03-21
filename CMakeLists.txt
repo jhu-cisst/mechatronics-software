@@ -85,8 +85,8 @@ if (Amp1394_HAS_PCAP)
   set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} ${PCAP_LIBRARIES})
 endif (Amp1394_HAS_PCAP)
 if (WIN32)
-  # for Windows, need WinSock
-  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} WSOCK32)
+  # for Windows, need WinSock, Iphlpapi (for getting interface info) and Ws2_32 (for WSAIoctl)
+  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} WSOCK32 Iphlpapi Ws2_32)
 endif (WIN32)
 
 # Generate Amp1394Config.cmake
