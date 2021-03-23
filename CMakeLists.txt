@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -25,6 +25,12 @@ if (NOT LIBRARY_OUTPUT_PATH)
   set (LIBRARY_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/lib")
 endif (NOT LIBRARY_OUTPUT_PATH)
 
+# If EXECUTABLE_OUTPUT_PATH is not defined, define it here (note that if this
+# is built within cisst, then EXECUTABLE_OUTPUT_PATH is defined by cisst).
+if (NOT EXECUTABLE_OUTPUT_PATH)
+  set (EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/bin")
+endif (NOT EXECUTABLE_OUTPUT_PATH)
+
 # TODO: Move include files to Amp1394 subdirectory, i.e., lib/Amp1394 or lib/include/Amp1394.
 set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Amp1394_BINARY_DIR}")
 set (Amp1394_LIBRARY_DIR ${LIBRARY_OUTPUT_PATH})
@@ -35,14 +41,17 @@ if (WIN32)
   # On Windows, can build with WinPcap or Npcap (Ethernet support)
   #    Use WinPcap for Windows XP and earlier (no longer maintained)
   #    Use Npcap for Windows 7 and higher (use Npcap SDK)
-  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap or npcap)" ON)
+  # OFF by default because UDP interface is preferred
+  option (Amp1394_HAS_PCAP "Build Amp1394 with Ethernet support (winpcap or npcap)" OFF)
 
-  # Need to specify where WinPcap Developer's Pack or Npcap SDK is installed
-  find_path (PCAP_INCLUDE_DIR pcap.h)
-  # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
-  # Make sure to use correct version (32 or 64 bit)
-  find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap/Npcap wpcap and Packet libraries")
-  set (PCAP_LIBRARIES "wpcap" "Packet")
+  if (Amp1394_HAS_PCAP)
+    # Need to specify where WinPcap Developer's Pack or Npcap SDK is installed
+    find_path (PCAP_INCLUDE_DIR pcap.h)
+    # In addition to wpcap, need Packet library for PacketOpenAdapter and PacketReqest
+    # Make sure to use correct version (32 or 64 bit)
+    find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap/Npcap wpcap and Packet libraries")
+    set (PCAP_LIBRARIES "wpcap" "Packet")
+  endif (Amp1394_HAS_PCAP)
 
 else (WIN32)
 
@@ -50,16 +59,14 @@ else (WIN32)
   option (Amp1394_HAS_PCAP   "Build Amp1394 with Ethernet support (pcap)"       OFF)
   option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
 
-  # For now, assume pcap is installed somewhere standard
-  # To install:  sudo apt-get install libpcap-dev
-  set (PCAP_INCLUDE_DIR "")
-  set (PCAP_LIBRARIES "pcap")
+  if (Amp1394_HAS_PCAP)
+    # For now, assume pcap is installed somewhere standard
+    # To install:  sudo apt-get install libpcap-dev
+    set (PCAP_INCLUDE_DIR "")
+    set (PCAP_LIBRARIES "pcap")
+  endif (Amp1394_HAS_PCAP)
 
 endif (WIN32)
-
-# if (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
-#   message (SEND_ERROR "Amp1394 requires at least one of Amp1394_HAS_RAW1394 or Amp1394_HAS_PCAP")
-# endif (NOT Amp1394_HAS_RAW1394 AND NOT Amp1394_HAS_PCAP)
 
 # TODO: Determine whether it is necessary to have separate EXTRA variables for LIBRARY_DIR
 #       and LIBRARIES. Currently, it seems that both are always used together.
@@ -78,8 +85,8 @@ if (Amp1394_HAS_PCAP)
   set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} ${PCAP_LIBRARIES})
 endif (Amp1394_HAS_PCAP)
 if (WIN32)
-  # for Windows, need WinSock
-  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} WSOCK32)
+  # for Windows, need WinSock, Iphlpapi (for getting interface info) and Ws2_32 (for WSAIoctl)
+  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} WSOCK32 Iphlpapi Ws2_32)
 endif (WIN32)
 
 # Generate Amp1394Config.cmake

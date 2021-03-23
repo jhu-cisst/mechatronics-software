@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -87,6 +87,7 @@ bool FirewirePort::Init(void)
         return false;
     }
     outStr << "FirewirePort::Init: successfully initialized port " << PortNum << std::endl;
+    outStr << "Using libraw1394 version " << raw1394_get_libversion() << std::endl;
 
     // stop cycle start packet
     StopCycleStartPacket();
@@ -225,7 +226,7 @@ nodeid_t FirewirePort::InitNodes(void)
 {
     // Get base node id (zero out 6 lsb)
     baseNodeId = raw1394_get_local_id(handle) & 0xFFC0;
-    outStr << "FirewirePort::InitNodes: base node id = " << std::hex << baseNodeId << std::endl;
+    outStr << "FirewirePort::InitNodes: base node id = " << std::hex << baseNodeId << std::dec << std::endl;
 
     // Get Firewire bus generation
     FwBusGeneration = raw1394_get_generation(handle);

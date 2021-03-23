@@ -1659,7 +1659,6 @@ bool AmpIO::DataCollectionStart(unsigned char chan, CollectCallback collectCB)
     collect_state = true;
     collect_chan = chan;
     collect_rindex = 0;
-    collect_rquads = COLLECT_MIN;
     collect_cb = collectCB;
     return true;
 }
@@ -1671,7 +1670,30 @@ void AmpIO::DataCollectionStop()
 
 bool AmpIO::IsCollecting() const
 {
-    return collect_state;
+    // Collection active on both host and FPGA
+    return (collect_state&&(ReadBuffer[TEMP_OFFSET]&0x80000000));
+}
+
+bool AmpIO::GetCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const
+{
+    if (GetFirmwareVersion() < 7) return false;
+    collecting = (ReadBuffer[TEMP_OFFSET]&0x80000000);
+    chan = (ReadBuffer[TEMP_OFFSET]&0x3c000000)>>26;
+    writeAddr = (ReadBuffer[TEMP_OFFSET]&0x03ff0000)>>16;;
+    return true;
+}
+
+bool AmpIO::ReadCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const
+{
+    if (GetFirmwareVersion() < 7) return false;
+    quadlet_t read_data;
+    bool ret = port->ReadQuadlet(BoardId, 0x7800, read_data);
+    if (ret) {
+        collecting = (read_data&0x00008000);
+        chan = (read_data&0x00003c00)>>10;
+        writeAddr = (read_data&0x000003ff);
+    }
+    return ret;
 }
 
 bool AmpIO::ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
@@ -1691,33 +1713,37 @@ bool AmpIO::ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned
 void AmpIO::CheckCollectCallback()
 {
     if (collect_cb == 0) return;
-    short numQuads = -1;
-    unsigned short collect_rquads_saved = collect_rquads;
-    if (ReadCollectedData(collect_data, collect_rindex, collect_rquads)) {
-        // Get current write index
-        unsigned short collect_windex = (collect_data[collect_rquads-1]&0x3ff00000) >> 20;
-        // Figure out how much data is available (even if we have not read all of it)
-        unsigned short numAvail = (collect_windex >= collect_rindex) ? (collect_windex-collect_rindex)
-                                                                     : (COLLECT_BUFSIZE +collect_windex-collect_rindex);
-        // Set numQuads and update collect_rquads for next time
-        if (numAvail < collect_rquads) {
-            numQuads = numAvail;
-            // Read more than was available, so decrease for next read
-            if (collect_rquads > COLLECT_MIN)
-                collect_rquads--;
-        }
-        else {
-            numQuads = collect_rquads;
-            // Read less than was available, so increase for next read.
-            if (collect_rquads == COLLECT_MIN)
-                collect_rquads = (numAvail > COLLECT_MAX) ? static_cast<unsigned short>(COLLECT_MAX) : numAvail;
-            else if (collect_rquads < COLLECT_MAX)
-                collect_rquads++;
-        }
-        collect_rindex += numQuads;
-        if (collect_rindex >= COLLECT_BUFSIZE)
-            collect_rindex -= COLLECT_BUFSIZE;
+    bool fpgaCollecting;
+    unsigned char fpgaChan;
+    unsigned short collect_windex;
+    if (!GetCollectionStatus(fpgaCollecting, fpgaChan, collect_windex)) {
+        std::cerr << "CheckCollectCallback: failed to get collection status" << std::endl;
+        return;
     }
-    if (!(*collect_cb)(collect_data, numQuads, collect_rquads_saved))
+    // Wait to make sure FPGA is collecting data
+    if (collect_state && !fpgaCollecting)
+        return;
+    if (fpgaChan != collect_chan) {
+        std::cerr << "CheckCollectCallback: channel mismatch: "
+                  << static_cast<unsigned int>(fpgaChan) << ", "
+                  << static_cast<unsigned int>(collect_chan) << std::endl;
+        // Continue processing
+    }
+    // Figure out how much data is available
+    // (this implementation works correctly for unsigned integers)
+    unsigned short numAvail = (collect_windex >= collect_rindex) ? (collect_windex-collect_rindex)
+                                                                 : (COLLECT_BUFSIZE +collect_windex-collect_rindex);
+    if (numAvail > 0) {
+        if (numAvail > (port->GetMaxReadDataSize()/sizeof(quadlet_t)))
+            numAvail = port->GetMaxReadDataSize()/sizeof(quadlet_t);
+        if (ReadCollectedData(collect_data, collect_rindex, numAvail)) {
+            collect_rindex += numAvail;
+            if (collect_rindex >= COLLECT_BUFSIZE)
+                collect_rindex -= COLLECT_BUFSIZE;
+        }
+        else
+            numAvail = 0;
+    }
+    if (!(*collect_cb)(collect_data, numAvail))
         DataCollectionStop();
 }

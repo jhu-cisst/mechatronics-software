@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -24,8 +24,10 @@ http://www.cisst.org/cisst/license.txt.
 #include <string>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <Iphlpapi.h>
+#include <mswsock.h>
 #define WINSOCKVERSION MAKEWORD(2,2)
-#else
+#else // Linux, Mac
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -36,6 +38,33 @@ http://www.cisst.org/cisst/license.txt.
 // Following assertion checks that sizeof(struct in_addr) is equal to sizeof(unsigned long).
 // In C++11, could instead use static_assert.
 typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1];
+
+// to query MTU setting
+#include <sys/ioctl.h>
+#include <net/if.h>
+
+#endif
+
+#ifdef _MSC_VER
+typedef WSAMSG     MsgHeaderType;
+typedef WSACMSGHDR CMsgHdrType;
+
+#ifndef CMSG_FIRSTHDR
+inline CMsgHdrType *CMSG_FIRSTHDR(MsgHeaderType *hdr)
+{ return WSA_CMSG_FIRSTHDR(hdr); }
+#endif
+#ifndef CMSG_NXTHDR
+inline CMsgHdrType *CMSG_NXTHDR(MsgHeaderType *hdr, CMsgHdrType *cmsg)
+{ return WSA_CMSG_NXTHDR(hdr, cmsg); }
+#endif
+#ifndef CMSG_DATA
+inline unsigned char *CMSG_DATA(CMsgHdrType *cmsg)
+{ return WSA_CMSG_DATA(cmsg); }
+#endif
+
+#else
+typedef struct msghdr  MsgHeaderType;
+typedef struct cmsghdr CMsgHdrType;
 #endif
 
 struct SocketInternals {
@@ -45,8 +74,14 @@ struct SocketInternals {
 #else
     int    SocketFD;
 #endif
+    int InterfaceIndex;
+    std::string InterfaceName;
+    int InterfaceMTU;
+
     struct sockaddr_in ServerAddr;
     struct sockaddr_in ServerAddrBroadcast;
+
+    bool FirstRun;
 
     SocketInternals(std::ostream &ostr);
     ~SocketInternals();
@@ -62,9 +97,13 @@ struct SocketInternals {
 
     // Flush the receive buffer
     int FlushRecv(void);
+
+    // Extract interface info (index, name and MTU) from message header
+    bool ExtractInterfaceInfo(MsgHeaderType *hdr);
 };
 
-SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET)
+SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET),
+                 InterfaceIndex(0), InterfaceName("undefined"), InterfaceMTU(ETH_UDP_MAX_SIZE), FirstRun(true)
 {
     memset(&ServerAddr, 0, sizeof(ServerAddr));
     memset(&ServerAddrBroadcast, 0, sizeof(ServerAddrBroadcast));
@@ -98,14 +137,30 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
 
     // Enable broadcasts
 #ifdef _MSC_VER
-    char broadcastEnable = 1;
+    BOOL broadcastEnable = TRUE;
+    DWORD packetInfo = 1;
+    if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char *>(&broadcastEnable),
+                   sizeof(broadcastEnable)) != 0) {
+        outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
+        return false;
+    }
+
+    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, reinterpret_cast<const char *>(&packetInfo),
+                   sizeof(packetInfo)) != 0) {
+        outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
+    }
 #else
     int broadcastEnable = 1;
-#endif
+    int packetInfo = 1;
     if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
         outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
         return false;
     }
+
+    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, &packetInfo, sizeof(packetInfo)) != 0) {
+        outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
+    }
+#endif
 
     // Determine the broadcast address. For simplicity, we assume that this is a Class A, B, or C network,
     // as defined by the InterNIC:
@@ -203,10 +258,73 @@ int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double ti
 #endif
     }
     else if (retval > 0) {
-        //struct sockaddr_in fromAddr;
-        //socklen_t length = sizeof(fromAddr);
-        //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
-        retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+
+        if (FirstRun) {
+
+            const size_t CONTROL_DATA_SIZE = 1000;  // THIS NEEDS TO BE BIG ENOUGH.
+            char controldata[CONTROL_DATA_SIZE];
+            MsgHeaderType hdr;
+
+#ifdef _MSC_VER
+            SOCKADDR addrRemote;
+            GUID WSARecvMsg_GUID = WSAID_WSARECVMSG;
+            LPFN_WSARECVMSG WSARecvMsg;
+            DWORD nBytes;
+            retval = WSAIoctl(SocketFD, SIO_GET_EXTENSION_FUNCTION_POINTER, &WSARecvMsg_GUID,
+                              sizeof(WSARecvMsg_GUID), &WSARecvMsg, sizeof(WSARecvMsg), &nBytes,
+                              NULL, NULL);
+            if (retval == SOCKET_ERROR) {
+                outStr << "Recv: could not get WSARecvMsg function pointer" << std::endl;
+            }
+            else {
+                WSABUF WSAbuf;
+                WSAbuf.buf = reinterpret_cast<char *>(bufrecv);
+                WSAbuf.len = maxlen;
+
+                hdr.name = &addrRemote;
+                hdr.namelen = sizeof(addrRemote);
+                hdr.lpBuffers = &WSAbuf;
+                hdr.dwBufferCount = 1;
+                hdr.Control.buf = controldata;
+                hdr.Control.len = CONTROL_DATA_SIZE;
+                hdr.dwFlags = MSG_PEEK;  // Do not remove message from queue
+
+                retval = WSARecvMsg(SocketFD, &hdr, &nBytes, NULL, NULL);
+                if (retval == SOCKET_ERROR)
+                    outStr << "Recv: WSARecvMsg failed" << std::endl;
+                else
+                    ExtractInterfaceInfo(&hdr);
+            }
+            // For some reason, the call to WSARecvMsg (without MSG_PEEK flag) does
+            // not work, so we instead specify MSG_PEEK above and call recv again.
+            // This also handles the error case (unable to get WSARecvMsg pointer).
+            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+#else
+            sockaddr_storage addrRemote;
+
+            struct iovec vec;
+            vec.iov_base = bufrecv;
+            vec.iov_len = maxlen;
+
+            hdr.msg_name = &addrRemote;
+            hdr.msg_namelen = sizeof(addrRemote);
+            hdr.msg_iov = &vec;
+            hdr.msg_iovlen = 1;
+            hdr.msg_control = controldata;
+            hdr.msg_controllen = CONTROL_DATA_SIZE;
+
+            retval = recvmsg(SocketFD, &hdr, 0);
+            ExtractInterfaceInfo(&hdr);
+#endif
+
+            outStr << "Using interface " << InterfaceName << " (" << InterfaceIndex << "), MTU: " << InterfaceMTU << std::endl;
+            FirstRun = false;
+        } else {
+            //struct sockaddr_in fromAddr;
+            //socklen_t length = sizeof(fromAddr);
+            //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
+            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+        }
         if (retval == SOCKET_ERROR) {
 #ifdef _MSC_VER
             outStr << "Recv: failed to receive: " << WSAGetLastError() << std::endl;
@@ -226,6 +344,81 @@ int SocketInternals::FlushRecv(void)
     while (Recv(buffer, FW_QRESPONSE_SIZE, 0.0) > 0)
         numFlushed++;
     return numFlushed;
+}
+
+bool SocketInternals::ExtractInterfaceInfo(MsgHeaderType *hdr)
+{
+    InterfaceIndex = -1;
+    // iterate through all the control headers
+    for (CMsgHdrType * cmsg = CMSG_FIRSTHDR(hdr);
+         cmsg != NULL;
+         cmsg = CMSG_NXTHDR(hdr, cmsg)) {
+        // ignore the control headers that don't match what we want
+        if (cmsg->cmsg_level != IPPROTO_IP ||
+            cmsg->cmsg_type != IP_PKTINFO) {
+            continue;
+        }
+        // struct in_pktinfo * pi = CMSG_DATA(cmsg)->ipi;
+        // at this point, peeraddr is the source sockaddr
+        // pi->ipi_spec_dst is the destination in_addr
+        InterfaceIndex = ((struct in_pktinfo*)CMSG_DATA(cmsg))->ipi_ifindex;
+    }
+
+    // should check if index != -1
+
+#ifdef _MSC_VER
+    // Windows supports if_indextoname, but the name returned does not appear to be
+    // meaningful. Also, Windows does not appear to support ioctl (or WSAIoctl) to
+    // query the MTU value. Thus, we instead use GetAdaptersAddresses, which gives us
+    // both the InterfaceName and InterfaceMTU for the specified InterfaceIndex.
+    //
+    // We first call GetAdaptersAddresses with a null buffer to query the required buffer size.
+    PIP_ADAPTER_ADDRESSES addrList = 0;
+    ULONG bufSize = 0;
+    ULONG retval;
+    retval = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                  NULL, addrList, &bufSize);
+    if (retval != ERROR_BUFFER_OVERFLOW) {
+        outStr << "Recv: GetAdaptersAddresses failed to return buffer size" << std::endl;
+        return false;
+    }
+    // Now, bufSize indicates the correct buffer size. Allocate memory and then call
+    // GetAdaptersAddresses again to get the information.
+    char *buffer = new char[bufSize];
+    addrList = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer);
+    retval = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                  NULL, addrList, &bufSize);
+    if (retval == NO_ERROR) {
+        for (PIP_ADAPTER_ADDRESSES addr = addrList;  addr != 0; addr = addr->Next) {
+            if (addr->IfIndex == InterfaceIndex) {
+                char fname[256];  // Should be large enough
+                if (WideCharToMultiByte(CP_ACP, 0, addr->FriendlyName, -1, fname, sizeof(fname), NULL, NULL) > 0) {
+                        InterfaceName = fname;
+                        InterfaceMTU = addr->Mtu;
+                        break;
+                }
+            }
+        }
+    }
+    delete [] buffer;
+#else
+    // get interface name and MTU
+    char ifName[256];
+    if (if_indextoname(InterfaceIndex, ifName) == NULL) {
+        outStr << "Recv: failed if_indextoname: " << strerror(errno) << std::endl;
+        return false;
+    }
+    InterfaceName = ifName;
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, InterfaceName.c_str());
+    if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
+        InterfaceMTU = ifr.ifr_mtu;
+        return true;
+    }
+#endif
+    return false;
 }
 
 EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, EthCallbackType cb):
@@ -332,12 +525,12 @@ unsigned int EthUdpPort::GetPrefixOffset(MsgType msg) const
 
 unsigned int EthUdpPort::GetMaxReadDataSize(void) const
 {
-    return ETH_UDP_MAX_SIZE - GetPrefixOffset(RD_FW_BDATA) - GetReadPostfixSize();
+    return sockPtr->InterfaceMTU - ETH_UDP_HEADER - GetPrefixOffset(RD_FW_BDATA) - GetReadPostfixSize();
 }
 
 unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
 {
-    return ETH_UDP_MAX_SIZE - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
+    return sockPtr->InterfaceMTU - ETH_UDP_HEADER - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
 }
 
 bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)

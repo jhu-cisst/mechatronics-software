@@ -20,8 +20,11 @@ do
     fi
 done
 
+echo "------> You now need to reboot your controllers.  You can either"
+echo "------> power cycle them or use: qlacommand -c reboot"
+echo ""
 echo "------> If your PC is connected to the controllers via FireWire"
-echo "------> you might need to unplug/replug the FireWire cable to"
+echo "------> you might also need to unplug/replug the FireWire cable to"
 echo "------> rediscover the boards (or use sudo qlareloadfw.bash)"
 
 exit 0

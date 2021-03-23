@@ -186,7 +186,7 @@ bool BasePort::ScanNodes(void)
         }
         if (data != QLA1_String) {
             outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
-                   << std::hex << data << ")" << std::endl;
+                   << std::hex << data << std::dec << ")" << std::endl;
             continue;
         }
 
@@ -590,7 +590,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     }
 
     if (!WriteBroadcastReadRequest(bcReadInfo.readSequence)) {
-        outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = " 
+        outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = "
                << bcReadInfo.readSequence << std::endl;
         OnNoneRead();
         return false;
@@ -752,14 +752,18 @@ bool BasePort::WriteAllBoards(void)
                 // Rev 7 firmware: write DAC (x4) and Status/Control register
                 BoardList[board]->GetWriteData(buf, 0, numQuads);
                 bool ret = WriteBlock(board, 0, buf, numBytes);
-                if (ret) noneWritten = false;
-                else allOK = false;
                 BoardList[board]->SetWriteValid(ret);
                 // Initialize (clear) the write buffer
                 BoardList[board]->InitWriteBuffer();
+                if (ret) {
+                    noneWritten = false;
+                    // Check for data collection callback
+                    BoardList[board]->CheckCollectCallback();
+                }
+                else {
+                    allOK = false;
+                }
             }
-            // Check for data collection callback
-            BoardList[board]->CheckCollectCallback();
         }
     }
     if (noneWritten) {
@@ -849,14 +853,15 @@ bool BasePort::WriteAllBoardsBroadcast(void)
                 BoardList[board]->InitWriteBuffer();
             }
             else {
-                if (ret) noneWritten = false;
                 BoardList[board]->SetWriteValid(ret);
                 // Initialize (clear) the write buffer
                 BoardList[board]->InitWriteBuffer();
+                if (ret) {
+                    noneWritten = false;
+                    // Check for data collection callback
+                    BoardList[board]->CheckCollectCallback();
+                }
             }
-
-            // Check for data collection callback
-            BoardList[board]->CheckCollectCallback();
         }
     }
 

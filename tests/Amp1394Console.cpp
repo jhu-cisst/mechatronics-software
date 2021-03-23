@@ -20,6 +20,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <iostream>
 #include <cstdarg>
 #ifdef _MSC_VER
+#define WIN32_LEAN_AND_MEAN
 #include <conio.h>
 #include <Windows.h>
 #else

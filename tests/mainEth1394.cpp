@@ -25,6 +25,106 @@
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 
+// CRC16-CCIT (also called CRC-ITU)
+const AmpIO_UInt16 crc16_table[256] = {
+	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
+	0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
+	0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
+	0x9339, 0x8318, 0xb37b, 0xa35a, 0xd3bd, 0xc39c, 0xf3ff, 0xe3de,
+	0x2462, 0x3443, 0x0420, 0x1401, 0x64e6, 0x74c7, 0x44a4, 0x5485,
+	0xa56a, 0xb54b, 0x8528, 0x9509, 0xe5ee, 0xf5cf, 0xc5ac, 0xd58d,
+	0x3653, 0x2672, 0x1611, 0x0630, 0x76d7, 0x66f6, 0x5695, 0x46b4,
+	0xb75b, 0xa77a, 0x9719, 0x8738, 0xf7df, 0xe7fe, 0xd79d, 0xc7bc,
+	0x48c4, 0x58e5, 0x6886, 0x78a7, 0x0840, 0x1861, 0x2802, 0x3823,
+	0xc9cc, 0xd9ed, 0xe98e, 0xf9af, 0x8948, 0x9969, 0xa90a, 0xb92b,
+	0x5af5, 0x4ad4, 0x7ab7, 0x6a96, 0x1a71, 0x0a50, 0x3a33, 0x2a12,
+	0xdbfd, 0xcbdc, 0xfbbf, 0xeb9e, 0x9b79, 0x8b58, 0xbb3b, 0xab1a,
+	0x6ca6, 0x7c87, 0x4ce4, 0x5cc5, 0x2c22, 0x3c03, 0x0c60, 0x1c41,
+	0xedae, 0xfd8f, 0xcdec, 0xddcd, 0xad2a, 0xbd0b, 0x8d68, 0x9d49,
+	0x7e97, 0x6eb6, 0x5ed5, 0x4ef4, 0x3e13, 0x2e32, 0x1e51, 0x0e70,
+	0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a, 0x9f59, 0x8f78,
+	0x9188, 0x81a9, 0xb1ca, 0xa1eb, 0xd10c, 0xc12d, 0xf14e, 0xe16f,
+	0x1080, 0x00a1, 0x30c2, 0x20e3, 0x5004, 0x4025, 0x7046, 0x6067,
+	0x83b9, 0x9398, 0xa3fb, 0xb3da, 0xc33d, 0xd31c, 0xe37f, 0xf35e,
+	0x02b1, 0x1290, 0x22f3, 0x32d2, 0x4235, 0x5214, 0x6277, 0x7256,
+	0xb5ea, 0xa5cb, 0x95a8, 0x8589, 0xf56e, 0xe54f, 0xd52c, 0xc50d,
+	0x34e2, 0x24c3, 0x14a0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
+	0xa7db, 0xb7fa, 0x8799, 0x97b8, 0xe75f, 0xf77e, 0xc71d, 0xd73c,
+	0x26d3, 0x36f2, 0x0691, 0x16b0, 0x6657, 0x7676, 0x4615, 0x5634,
+	0xd94c, 0xc96d, 0xf90e, 0xe92f, 0x99c8, 0x89e9, 0xb98a, 0xa9ab,
+	0x5844, 0x4865, 0x7806, 0x6827, 0x18c0, 0x08e1, 0x3882, 0x28a3,
+	0xcb7d, 0xdb5c, 0xeb3f, 0xfb1e, 0x8bf9, 0x9bd8, 0xabbb, 0xbb9a,
+	0x4a75, 0x5a54, 0x6a37, 0x7a16, 0x0af1, 0x1ad0, 0x2ab3, 0x3a92,
+	0xfd2e, 0xed0f, 0xdd6c, 0xcd4d, 0xbdaa, 0xad8b, 0x9de8, 0x8dc9,
+	0x7c26, 0x6c07, 0x5c64, 0x4c45, 0x3ca2, 0x2c83, 0x1ce0, 0x0cc1,
+	0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
+	0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
+};
+
+AmpIO_UInt16 ComputeCRC16(unsigned char *data, size_t len)
+{
+    AmpIO_UInt16 crc16 = 0;
+    for (size_t i = 0; i < len; i++)
+        crc16 = (crc16 << 8) ^ crc16_table[((crc16 >> 8) ^ data[i]) & 0x00ff];
+    return  crc16;
+}
+
+void ComputeConfigCRC()
+{
+    AmpIO_UInt16 crc16, crc16Eth;
+    quadlet_t bus_info[4];
+    bus_info[0] = bswap_32(0x31333934);  // "1394"
+    bus_info[1] = bswap_32(0x00ffa000);
+    bus_info[2] = bswap_32(0xfa610e00);  // LCSR CID + BID + E/F
+    bus_info[3] = bswap_32(0x00000007);  // Firmware version
+    std::cout << std::hex;
+    for (unsigned int bver = 0x0e; bver <= 0x0f; bver++) {
+        std::cout << "    // Version: " << ((bver == 0x0e) ? "Ethernet" : "Firewire") << std::endl;
+        std::cout << "    always @(*)" << std::endl;
+        std::cout << "    begin" << std::endl;
+        std::cout << "        case (board_id)" << std::endl;
+        for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
+            bus_info[2] = bswap_32(0xfa610e00|(bnum << 4)|bver);
+            crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(bus_info), sizeof(bus_info));
+            std::cout << "            4'h" << bnum << ": info_crc = 16'h"
+                      << std::setw(4) << std::setfill('0') << crc16 << ";" << std::endl;
+        }
+        std::cout << "        endcase" << std::endl;
+        std::cout << "    end" << std::endl;
+    }
+    quadlet_t root_dir[5];
+    root_dir[0] = bswap_32(0x0c0083c0);
+    root_dir[1] = bswap_32(0x03fa610e);
+    root_dir[2] = bswap_32(0x81000003);
+    root_dir[3] = bswap_32(0x17000001);
+    root_dir[4] = bswap_32(0x81000006);
+    crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(root_dir), sizeof(root_dir));
+    root_dir[3] = bswap_32(0x17000002);
+    crc16Eth = ComputeCRC16(reinterpret_cast<unsigned char *>(root_dir), sizeof(root_dir));
+    std::cout << "    Root Directory CRC (Rev 1,2): " << std::setw(4) << std::setfill('0') << crc16
+              << ", " << crc16Eth << std::endl;
+    quadlet_t vendor_desc[4];
+    vendor_desc[0] = bswap_32(0x00000000);
+    vendor_desc[1] = bswap_32(0x00000000);
+    vendor_desc[2] = bswap_32(0x4A485520);  // "JHU "
+    vendor_desc[3] = bswap_32(0x4C435352);  // "LCSR"
+    crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(vendor_desc), sizeof(vendor_desc));
+    std::cout << "    Vendor Descriptor CRC: " << std::setw(4) << std::setfill('0') << crc16
+              << std::endl;
+    quadlet_t model_desc[5];
+    model_desc[0] = bswap_32(0x00000000);
+    model_desc[1] = bswap_32(0x00000000);
+    model_desc[2] = bswap_32(0x46504741);   // "FPGA"
+    model_desc[3] = bswap_32(0x312F514C);   // "1/QL"
+    model_desc[4] = bswap_32(0x41000000);   // "A"
+    crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(model_desc), sizeof(model_desc));
+    model_desc[3] = bswap_32(0x322F514C);   // "2/QL"
+    crc16Eth = ComputeCRC16(reinterpret_cast<unsigned char *>(model_desc), sizeof(model_desc));
+    std::cout << "    Model Descriptor CRC (Rev 1,2): " << std::setw(4) << std::setfill('0') << crc16
+              << ", " << crc16Eth << std::endl;
+    std::cout << std::dec;
+}
+
 AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
 {
     AmpIO_UInt32 crc = 0xffffffff;
@@ -318,7 +418,7 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
 {
     nodeaddr_t addr;
     quadlet_t read_data;
-    quadlet_t block_data[16];
+    quadlet_t block_data[24];
     addr = 0xfffff0000400;  // Configuration ROM address
     if (port->ReadQuadlet(boardNum, addr, read_data))
         std::cout << "Configuration ROM: " << std::hex << read_data << std::endl;
@@ -329,6 +429,19 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
             if (i%4 == 3) std::cout << std::endl;
         }
     }
+    unsigned int bus_info_len = (bswap_32(block_data[0])&0xff000000) >> 24;
+    std::cout << "Bus_Info length = " << bus_info_len << std::endl;
+    if (bus_info_len > 1) {
+        unsigned int bus_info_crc = bswap_32(block_data[0])&0x0000ffff;
+        AmpIO_UInt16 crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[1]), bus_info_len*sizeof(quadlet_t));
+        std::cout << "Bus_Info CRC: ROM = " << std::hex << bus_info_crc << ", Computed = " << crc16 << std::dec << std::endl;
+        unsigned int root_len = (bswap_32(block_data[bus_info_len+1])&0xffff0000) >> 16;
+        unsigned int root_dir_crc = bswap_32(block_data[bus_info_len+1])&0x0000ffff;
+        std::cout << "Root_Directory length = " << root_len << std::endl;
+        crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[bus_info_len+2]), root_len*sizeof(quadlet_t));
+        std::cout << "Root_Dir CRC: ROM = " << std::hex << root_dir_crc << ", Computed = " << crc16 << std::dec << std::endl;
+    }
+    std::cout << std::endl;
     std::cout << "Testing again with block read (8th entry should be ROM, followed by bus info):" << std::endl;
     if (port->ReadBlock(boardNum, addr-7*sizeof(quadlet_t), block_data, sizeof(block_data))) {
         for (size_t i = 0; i < sizeof(block_data)/sizeof(quadlet_t); i++) {
@@ -707,6 +820,7 @@ int main(int argc, char **argv)
         }
         if ((EthBoardList.size() > 0) || (FwBoardList.size() > 0))
             std::cout << "  b) Change Firewire/Ethernet board" << std::endl;
+        std::cout << "  C) Compute Configuration ROM CRC" << std::endl;
         if (curBoardEth) {
             std::cout << "  c) Continuous test (quadlet reads)" << std::endl;
             std::cout << "  d) Continuous write test (quadlet write)" << std::endl;
@@ -909,6 +1023,10 @@ int main(int argc, char **argv)
         case 'c':
             if (curBoardEth)
                 ContinuousReadTest(EthPort, boardNum);
+            break;
+
+        case 'C':
+            ComputeConfigCRC();
             break;
 
         case 'd':

@@ -67,12 +67,12 @@ void EthBasePort::PrintMAC(std::ostream &outStr, const char* name, const uint8_t
     if (swap16) {
         outStr << name << ": " << std::hex << std::setw(2) << std::setfill('0')
                << (int)addr[1] << ":" << (int)addr[0] << ":" << (int)addr[3] << ":"
-               << (int)addr[2] << ":" << (int)addr[5] << ":" << (int)addr[4] << std::endl;
+               << (int)addr[2] << ":" << (int)addr[5] << ":" << (int)addr[4] << std::dec << std::endl;
     }
     else {
         outStr << name << ": " << std::hex << std::setw(2) << std::setfill('0')
                << (int)addr[0] << ":" << (int)addr[1] << ":" << (int)addr[2] << ":"
-               << (int)addr[3] << ":" << (int)addr[4] << ":" << (int)addr[5] << std::endl;
+               << (int)addr[3] << ":" << (int)addr[4] << ":" << (int)addr[5] << std::dec << std::endl;
     }
 }
 
@@ -172,27 +172,27 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     }
     else if ((tcode == QWRITE) || (tcode == QREAD) || (tcode == BWRITE) || (tcode == BREAD)) {
         out << ", dest_off: " << std::hex << (packet[1]&0x0000ffff) << std::endl;
-        out << "  dest_off: " << std::hex << packet[2];
+        out << "  dest_off: " << packet[2] << std::dec;
     }
     out << std::endl;
 
     if ((tcode == BWRITE) || (tcode == BRESPONSE) || (tcode == BREAD)) {
         data_length = (packet[3]&0xffff0000) >> 16;
         out << "  data_length: " << std::dec << data_length
-            << ", ext_tcode: " << std::hex << (packet[3]&0x0000ffff) << std::endl;
+            << ", ext_tcode: " << std::hex << (packet[3]&0x0000ffff) << std::dec << std::endl;
         if (data_length%4 != 0)
             out << "WARNING: data_length is not a multiple of 4" << std::endl;
     }
     else if ((tcode == QWRITE) || (tcode == QRESPONSE)) {
-        out << "  data: " << std::hex << packet[3] << std::endl;
+        out << "  data: " << std::hex << packet[3] << std::dec << std::endl;
     }
 
     if (tcode == QREAD)
-        out << "  header_crc: " << std::hex << packet[3] << std::endl;
+        out << "  header_crc: " << std::hex << packet[3] << std::dec << std::endl;
     else if (max_quads < 5)  // Nothing else to do for short packets
         return;
     else
-        out << "  header_crc: " << std::hex << packet[4] << std::endl;
+        out << "  header_crc: " << std::hex << packet[4] << std::dec << std::endl;
 
     if ((tcode == BWRITE) || (tcode == BRESPONSE)) {
         data_length /= sizeof(quadlet_t);   // data_length in quadlets
@@ -201,11 +201,11 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
             out << "  data[" << std::dec << std::setfill(' ') << std::setw(3) << i << ":"
                 << std::setw(3) << (i+3) << "]:  ";
             for (unsigned int j = 0; (j < 4) && ((i+j) < lim); j++)
-                out << std::hex << std::setw(8) << std::setfill('0') << packet[5+i+j] << "  ";
+                out << std::hex << std::setw(8) << std::setfill('0') << packet[5+i+j] << std::dec << "  ";
             out << std::endl;
         }
         if ((data_length > 0) && (data_length < max_quads-5))
-            out << "  data_crc: " << std::hex << packet[5+data_length] << std::endl;
+            out << "  data_crc: " << std::hex << packet[5+data_length] << std::dec << std::endl;
     }
 }
 
@@ -286,8 +286,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
                     << p->header[2] << p->header[3] << " (should be DBG0)" << std::endl;
         return;
     }
-    debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::endl;
-    debugStream << "FireWire node_id: " << std::dec << static_cast<unsigned int>(p->node_id&0x3f) << std::endl;
+    debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::dec << std::endl;
+    debugStream << "FireWire node_id: " << static_cast<unsigned int>(p->node_id&0x3f) << std::endl;
     unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
     EthBasePort::PrintDebug(debugStream, status);
     if (p->eth_errors&0x07) {
@@ -416,7 +416,7 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
     out << "Ethernet Frame:" << std::endl;
     EthBasePort::PrintMAC(out, "  Dest MAC", frame->destMac, true);
     EthBasePort::PrintMAC(out, "  Src MAC", frame->srcMac, true);
-    out << "  Ethertype/Length: " << std::hex << std::setw(4) << std::setfill('0') << frame->etherType;
+    out << "  Ethertype/Length: " << std::hex << std::setw(4) << std::setfill('0') << frame->etherType << std::dec;
     if (frame->etherType == 0x0800) out << " (IPv4)";
     else if (frame->etherType == 0x0806) out << " (ARP)";
     out << std::endl;
@@ -457,7 +457,7 @@ void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet
         out << std::hex << "    htype:" << arp->htype << ", ptype:" << arp->ptype
             << ", hlen:" << static_cast<unsigned int>(arp->hlen)
             << ", plen: " << static_cast<unsigned int>(arp->plen)
-            << ", oper:" << arp->oper << std::endl;
+            << ", oper:" << arp->oper << std::dec << std::endl;
         EthBasePort::PrintMAC(out, "    Src MAC", arp->srcMac, true);
         EthBasePort::PrintIP(out, "    Src IP", arp->srcIP, true);
         EthBasePort::PrintIP(out, "    Dest IP", arp->destIP, true);
