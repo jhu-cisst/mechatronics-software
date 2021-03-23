@@ -24,9 +24,9 @@ http://www.cisst.org/cisst/license.txt.
 
 struct SocketInternals;
 
-// Following is a conservative limit, based on MTU=1500 (1518 including Ethernet
-// frame and CRC), minus 20 for the IPv4 header and 8 for the UDP header.
-const unsigned int ETH_UDP_MAX_SIZE = 1472;
+// Default MTU=1500 (does not count 18 bytes for Ethernet frame header and CRC)
+const unsigned int ETH_MTU_DEFAULT = 1500;
+// Size of IPv4 header (20) and UDP header (8), counts against MTU limit
 const unsigned int ETH_UDP_HEADER = 28;
 
 class EthUdpPort : public EthBasePort

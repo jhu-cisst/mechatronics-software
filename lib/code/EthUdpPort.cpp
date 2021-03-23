@@ -27,6 +27,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <Iphlpapi.h>
 #include <mswsock.h>
 #define WINSOCKVERSION MAKEWORD(2,2)
+#undef min   // to be able to use std::min
 #else // Linux, Mac
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -45,7 +46,10 @@ typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1
 
 #endif
 
+#include <algorithm>   // for std::min
+
 #ifdef _MSC_VER
+
 typedef WSAMSG     MsgHeaderType;
 typedef WSACMSGHDR CMsgHdrType;
 
@@ -103,7 +107,7 @@ struct SocketInternals {
 };
 
 SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET),
-                 InterfaceIndex(0), InterfaceName("undefined"), InterfaceMTU(ETH_UDP_MAX_SIZE), FirstRun(true)
+                 InterfaceIndex(0), InterfaceName("undefined"), InterfaceMTU(ETH_MTU_DEFAULT), FirstRun(true)
 {
     memset(&ServerAddr, 0, sizeof(ServerAddr));
     memset(&ServerAddrBroadcast, 0, sizeof(ServerAddrBroadcast));
@@ -523,14 +527,26 @@ unsigned int EthUdpPort::GetPrefixOffset(MsgType msg) const
     return 0;
 }
 
+// The largest data size supported by the firmware is:
+//   1) Firewire limits maximum data size to 2048 bytes (MAX_POSSIBLE_DATA_SIZE)
+//   2) The FPGA firmware reduces this limit by 24 (FW_BRESPONSE_HEADER_SIZE + FW_CRC_SIZE)
+// But, there is also a limit imposed by the MTU (maximum Ethernet packet size); in addition
+// to the Firewire packet, we need to consider ETH_UDP_HEADER and FW_EXTRA_SIZE.
 unsigned int EthUdpPort::GetMaxReadDataSize(void) const
 {
-    return sockPtr->InterfaceMTU - ETH_UDP_HEADER - GetPrefixOffset(RD_FW_BDATA) - GetReadPostfixSize();
+    return (std::min(MAX_POSSIBLE_DATA_SIZE, sockPtr->InterfaceMTU-ETH_UDP_HEADER-FW_EXTRA_SIZE)
+            - FW_BRESPONSE_HEADER_SIZE - FW_CRC_SIZE);
 }
 
+// The largest data size supported by the firmware is:
+//   1) Firewire limits maximum data size to 2048 bytes (MAX_POSSIBLE_DATA_SIZE)
+//   2) The FPGA firmware reduces this limit by 24 (FW_BWRITE_HEADER_SIZE + FW_CRC_SIZE)
+// But, there is also a limit imposed by the MTU (maximum Ethernet packet size); in addition
+// to the Firewire packet, we need to consider ETH_UDP_HEADER and FW_CTRL_SIZE.
 unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
 {
-    return sockPtr->InterfaceMTU - ETH_UDP_HEADER - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
+    return (std::min(MAX_POSSIBLE_DATA_SIZE, sockPtr->InterfaceMTU-ETH_UDP_HEADER-FW_CTRL_SIZE)
+            - FW_BWRITE_HEADER_SIZE - FW_CRC_SIZE);
 }
 
 bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
