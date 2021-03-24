@@ -220,11 +220,11 @@ void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)
     if (status&0x1000) debugStream << "local ";
     if (status&0x0800) debugStream << "remote ";
     if (status&0x0400) debugStream << "FrameErr ";
-    if (status&0x0200) debugStream << "DestErr ";
-    if (status&0x0100) debugStream << "qRead ";
-    if (status&0x0080) debugStream << "qWrite ";
-    if (status&0x0040) debugStream << "bRead ";
-    if (status&0x0020) debugStream << "bWrite ";
+    if (status&0x0200) debugStream << "IPv4Err ";
+    if (status&0x0100) debugStream << "UDPErr ";
+    if (status&0x0080) debugStream << "DestErr ";
+    if (status&0x0040) debugStream << "AccessErr ";
+    if (status&0x0020) debugStream << "Unused ";
     if (status&0x0010) debugStream << "UDP ";
     if (status&0x0008) debugStream << "Link-On ";
     else               debugStream << "Link-Off ";
