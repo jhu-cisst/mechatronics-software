@@ -33,8 +33,7 @@ EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType
     BasePort(portNum, debugStream),
     fw_tl(0),
     eth_read_callback(cb),
-    ReceiveTimeout(0.02),
-    FwBusReset(false)
+    ReceiveTimeout(0.02)
 {
 }
 
@@ -92,9 +91,13 @@ void EthBasePort::PrintIP(std::ostream &outStr, const char* name, const uint8_t 
 
 void EthBasePort::ProcessExtraData(const unsigned char *packet)
 {
+    FpgaStatus.FwBusReset = (packet[0]&FwBusReset);
+    FpgaStatus.FwPacketDropped = (packet[0]&FwPacketDropped);
+    FpgaStatus.EthAccessError = (packet[0]&EthAccessError);
+    FpgaStatus.EthSummaryError = (packet[0]&EthSummaryError);
+    FpgaStatus.numStateInvalid = packet[2];
+    FpgaStatus.numPacketError = packet[3];
     unsigned int FwBusGeneration_FPGA = packet[1];
-    FwBusReset = packet[0]&0x01;
-    // FwPacketDropped = packet[0]&0x02;
 
     const double FPGA_sysclk_MHz = 49.152;      /* FPGA sysclk in MHz (from AmpIO.cpp) */
     const unsigned short *packetW = reinterpret_cast<const unsigned short *>(packet);
@@ -281,9 +284,18 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         return;
     }
     const DebugData *p = reinterpret_cast<const DebugData *>(data);
-    if (strncmp(p->header, "DBG0", 4) != 0) {
+    if (strncmp(p->header, "DBG", 3) != 0) {
         debugStream << "Unexpected header string: " << p->header[0] << p->header[1]
-                    << p->header[2] << p->header[3] << " (should be DBG0)" << std::endl;
+                    << p->header[2] << " (should be DBG)" << std::endl;
+        return;
+    }
+    int debugLevel = p->header[3] - '0';
+    if (debugLevel == 0) {
+        debugStream << "No debug data available" << std::endl;
+        return;
+    }
+    else if (debugLevel != 1) {
+        debugStream << "Unsupported debug level: " << debugLevel << std::endl;
         return;
     }
     debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::dec << std::endl;

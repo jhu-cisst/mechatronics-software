@@ -54,6 +54,18 @@ public:
         BRESPONSE = 7
     };
 
+    struct FPGA_Status {
+        bool FwBusReset;
+        bool FwPacketDropped;
+        bool EthAccessError;
+        bool EthSummaryError;
+        unsigned int numStateInvalid;
+        unsigned int numPacketError;
+        FPGA_Status() : FwBusReset(false), FwPacketDropped(false), EthAccessError(false),
+                        EthSummaryError(false), numStateInvalid(0), numPacketError(0) {}
+        ~FPGA_Status() {}
+    };
+
     typedef bool (*EthCallbackType)(EthBasePort &port, unsigned char boardId, std::ostream &debugStream);
 
 protected:
@@ -63,7 +75,14 @@ protected:
     EthCallbackType eth_read_callback;
     double ReceiveTimeout;      // Ethernet receive timeout (seconds)
 
-    bool   FwBusReset;          // True if Firewire bus reset is active
+    enum FPGA_FLAGS {
+        FwBusReset = 0x01,          // Firewire bus reset is active
+        FwPacketDropped = 0x02,     // Firewire packet dropped
+        EthAccessError = 0x04,      // Internal bus access error in Ethernet module
+        EthSummaryError = 0x08      // Summary of Ethernet protocol errors (see Status)
+    };
+
+    FPGA_Status FpgaStatus;     // FPGA status from extra data returned
 
     double FPGA_RecvTime;       // Time for FPGA to receive Ethernet packet (seconds)
     double FPGA_TotalTime;      // Total time for FPGA to receive packet and respond (seconds)
@@ -121,6 +140,9 @@ public:
     double GetReceiveTimeout(void) const { return ReceiveTimeout; }
 
     void SetReceiveTimeout(double timeSec) { ReceiveTimeout = timeSec; }
+
+    // Return FPGA status related to Ethernet interface
+    void GetFpgaStatus(FPGA_Status &status) const { status = FpgaStatus; }
 
     // Return time required to receive Ethernet packet on FPGA, in seconds.
     double GetFpgaReceiveTime(void) const { return FPGA_RecvTime; }
