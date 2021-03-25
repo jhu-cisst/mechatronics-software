@@ -711,7 +711,7 @@ int main(int argc, char** argv)
         else if (ethPort) {
             EthBasePort::FPGA_Status fpgaStatus;
             ethPort->GetFpgaStatus(fpgaStatus);
-            char flagStr[8];
+            char flagStr[10];
             flagStr[0] = fpgaStatus.FwBusReset ? 'R' : ' ';
             flagStr[1] = ' ';
             flagStr[2] = fpgaStatus.FwPacketDropped ? 'D' : ' ';
@@ -719,7 +719,9 @@ int main(int argc, char** argv)
             flagStr[4] = fpgaStatus.EthAccessError ? 'A' : ' ';
             flagStr[5] = ' ';
             flagStr[6] = fpgaStatus.EthSummaryError ? 'S' : ' ';
-            flagStr[7] = 0;
+            flagStr[7] = ' ';
+            flagStr[8] = fpgaStatus.EthStateError ? 'T' : ' ';
+            flagStr[9] = 0;
             console.Print(STATUS_LINE+5, lm+12, "%s   StateError: %3d   PacketError: %3d",
                           flagStr, fpgaStatus.numStateInvalid, fpgaStatus.numPacketError);
         }

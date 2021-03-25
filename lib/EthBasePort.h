@@ -59,10 +59,11 @@ public:
         bool FwPacketDropped;
         bool EthAccessError;
         bool EthSummaryError;
+        bool EthStateError;
         unsigned int numStateInvalid;
         unsigned int numPacketError;
-        FPGA_Status() : FwBusReset(false), FwPacketDropped(false), EthAccessError(false),
-                        EthSummaryError(false), numStateInvalid(0), numPacketError(0) {}
+        FPGA_Status() : FwBusReset(false), FwPacketDropped(false), EthAccessError(false), EthSummaryError(false),
+                        EthStateError(false), numStateInvalid(0), numPacketError(0) {}
         ~FPGA_Status() {}
     };
 
@@ -79,7 +80,8 @@ protected:
         FwBusReset = 0x01,          // Firewire bus reset is active
         FwPacketDropped = 0x02,     // Firewire packet dropped
         EthAccessError = 0x04,      // Internal bus access error in Ethernet module
-        EthSummaryError = 0x08      // Summary of Ethernet protocol errors (see Status)
+        EthSummaryError = 0x08,     // Summary of Ethernet protocol errors (see Status)
+        EthStateError = 0x10        // Ethernet state machine error
     };
 
     FPGA_Status FpgaStatus;     // FPGA status from extra data returned
