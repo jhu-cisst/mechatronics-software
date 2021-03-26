@@ -93,9 +93,8 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
 {
     FpgaStatus.FwBusReset = (packet[0]&FwBusReset);
     FpgaStatus.FwPacketDropped = (packet[0]&FwPacketDropped);
-    FpgaStatus.EthAccessError = (packet[0]&EthAccessError);
+    FpgaStatus.EthInternalError = (packet[0]&EthInternalError);
     FpgaStatus.EthSummaryError = (packet[0]&EthSummaryError);
-    FpgaStatus.EthStateError = (packet[0]&EthStateError);
     FpgaStatus.numStateInvalid = packet[2];
     FpgaStatus.numPacketError = packet[3];
     unsigned int FwBusGeneration_FPGA = packet[1];
