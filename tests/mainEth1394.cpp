@@ -814,7 +814,6 @@ int main(int argc, char **argv)
             std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "  8) Multicast quadlet read via Ethernet" << std::endl;
         if (curBoardEth) {
-            std::cout << "  9) Block write test to 0x4090" << std::endl;
             std::cout << "  a) WriteAllBoards test" << std::endl;
             std::cout << "  B) BlockWrite test" << std::endl;
         }
@@ -981,28 +980,6 @@ int main(int argc, char **argv)
                 std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
             else
                 std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
-            break;
-
-        case '9':   // Block read test
-            if (curBoardEth) {
-                size_t i;
-                quadlet_t testBlock[16];
-                memset(testBlock, 0, sizeof(testBlock));
-                if (EthPort->ReadBlock(boardNum, 0x4090, testBlock, sizeof(testBlock))) {
-                   std::cout << "Current contents of block: " << std::endl;
-                   for (i = 0; i < 16; i++) {
-                       testBlock[i] = bswap_32(testBlock[i]);
-                       std::cout << testBlock[i] << " ";
-                   }
-                   std::cout << std::endl;
-                }
-                for (i = 0; i < 16; i++) {
-                    testBlock[i] += i;
-                    testBlock[i] = bswap_32(testBlock[i]);
-                }
-                std::cout << "Writing new data" << std::endl;
-                EthPort->WriteBlock(boardNum, 0x4090, testBlock, sizeof(testBlock));
-            }
             break;
 
         case 'a':
