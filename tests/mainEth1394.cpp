@@ -538,13 +538,30 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     unsigned int max_wait = 0;
     unsigned int max_wlen = WLEN_MAX;
     unsigned int numSilentMismatch = 0;
+
+    // Check if debug data available, in which case we can query bw_left
+    bool debugValid = false;
+    if (rboard->ReadEthernetData(waveform_read, 0x80, 16)) {
+        char *cptr = reinterpret_cast<char *>(waveform_read);
+        if (strncmp(cptr, "DBG1", 4) == 0) {
+            debugValid = true;
+        }
+        else {
+            std::cout << "Debug data not available" << std::endl;
+            std::cout << "Will only perform read/write test" << std::endl;
+        }
+    }
+
     for (size_t wlen = 2; wlen < WLEN_MAX; wlen++) {
         bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
         unsigned int len16 = 2*wlen;  // length in words
         unsigned int trigger_comp = 10 + len16/2+len16/8 + 2;   // computation on FPGA
         if (doOut) {
-            std::cout << "Len=" << std::dec << wlen << ": trigger = " << (3*wlen-2)/5.0
-                      << ", trigger_fpga = " << (trigger_comp-10)/2;
+            std::cout << "Len=" << std::dec << wlen << ": ";
+            if (debugValid) {
+                std::cout << "trigger = " << (3*wlen-2)/5.0
+                          << ", trigger_fpga = " << (trigger_comp-10)/2 << ", ";
+            }
         }
         for (i = 0; i < wlen; i++) {
             waveform[i] = ((wlen+i)<< 16) | (wlen-i);
@@ -556,31 +573,35 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             return;
         }
         Amp1394_Sleep(0.05);
-        if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
-            break;
-        unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
-        unsigned short bw_left = ptr[0];
-        if (bw_left < min_left) {
-            min_left = bw_left;
-            min_wlen = wlen;
-        }
-        unsigned short bw_wait = ptr[1];
-        if (bw_wait > max_wait) {
-            max_wait = bw_wait;
-            max_wlen = wlen;
-        }
-        if (doOut) {
-            std::cout << ", bw_left = " << bw_left << ", bw_wait = " << bw_wait;
+        if (debugValid) {
+            if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
+                break;
+            unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
+            unsigned short bw_left = ptr[0];
+            if (bw_left < min_left) {
+                min_left = bw_left;
+                min_wlen = wlen;
+            }
+            unsigned short bw_wait = ptr[1];
+            if (bw_wait > max_wait) {
+                max_wait = bw_wait;
+                max_wlen = wlen;
+            }
+            if (doOut) {
+                std::cout << "bw_left = " << bw_left << ", bw_wait = " << bw_wait;
+            }
         }
         if (!rboard->ReadWaveformTable(waveform_read, 0, wlen)) {
-            if (!doOut) std::cout << "Len=" << std::dec << wlen << ":";
-            std::cout << " ReadWaveformTable failed" << std::endl;
+            if (!doOut) std::cout << "Len=" << std::dec << wlen << ": ";
+            std::cout << "ReadWaveformTable failed" << std::endl;
             break;
         }
+        bool allOK = true;
         for (i = 0; i < wlen; i++) {
             if (waveform_read[i] != waveform[i]) {
+                allOK = false;
                 if (doOut) {
-                    std::cout << ", mismatch at quadlet " << std::dec << i << ", read "
+                    std::cout << "mismatch at quadlet " << std::dec << i << ", read "
                               << waveform_read[i] << ", expected " << waveform[i];
                     if (numSilentMismatch > 0) {
                         std::cout << std::endl << "There were " << numSilentMismatch
@@ -593,12 +614,18 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
                 break;
             }
         }
-        if (doOut) std::cout << std::endl;
+        if (doOut) {
+            if (!debugValid && allOK) std::cout << " Pass";
+            std::cout << std::endl;
+        }
     }
-    if (numSilentMismatch > 0)
+    if (numSilentMismatch > 0) {
         std::cout << "There were " << numSilentMismatch << " additional lengths with mismatches" << std::endl;
-    std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
-    std::cout << "Maximum bw_wait = " << std::dec << max_wait << " at wlen = " << max_wlen << std::endl;
+    }
+    if (debugValid) {
+        std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
+        std::cout << "Maximum bw_wait = " << std::dec << max_wait << " at wlen = " << max_wlen << std::endl;
+    }
 }
 
 void TestWaveform(AmpIO *board)
@@ -815,7 +842,7 @@ int main(int argc, char **argv)
         std::cout << "  8) Multicast quadlet read via Ethernet" << std::endl;
         if (curBoardEth) {
             std::cout << "  a) WriteAllBoards test" << std::endl;
-            std::cout << "  B) BlockWrite test" << std::endl;
+            std::cout << "  B) BlockWrite test (Waveform table)" << std::endl;
         }
         if ((EthBoardList.size() > 0) || (FwBoardList.size() > 0))
             std::cout << "  b) Change Firewire/Ethernet board" << std::endl;
