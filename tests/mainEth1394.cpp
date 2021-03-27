@@ -294,6 +294,30 @@ AmpIO *SelectBoard(const std::string &portName, std::vector<AmpIO *> boardList, 
     return newBoard;
 }
 
+void TestDacRW(BasePort *port, unsigned char boardNum)
+{
+    size_t i;
+    quadlet_t write_block[5];
+
+    // Read from DAC (quadlet reads), modify values, write them using
+    // a block write, then read them again to check.
+    for (i = 0; i < 4; i++) {
+        nodeaddr_t addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
+        port->ReadQuadlet(boardNum, addr, write_block[i]);
+        write_block[i] &= 0x0000ffff;
+    }
+    std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
+              << write_block[1] << ", " << write_block[2] << ", "
+              << write_block[3] << std::endl;
+    for (i = 0; i < 4; i++) {
+        write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
+    }
+    write_block[4] = 0;
+    std::cout << "Setting new values" << std::endl;
+    if (!port->WriteBlock(boardNum, 0, write_block, sizeof(write_block)))
+        std::cout << "Failed to write block data" << std::endl;
+}
+
 void  WriteAllBoardsTest(BasePort *port, std::vector<AmpIO *> &boardList)
 {
     std::cout << "Protocol: " << port->GetProtocol() << std::endl;
@@ -659,6 +683,7 @@ void TestWaveform(AmpIO *board)
         std::cout << "WriteWaveformTable failed" << std::endl;
         return;
     }
+    Amp1394_Sleep(0.05);
     std::cout << "Reading data" << std::endl;
     if (!board->ReadWaveformTable(waveform_read, 0, WLEN)) {
         std::cout << "ReadWaveformTable failed" << std::endl;
@@ -829,10 +854,10 @@ int main(int argc, char **argv)
             std::cout << "  1) Quadlet write (power/relay toggle) to board via Ethernet" << std::endl;
             std::cout << "  2) Quadlet read from board via Ethernet" << std::endl;
         }
-        if (curBoardEth || curBoardFw)
+        if (curBoardEth || curBoardFw) {
             std::cout << "  3) Block read from board via Ethernet and/or Firewire" << std::endl;
-        if (curBoardEth)
-            std::cout << "  4) Block write to board via Ethernet" << std::endl;
+            std::cout << "  4) Block write to board via Ethernet or Firewire" << std::endl;
+        }
         if (curBoardFw) {
             std::cout << "  5) Ethernet port status" << std::endl;
             std::cout << "  6) Initialize Ethernet port" << std::endl;
@@ -950,36 +975,16 @@ int main(int argc, char **argv)
             break;
 
         case '4':
-            if (curBoardEth) {
-                // Read from DAC (quadlet reads), modify values, write them using
-                // a block write, then read them again to check.
-                // Note that test can be done using FireWire by changing EthPort to FwPort.
-                for (i = 0; i < 4; i++) {
-                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
-                    EthPort->ReadQuadlet(boardNum, addr, write_block[i]);
-                    write_block[i] &= 0x0000ffff;
-                }
-                std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
-                          << write_block[1] << ", " << write_block[2] << ", "
-                          << write_block[3] << std::endl;
-                for (i = 0; i < 4; i++) {
-                    write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
-                }
-                write_block[4] = 0;
-                std::cout << "Setting new values" << std::endl;
-                if (!EthPort->WriteBlock(boardNum, 0, write_block, sizeof(write_block))) {
-                    std::cout << "Failed to write block data via Ethernet port" << std::endl;
-                    break;
-                }
-#if 0
-                for (i = 0; i < 4; i++) {
-                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
-                    EthPort->ReadQuadlet(boardNum, addr, write_block[i]);
-                }
-                std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
-                          << write_block[1] << ", " << write_block[2] << ", "
-                          << write_block[3] << std::endl;
+#if Amp1394_HAS_RAW1394
+            if (curBoardFw) {
+                std::cout << "Testing via Firewire" << std::endl;
+                TestDacRW(&FwPort, curBoardFw->GetBoardId());
+                break;
+            }
 #endif
+            if (curBoardEth) {
+                std::cout << "Testing via Ethernet" << std::endl;
+                TestDacRW(EthPort, curBoardEth->GetBoardId());
             }
             break;
 
