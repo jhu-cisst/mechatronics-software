@@ -197,7 +197,7 @@ public:
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
     /*! Returns midrange value of encoder position. */
-    AmpIO_Int32 GetEncoderMidRange(void) const;
+    static AmpIO_Int32 GetEncoderMidRange(void);
 
     /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
         between the most recent full cycle and the previous full cycle. If the encoder counter overflowed

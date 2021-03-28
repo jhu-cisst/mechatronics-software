@@ -303,7 +303,9 @@ void TestDacRW(BasePort *port, unsigned char boardNum)
     // a block write, then read them again to check.
     for (i = 0; i < 4; i++) {
         nodeaddr_t addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
-        port->ReadQuadlet(boardNum, addr, write_block[i]);
+        write_block[i] = 0;
+        if (!port->ReadQuadlet(boardNum, addr, write_block[i]))
+            std::cout << "Failed to read quadlet for channel " << (i+1) << std::endl;
         write_block[i] &= 0x0000ffff;
     }
     std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
@@ -312,7 +314,7 @@ void TestDacRW(BasePort *port, unsigned char boardNum)
     for (i = 0; i < 4; i++) {
         write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
     }
-    write_block[4] = 0;
+    write_block[4] = 0;   // power control
     std::cout << "Setting new values" << std::endl;
     if (!port->WriteBlock(boardNum, 0, write_block, sizeof(write_block)))
         std::cout << "Failed to write block data" << std::endl;

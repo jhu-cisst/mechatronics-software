@@ -328,7 +328,19 @@ bool FirewirePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t da
         return false;
 
     data = bswap_32(data);
-    return !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
+    bool ret = !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
+
+    // Workaround for Firewire broadcast, which is not currently working due to an issue with
+    // either libraw1394 or the Firewire JuJu driver.
+    if (!ret && (node == FW_NODE_BROADCAST)) {
+        ret = true;
+        for (nodeid_t curNode = 0; curNode < NumOfNodes_; curNode++) {
+            if (raw1394_write(handle, baseNodeId+curNode, addr, 4, &data))
+                ret = false;
+        }
+    }
+
+    return ret;
 }
 
 bool FirewirePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,

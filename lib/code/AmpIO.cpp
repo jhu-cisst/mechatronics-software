@@ -41,6 +41,7 @@ const AmpIO_UInt32 MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current a
 const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
+const AmpIO_UInt32 RESET_KSZ8851    = 0x04000000;  /*!< Mask to reset KSZ8851 Ethernet chip */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <= 5 (16 bits) */
@@ -553,7 +554,7 @@ double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
     return (encVelData[index].runPeriod)*(encVelData[index].clkPeriod);
 }
 
-AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
+AmpIO_Int32 AmpIO::GetEncoderMidRange(void)
 {
     return ENC_MIDRANGE;
 }
@@ -1491,7 +1492,7 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
 bool AmpIO::ResetKSZ8851()
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x04000000;
+    quadlet_t write_data = RESET_KSZ8851;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 

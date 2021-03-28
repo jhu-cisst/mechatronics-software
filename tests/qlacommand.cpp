@@ -25,9 +25,16 @@ http://www.cisst.org/cisst/license.txt.
 #include <AmpIO.h>
 #include "Amp1394Time.h"
 
+// Following constants are from AmpIO
+const quadlet_t REBOOT_FPGA   = 0x00300000;
+const quadlet_t RELAY_ON      = 0x00030000;
+const quadlet_t RELAY_OFF     = 0x00020000;
+const quadlet_t RESET_KSZ8851 = 0x04000000;
+const nodeaddr_t ENC_LOAD_OFFSET = 4;
+
 int main(int argc, char** argv)
 {
-    unsigned int i, j;
+    unsigned int i;
     unsigned int nbArgs = static_cast<unsigned int>(argc);
     BasePort * port = 0;
     std::string portArgs;
@@ -67,32 +74,18 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    std::vector<AmpIO *> boardList;
-    for (i = 0; i < port->GetNumOfNodes(); i++) {
-        int boardId = port->GetBoardId(i);
-        if (boardId != BoardIO::MAX_BOARDS) {
-            std::cout << "Adding firewire node " << i << ", BoardID " << boardId << std::endl;
-            AmpIO *board = new AmpIO(boardId);
-            boardList.push_back(board);
-            port->AddBoard(board);
-        }
-    }
-
-    // actual command
-    for (j = 0; j < boardList.size(); j++) {
-        std::cout << "Executing command \"" << command << "\" on node " << j << std::endl;
-        if (command == "open-relays") {
-            boardList[j]->WriteSafetyRelay(false);
-        } else if (command == "close-relays") {
-            boardList[j]->WriteSafetyRelay(true);
-        } else if (command == "reboot") {
-            boardList[j]->WriteReboot();
-        } else if (command == "reset-eth") {
-            boardList[j]->ResetKSZ8851();
-        } else if (command == "reset-encoder-preload") {
-            for (i = 0; i < 4; i++) {
-                boardList[j]->WriteEncoderPreload(i, 0);
-            }
+    std::cout << "Executing command \"" << command << "\" on " << port->GetNumOfNodes() << " nodes" << std::endl;
+    if (command == "open-relays") {
+        port->WriteQuadlet(FW_NODE_BROADCAST, 0, RELAY_OFF);
+    } else if (command == "close-relays") {
+        port->WriteQuadlet(FW_NODE_BROADCAST, 0, RELAY_ON);
+    } else if (command == "reboot") {
+        port->WriteQuadlet(FW_NODE_BROADCAST, 0, REBOOT_FPGA);
+    } else if (command == "reset-eth") {
+        port->WriteQuadlet(FW_NODE_BROADCAST, 12, RESET_KSZ8851);
+    } else if (command == "reset-encoder-preload") {
+        for (i = 0; i < 4; i++) {
+            port->WriteQuadlet(FW_NODE_BROADCAST, i | ENC_LOAD_OFFSET, AmpIO::GetEncoderMidRange());
         }
     }
 
