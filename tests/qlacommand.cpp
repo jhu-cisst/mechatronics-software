@@ -85,7 +85,8 @@ int main(int argc, char** argv)
         port->WriteQuadlet(FW_NODE_BROADCAST, 12, RESET_KSZ8851);
     } else if (command == "reset-encoder-preload") {
         for (i = 0; i < 4; i++) {
-            port->WriteQuadlet(FW_NODE_BROADCAST, i | ENC_LOAD_OFFSET, AmpIO::GetEncoderMidRange());
+            unsigned int channel = (i+1) << 4;
+            port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_OFFSET, AmpIO::GetEncoderMidRange());
         }
     }
 
