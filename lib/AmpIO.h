@@ -433,6 +433,20 @@ public:
     */
     AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
 
+    // **************** Static WRITE Methods (for broadcast) ********************
+
+    static bool WriteRebootAll(BasePort *port);
+
+    static bool WritePowerEnableAll(BasePort *port, bool state);
+
+    static bool WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state);
+
+    static bool WriteSafetyRelayAll(BasePort *port, bool state);
+
+    static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata);
+
+    static bool ResetKSZ8851All(BasePort *port);
+
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming
     //   1 - the FPGA configuration PROM (M25P16)

@@ -16,21 +16,12 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
-#include <stdlib.h> // for atoi
 #include <iostream>
-#include <vector>
 #include <string>
 
 #include <PortFactory.h>
 #include <AmpIO.h>
 #include "Amp1394Time.h"
-
-// Following constants are from AmpIO
-const quadlet_t REBOOT_FPGA   = 0x00300000;
-const quadlet_t RELAY_ON      = 0x00030000;
-const quadlet_t RELAY_OFF     = 0x00020000;
-const quadlet_t RESET_KSZ8851 = 0x04000000;
-const nodeaddr_t ENC_LOAD_OFFSET = 4;
 
 int main(int argc, char** argv)
 {
@@ -76,17 +67,16 @@ int main(int argc, char** argv)
 
     std::cout << "Executing command \"" << command << "\" on " << port->GetNumOfNodes() << " nodes" << std::endl;
     if (command == "open-relays") {
-        port->WriteQuadlet(FW_NODE_BROADCAST, 0, RELAY_OFF);
+        AmpIO::WriteSafetyRelayAll(port, false);
     } else if (command == "close-relays") {
-        port->WriteQuadlet(FW_NODE_BROADCAST, 0, RELAY_ON);
+        AmpIO::WriteSafetyRelayAll(port, true);
     } else if (command == "reboot") {
-        port->WriteQuadlet(FW_NODE_BROADCAST, 0, REBOOT_FPGA);
+        AmpIO::WriteRebootAll(port);
     } else if (command == "reset-eth") {
-        port->WriteQuadlet(FW_NODE_BROADCAST, 12, RESET_KSZ8851);
+        AmpIO::ResetKSZ8851All(port);
     } else if (command == "reset-encoder-preload") {
         for (i = 0; i < 4; i++) {
-            unsigned int channel = (i+1) << 4;
-            port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_OFFSET, AmpIO::GetEncoderMidRange());
+            AmpIO::WriteEncoderPreloadAll(port, i, 0);
         }
     }
 

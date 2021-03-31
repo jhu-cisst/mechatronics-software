@@ -981,16 +981,16 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
 {
     unsigned int channel = (index+1) << 4;
 
-    if ((sdata >= ENC_MIDRANGE)
-            || (sdata < -ENC_MIDRANGE)) {
+    if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
         std::cerr << "AmpIO::WriteEncoderPreload, preload out of range " << sdata << std::endl;
         return false;
     }
+    bool ret = false;
     if (port && (index < NUM_CHANNELS)) {
-        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
-    } else {
-        return false;
+        ret = port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET,
+                                 static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
     }
+    return ret;
 }
 
 bool AmpIO::WriteDoutConfigReset(void)
@@ -1110,6 +1110,60 @@ bool AmpIO::WriteIPv4Address(AmpIO_UInt32 IPaddr)
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
 {
     return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
+}
+
+/*******************************************************************************
+ * Static Write methods (for broadcast)
+ *
+ * These methods duplicate the board-specific methods (WriteReboot, WritePowerEnable,
+ * WriteAmpEnable, ...), but are sent to the broadcast address (FW_NODE_BROADCAST).
+ */
+
+bool AmpIO::WriteRebootAll(BasePort *port)
+{
+    // Note that Firmware V7+ supports the reboot command; earlier versions of
+    // firmware will instead perform a limited reset.
+    AmpIO_UInt32 write_data = REBOOT_FPGA;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WritePowerEnableAll(BasePort *port, bool state)
+{
+    AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state)
+{
+    quadlet_t write_data = (mask << 8) | state;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WriteSafetyRelayAll(BasePort *port, bool state)
+{
+    AmpIO_UInt32 write_data = state ? RELAY_ON : RELAY_OFF;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata)
+{
+    unsigned int channel = (index+1) << 4;
+
+    if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
+        std::cerr << "AmpIO::WriteEncoderPreloadAll, preload out of range " << sdata << std::endl;
+        return false;
+    }
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        ret = port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_OFFSET,
+                                 static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
+    }
+    return ret;
+}
+
+bool AmpIO::ResetKSZ8851All(BasePort *port) {
+    quadlet_t write_data = RESET_KSZ8851;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 12, write_data) : false);
 }
 
 /*******************************************************************************
