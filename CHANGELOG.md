@@ -1,7 +1,7 @@
 Change log
 ==========
 
-2.0.0 (2021-04-08)
+1.6.0 (2021-04-08)
 ==================
 * API changes:
   * New packet format for firmware 7
