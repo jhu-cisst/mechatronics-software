@@ -310,7 +310,12 @@ public:
     bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
     bool IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const;
 
-    AmpIO_Int32 ReadWatchdogPeriod(void) const;
+    // Read the watchdog period (16 bit number).
+    // If applyMask is true, the upper 16 bits are cleared. This is the default
+    // behavior for backward compatibility.
+    // Starting with Firmware Rev 8, the upper bit (bit 31) indicates whether
+    // LED1 on the QLA displays the watchdog period status.
+    AmpIO_Int32 ReadWatchdogPeriod(bool applyMask = true) const;
     double ReadWatchdogPeriodInSeconds(void) const;
 
     AmpIO_UInt32 ReadDigitalIO(void) const;
@@ -366,8 +371,12 @@ public:
     // Start/stop driving waveform for specified digital outputs (mask)
     bool WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
+    // Write the watchdog period in counts. Starting with Firmware Rev 8, setting the upper
+    // bit (bit 31) will cause LED1 on the QLA to display the watchdog period status.
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
-    bool WriteWatchdogPeriodInSeconds(const double seconds);
+    // Write the watchdog period in seconds. Starting with Firmware Rev 8, setting ledDisplay
+    // true will cause LED1 on the QLA to display the watchdog period status.
+    bool WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay = false);
 
     /*! \brief Write DOUT control register to set digital output mode (e.g., PWM, one-shot (pulse), general out).
 

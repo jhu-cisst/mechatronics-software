@@ -874,12 +874,14 @@ bool AmpIO::IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) cons
     return ret;
 }
 
-AmpIO_Int32 AmpIO::ReadWatchdogPeriod(void) const
+AmpIO_Int32 AmpIO::ReadWatchdogPeriod(bool applyMask) const
 {
     AmpIO_UInt32 counts = 0;
     if (port) {
         port->ReadQuadlet(BoardId, 3, counts);
     }
+    if (applyMask)
+        counts &= 0x0000ffff;
     return counts;
 }
 
@@ -1027,7 +1029,7 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
     return port->WriteQuadlet(BoardId, 3, counts);
 }
 
-bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
+bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay)
 {
     AmpIO_UInt32 counts;
     if (seconds == 0.0) {
@@ -1040,6 +1042,8 @@ bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
         counts = static_cast<AmpIO_UInt32>(seconds/WDOG_ClockPeriod);
         counts = std::max(counts, static_cast<AmpIO_UInt32>(1));
     }
+    if (ledDisplay)
+        counts |= 0x80000000;
     return WriteWatchdogPeriod(counts);
 }
 
