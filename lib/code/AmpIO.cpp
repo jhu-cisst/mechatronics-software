@@ -29,6 +29,8 @@ inline quadlet_t bswap_32(quadlet_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
+const AmpIO_UInt32 OFF_CTRL_ADDR_SPACE =  0x8000;  /*!< New address space: reg_raddr[15:12] of FPGA = ADDR_CTRL = 8 */
+
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 COLLECT_BIT      = 0x40000000;  /*!< Enable data collection on FPGA */
 const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
@@ -779,6 +781,236 @@ AmpIO_UInt32 AmpIO::ReadIPv4Address(void) const
 }
 
 /*******************************************************************************
+ * Digital Controller reads
+ */
+
+bool AmpIO::ReadCtrlCurrCO_cmd(unsigned int index, AmpIO_UInt16 &sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CO_CMD_FB, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data >> 16); // co_cmd is in the higher 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlCurrCO_fbBits(unsigned int index, AmpIO_UInt16 &sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CO_CMD_FB, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data & 0x0000FFFF); // co_fbBits is in the lower 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlCurrKp(unsigned int index, AmpIO_UInt16 &sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_CURR_Kp_KiT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data >> 16); // Kp is in the higher 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlCurrKiT(unsigned int index, AmpIO_UInt16 &sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_CURR_Kp_KiT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data & 0x0000FFFF); // KiT is in the lower 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlCurrKdT(unsigned int index, AmpIO_UInt16 &sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_CURR_KdT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data >> 16); // KdT is in the higher 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlPosKp(unsigned int index, AmpIO_UInt16& sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_Kp_KiT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data >> 16); // Kp is in the higher 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlPosKiT(unsigned int index, AmpIO_UInt16& sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_Kp_KiT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data & 0x0000FFFF); // KiT is in the lower 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlPosKdT(unsigned int index, AmpIO_UInt16& sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_KdT_CF_OUT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data >> 16); // KdT is in the higher 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlPosCF_out(unsigned int index, AmpIO_UInt16& sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_KdT_CF_OUT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data & 0x0000FFFF); // co_out is in the lower 16 bits
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlPosCmd(unsigned int index, AmpIO_Int32& sdata) //read commanded position for PID_position controller
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_OUT_POS_CMD, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt32>(read_data - ENC_MIDRANGE); // Pos_cmd is in the lower 25 bits, subtract the midrange which was added when Writing PosCmd
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlPosOut(unsigned int index, AmpIO_UInt16& sdata) //read output of PID_position controller
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_OUT_POS_OUT, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt16>(read_data & 0x0000FFFF); // Pos_out is in the 16 bit which act as input for the current controller
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlNshiftsAll(unsigned int index, AmpIO_UInt32& sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_SHIFTS, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt32>(read_data); // Read whole 32 bits. Masks are applied when reading the single parameters out of the whole 4 Bytes
+    }
+    return ret;
+}
+
+bool AmpIO::ReadCtrlPosContEn(unsigned int index, AmpIO_UInt8& sdata)
+{
+    AmpIO_UInt32 read_data;
+    bool ret = ReadCtrlNshiftsAll(index, read_data); // call by reference
+    if (ret)
+        sdata = static_cast<AmpIO_UInt8>((read_data & (0x1 << 31)) >> 31); // mask and shift bits to lower end
+
+    return ret;
+}
+
+bool AmpIO::ReadCtrlNshiftCurrKp(unsigned int index, AmpIO_UInt8& sdata)
+{
+    AmpIO_UInt32 read_data;
+    bool ret = ReadCtrlNshiftsAll(index, read_data); // call by reference
+    if (ret)
+        sdata = static_cast<AmpIO_UInt8>((read_data & (0x000F << 20)) >> 20); // mask and shift bits to lower end
+
+    return ret;
+}
+
+bool AmpIO::ReadCtrlNshiftCurrKiT(unsigned int index, AmpIO_UInt8& sdata)
+{
+    AmpIO_UInt32 read_data;
+    bool ret = ReadCtrlNshiftsAll(index, read_data); // call by reference
+    if (ret)
+        sdata = static_cast<AmpIO_UInt8>((read_data & (0x000F << 16)) >> 16); // mask and shift bits to lower end
+
+    return ret;
+}
+
+bool AmpIO::ReadCtrlNshiftCurrKdT(unsigned int index, AmpIO_UInt8& sdata)
+{
+    AmpIO_UInt32 read_data;
+    bool ret = ReadCtrlNshiftsAll(index, read_data); // call by reference
+    if (ret)
+        sdata = static_cast<AmpIO_UInt8>((read_data & (0x000F << 12)) >> 12); // mask and shift bits to lower end
+
+    return ret;
+}
+
+bool AmpIO::ReadCtrlNshiftPosKp(unsigned int index, AmpIO_UInt8& sdata)
+{
+    AmpIO_UInt32 read_data;
+    bool ret = ReadCtrlNshiftsAll(index, read_data); // call by reference
+    if (ret)
+        sdata = static_cast<AmpIO_UInt8>((read_data & (0x000F << 8)) >> 8); // mask and shift bits to lower end
+
+    return ret;
+}
+
+bool AmpIO::ReadCtrlNshiftPosKiT(unsigned int index, AmpIO_UInt8& sdata)
+{
+    AmpIO_UInt32 read_data;
+    bool ret = ReadCtrlNshiftsAll(index, read_data); // call by reference
+    if (ret)
+        sdata = static_cast<AmpIO_UInt8>((read_data & (0x000F << 4)) >> 4); // mask and shift bits to lower end
+
+    return ret;
+}
+
+bool AmpIO::ReadCtrlNshiftPosKdT(unsigned int index, AmpIO_UInt8& sdata)
+{
+    AmpIO_UInt32 read_data;
+    bool ret = ReadCtrlNshiftsAll(index, read_data); // call by reference
+    if (ret)
+        sdata = static_cast<AmpIO_UInt8>((read_data & (0x000F))); // mask and shift bits to lower end
+
+    return ret;
+}
+
+/*******************************************************************************
  * Write commands
  */
 
@@ -904,6 +1136,213 @@ bool AmpIO::WriteIPv4Address(AmpIO_UInt32 IPaddr)
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
 {
     return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
+}
+
+/*******************************************************************************
+ * Digital controller writes
+ */
+
+bool AmpIO::WriteCtrlCurrCO_cmd(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index+1) << 4;
+
+    AmpIO_UInt16 co_fbBits;
+    bool ret = ReadCtrlCurrCO_fbBits(index, co_fbBits); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CO_CMD_FB, static_cast<AmpIO_UInt32>( (sdata << 16) | co_fbBits));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlCurrCO_fbBits(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index+1) << 4;
+
+    AmpIO_UInt16 co_cmd;
+    bool ret = ReadCtrlCurrCO_cmd(index, co_cmd); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CO_CMD_FB, static_cast<AmpIO_UInt32>( (co_cmd << 16) | sdata));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlCurrKp(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index+1) << 4;
+
+    AmpIO_UInt16 KiT;
+    bool ret = ReadCtrlCurrKiT(index, KiT); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_CURR_Kp_KiT, static_cast<AmpIO_UInt32>( (sdata << 16) | KiT));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlCurrKiT(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index+1) << 4;
+
+    AmpIO_UInt16 Kp;
+    bool ret = ReadCtrlCurrKp(index, Kp); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_CURR_Kp_KiT, static_cast<AmpIO_UInt32>( (Kp << 16) | sdata));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlCurrKdT(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index+1) << 4;
+
+    //AmpIO_UInt16 KiT;
+    //bool ret = ReadCtrlCurrKiT(index, KiT); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_CURR_KdT, static_cast<AmpIO_UInt32>( (sdata << 16) | 0)); // OR 0 because other half of register is not used yet
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlPosKp(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    AmpIO_UInt16 KiT;
+    bool ret = ReadCtrlPosKiT(index, KiT); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_Kp_KiT, static_cast<AmpIO_UInt32>((sdata << 16) | KiT));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlPosKiT(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    AmpIO_UInt16 Kp;
+    bool ret = ReadCtrlPosKp(index, Kp); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_Kp_KiT, static_cast<AmpIO_UInt32>((Kp << 16) | sdata));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlPosKdT(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    AmpIO_UInt16 cf_out;
+    bool ret = ReadCtrlPosCF_out(index, cf_out); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_KdT_CF_OUT, static_cast<AmpIO_UInt32>((sdata << 16) | cf_out));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlPosCF_out(unsigned int index, AmpIO_UInt16 sdata)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    AmpIO_UInt16 KdT;
+    bool ret = ReadCtrlPosKdT(index, KdT); // call by reference
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_POS_KdT_CF_OUT, static_cast<AmpIO_UInt32>((KdT << 16) | sdata));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlPosCmd(unsigned int index, AmpIO_UInt32 sdata) //write commanded position for PID_position controller
+{
+    unsigned int channel = (index + 1) << 4;
+
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_OUT_POS_CMD, static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlNshift(unsigned int index, unsigned int n, AmpIO_UInt8 sdata) //write one specific N_shift indicated by the n
+{
+    unsigned int channel = (index + 1) << 4;
+
+    AmpIO_UInt32 readdata; //read all data in one go instead of 6 writes and wait times between
+    AmpIO_UInt32 writedata = 0; //write data are composed based on pos_cont_en and the 6 gains
+
+    //read back
+    bool ret = ReadCtrlNshiftsAll(index, readdata); // call by reference
+
+    //bit handling
+
+    //pos_cont_en
+    if(n == 0)
+        writedata = sdata << 31;
+    else
+        writedata = (readdata & (0x1 << 31)); //mask bit 31 of read data
+
+    //control gains per channel (3 curr, 3 pos)
+    for (unsigned int i = 1; i<=6; i++)
+    {
+        if (i == n) //value desired to rewrite
+            writedata |= (sdata << (20 - 4*(i-1)));
+        else //write corresponding part of readout data
+            writedata |= (readdata & (0x000F << (20 - 4*(i-1))));
+    }
+
+    //write back
+    if (port && (index < NUM_CHANNELS))
+        return port->WriteQuadlet(BoardId, channel | OFF_CTRL_ADDR_SPACE | OFF_CTRL_SHIFTS, static_cast<AmpIO_UInt32>(writedata));
+    else
+        return false;
+}
+
+bool AmpIO::WriteCtrlPosContEn(unsigned int index, AmpIO_UInt8 sdata)
+{
+    bool ret = WriteCtrlNshift(index, 0, sdata);
+    return ret;
+}
+
+bool AmpIO::WriteCtrlNshiftCurrKp(unsigned int index, AmpIO_UInt8 sdata)
+{
+    bool ret = WriteCtrlNshift(index, 1, sdata);
+    return ret;
+}
+
+bool AmpIO::WriteCtrlNshiftCurrKiT(unsigned int index, AmpIO_UInt8 sdata)
+{
+    bool ret = WriteCtrlNshift(index, 2, sdata);
+    return ret;
+}
+
+bool AmpIO::WriteCtrlNshiftCurrKdT(unsigned int index, AmpIO_UInt8 sdata)
+{
+    bool ret = WriteCtrlNshift(index, 3, sdata);
+    return ret;
+}
+
+bool AmpIO::WriteCtrlNshiftPosKp(unsigned int index, AmpIO_UInt8 sdata)
+{
+    bool ret = WriteCtrlNshift(index, 4, sdata);
+    return ret;
+}
+
+bool AmpIO::WriteCtrlNshiftPosKiT(unsigned int index, AmpIO_UInt8 sdata)
+{
+    bool ret = WriteCtrlNshift(index, 5, sdata);
+    return ret;
+}
+
+bool AmpIO::WriteCtrlNshiftPosKdT(unsigned int index, AmpIO_UInt8 sdata)
+{
+    bool ret = WriteCtrlNshift(index, 6, sdata);
+    return ret;
 }
 
 /*******************************************************************************

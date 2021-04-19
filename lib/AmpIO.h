@@ -448,6 +448,58 @@ public:
     /*! \brief Read collected data from FPGA memory buffer */
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
+    /*********************** METHODS FOR DIGITAL CONTROL ************************/
+
+    // read offsets and controller values for closed-loop motor current control
+    bool ReadCtrlCurrCO_cmd(unsigned int index, AmpIO_UInt16 &sdata);
+    bool ReadCtrlCurrCO_fbBits(unsigned int index, AmpIO_UInt16 &sdata);
+    bool ReadCtrlCurrKp(unsigned int index, AmpIO_UInt16 &sdata);
+    bool ReadCtrlCurrKiT(unsigned int index, AmpIO_UInt16 &sdata);
+    bool ReadCtrlCurrKdT(unsigned int index, AmpIO_UInt16 &sdata);
+
+    // read cmd and controller values for closed-loop position control
+    bool ReadCtrlPosKp(unsigned int index, AmpIO_UInt16& sdata);
+    bool ReadCtrlPosKiT(unsigned int index, AmpIO_UInt16& sdata);
+    bool ReadCtrlPosKdT(unsigned int index, AmpIO_UInt16& sdata);
+    bool ReadCtrlPosCF_out(unsigned int index, AmpIO_UInt16& sdata);
+    bool ReadCtrlPosCmd(unsigned int index, AmpIO_Int32& sdata);
+    bool ReadCtrlPosOut(unsigned int index, AmpIO_UInt16& sdata);
+
+    // read Position control enabled (or only current control) AND shifts of the 6 controller gains per channel
+    bool ReadCtrlNshiftsAll(unsigned int index, AmpIO_UInt32& sdata);
+    bool ReadCtrlPosContEn(unsigned int index, AmpIO_UInt8& sdata);
+    bool ReadCtrlNshiftCurrKp(unsigned int index, AmpIO_UInt8& sdata);
+    bool ReadCtrlNshiftCurrKiT(unsigned int index, AmpIO_UInt8& sdata);
+    bool ReadCtrlNshiftCurrKdT(unsigned int index, AmpIO_UInt8& sdata);
+    bool ReadCtrlNshiftPosKp(unsigned int index, AmpIO_UInt8& sdata);
+    bool ReadCtrlNshiftPosKiT(unsigned int index, AmpIO_UInt8& sdata);
+    bool ReadCtrlNshiftPosKdT(unsigned int index, AmpIO_UInt8& sdata);
+
+    // write offsets and controller values for closed-loop motor current control
+    bool WriteCtrlCurrCO_cmd(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlCurrCO_fbBits(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlCurrKp(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlCurrKiT(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlCurrKdT(unsigned int index, AmpIO_UInt16 sdata);
+
+    // write cmd and controller values for closed-loop position control
+    bool WriteCtrlPosKp(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlPosKiT(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlPosKdT(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlPosCF_out(unsigned int index, AmpIO_UInt16 sdata);
+    bool WriteCtrlPosCmd(unsigned int index, AmpIO_UInt32 sdata);
+
+    // read Position control enabled (or only current control) AND shifts of the 6 controller gains per channel
+    bool WriteCtrlNshift(unsigned int index, unsigned int n, AmpIO_UInt8 sdata); //write one specific N_shift indicated by the n
+    bool WriteCtrlPosContEn(unsigned int index, AmpIO_UInt8 sdata);
+    bool WriteCtrlNshiftCurrKp(unsigned int index, AmpIO_UInt8 sdata);
+    bool WriteCtrlNshiftCurrKiT(unsigned int index, AmpIO_UInt8 sdata);
+    bool WriteCtrlNshiftCurrKdT(unsigned int index, AmpIO_UInt8 sdata);
+    bool WriteCtrlNshiftPosKp(unsigned int index, AmpIO_UInt8 sdata);
+    bool WriteCtrlNshiftPosKiT(unsigned int index, AmpIO_UInt8 sdata);
+    bool WriteCtrlNshiftPosKdT(unsigned int index, AmpIO_UInt8 sdata);
+
+
 protected:
     unsigned int NumAxes;   // not currently used
 
@@ -566,6 +618,21 @@ protected:
         VEL_DP_DATA_OFFSET = 7,    // enc data register (velocity, DP/1 method)
         DOUT_CTRL_OFFSET = 8       // digital output control (PWM, one-shot)
     };
+
+    // CONTROLLER address offsets
+    enum {
+        OFF_CO_CMD_FB = 0,            // conversion offsets for commanded and feedback values
+        //**** Gains for closed loop motor current control ****
+        OFF_CTRL_CURR_Kp_KiT = 1,     // Kp [31:16] and Ki*T [15:0], both multiplied by 2^N_shift (default 13)
+        OFF_CTRL_CURR_KdT = 2,        // Kd/T [31:16], multiplied by 2^N_shift (default 13)
+        //**** Gains for closed loop motor position control ****
+        OFF_CTRL_POS_Kp_KiT = 3,      // Kp [31:16] and Ki*T [15:0], both multiplied by 2^N_shift (default 10)
+        OFF_CTRL_POS_KdT_CF_OUT = 4,  // Kd/T [31:16] multiplied by 2^N_shift (default 10)
+        OFF_OUT_POS_CMD = 5,          // pos_cmd [24:0]
+        OFF_OUT_POS_OUT = 6,          // pos_cmd [24:0]
+        OFF_CTRL_SHIFTS = 7           // pos_cont_en [31] and N_shift_Curr_Kp[23:20]
+    };
+
 };
 
 #endif // __AMPIO_H__
