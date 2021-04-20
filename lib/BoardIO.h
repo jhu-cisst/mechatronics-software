@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -54,31 +54,31 @@ protected:
     bool readValid;
     bool writeValid;
 
+    unsigned int numReadErrors;
+    unsigned int numWriteErrors;
+
     friend class BasePort;
     friend class FirewirePort;
     friend class EthBasePort;
     friend class EthRawPort;
     friend class EthUdpPort;
 
-    // DESIGN APPROACH (IN PROCESS):
     // For real-time block reads and writes, the board class (i.e., derived classes from BoardIO)
-    // determines the data size (NumBytes), but the port class (i.e., derived classes from BasePort)
-    // allocate the memory and call SetReadBuffer/SetWriteBuffer.
+    // determines the data size (NumBytes), but the port classes (i.e., derived classes from BasePort)
+    // allocate the memory.
 
     // Following methods are for real-time block reads
-    void SetReadValid(bool flag) { readValid = flag; }
+    void SetReadValid(bool flag)
+    { readValid = flag; if (!readValid) numReadErrors++; }
     virtual unsigned int GetReadNumBytes() const = 0;
-    virtual quadlet_t *GetReadBuffer() const = 0;
-    virtual void SetReadBuffer(quadlet_t *buf) = 0;
+    virtual void SetReadData(const quadlet_t *buf) = 0;
 
     // Following methods are for real-time block writes
-    // TODO: Consolidate Buffer and BufferData
     void SetWriteValid(bool flag)
-    { writeValid = flag; if (writeValid) memset(GetWriteBufferData(), 0, GetWriteNumBytes()); }
+    { writeValid = flag; if (!writeValid) numWriteErrors++; }
     virtual unsigned int GetWriteNumBytes() const = 0;
-    virtual quadlet_t *GetWriteBuffer() const = 0;
-    virtual quadlet_t *GetWriteBufferData() const = 0;
-    virtual void SetWriteBuffer(quadlet_t *buf, size_t data_offset) = 0;
+    virtual bool GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap = true) const = 0;
+    virtual void InitWriteBuffer(void) = 0;
 
     virtual bool WriteBufferResetsWatchdog(void) const = 0;
     virtual void CheckCollectCallback() = 0;
@@ -86,7 +86,8 @@ protected:
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards
 
-    BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false) {}
+    BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
+                                      numReadErrors(0), numWriteErrors(0) {}
     virtual ~BoardIO() {}
 
     inline unsigned char GetBoardId() const { return BoardId; }
@@ -96,6 +97,15 @@ public:
 
     inline bool ValidRead() const { return readValid; }
     inline bool ValidWrite() const { return writeValid; }
+
+    inline unsigned int GetReadErrors() const { return numReadErrors; }
+    inline unsigned int GetWriteErrors() const { return numWriteErrors; }
+
+    inline void ClearReadErrors() { numReadErrors = 0; }
+    inline void ClearWriteErrors() { numWriteErrors = 0; }
+
+    // Returns FPGA clock period in seconds
+    virtual double GetFPGAClockPeriod(void) const = 0;
 };
 
 #endif // __BOARDIO_H__

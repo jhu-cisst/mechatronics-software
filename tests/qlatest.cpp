@@ -14,8 +14,6 @@
  ******************************************************************************/
 
 #include <stdlib.h>
-#include <unistd.h>
-#include <curses.h>
 #include <math.h>
 #include <iostream>
 #include <sstream>
@@ -30,6 +28,8 @@
 #endif
 #include "EthUdpPort.h"
 #include "AmpIO.h"
+#include "Amp1394Time.h"
+#include "Amp1394Console.h"
 
 /*!
  \brief Increment encoder counts
@@ -63,7 +63,7 @@ void ClearLines(int start, int end)
     memset(blank, ' ', sizeof(blank)-1);
     blank[sizeof(blank)-1] = 0;
     while (start < end)
-        mvprintw(start++, 9, blank);
+        Amp1394Console::Print(start++, 9, blank);
 }
 
 bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
@@ -73,13 +73,13 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream 
     char buf[80];
 
     logFile << std::endl << "=== DIGITAL INPUTS ===" << std::endl;
-    mvprintw(curLine++, 9, "This tests the loopback on the test board"
+    Amp1394Console::Print(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT4 and all digital inputs");
 
     logFile << "   All inputs low: ";
     if (Board.WriteDigitalOutput(0x08, 0x00)) {
 
-        usleep(1000);
+        Amp1394_Sleep(0.001);
         if (Port->ReadAllBoards()) {
             data = (Board.GetDigitalInput() & 0x0fff);
             logFile << std::hex << data;
@@ -105,11 +105,11 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream 
         pass = false;
     }
 
-    mvprintw(curLine++, 9, buf);
+    Amp1394Console::Print(curLine++, 9, buf);
     logFile << "   All inputs high: ";
     if (Board.WriteDigitalOutput(0x08, 0x08)) {
 
-        usleep(1000);
+        Amp1394_Sleep(0.001);
         if (Port->ReadAllBoards()) {
             data = (Board.GetDigitalInput() & 0x0fff);
             logFile << std::hex << data;
@@ -135,7 +135,7 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream 
         pass = false;
     }
 
-    mvprintw(curLine++, 9, buf);
+    Amp1394Console::Print(curLine++, 9, buf);
     return pass;
 }
 
@@ -151,14 +151,14 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     bool tmpFix;
 
     logFile << std::endl << "=== ENCODER INPUTS ===" << std::endl;
-    mvprintw(curLine++, 9, "This test uses the DOUT signals to"
+    Amp1394Console::Print(curLine++, 9, "This test uses the DOUT signals to"
                            " generate a known number of quadrature encoder signals");
     Board.WriteDigitalOutput(0x0f, 0x03);
     // First, test setting of encoder preload
     logFile << "   Preload to 0x000000: ";
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
@@ -175,17 +175,17 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
         sprintf(buf, "Set encoder preload to 0 - FAIL (%06lx %06lx %06lx %06lx)",
                      darray[0], darray[1], darray[2], darray[3]);
     }
-    mvprintw(curLine++, 9, buf);
-    refresh();
+    Amp1394Console::Print(curLine++, 9, buf);
+    Amp1394Console::Refresh();
     if (pass) {
         logFile << "   Increment to 0x000100:" << std::endl;
-        mvprintw(curLine, 9, "Testing encoder increment to 0x000100 -");
+        Amp1394Console::Print(curLine, 9, "Testing encoder increment to 0x000100 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
             testValue[j] = 0;
         for (i = 0; (i < (0x100/4)) && pass; i++) {
             EncUp(Board);
-            usleep(100);
+            Amp1394_Sleep(0.0001);
             logFile << "      ";
             Port->ReadAllBoards();
             for (j = 0; j < 4; j++) {
@@ -230,14 +230,14 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
             sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x800000UL+4*i,
                          darray[0], darray[1], darray[2], darray[3]);
         }
-        mvprintw(curLine++, 49, buf);
-        refresh();
+        Amp1394Console::Print(curLine++, 49, buf);
+        Amp1394Console::Refresh();
     }
     bool tmp_pass = true;
     logFile << "   Preload to 0x000100: ";
     for (i = 0; i < 4; i++)
         Board.WriteEncoderPreload(i, 0x000100);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     for (i = 0; i < 4; i++) {
         darray[i] = Board.GetEncoderPosition(i);
@@ -255,18 +255,18 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
                       darray[0], darray[1], darray[2], darray[3]);
         pass = false;
     }
-    mvprintw(curLine++, 9, buf);
-    refresh();
+    Amp1394Console::Print(curLine++, 9, buf);
+    Amp1394Console::Refresh();
 
     if (tmp_pass) {
         logFile << "   Decrement to 0x000000:" << std::endl;
-        mvprintw(curLine, 9, "Testing encoder decrement to 0x000000 -");
+        Amp1394Console::Print(curLine, 9, "Testing encoder decrement to 0x000000 -");
         tmpFix = false;
         for (j = 0; j < 4; j++)
             testValue[j] = 0;
         for (i = (0x100/4)-1; (i >= 0) && tmp_pass; i--) {
             EncDown(Board);
-            usleep(100);
+            Amp1394_Sleep(0.0001);
             logFile << "      ";
             Port->ReadAllBoards();
             for (j = 0; j < 4; j++) {
@@ -312,18 +312,18 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
             sprintf(buf, "FAIL at %06lx (%06lx %06lx %06lx %06lx)", 0x000000UL+4*(i+1),
                          darray[0], darray[1], darray[2], darray[3]);
         }
-        mvprintw(curLine++, 49, buf);
-        refresh();
+        Amp1394Console::Print(curLine++, 49, buf);
+        Amp1394Console::Refresh();
     }
 
-    mvprintw(curLine, 9, "Testing direct encoder input (A,B,I)");
+    Amp1394Console::Print(curLine, 9, "Testing direct encoder input (A,B,I)");
     bool directPass = true;
 
     // Test A channel directly
     AmpIO_UInt8 chanA;
     // Channel A low
     Board.WriteDigitalOutput(0x01, 0x00);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     chanA = Board.GetEncoderChannelA();
     if (chanA != 0x00) {
@@ -333,7 +333,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     }
     // Channel A high
     Board.WriteDigitalOutput(0x01, 0x01);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     chanA = Board.GetEncoderChannelA();
     if (chanA != 0x0f) {
@@ -346,7 +346,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     AmpIO_UInt8 chanB;
     // Channel B low
     Board.WriteDigitalOutput(0x02, 0x00);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     chanB = Board.GetEncoderChannelB();
     if (chanB != 0x00) {
@@ -356,7 +356,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     }
     // Channel B high
     Board.WriteDigitalOutput(0x02, 0x02);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     chanB = Board.GetEncoderChannelB();
     if (chanB != 0x0f) {
@@ -369,7 +369,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     // Index low
     AmpIO_UInt8 index;
     Board.WriteDigitalOutput(0x04, 0x00);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     index = Board.GetEncoderIndex();
     if (index != 0x00) {
@@ -379,7 +379,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     }
     // Index high
     Board.WriteDigitalOutput(0x04, 0x04);
-    usleep(100);
+    Amp1394_Sleep(0.0001);
     Port->ReadAllBoards();
     index = Board.GetEncoderIndex();
     if (index != 0x0f) {
@@ -389,9 +389,9 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     }
 
     if (directPass)
-        mvprintw(curLine++, 49, "- PASS");
+        Amp1394Console::Print(curLine++, 49, "- PASS");
     else
-        mvprintw(curLine++, 49, "- FAIL");
+        Amp1394Console::Print(curLine++, 49, "- FAIL");
 
     if (pass)
         logFile << "   Overall result: PASS" << std::endl;
@@ -408,11 +408,11 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &
     bool pass = true;
 
     logFile << std::endl << "=== Analog Inputs ===" << std::endl;
-    mvprintw(curLine++, 9, "This test uses the pot on the test board to set a voltage (+/-0.25V)");
+    Amp1394Console::Print(curLine++, 9, "This test uses the pot on the test board to set a voltage (+/-0.25V)");
     bool tmp_pass = false;
     while (!tmp_pass) {
-        mvprintw(curLine, 9, "Enter pot voltage: ");
-        getstr(buf);
+        Amp1394Console::Print(curLine, 9, "Enter pot voltage: ");
+        Amp1394Console::GetString(buf, sizeof(buf));
         if (sscanf(buf, "%lf", &measured) == 1) tmp_pass = true;
     }
     logFile << "   Input voltage: " << measured << std::endl;
@@ -454,7 +454,7 @@ bool TestAnalogInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &
                 potV[0], potV[1], potV[2], potV[3]);
     }
 
-    mvprintw(curLine, 9, buf);
+    Amp1394Console::Print(curLine, 9, buf);
     return pass;
 }
 
@@ -470,21 +470,21 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
  retry:
     // Enabling motor power supply
     Board.WritePowerEnable(true);
-    mvprintw(curLine, 9, "Enable motor power -");
-    refresh();
-    sleep(1);
+    Amp1394Console::Print(curLine, 9, "Enable motor power -");
+    Amp1394Console::Refresh();
+    Amp1394_Sleep(1.0);
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Enable motor power: " << std::hex << status;
     if ((status&0x000cffff) != 0x000c0000) {
         sprintf(buf, "FAIL (%08lx) - is motor power connected?", status);
-        mvprintw(curLine++, 30, buf);
-        mvprintw(curLine, 9, "Do you want to retry (y/n)? ");
-        getstr(buf);
+        Amp1394Console::Print(curLine++, 30, buf);
+        Amp1394Console::Print(curLine, 9, "Do you want to retry (y/n)? ");
+        Amp1394Console::GetString(buf, sizeof(buf));
         if ((buf[0] == 'y') || (buf[0] == 'Y')) {
-            mvprintw(curLine, 9, "                               ");
+            Amp1394Console::Print(curLine, 9, "                               ");
             curLine -= 1;
-            mvprintw(curLine, 30, "                                           ");
+            Amp1394Console::Print(curLine, 30, "                                           ");
             goto retry;
         }
         logFile << " - FAIL" << std::endl;
@@ -494,17 +494,17 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         logFile << " - PASS" << std::endl;
         sprintf(buf, "PASS (%08lx)", status);
     }
-    mvprintw(curLine++, 30, buf);
+    Amp1394Console::Print(curLine++, 30, buf);
 
     if (!pass && (status & 0x0004ffff) == 0x00040000) {
         logFile << "   Continuing test, ignoring 'motor voltage good' feedback" << std::endl;
-        mvprintw(curLine++, 9, "Continuing test, ignoring 'motor voltage good' feedback");
+        Amp1394Console::Print(curLine++, 9, "Continuing test, ignoring 'motor voltage good' feedback");
         ignoreMV = true;
     }
 
     // Enabling individual amplifiers
     Board.WriteAmpEnable(0x0f, 0x0f);
-    usleep(1000);
+    Amp1394_Sleep(0.001);
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Amplifier enable: " << std::hex << status;
@@ -518,14 +518,14 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         logFile << " - PASS" << std::endl;
         sprintf(buf, "Enable power amplifiers - PASS (%08lx)", status);
     }
-    mvprintw(curLine++, 9, buf);
+    Amp1394Console::Print(curLine++, 9, buf);
 
-    refresh();
-    sleep(1);    // wait 1 second (LEDs should be ON)
+    Amp1394Console::Refresh();
+    Amp1394_Sleep(1.0);    // wait 1 second (LEDs should be ON)
 
     // Turning amplifiers off
     Board.WriteAmpEnable(0x0f, 0);
-    usleep(1000);
+    Amp1394_Sleep(0.001);
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Amplifier disable: " << std::hex << status;
@@ -538,12 +538,12 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         logFile << " - PASS" << std::endl;
         sprintf(buf, "Disable power amplifiers - PASS (%08lx)", status);
     }
-    mvprintw(curLine++, 9, buf);
+    Amp1394Console::Print(curLine++, 9, buf);
 
     Board.WritePowerEnable(false);
-    mvprintw(curLine, 9, "Disable motor power -");
-    refresh();
-    sleep(1);
+    Amp1394Console::Print(curLine, 9, "Disable motor power -");
+    Amp1394Console::Refresh();
+    Amp1394_Sleep(1.0);
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Disable motor power: " << std::hex << status;
@@ -556,11 +556,11 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         logFile << " - PASS" << std::endl;
         sprintf(buf, "PASS (%08lx)", status);
     }
-    mvprintw(curLine++, 31, buf);
+    Amp1394Console::Print(curLine++, 31, buf);
 
     // Turn on safety relay
     Board.WriteSafetyRelay(true);
-    usleep(10000);  // 10 ms
+    Amp1394_Sleep(0.01);   // 10 ms
     logFile << "   Enable safety relay: " << std::hex << Board.ReadStatus();
     if (!Board.ReadSafetyRelayStatus()) {
         logFile << " - FAIL" << std::endl;
@@ -572,14 +572,14 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         logFile << " - PASS" << std::endl;
         sprintf(buf, "Enable safety relay - PASS (%08x)", Board.ReadStatus());
     }
-    mvprintw(curLine++, 9, buf);
+    Amp1394Console::Print(curLine++, 9, buf);
 
-    refresh();
-    sleep(1);
+    Amp1394Console::Refresh();
+    Amp1394_Sleep(1.0);
 
     // Turn off safety relay
     Board.WriteSafetyRelay(false);
-    usleep(1000);
+    Amp1394_Sleep(0.001);
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Disable safety relay: " << std::hex << status;
@@ -592,7 +592,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         logFile << " - PASS" << std::endl;
         sprintf(buf, "Disable safety relay - PASS (%08lx)", status);
     }
-    mvprintw(curLine++, 9, buf);
+    Amp1394Console::Print(curLine++, 9, buf);
 
     return pass;
 }
@@ -609,8 +609,8 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
     Board.WriteWatchdogPeriod(0x0000);
 
     logFile << std::endl << "=== Power Amplifier Test ===" << std::endl;
-    mvprintw(curLine, 9, "Temperature sensors - ");
-    refresh();
+    Amp1394Console::Print(curLine, 9, "Temperature sensors - ");
+    Amp1394Console::Refresh();
 
     Board.WritePowerEnable(true);
     Board.WriteAmpEnable(0x0f, 0x0f);
@@ -618,13 +618,13 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
     for (i = 0; i < 4; i++)
         Board.SetMotorCurrent(i, dac);
     Port->WriteAllBoards();
-    sleep(1);  // wait for power to stabilize
+    Amp1394_Sleep(1.0);  // wait for power to stabilize
     Port->ReadAllBoards();
     status = Board.GetStatus();
     if ((status&0x000cffff) != 0x000c0f0f) {
         sprintf(buf,"Failed to enable power (%08lx) - is motor power connected?", status);
-        mvprintw(curLine++, 9, buf);
-        mvprintw(curLine, 9, "Temperature sensors - ");
+        Amp1394Console::Print(curLine++, 9, buf);
+        Amp1394Console::Print(curLine, 9, "Temperature sensors - ");
     }
     // Read temperature in Celsius
     unsigned short temp1 = Board.GetAmpTemperature(0)/2;
@@ -638,18 +638,18 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
         logFile << "- PASS" << std::endl;
         sprintf(buf, "PASS (%d, %d degC)", temp1, temp2);
     }
-    mvprintw(curLine++, 31, buf);
+    Amp1394Console::Print(curLine++, 31, buf);
 
-    mvprintw(curLine, 9, "DAC:");
-    mvprintw(curLine+1, 9, "ADC:");
-    mvprintw(curLine+3, 9, "Temp:");
-    refresh();
+    Amp1394Console::Print(curLine, 9, "DAC:");
+    Amp1394Console::Print(curLine+1, 9, "ADC:");
+    Amp1394Console::Print(curLine+3, 9, "Temp:");
+    Amp1394Console::Refresh();
 
     // Increment of 0x0200 is about 100 mA; 0x9000 is approx. 780 mA.
     unsigned long cur[4];
     while (1) {
         sprintf(buf, "%04lx   %04lx   %04lx   %04lx", dac, dac, dac, dac);
-        mvprintw(curLine, 15, buf);
+        Amp1394Console::Print(curLine, 15, buf);
         logFile << "   Commanded current: " << std::hex << dac << ", Measured currents: ";
         for (i = 0; i < 4; i++) {
             cur[i] = Board.GetMotorCurrent(i);
@@ -660,17 +660,17 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
                     )
                 ) {
                 logFile << "* ";
-                mvprintw(curLine+2, 15+7*i, "FAIL");
+                Amp1394Console::Print(curLine+2, 15+7*i, "FAIL");
                 pass = false;
             }
             else {
                 logFile << "  ";
-                mvprintw(curLine+2, 15+7*i, "PASS");
+                Amp1394Console::Print(curLine+2, 15+7*i, "PASS");
             }
         }
         logFile << std::endl;
         sprintf(buf, "%04lx   %04lx   %04lx   %04lx", cur[0], cur[1], cur[2], cur[3]);
-        mvprintw(curLine+1, 15, buf);
+        Amp1394Console::Print(curLine+1, 15, buf);
 
         unsigned short newTemp1 = Board.GetAmpTemperature(0)/2;
         unsigned short newTemp2 = Board.GetAmpTemperature(1)/2;
@@ -681,10 +681,10 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
             logFile << " - fail" << std::endl;
         sprintf(buf, "%4d (%s)    %4d (%s)", newTemp1, ((newTemp1 >= temp1) ? "PASS" : "FAIL"),
                 newTemp2, ((newTemp2 >= temp2) ? "PASS" : "FAIL"));
-        mvprintw(curLine+3, 15, buf);
+        Amp1394Console::Print(curLine+3, 15, buf);
         temp1 = newTemp1;
         temp2 = newTemp2;
-        refresh();
+        Amp1394Console::Refresh();
 
         if (dac > 0x8000) dac = 0x8000 - (dac - 0x8000);
         else dac = 0x8000 + (0x8000 - dac) + 0x0200;
@@ -694,7 +694,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
         for (i = 0; i < 4; i++)
             Board.SetMotorCurrent(i, dac);
         Port->WriteAllBoards();
-        sleep(1);
+        Amp1394_Sleep(1.0);
         Port->ReadAllBoards();
     }
 
@@ -729,7 +729,7 @@ bool TestEthernet(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     // Reset the board
     Board.ResetKSZ8851();
     // Wait 100 msec
-    usleep(100000L);
+    Amp1394_Sleep(0.1);
     // Read the status
     status = Board.ReadKSZ8851Status();
     logFile << "   After reset, status = " << std::hex << status << std::endl;
@@ -833,7 +833,7 @@ int main(int argc, char** argv)
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    BasePort *Port;
+    BasePort *Port = 0;
     if (desiredPort == BasePort::PORT_FIREWIRE) {
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
@@ -844,18 +844,16 @@ int main(int argc, char** argv)
     }
     else if (desiredPort == BasePort::PORT_ETH_UDP) {
         Port = new EthUdpPort(port, IPaddr, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
     }
     else if (desiredPort == BasePort::PORT_ETH_RAW) {
 #if Amp1394_HAS_PCAP
         Port = new EthRawPort(port, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 #else
         std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
         return -1;
 #endif
     }
-    if (!Port->IsOK()) {
+    if (!Port || !Port->IsOK()) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
         return -1;
@@ -889,22 +887,26 @@ int main(int argc, char** argv)
 
     logFile << "FPGA Firmware Version: " << Board.GetFirmwareVersion() << std::endl;
 
-    initscr();
-    cbreak();
-    keypad(stdscr, TRUE);
+    Amp1394Console console(Amp1394Console::FLAG_ECHO|Amp1394Console::FLAG_BLOCKING);
+    if (!console.IsOK()) {
+        std::cerr << "Failed to initialize console" << std::endl;
+        Port->RemoveBoard(board);
+        delete Port;
+        return -1;
+    }
 
-    mvprintw(1, 9, "QLA Test for Board %d, S/N %s", board, QLA_SN.c_str());
+    console.Print(1, 9, "QLA Test for Board %d, S/N %s", board, QLA_SN.c_str());
 
-    mvprintw(3, 9, "0) Quit");
-    mvprintw(4, 9, "1) Test digital input:");
-    mvprintw(5, 9, "2) Test encoder feedback:");
-    mvprintw(6, 9, "3) Test analog feedback:");
-    mvprintw(7, 9, "4) Test motor power control:");
-    mvprintw(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
+    console.Print(3, 9, "0) Quit");
+    console.Print(4, 9, "1) Test digital input:");
+    console.Print(5, 9, "2) Test encoder feedback:");
+    console.Print(6, 9, "3) Test analog feedback:");
+    console.Print(7, 9, "4) Test motor power control:");
+    console.Print(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
     if ((desiredPort == BasePort::PORT_FIREWIRE) && Board.HasEthernet())
-        mvprintw(9, 9, "6) Test Ethernet controller:");
+        console.Print(9, 9, "6) Test Ethernet controller:");
 
-    refresh();
+    console.Refresh();
 
     const int TEST_START_LINE = 12;
     const int DEBUG_START_LINE = 20;
@@ -918,19 +920,19 @@ int main(int argc, char** argv)
             char line[80];
             memset(line, ' ', sizeof(line));
             for (i = cur_line; i < last_debug_line; i++)
-                mvprintw(i, 9, line);
+                console.Print(i, 9, line);
             while (!debugStream.eof()) {
                 std::string stringLine;
                 std::getline(debugStream, stringLine);
-                mvwprintw(stdscr,cur_line++, 9, stringLine.c_str());
+                console.Print(cur_line++, 9, stringLine.c_str());
             }
             debugStream.clear();
             debugStream.str("");
             last_debug_line = cur_line;
         }
 
-        mvprintw(10, 10, "Select option: ");
-        int c = getch();
+        console.Print(10, 10, "Select option: ");
+        int c = console.GetChar();
 
         switch (c) {
             case '0':   // Quit
@@ -939,58 +941,58 @@ int main(int argc, char** argv)
             case '1':   // Test digital input
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                 if (TestDigitalInputs(TEST_START_LINE, Board, Port, logFile))
-                    mvprintw(4, 46, "PASS");
+                    console.Print(4, 46, "PASS");
                 else
-                    mvprintw(4, 46, "FAIL");
+                    console.Print(4, 46, "FAIL");
                 break;
 
             case '2':    // Test encoder feedback
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                 if (TestEncoders(TEST_START_LINE, Board, Port, logFile))
-                    mvprintw(5, 46, "PASS");
+                    console.Print(5, 46, "PASS");
                 else
-                    mvprintw(5, 46, "FAIL");
+                    console.Print(5, 46, "FAIL");
                 break;
 
             case '3':    // Test analog feedback
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                 if (TestAnalogInputs(TEST_START_LINE, Board, Port, logFile))
-                    mvprintw(6, 46, "PASS");
+                    console.Print(6, 46, "PASS");
                 else
-                    mvprintw(6, 46, "FAIL");
+                    console.Print(6, 46, "FAIL");
                 break;
 
             case '4':
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                 if (TestMotorPowerControl(TEST_START_LINE, Board, Port, logFile))
-                    mvprintw(7, 46, "PASS");
+                    console.Print(7, 46, "PASS");
                 else
-                    mvprintw(7, 46, "FAIL");
+                    console.Print(7, 46, "FAIL");
                 break;
 
             case '5':
                 ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                 if (TestPowerAmplifier(TEST_START_LINE, Board, Port, logFile))
-                    mvprintw(8, 46, "PASS");
+                    console.Print(8, 46, "PASS");
                 else
-                    mvprintw(8, 46, "FAIL");
+                    console.Print(8, 46, "FAIL");
                 break;
 
             case '6':
                 if ((desiredPort == BasePort::PORT_FIREWIRE) && Board.HasEthernet()) {
                     ClearLines(TEST_START_LINE, DEBUG_START_LINE);
                     if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
-                        mvprintw(9, 46, "PASS");
+                        console.Print(9, 46, "PASS");
                     else
-                        mvprintw(9, 46, "FAIL");
+                        console.Print(9, 46, "FAIL");
                 }
                 break;
         }
 
-        refresh();
+        console.Refresh();
     }
 
     Port->RemoveBoard(board);
-    endwin();
+    console.End();
     delete Port;
 }

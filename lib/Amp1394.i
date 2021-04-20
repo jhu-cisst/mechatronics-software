@@ -1,28 +1,37 @@
 /* File : Amp1394.i */
-%module Amp1394
+%module Amp1394Python
 %{
 #define SWIG_FILE_WITH_INIT
     
 /*Put headers and other declarations here*/
+#include "AmpIORevision.h"
 #include "AmpIO.h"
-#include "Eth1394Port.h"
-#include "FirewirePort.h"
+#include "EthUdpPort.h"
+
+typedef AmpIO::EncoderVelocityData EncoderVelocityData;
+
+#if Amp1394_HAS_RAW1394
+  #include "FirewirePort.h"
+#endif
+
+#if Amp1394_HAS_PCAP
+  #include "EthRawPort.h"
+#endif
+
 #ifdef _MSC_VER
 #include <stdlib.h>
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
+inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #else
 #include <byteswap.h>
 #endif
-extern void print_frame(unsigned char* buffer, int length);
-
-/*Provide bswap_32*/
-uint32_t bswap32(uint32_t in) {
-    return bswap_32(in);
-}
 
 uint16_t bswap16(uint16_t in) {
     return bswap_16(in);
+}
+
+uint32_t bswap32(uint32_t in) {
+    return bswap_32(in);
 }
 
 %}
@@ -35,14 +44,8 @@ uint16_t bswap16(uint16_t in) {
     import_array();
 %}
 
-void print_frame(unsigned char* buffer, int length);
-uint32_t bswap32(uint32_t in);
 uint16_t bswap16(uint16_t in);
-
-typedef unsigned long int	nodeaddr_t;
-typedef unsigned int		quadlet_t;
-typedef unsigned int		uint32_t;
-
+uint32_t bswap32(uint32_t in);
 
 /*%apply int *INPUT { Int32 *in };*/
 %typemap(in,numinputs=0)
@@ -149,14 +152,26 @@ typedef unsigned int		uint32_t;
 %ignore AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
 %ignore AmpIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
 
-%include "AmpIO.h"
+%import "AmpIORevision.h"
 
+%constant int VERSION_MAJOR = Amp1394_VERSION_MAJOR;
+%constant int VERSION_MINOR = Amp1394_VERSION_MINOR;
+%constant int VERSION_PATCH = Amp1394_VERSION_PATCH;
+%constant std::string VERSION = Amp1394_VERSION;
+
+%include "BoardIO.h"
+%include "AmpIO.h"
 
 %apply (int* IN_ARRAY1, int DIM1) {(int* data, int size)};
 %apply quadlet_t& ARGOUT_QUADLET_T {quadlet_t &data};
 %apply (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES) {(quadlet_t *rdata, unsigned int nbytes)};
 %apply (quadlet_t* IN_ARRAY1, unsigned int NBYTES) {(quadlet_t *wdata, unsigned int nbytes)};
 %include "BasePort.h"
-%include "Eth1394Port.h"  
-%include "FirewirePort.h"
-
+%include "EthBasePort.h"
+%include "EthUdpPort.h"
+#if Amp1394_HAS_RAW1394
+  %include "FirewirePort.h"
+#endif
+#if Amp1394_HAS_PCAP
+  %include "EthRawPort.h"
+#endif

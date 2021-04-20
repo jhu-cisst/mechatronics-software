@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -24,7 +24,10 @@ http://www.cisst.org/cisst/license.txt.
 
 struct SocketInternals;
 
-#define ETH_UDP_DEFAULT_IP "169.254.0.100"
+// Default MTU=1500 (does not count 18 bytes for Ethernet frame header and CRC)
+const unsigned int ETH_MTU_DEFAULT = 1500;
+// Size of IPv4 header (20) and UDP header (8), counts against MTU limit
+const unsigned int ETH_UDP_HEADER = 28;
 
 class EthUdpPort : public EthBasePort
 {
@@ -37,14 +40,21 @@ protected:
     //! Initialize EthUdp port
     bool Init(void);
 
-    //! Initialize nodes on the bus
-    bool InitNodes(void);
+    //! Cleanup EthUdp port
+    void Cleanup(void);
 
-    //! Read quadlet from node (internal method called by ReadQuadlet)
-    bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
+    //! Initialize nodes on the bus; called by ScanNodes
+    // \return Maximum number of nodes on bus (0 if error)
+    nodeid_t InitNodes(void);
 
-    //! Write quadlet to node (internal method called by WriteQuadlet)
-    bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
+    // Send packet via UDP
+    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
+
+    // Receive packet via UDP
+    int PacketReceive(unsigned char *packet, size_t nbytes);
+
+    // Flush all packets in receive buffer
+    int PacketFlushAll(void);
 
 public:
 
@@ -59,41 +69,17 @@ public:
 
     bool IsOK(void);
 
-    void Reset(void);
+    unsigned int GetPrefixOffset(MsgType msg) const;
+    unsigned int GetWritePostfixSize(void) const  { return FW_CRC_SIZE; }
+    unsigned int GetReadPostfixSize(void) const   { return (FW_CRC_SIZE+FW_EXTRA_SIZE); }
 
-    // Add board to list of boards in use
-    bool AddBoard(BoardIO *board);
+    unsigned int GetWriteQuadAlign(void) const    { return (FW_CTRL_SIZE%sizeof(quadlet_t)); }
+    unsigned int GetReadQuadAlign(void) const     { return 0; }
 
-    // Remove board from list of boards in use
-    bool RemoveBoard(unsigned char boardId);
-
-    // Read all boards broadcasting
-    bool ReadAllBoardsBroadcast(void);
-
-    // Write to all boards using broadcasting
-    bool WriteAllBoardsBroadcast(void);
-
-    // ReadQuadlet in EthBasePort
-
-    // WriteQuadlet in EthBasePort
-
-    // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                   unsigned int nbytes);
-
-    // Write a block to the specified board
-    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                    unsigned int nbytes);
-
-    /*!
-     \brief Write a block of data using asynchronous broadcast
-
-     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param wdata  The pointer to write buffer data
-     \param nbytes  Number of bytes to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
+    // Get the maximum number of data bytes that can be read
+    // (via ReadBlock) or written (via WriteBlock).
+    unsigned int GetMaxReadDataSize(void) const;
+    unsigned int GetMaxWriteDataSize(void) const;
 
     //****************** Static methods ***************************
 

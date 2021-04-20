@@ -173,7 +173,7 @@ int main(int argc, char** argv)
             (!isQuad1394 && (args_found <= 2)))
     {
         if (isBroadcast) {
-            fprintf(stderr, "**** Error: broadcast read ONT supported on node %d (num nodes = %d)\n", node, nnodes);
+            fprintf(stderr, "**** Error: broadcast read NOT supported on node %d (num nodes = %d)\n", node, nnodes);
         }
 
         /* read the data block and print out the values */
@@ -193,10 +193,7 @@ int main(int argc, char** argv)
         }
     }
     if (rc) {
-        raw1394_errcode_t errcode;
-        errcode = raw1394_get_errcode(handle);
-        fprintf(stderr, "**** Error: (0x%08X) errno = %d %s \n",
-                errcode, errno, strerror(errno));
+        fprintf(stderr, "**** Error: errno = %d %s \n", errno, strerror(errno));
     }
 
     // Free memory if it was dynamically allocated

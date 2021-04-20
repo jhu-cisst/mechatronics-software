@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -40,18 +40,60 @@ typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
 typedef uint8_t  AmpIO_UInt8;
 
+// Conditional compilation so that EncoderVelocityData is internal to AmpIO, except when
+// parsing with SWIG, since SWIG cannot handle internal classes.
+
+#ifndef SWIG
+/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
 class AmpIO : public BoardIO
 {
 public:
+#endif
+
+    struct EncoderVelocityData {
+        double clkPeriod;            // Clock period, in seconds
+        AmpIO_UInt32 velPeriod;      // Encoder full-cycle period (for velocity)
+        bool velOverflow;            // Velocity (period) overflow
+        AmpIO_UInt32 velPeriodMax;   // Maximum possible velocity period
+        bool velDir;                 // Velocity direction (true -> positive direction)
+        bool dirChange;              // Direction change during last velocity period, V7+
+        bool encError;               // Encoder error detected, V7+
+        bool partialCycle;           // No full cycle yet, V7+
+        AmpIO_UInt32 qtr1Period;     // Encoder quarter-cycle period 1 (for accel), V6+
+        bool qtr1Overflow;           // Qtr1 overflow, V7+
+        bool qtr1Dir;                // Qtr1 direction (true -> positive direction), V7+
+        unsigned char qtr1Edges;     // Qtr1 edge mask (A-up, B-up, A-down, B-down), V7+
+        AmpIO_UInt32 qtr5Period;     // Encoder quarter-cycle period 5 (for accel), V6+
+        bool qtr5Overflow;           // Qtr5 overflow, V7+
+        bool qtr5Dir;                // Qtr5 direction (true -> positive direction), V7+
+        unsigned char qtr5Edges;     // Qtr5 edge mask (A-up, B-up, A-down, B-down), V7+
+        AmpIO_UInt32 qtrPeriodMax;   // Maximum Qtr1 or Qtr5 period
+        AmpIO_UInt32 runPeriod;      // Time since last encoder edge, Firmware V4,5,7+
+        bool runOverflow;            // Running counter overflow, V7+
+
+        EncoderVelocityData() { Init(); }
+        ~EncoderVelocityData() {}
+        void Init();
+    };
+
+#ifdef SWIG
+/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
+class AmpIO : public BoardIO
+{
+public:
+#endif
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    AmpIO_UInt32 GetFirmwareVersion(void) const;    
+    AmpIO_UInt32 GetFirmwareVersion(void) const;
     // Return FPGA serial number (empty string if not found)
     std::string GetFPGASerialNumber(void);
     // Return QLA serial number (empty string if not found)
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
+
+    // Returns FPGA clock period in seconds
+    double GetFPGAClockPeriod(void) const;
 
     // Returns true if FPGA has Ethernet (Rev 2.0+)
     bool HasEthernet(void) const;
@@ -65,6 +107,17 @@ public:
     AmpIO_UInt32 GetStatus(void) const;
 
     AmpIO_UInt32 GetTimestamp(void) const;
+
+    // Get timestamp in seconds (time between two consecutive reads)
+    double GetTimestampSeconds(void) const;
+
+    // Get elapsed time, in seconds, based on FPGA clock. This is computed by accumulating
+    // the timestamp values in the real-time read packet; thus, it is only accurate when
+    // there are periodic calls to ReadAllBoards or ReadAllBoardsBroadcast.
+    double GetFirmwareTime(void) const { return firmwareTime; }
+
+    // Set firmware time
+    void SetFirmwareTime(double newTime = 0.0) { firmwareTime = newTime; }
 
     // Return digital output state
     AmpIO_UInt8 GetDigitalOutput(void) const;
@@ -90,8 +143,6 @@ public:
     AmpIO_UInt8 GetEncoderChannelB(void) const;
     bool GetEncoderChannelB(unsigned int index) const;
 
-    bool GetEncoderOverflow(unsigned int index) const;
-
     AmpIO_UInt8 GetEncoderIndex(void) const;
     //@}
 
@@ -103,37 +154,50 @@ public:
 
     AmpIO_UInt32 GetAnalogInput(unsigned int index) const;
 
+    //********************** Encoder position/velocity/acceleration *****************************
+
+    /*! Returns the encoder position in counts. */
     AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
+
+    /*! Returns true if encoder position has overflowed. */
+    bool GetEncoderOverflow(unsigned int index) const;
+
+    /*! Returns the encoder clock period, in seconds. Note that this value depends on the
+        firmware version. */
+    double GetEncoderClockPeriod(void) const;
 
     /*! Returns the encoder velocity, in counts per second, based on the FPGA measurement
         of the encoder period (i.e., time between two consecutive edges). Specifically, the
         velocity is given by 4/(period*clk) counts/sec, where clk is the period of the clock used to measure
         the encoder period. The numerator is 4 because an encoder period is equal to 4 counts (quadrature).
         If the counter overflows, the velocity is set to 0. This method should work with all versions of firmware,
-        but has improved performance starting with Version 6. */
-    double GetEncoderVelocityCountsPerSecond(unsigned int index) const;
+        but has improved performance starting with Version 6. For a better velocity estimate, see the
+        GetEncoderVelocityPredicted method.
 
-    /*! Returns the time delay of the encoder velocity measurement, in seconds.
-        Currently, this is equal to half the measured period, based on the assumption that measuring the
-        period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle. */
-    double GetEncoderVelocityDelay(unsigned int index) const;
+        This method was previously called GetEncoderVelocityCountsPerSecond to distinguish it from an obsolete
+        GetEncoderVelocity that actually returned the encoder period as an integer (AmpIO_Int32). The velocity
+        period (velPeriod) and other information can now be obtained via the GetEncoderVelocityData method.
+    */
+    double GetEncoderVelocity(unsigned int index) const;
 
-    /*! Returns the encoder period, which is the time between two consecutive edges, as a signed value.
-        Specific details depend on the version of FPGA firmware. This value can be used to estimate the encoder
-        velocity (see GetEncoderVelocityCountsPerSecond). This method probably should have been called GetEncoderPeriod.
-        \note In prior versions of this library (up through 1.3.0), there was an optional "islatch"
-        boolean parameter, which defaulted to true. This is no longer supported by FPGA Firmware
-        Version 6+ and thus has been removed. If this library is used with prior versions of firmware,
-        it will return the estimated period corresponding to a true "islatch", and that period will
-        occupy the lower 16-bits. */
-    AmpIO_Int32 GetEncoderVelocity(unsigned int index) const;
+    /*! Returns the predicted encoder velocity, in counts per second, based on the FPGA measurement of the
+        encoder period (i.e., time between two consecutive edges), with compensation for the measurement delay.
+        For firmware Rev 6+, the predicted encoder velocity uses the estimated acceleration to predict the
+        velocity at the current time. For Rev 7+, the prediction also uses the encoder running counter (time
+        since last edge). There are two limits enforced:
+        1) The predicted velocity will not change sign (i.e., be in the opposite direction from the measured velocity).
+        2) The predicted velocity will not be larger than the velocity that would have caused one encoder count to
+           occur during the time measured by the running counter.
+        For an explanation of percent_threshold, see GetEncoderAcceleration.
+    */
+    double GetEncoderVelocityPredicted(unsigned int index, double percent_threshold = 1.0) const;
 
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
     /*! Returns midrange value of encoder position. */
-    AmpIO_Int32 GetEncoderMidRange(void) const;
+    static AmpIO_Int32 GetEncoderMidRange(void);
 
     /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
         between the most recent full cycle and the previous full cycle. If the encoder counter overflowed
@@ -150,11 +214,47 @@ public:
         encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
         This method is provided for internal use and testing in firmware Rev 6 and deprecated in >6. */
     AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
-    
+
+    /*! Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+). */
+    AmpIO_UInt32 GetEncoderQtr1Raw(unsigned int index) const;
+
+    /*! Get the encoder quarter cycle period from 5 cycles ago (i.e., 4 cycles prior to the one returned
+        by GetEncoderQtr1) for internal use and testing (Rev 7+). */
+    AmpIO_UInt32 GetEncoderQtr5Raw(unsigned int index) const;
+
+    /*! Get the encoder running counter, which measures the elasped time since the last encoder edge;
+        for internal use and testing (Rev 7+). */
+    AmpIO_UInt32 GetEncoderRunningCounterRaw(unsigned int index) const;
+
+    /*! Get the encoder running counter, in seconds */
+    double GetEncoderRunningCounterSeconds(unsigned int index) const;
+
+    /*! Returns the data available for computing encoder velocity (and acceleration). */
+    bool GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data) const;
+
+    /*! Returns the number of encoder errors (invalid transitions on the A or B channel). The errors
+        are detected on the FPGA, with Firmware V7+, which sets an error bit in the encoder period used
+        for velocity estimation. The error bit is cleared with the next valid transition.
+        The number of errors reported here is only the number of errors received by the PC; it does
+        not include any errors detected on the FPGA that were cleared before being read by the PC. */
+    unsigned int GetEncoderErrorCount(unsigned int index) const;
+
+    /*! Clears the count of encoder errors for the specified channel. Specifying NUM_CHANNELS (default
+        value) clears the counter for all channels. */
+    bool ClearEncoderErrorCount(unsigned int index = NUM_CHANNELS);
+
+    //********************************************************************************************
+
+    // GetPowerEnable: return power enable control
+    bool GetPowerEnable(void) const;
+
     // GetPowerStatus: returns true if motor power supply voltage
     // is present on the QLA. If not present, it could be because
     // power is disabled or the power supply is off.
     bool GetPowerStatus(void) const;
+
+    // GetSafetyRelay: returns desired safety relay state
+    bool GetSafetyRelay(void) const;
 
     // GetSafetyRelayStatus: returns true if safety relay contacts are closed
     bool GetSafetyRelayStatus(void) const;
@@ -165,6 +265,10 @@ public:
     // GetAmpEnable: returns true if system is requesting amplifier to
     // be enabled (but, amplifier might be in fault state)
     bool GetAmpEnable(unsigned int index) const;
+
+    // GetAmpEnableMask: returns mask where each set bit indicates that
+    // the corresponding amplifier is requested to be enabled
+    AmpIO_UInt8 GetAmpEnableMask(void) const;
 
     // GetAmpStatus: returns true if amplifier is enabled; false if
     // amplifier is in fault state.
@@ -177,9 +281,16 @@ public:
     // The SetXXX methods below write data to local buffers that are sent over
     // IEEE-1394 via FirewirePort::WriteAllBoards. To immediately write to
     // the boards, you can use a WriteXXX method.
+    // Note that SetAmpEnableMask is equivalent to WriteAmpEnable, whereas
+    // SetAmpEnable affects only the specified amplifier index.
+    // Also, due to the firmware implementation, SetAmpEnable/SetAmpEnableMask
+    // cannot enable the amplifiers unless board power is already enabled,
+    // i.e., via an earlier SetPowerEnable(true) followed by WriteAllBoards, or
+    // via a call to WritePowerEnable(true).
 
     void SetPowerEnable(bool state);
     bool SetAmpEnable(unsigned int index, bool state);
+    bool SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state);
     void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
@@ -199,6 +310,14 @@ public:
     bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
     bool IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const;
 
+    // Read the watchdog period (16 bit number).
+    // If applyMask is true, the upper 16 bits are cleared. This is the default
+    // behavior for backward compatibility.
+    // Starting with Firmware Rev 8, the upper bit (bit 31) indicates whether
+    // LED1 on the QLA displays the watchdog period status.
+    AmpIO_Int32 ReadWatchdogPeriod(bool applyMask = true) const;
+    double ReadWatchdogPeriodInSeconds(void) const;
+
     AmpIO_UInt32 ReadDigitalIO(void) const;
 
     /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
@@ -213,12 +332,23 @@ public:
      */
     bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
 
+    /*! \brief Read the status of the waveform output (i.e., whether waveform table is driving any
+               digital outputs and, if so, the current table index).
+        \param active true if the waveform table is actively driving any digital output
+        \param tableIndex index into waveform table (see WriteWaveformTable)
+        \returns true if successful (results in active and tableIndex)
+    */
+    bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
+
     /*! Read IPv4 address (only relevant for FPGA boards with Ethernet support)
         \returns IPv4 address (uint32) or 0 if error
      */
     AmpIO_UInt32 ReadIPv4Address(void) const;
 
     // ********************** WRITE Methods **********************************
+
+    // Reboot FPGA
+    bool WriteReboot(void);
 
     // Enable motor power to the entire board (it is still necessary
     // to enable power to the individual amplifiers).
@@ -231,10 +361,22 @@ public:
 
     bool WriteEncoderPreload(unsigned int index, AmpIO_Int32 enc);
 
+    // Reset DOUT configuration bit, which causes firmware to repeat DOUT configuration check
+    // (i.e., to detect QLA Rev 1.4+ with bidirectional DOUT).
+    bool WriteDoutConfigReset(void);
+
     // Set digital output state
     bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
+    // Start/stop driving waveform for specified digital outputs (mask)
+    bool WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
+
+    // Write the watchdog period in counts. Starting with Firmware Rev 8, setting the upper
+    // bit (bit 31) will cause LED1 on the QLA to display the watchdog period status.
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
+    // Write the watchdog period in seconds. Starting with Firmware Rev 8, setting ledDisplay
+    // true will cause LED1 on the QLA to display the watchdog period status.
+    bool WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay = false);
 
     /*! \brief Write DOUT control register to set digital output mode (e.g., PWM, one-shot (pulse), general out).
 
@@ -299,6 +441,20 @@ public:
         \returns Time, in counts
     */
     AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
+
+    // **************** Static WRITE Methods (for broadcast) ********************
+
+    static bool WriteRebootAll(BasePort *port);
+
+    static bool WritePowerEnableAll(BasePort *port, bool state);
+
+    static bool WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state);
+
+    static bool WriteSafetyRelayAll(BasePort *port, bool state);
+
+    static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata);
+
+    static bool ResetKSZ8851All(BasePort *port);
 
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming
@@ -421,18 +577,39 @@ public:
     //    buffer  buffer for storing data
     //    offset  address offset (in quadlets)
     //    nquads  number of quadlets to read (not more than 64)
-    // Note: This is not yet fully implemented in firmware (e.g., need to edit FPGA1394Eth-QLA.v)
     bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
+
+    // ********************** Waveform Generator Methods *****************************
+    // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
+    // any combination of the 4 digital outputs. The waveform table length is 1024,
+    // but can be updated while the waveform is active; to do that, call ReadWaveformStatus
+    // to obtain the current readIndex on the FPGA. Note that the FPGA will automatically
+    // wrap when reading/writing the table. For example, writing 10 quadlets to offset 1020
+    // will write to table[1020]-table[1023] and then table[0]-table[5].
+
+    /*! \brief Read the contents of the waveform table.
+        \param buffer Buffer for storing contents of waveform table
+        \param offset Offset into waveform table (0-1023)
+        \param nquads Number of quadlets to read (1-1024)
+        \note Cannot read table while waveform is active.
+    */
+    bool ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
+
+    /*! \brief Write the contents of the waveform table.
+        \param buffer Buffer containing data to write to waveform table
+        \param offset Offset into waveform table (0-1023)
+        \param nquads Number of quadlets to write (1-1024)
+    */
+    bool WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
     // *********************** Data Collection Methods *******************************
 
     /*! \brief User-supplied callback function for data collection
         \param buffer pointer to collected data
-        \param nquads number of elements in buffer (-1 if error)
-        \param readSize size of most recent block read request (informational)
+        \param nquads number of elements in buffer
         \returns returning false stops data collection (same as calling DataCollectionStop)
     */
-    typedef bool (*CollectCallback)(quadlet_t *buffer, short nquads, unsigned short readSize);
+    typedef bool (*CollectCallback)(quadlet_t *buffer, short nquads);
 
     /*! \brief Start data collection on FPGA (Firmware Rev 7+)
         \param chan which channel to collect (1-4)
@@ -445,6 +622,23 @@ public:
     void DataCollectionStop();
     /*! \brief Returns true if data collection is active */
     bool IsCollecting() const;
+
+    /*! \brief Gets FPGA data collection status, from real-time block read (Firmware Rev 7+)
+        \param collecting Whether FPGA is currently collecting data
+        \param chan Channel being collected (1-4)
+        \param writeAddr Buffer address being written by FPGA (can read up to writeAddr-1)
+        \returns true if successful
+        \sa ReadCollectionStatus  */
+    bool GetCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const;
+
+    /*! \brief Reads FPGA data collection status, via quadlet read command (Firmware Rev 7+)
+        \param collecting Whether FPGA is currently collecting data
+        \param chan Channel being collected (1-4)
+        \param writeAddr Buffer address being written by FPGA (can read up to writeAddr-1)
+        \returns true if successful
+        \sa GetCollectionStatus  */
+    bool ReadCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const;
+
     /*! \brief Read collected data from FPGA memory buffer */
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
@@ -513,75 +707,70 @@ protected:
            ReadBufSize = 4+6*NUM_CHANNELS,
            WriteBufSize = NUM_CHANNELS+1 };
 
-    // Buffer for real-time block reads. The constructor sets this to read_buffer_internal
-    // so that it is always valid, but the Port may set it differently, e.g., to point to
-    // the appropriate offset within a larger broadcast buffer.
-    quadlet_t *ReadBuffer;
-    quadlet_t read_buffer_internal[ReadBufSize];
+    // Buffer for real-time block reads. The Port class calls SetReadData to copy the
+    // most recent data into this buffer, while also byteswapping.
+    quadlet_t ReadBuffer[ReadBufSize];
 
-    // Buffer for real-time block writes. The constructor sets this to write_buffer_internal
-    // so that it is always valid, but the Port may set it differently, e.g., to point to
-    // the appropriate offset within a larger broadcast buffer.
-    quadlet_t *WriteBuffer;     // buffer for real-time writes
-    quadlet_t *WriteBufferData; // buffer for data part
-    quadlet_t write_buffer_internal[WriteBufSize];
+    // Buffer for real-time block writes. The Port class calls GetWriteData to copy from
+    // this buffer, while also byteswapping if needed.
+    quadlet_t WriteBuffer[WriteBufSize];
+
+    // Encoder velocity data (per axis)
+    EncoderVelocityData encVelData[NUM_CHANNELS];
+
+    // Counts received encoder errors
+    unsigned int encErrorCount[NUM_CHANNELS];
+
+    // Accumulated firmware time
+    double firmwareTime;
 
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.
     // Data collection is enabled by setting the COLLECT_BIT when writing the desired motor current.
     // Data can only be collected on one channel, specified by collect_chan.
     enum { COLLECT_BUFSIZE = 1024,     // must match firmware buffer size
-           COLLECT_MAX = 512,          // maximum read request size (at 400 MBit/sec)
-           COLLECT_MIN = 16            // minimum read request size (arbitrary)
+           COLLECT_MAX = 512           // maximum read request size (at 400 MBit/sec)
          };
     quadlet_t collect_data[COLLECT_MAX];
     bool collect_state;                // true if collecting data
     unsigned char collect_chan;        // which channel is being collected
     CollectCallback collect_cb;        // user-supplied callback (if non-zero)
     unsigned short collect_rindex;     // current read index
-    unsigned short collect_rquads;     // current block read request size (in quadlets)
-    
-    // Virtual methods
-    quadlet_t *GetReadBuffer() const { return ReadBuffer; }
-    unsigned int GetReadNumBytes() const;
-    void SetReadBuffer(quadlet_t *buf);
 
-    quadlet_t *GetWriteBuffer() const { return WriteBuffer; }
-    quadlet_t *GetWriteBufferData() const { return WriteBufferData; }
+    // Virtual methods
+    unsigned int GetReadNumBytes() const;
+    void SetReadData(const quadlet_t *buf);
+
     unsigned int GetWriteNumBytes() const { return WriteBufSize*sizeof(quadlet_t); }
-    void SetWriteBuffer(quadlet_t *buf, size_t data_offset);
+    bool GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap = true) const;
+    void InitWriteBuffer(void);
 
     // Test if the current write buffer contains commands that will
     // reset the watchdog on the board.  In practice, checks if
     // there's any valid bit on the 4 requested currents.
     bool WriteBufferResetsWatchdog(void) const;
 
-    /*! Returns whether the full cycle counter has overflows (22 bits) */
-    bool GetEncoderVelocityOverflow(unsigned int index) const;
-
-    /*! Returns the direction the encoder is moving in. */
-    bool GetEncoderDir(unsigned int index) const;
-
-    /*! Returns the latched period of the most recent encoder
-      quarter cycle. Used internally to calculate acceleration 
-      in firmware Rev 6 and deprecated in >6. */
-    AmpIO_Int32 GetEncoderAccRec(unsigned int index) const;
-
-    /*! Returns the latched quarter cycle periods.
-      Used internally to calculate acceleration in firmware Rev >6. */
-    AmpIO_Int32 GetEncoderQtr(unsigned int index, unsigned int offset) const;
+    /*! Extract the data used for velocity estimation */
+    bool SetEncoderVelocityData(unsigned int index);
 
     /*! \brief If user-supplied callback is not NULL, read data collection buffer and then call callback.
         \note Called by relevant Port class.
     */
     void CheckCollectCallback();
 
-    // Offsets of real-time read buffer contents, 20 = 4 + 4 * 4 quadlets
-    // Note that there are two velocity measurements. The first one (ENC_VEL_OFFSET)
-    // measures the time between consecutive encoder edges of the same type.
-    // The second one (ENC_FRQ_OFFSET) returns the number of encoder counts over
-    // a fixed time period (currently, about 8.5 ms, based on 11.72 Hz clock on FPGA).
-    // Only the first one (ENC_VEL_OFFSET) is currently used.
+    // Offsets of real-time read buffer contents, 28 = 4 + 4 * 6 quadlets
+    // Offsets from TIMESTAMP_OFFSET to ENC_POS_OFFSET have remained stable through
+    // all releases of firmware. The other offsets are related to velocity (and
+    // acceleration) estimation and have varied based on the firmware.
+    // ENC_VEL_OFFSET has always measured the encoder period (time between consecutive
+    // encoder edges of th same type), though the resolution of that measurement (i.e.,
+    // clock ticks per second) varies between different firmware versions.
+    // ENC_FRQ_OFFSET originally measured the number of encoder counts over a fixed
+    // time period (about 8.5 ms), but was never used by the higher-level software.
+    // It was later changed to ENC_QTR1_OFFSET, which measures the number of encoder
+    // counts over the last quarter-cycle, which is used for acceleration estimation.
+    // Firmware V7 added ENC_QTR5_OFFSET and ENC_RUN_OFFSET; in V6, the QTR5 data
+    // was stuffed into unused bits in other fields.
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet

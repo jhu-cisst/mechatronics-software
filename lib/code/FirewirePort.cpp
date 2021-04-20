@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -24,24 +24,17 @@ http://www.cisst.org/cisst/license.txt.
 #include <byteswap.h>
 #include <sys/select.h>
 #include <errno.h>   // errno
-#include <string.h>  // strerror(errno)
-#include <sys/time.h>
-#include <unistd.h>
-#include <stdio.h>
 
 // firewire
 #include "FirewirePort.h"
+#include "Amp1394Time.h"
 #include <libraw1394/raw1394.h>
 #include <libraw1394/csr.h>
-
-#define FAKEBC 1    // fake broadcast mode
 
 FirewirePort::PortListType FirewirePort::PortList;
 
 FirewirePort::FirewirePort(int portNum, std::ostream &debugStream):
-    BasePort(portNum, debugStream),
-    ReadErrorCounter_(0),
-    max_board(0)
+    BasePort(portNum, debugStream)
 {
     Init();
 }
@@ -50,8 +43,7 @@ bool FirewirePort::Init(void)
 {
     // create firewire port handle
     handle = raw1394_new_handle();
-    handle_bc = raw1394_new_handle();
-    if (!handle || !handle_bc) {
+    if (!handle) {
         outStr << "FirewirePort::Init: error, could not create handle" << std::endl;
         return false;
     }
@@ -68,13 +60,19 @@ bool FirewirePort::Init(void)
 
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
-    // set the bus reset handlers
+    // set the bus reset handler
     old_reset_handler = raw1394_set_bus_reset_handler(handle, reset_handler);
-    old_reset_handler_bc = raw1394_set_bus_reset_handler(handle_bc, reset_handler);
 
     // get number of ports
     int nports = raw1394_get_port_info(handle, NULL, 0);
     outStr << "FirewirePort::Init: number of ports = " << nports << std::endl;
+    if (nports > 0) {
+        struct raw1394_portinfo *pinfo = new raw1394_portinfo[nports];
+        raw1394_get_port_info(handle, pinfo, nports);
+        for (int i = 0; i < nports; i++)
+            outStr << "  Port " << i << ": " << pinfo[i].name << ", " << pinfo[i].nodes << " nodes" << std::endl;
+        delete [] pinfo;
+    }
     if (nports < PortNum) {
         outStr << "FirewirePort::Init: port " << PortNum << " does not exist" << std::endl;
         raw1394_destroy_handle(handle);
@@ -82,20 +80,22 @@ bool FirewirePort::Init(void)
         return false;
     }
 
-    if (raw1394_set_port(handle, PortNum) || raw1394_set_port(handle_bc, PortNum)) {
+    if (raw1394_set_port(handle, PortNum)) {
         outStr << "FirewirePort::Init: error setting port to " << PortNum << std::endl;
         raw1394_destroy_handle(handle);
-        raw1394_destroy_handle(handle_bc);
         handle = NULL;
-        handle_bc = NULL;
         return false;
     }
     outStr << "FirewirePort::Init: successfully initialized port " << PortNum << std::endl;
+    outStr << "Using libraw1394 version " << raw1394_get_libversion() << std::endl;
 
     // stop cycle start packet
     StopCycleStartPacket();
 
-    return ScanNodes();
+    bool ret = ScanNodes();
+    if (ret)
+        SetDefaultProtocol();
+    return ret;
 }
 
 void FirewirePort::StopCycleStartPacket(void)
@@ -172,15 +172,21 @@ void FirewirePort::Cleanup(void)
     else
         PortList.erase(it);
     raw1394_destroy_handle(handle);
-    raw1394_destroy_handle(handle_bc);
     handle = NULL;
-    handle_bc = NULL;
 }
 
-void FirewirePort::Reset(void)
+unsigned int FirewirePort::GetBusGeneration(void) const
 {
-    Cleanup();
-    Init();
+    if (FwBusGeneration != raw1394_get_generation(handle))
+        outStr << "FirewirePort::GetBusGeneration mismatch: " << FwBusGeneration
+               << ", " << raw1394_get_generation(handle) << std::endl;
+    return FwBusGeneration;
+}
+
+void FirewirePort::UpdateBusGeneration(unsigned int gen)
+{
+    raw1394_update_generation(handle, gen);
+    FwBusGeneration = gen;
 }
 
 int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
@@ -190,16 +196,9 @@ int FirewirePort::reset_handler(raw1394handle_t hdl, uint gen)
     for (it = PortList.begin(); it != PortList.end(); it++) {
         if ((*it)->handle == hdl) {
             (*it)->outStr << "FirewirePort::reset_handler: generation = " << gen << std::endl;
-            ret = (*it)->old_reset_handler(hdl, gen);
-            (*it)->outStr << "FirewirePort::reset_handler: scanning port " << (*it)->PortNum << std::endl;
-            (*it)->ScanNodes();
-            break;
-        }
-        else if ((*it)->handle_bc == hdl) {
-            (*it)->outStr << "FirewirePort::reset_handler: [bc] generation = " << gen << std::endl;
-            ret = (*it)->old_reset_handler_bc(hdl, gen);
-            (*it)->outStr << "FirewirePort::reset_handler: [bc] scanning port " << (*it)->PortNum << std::endl;
-            (*it)->ScanNodes();
+            // Call default handler, which calls raw1394_update_generation
+            // ret = (*it)->old_reset_handler(hdl, gen);
+            (*it)->newFwBusGeneration = gen;
             break;
         }
     }
@@ -223,98 +222,20 @@ void FirewirePort::PollEvents(void)
         raw1394_loop_iterate(handle);
 }
 
-bool FirewirePort::ScanNodes(void)
+nodeid_t FirewirePort::InitNodes(void)
 {
-
-    int board;
-    nodeid_t node;
-
-    // Clear any existing Node2Board
-    memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
-
     // Get base node id (zero out 6 lsb)
     baseNodeId = raw1394_get_local_id(handle) & 0xFFC0;
-    outStr << "FirewirePort::ScanNodes: base node id = " << std::hex << baseNodeId << std::endl;
+    outStr << "FirewirePort::InitNodes: base node id = " << std::hex << baseNodeId << std::dec << std::endl;
 
-    // iterate through all the nodes and find out their boardId
+    // Get Firewire bus generation
+    FwBusGeneration = raw1394_get_generation(handle);
+    newFwBusGeneration = FwBusGeneration;
+
+    // Get total number of nodes on bus
     int numNodes = raw1394_get_nodecount(handle);
-    NumOfNodes_ = numNodes - 1;
-
-    outStr << "FirewirePort::ScanNodes: building node map for " << numNodes << " nodes:" << std::endl;
-    IsAllBoardsBroadcastCapable_ = true;
-    IsAllBoardsBroadcastShorterWait_ = true;
-    IsNoBoardsBroadcastShorterWait_ = true;
-    // Iterate through all connected nodes (except for last one, which is the PC).
-    for (node = 0; node < numNodes-1; node++){
-        quadlet_t data;
-        if (raw1394_read(handle, baseNodeId+node, 4, 4, &data)) {
-            outStr << "FirewirePort::ScanNodes: unable to read from node " << node << std::endl;
-            return false;
-        }
-        data = bswap_32(data);
-        if ((data != 0xC0FFEE) && (data != QLA1_String)) {
-            outStr << "FirewirePort::ScanNodes: node " << node << " is not a QLA board" << std::endl;
-            continue;
-        }
-        // Now, read firmware version
-        unsigned long fver = 0;
-        if (data == QLA1_String) {
-            if (raw1394_read(handle, baseNodeId+node, 7, 4, &data)) {
-                outStr << "FirewirePort::ScanNodes: unable to read firmware version from node "
-                       << node << std::endl;
-                return false;
-            }
-            data = bswap_32(data);
-            fver = data;
-        }
-        if (raw1394_read(handle, baseNodeId+node, 0, 4, &data)) {
-            outStr << "FirewirePort::ScanNodes: unable to read status from node " << node << std::endl;
-            return false;
-        }
-        data = bswap_32(data);
-        // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
-        board = (data & BOARD_ID_MASK) >> 24;
-        outStr << "  Node " << node << ", BoardId = " << board
-               << ", Firmware Version = " << fver << std::endl;
-        if (Node2Board[node] < BoardIO::MAX_BOARDS)
-            outStr << "    Duplicate entry, previous value = "
-                   << static_cast<int>(Node2Board[node]) << std::endl;
-        Node2Board[node] = board;
-        FirmwareVersion[board] = fver;
-
-        // check firmware version
-        // FirmwareVersion >= 4, broadcast capable
-        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
-        // FirmwareVersion >= 6, broadcast with possibly shorter wait (i.e., skipping nodes
-        // on the bus that are not part of the current configuration).
-        if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
-        else          IsNoBoardsBroadcastShorterWait_ = false;
-    }
-
-    // Use broadcast by default if all firmware are bc capable
-    if (IsAllBoardsBroadcastCapable_) {
-        Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-        if (IsAllBoardsBroadcastShorterWait_)
-            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and support shorter wait" << std::endl;
-        else if (IsNoBoardsBroadcastShorterWait_)
-            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and do not support shorter wait" << std::endl;
-        else
-            outStr << "FirewirePort::ScanNodes: all nodes broadcast capable and some support shorter wait" << std::endl;
-    }
-
-    // update Board2Node
-    for (board = 0; board < BoardIO::MAX_BOARDS; board++) {
-        Board2Node[board] = MAX_NODES;
-        for (node = 0; node < numNodes-1; node++) {
-            if (Node2Board[node] == board) {
-                if (Board2Node[board] < MAX_NODES)
-                    outStr << "FirewirePort::ScanNodes: warning, GetNodeId detected duplicate board id for " << board << std::endl;
-                Board2Node[board] = node;
-            }
-        }
-    }
-
-    return true;
+    // Subtract 1 for PC which, as bus master, is always the highest number
+    return (numNodes-1);
 }
 
 
@@ -322,9 +243,7 @@ bool FirewirePort::AddBoard(BoardIO *board)
 {
     bool ret = BasePort::AddBoard(board);
     if (ret) {
-        int id = board->BoardId;
-        if (id >= max_board)
-            max_board = id+1;
+        unsigned int id = board->BoardId;
         HubBoard = id;  // last added board would be hub board
     }
     return ret;
@@ -332,103 +251,22 @@ bool FirewirePort::AddBoard(BoardIO *board)
 
 bool FirewirePort::RemoveBoard(unsigned char boardId)
 {
-    bool ret = BasePort::RemoveBoard(boardId);
-    if (ret) {
-        if (boardId >= max_board-1) {
-            // If max_board was just removed, find the new max_board
-            max_board = 0;
-            for (int bd = 0; bd < boardId; bd++)
-                if (BoardList[bd]) max_board = bd+1;
-        }
-    }
-    return ret;
+    return BasePort::RemoveBoard(boardId);
 }
 
-// CAN BE MERGED WITH ETHBASEPORT
-bool FirewirePort::ReadAllBoards(void)
+bool FirewirePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
 {
-    if (!handle) {
-        outStr << "FirewirePort::ReadAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
-        return false;
-    }
-
-    if (Protocol_ == BasePort::PROTOCOL_BC_QRW) {
-        return ReadAllBoardsBroadcast();
-    }
-
-    bool allOK = true;
-    bool noneRead = true;
-    for (int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            bool ret = ReadBlock(board, 0, BoardList[board]->GetReadBuffer(),
-                                 BoardList[board]->GetReadNumBytes());
-            if (ret) {
-                noneRead = false;
-            } else {
-                allOK = false;
-            }
-            BoardList[board]->SetReadValid(ret);
-
-            if (!ret) {
-                if (ReadErrorCounter_ == 0) {
-                    outStr << "FirewirePort::ReadAllBoards: read failed on port "
-                           << PortNum << ", board " << board << std::endl;
-                }
-                ReadErrorCounter_++;
-                if (ReadErrorCounter_ == 10000) {
-                    outStr << "FirewirePort::ReadAllBoards: read failed on port "
-                           << PortNum << ", board " << board << " occurred 10,000 times" << std::endl;
-                    ReadErrorCounter_ = 0;
-                }
-            } else {
-                ReadErrorCounter_ = 0;
-            }
-        }
-    }
-    if (noneRead) {
-        PollEvents();
-    }
-    return allOK;
-}
-
-
-bool FirewirePort::ReadAllBoardsBroadcast(void)
-{
-    if (!handle || !handle_bc) {
-        outStr << "FirewirePort::ReadAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
-        return false;
-    }
-
-    bool ret;
-    bool allOK = true;
-    bool noneRead = true;
-    int hub_node_id = GetNodeId(HubBoard);   //  ZC: NOT USE PLACEHOLDER
-
-    //--- send out broadcast read request -----
-
-#if 0
-    quadlet_t debugData;
-    nodeaddr_t debugAddr = 0x03;
-
-    bool retdebug = !raw1394_read(handle,
-                                  baseNodeId + hub_node_id,    // boardid 7
-                                  debugAddr,           // read from hub addr
-                                  4,                   // read all 16 boards
-                                  &debugData);
-    if (!retdebug) {
-        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        std::cerr << "debug read ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-                  << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
-    }
+#if 1
+    return WriteBlockNode(0, 0xffffffff0000, buffer, size);
+#else
+    return WriteBlockNode(FW_NODE_BROADCAST, 0xffffff000000,  // now the address is hardcoded
+                          buffer, size);
 #endif
+}
 
-    // sequence number from 16 bits 0 to 65535
-    ReadSequence_++;
-    if (ReadSequence_ == 65536) {
-        ReadSequence_ = 1;
-    }
-
-    quadlet_t bcReqData = (ReadSequence_ << 16);
+bool FirewirePort::WriteBroadcastReadRequest(unsigned int seq)
+{
+    quadlet_t bcReqData = (seq << 16);
     if (IsAllBoardsBroadcastShorterWait_ || IsNoBoardsBroadcastShorterWait_)
         bcReqData += BoardInUseMask_;
     else
@@ -438,314 +276,89 @@ bool FirewirePort::ReadAllBoardsBroadcast(void)
         // arbitration protocol should prevent disaster, but this could lead to lower efficiency.
         bcReqData += ((1 << NumOfNodes_)-1);
 
-    nodeaddr_t bcReqAddr = 0xffffffff000f;    // special address to trigger broadcast read
+    nodeaddr_t bcReqAddr;
+    if (IsNoBoardsRev7_)
+        bcReqAddr = 0xffffffff000f;      // special address to trigger broadcast read
+    else
+        bcReqAddr = 0x1800;              // special address to trigger broadcast read
 
-
-//#if FAKEBC
 #if 1
-    bcReqData = bswap_32(bcReqData);
-    ret = !raw1394_write(handle,
-                         baseNodeId,
-                         bcReqAddr,
-                         4,
-                         &bcReqData);
-    if (!ret) {
-        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        std::cerr << "bbbbbbb fake ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-                  << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
-    }
+    WriteQuadletNode(0, bcReqAddr, bcReqData);
+    // WriteQuadletNode returns false because the "fake" broadcast packet to node 0 does not
+    // return an ACK.
+    return true;
 #else
-    WriteQuadletBroadcast(bcReqAddr, bcReqData);
+    return WriteQuadlet(FW_NODE_BROADCAST, bcReqAddr, bcReqData);
 #endif
+}
 
+void FirewirePort::WaitBroadcastRead(void)
+{
     // Wait for all boards to respond with data
-    timeval start, check;
-    gettimeofday(&start, NULL);
-    while(true) {
-        gettimeofday(&check, NULL);
-        double timeDiff = (check.tv_sec-start.tv_sec)*1000000 + (check.tv_usec-start.tv_usec);
-        if (IsAllBoardsBroadcastShorterWait_ && (timeDiff > (10 + 5.0*NumOfBoards_)))
-            break;  // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
-        else if (timeDiff > (5.0*NumOfNodes_+5.0))
-            break;  // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
-    }
-
-    // initialize max buffer
-    // TODO: need to update following
-    const int hubReadSize = 272;     // 16 * 17 = 272 max
-    quadlet_t hubReadBuffer[hubReadSize];
-    memset(hubReadBuffer, 0, sizeof(hubReadBuffer));
-
-#if 1
-    // raw1394_read 0 = SUCCESS, -1 = FAIL, flip return value
-    ret = !raw1394_read(handle,
-                        baseNodeId + hub_node_id,
-                        0x1000,           // read from hub addr
-                        272 * 4,          // read all 16 boards
-                        hubReadBuffer);
-#endif
-
-#if 1
-    // ----- DEBUG -----------
-    static int raw1394readCounter = 0;
-    if (!ret) {
-        raw1394readCounter++;
-        raw1394_errcode_t ecode = raw1394_get_errcode(handle);
-        std::cerr << "ecode = " << ecode << " to_errno = " << raw1394_errcode_to_errno(ecode) << "  "
-                  << strerror(raw1394_errcode_to_errno(ecode)) << std::endl;
-        std::cerr << "raw1394_read failed " << raw1394readCounter << ": " << strerror(errno) << std::endl;
-    }
-    // -----------------------
-
-    for (int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            // TODO: Need to update following
-            const int readSize = 17;  // 1 seq + 16 data, unit quadlet
-            quadlet_t readBuffer[readSize];
-
-            memcpy(readBuffer, &(hubReadBuffer[readSize * board + 0]), readSize * 4);
-
-            unsigned int seq = (bswap_32(readBuffer[0]) >> 16);
-
-            static int errorcounter = 0;
-            if (ReadSequence_ != seq) {
-                errorcounter++;
-                outStr << "errorcounter = " << errorcounter << std::endl;
-                outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
-            }
-//            std::cerr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)board << std::endl;
-
-            memcpy(BoardList[board]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * 4);
-
-            if (ret) noneRead = false;
-            else allOK = false;
-            BoardList[board]->SetReadValid(ret);
-        }
-    }
-#endif
-
-    if (noneRead) {
-        PollEvents();
-    }
-
-    return allOK;
+    // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
+    // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
+    double waitTime_uS = IsAllBoardsBroadcastShorterWait_ ? (10.0 + 5.0*NumOfBoards_) : (5.0 + 5.0*NumOfNodes_);
+    Amp1394_Sleep(waitTime_uS*1e-6);
 }
 
-
-// CAN BE MERGED WITH ETHBASEPORT
-bool FirewirePort::WriteAllBoards(void)
+void FirewirePort::OnNoneRead(void)
 {
-    if (!handle) {
-        outStr << "FirewirePort::WriteAllBoards: handle for port " << PortNum << " is NULL" << std::endl;
+    PollEvents();
+}
+
+void FirewirePort::OnNoneWritten(void)
+{
+    PollEvents();
+}
+
+bool FirewirePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char)
+{
+    if (!CheckFwBusGeneration("FirewirePort::ReadQuadlet"))
         return false;
-    }
 
-    if ((Protocol_ == BasePort::PROTOCOL_SEQ_R_BC_W) || (Protocol_ == BasePort::PROTOCOL_BC_QRW)) {
-        return WriteAllBoardsBroadcast();
-    }
-
-    bool allOK = true;
-    bool noneWritten = true;
-    for (int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            bool noneWrittenThisBoard = true;
-            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
-            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
-            // Currently (Rev 1-6 firmware), the last quadlet (Status/Control register)
-            // is done as a separate quadlet write.
-            bool ret = WriteBlock(board, 0, buf, numBytes-4);
-            if (ret) { noneWritten = false; noneWrittenThisBoard = false; }
-            else allOK = false;
-            quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
-            bool ret2 = true;
-            if (ctrl) {    // if anything non-zero, write it
-                ret2 = WriteQuadlet(board, 0, ctrl);
-                if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
-                else allOK = false;
-            }
-            if (noneWrittenThisBoard
-                || !(BoardList[board]->WriteBufferResetsWatchdog())) {
-                // send no-op to reset watchdog
-                bool ret3 = WriteNoOp(board);
-                if (ret3) noneWritten = false;
-            }
-            // Check for data collection callback
-            BoardList[board]->CheckCollectCallback();
-            // SetWriteValid clears the buffer if the write was valid
-            BoardList[board]->SetWriteValid(ret&&ret2);
-        }
-    }
-    if (noneWritten) {
-        PollEvents();
-    }
-    return allOK;
-}
-
-bool FirewirePort::WriteAllBoardsBroadcast(void)
-{
-    // check hanle
-    if (!handle) {
-        outStr << "FirewirePort::WriteAllBoardsBroadcast: handle for port " << PortNum << " is NULL" << std::endl;
-        return false;
-    }
-
-    // sanity check vars
-    bool allOK = true;
-    bool noneWritten = true;
-
-    // loop 1: broadcast write block
-
-    // construct broadcast write buffer
-    const int numOfChannel = 4;
-    quadlet_t bcBuffer[numOfChannel * MAX_NODES];
-    memset(bcBuffer, 0, sizeof(bcBuffer));
-    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
-    int numOfBoards = 0;
-
-    for (int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            numOfBoards++;
-            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
-            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
-            // bcBufferOffset equals total numBytes to write, when the loop ends
-            bcBufferOffset = bcBufferOffset + numBytes - 4;
-        }
-    }
-
-    // now broadcast out the huge packet
-    bool ret = true;
-
-#if 1
-    ret = !raw1394_write(handle,
-                         baseNodeId,
-                         0xffffffff0000,
-                         bcBufferOffset,
-                         bcBuffer);
-#else
-    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
-                              bcBuffer,
-                              bcBufferOffset);
-#endif
-
-    // loop 2: send out control quadlet if necessary
-    for (int board = 0; board < max_board; board++) {
-        if (BoardList[board]) {
-            bool noneWrittenThisBoard = true;
-            quadlet_t *buf = BoardList[board]->GetWriteBuffer();
-            unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
-            quadlet_t ctrl = buf[numQuads-1];  // Get last quadlet
-            bool ret2 = true;
-            if (ctrl) {  // if anything non-zero, write it
-                ret2 = WriteQuadlet(board, 0x00, ctrl);
-                if (ret2) { noneWritten = false; noneWrittenThisBoard = false; }
-                else allOK = false;
-            }
-            if (noneWrittenThisBoard
-                && !(BoardList[board]->WriteBufferResetsWatchdog())) {
-                // send no-op to reset watchdog
-                bool ret3 = WriteNoOp(board);
-                if (ret3) noneWritten = false;
-            }
-
-            // Check for data collection callback
-            BoardList[board]->CheckCollectCallback();
-            // SetWriteValid clears the buffer if the write was valid
-            BoardList[board]->SetWriteValid(ret&&ret2);
-        }
-    }
-
-    // pullEvents
-    if (noneWritten) {
-        PollEvents();
-    }
-
-    // return
-    return allOK;
-}
-
-bool FirewirePort::ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data)
-{
-    nodeid_t node = GetNodeId(boardId);
-    bool ret = false;
-    if (node < MAX_NODES) {
-        ret = !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
+    bool ret = !raw1394_read(handle, baseNodeId+node, addr, 4, &data);
+    if (ret)
         data = bswap_32(data);
-    }
     return ret;
 }
 
-bool FirewirePort::WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data)
+bool FirewirePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char)
 {
-    nodeid_t node = GetNodeId(boardId);
-    bool ret = false;
-    if (node < MAX_NODES) {
-        data = bswap_32(data);
-        ret = !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
-    }
-    return ret;
-}
+    if (!CheckFwBusGeneration("FirewirePort::WriteQuadlet"))
+        return false;
 
-bool FirewirePort::WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data)
-{
-    // special case of WriteBlockBroadcast
-    // nbytes = 4
     data = bswap_32(data);
-    return WriteBlockBroadcast(addr, &data, 4);
-}
+    bool ret = !raw1394_write(handle, baseNodeId+node, addr, 4, &data);
 
-
-bool FirewirePort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                             unsigned int nbytes)
-{
-    nodeid_t node = GetNodeId(boardId);
-    if (node < MAX_NODES)
-        return !raw1394_read(handle, baseNodeId+node, addr, nbytes, rdata);
-    else
-        return false;
-}
-
-bool FirewirePort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                              unsigned int nbytes)
-{
-    nodeid_t node = GetNodeId(boardId);
-    if (node < MAX_NODES)
-        return !raw1394_write(handle, baseNodeId+node, addr, nbytes, wdata);
-    else
-        return false;
-}
-
-
-bool FirewirePort::WriteBlockBroadcast(
-        nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-    // check handle
-    if (!handle_bc) {
-        outStr << "FirewirePort::WriteBlockBroadcast: invalid firewire handle" << std::endl;
-        return false;
+    // Workaround for Firewire broadcast, which is not currently working due to an issue with
+    // either libraw1394 or the Firewire JuJu driver.
+    if (!ret && (node == FW_NODE_BROADCAST)) {
+        ret = true;
+        for (nodeid_t curNode = 0; curNode < NumOfNodes_; curNode++) {
+            if (raw1394_write(handle, baseNodeId+curNode, addr, 4, &data))
+                ret = false;
+        }
     }
 
-    // check address
-    // ZC: maybe limit address to 8 bits reg_addr[7:0]
-    //     and cheat firewire driverg
-    if (addr < CSR_REGISTER_BASE + CSR_CONFIG_ROM_END) {
-        outStr << "FirewirePort::WriteBlockBroadcast: address not allowed, \n"
-               << "addr should > CSR_REG_BASE + CSR_CONFIG_ROM_END" << std::endl;
-        return false;
-    }
+    return ret;
+}
 
-    // broadcast
-    int rc;    // return code
-    const nodeid_t broadcast_node_id = 0xffff;  // use node_id 0xffff to broadcast
-    const unsigned long tag = 11;  // tag is random picked, not used
-    // send broadcast request
-    rc = raw1394_start_write(handle_bc, broadcast_node_id, addr, nbytes, wdata, tag);
-    if (rc) {
-        outStr << "FirewirePort::WriteBlockBroadcast: errno = " << strerror(errno) << std::endl;
+bool FirewirePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
+                                 unsigned int nbytes, unsigned char)
+{
+    if (!CheckFwBusGeneration("FirewirePort::ReadBlock"))
         return false;
-    } else {
-        return true;
-    }
+
+    rtRead = true;   // for debugging
+    return !raw1394_read(handle, baseNodeId+node, addr, nbytes, rdata);
+}
+
+bool FirewirePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
+                                  unsigned int nbytes, unsigned char)
+{
+    if (!CheckFwBusGeneration("FirewirePort::WriteBlock"))
+        return false;
+
+    rtWrite = true;   // for debugging
+    return !raw1394_write(handle, baseNodeId+node, addr, nbytes, wdata);
 }

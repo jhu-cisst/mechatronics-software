@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -25,7 +25,11 @@ http://www.cisst.org/cisst/license.txt.
 struct pcap;
 typedef struct pcap pcap_t;
 
-const unsigned int ETH_FRAME_HEADER_SIZE = 14;  // dest addr (6), src addr (6), length (2)
+const unsigned int ETH_FRAME_HEADER_SIZE = 14;    // dest addr (6), src addr (6), length (2)
+const unsigned int ETH_FRAME_LENGTH_OFFSET = 12;  // offset to length
+
+//const unsigned int ETH_RAW_FRAME_MAX_SIZE = 1500; // maximum raw Ethernet frame size
+const unsigned int ETH_RAW_FRAME_MAX_SIZE = 1024;   // Temporary firmware limit
 
 class EthRawPort : public EthBasePort
 {
@@ -34,44 +38,33 @@ protected:
     pcap_t *handle;
     uint8_t frame_hdr[ETH_FRAME_HEADER_SIZE];
 
-    bool headercheck(uint8_t* header, bool toPC) const;
+    bool headercheck(const unsigned char *header, bool toPC) const;
 
-    /**
-     * @brief send async read request to a node and wait for response.
-     *
-     * @param node: target node ID
-     * @param addr: address to read from
-     * @param length: amount of bytes of data to read
-     * @param buffer: pointer to buffer where data will be saved
-     *
-     * @return int 0 on success, -1 on failure
-     */
-    int eth1394_read(nodeid_t node, nodeaddr_t addr, size_t length, quadlet_t* buffer, bool useEthernetBroadcast = false);
+    void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
 
-    /**
-     * \brief Write FireWire packet via Ethernet
-     *
-     * \param node        destination board number
-     * \param buffer      address of pre-allocated buffer (includes space for Ethernet header)
-     * \param length_fw   length of FireWire packet, in quadlets
-     *
-     * \return true on success; false otherwise
-     */
-    bool eth1394_write(nodeid_t node, quadlet_t* buffer, size_t length_fw, bool useEthernetBroadcast = false);
+    void make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags);
 
-    int make_ethernet_header(unsigned char *buffer, unsigned int numBytes);
+    // Check Ethernet header
+    bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
 
     //! Initialize EthRaw port
     bool Init(void);
 
-    //! Initialize nodes on the bus
-    bool InitNodes(void);
+    //! Cleanup EthRaw port
+    void Cleanup(void);
 
-    //! Read quadlet from node (internal method called by ReadQuadlet)
-    bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0);
+    //! Initialize nodes on the bus; called by ScanNodes
+    // \return Maximum number of nodes on bus (0 if error)
+    nodeid_t InitNodes(void);
 
-    //! Write quadlet to node (internal method called by WriteQuadlet)
-    bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
+    // Send packet via PCAP
+    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
+
+    // Receive packet via PCAP
+    int PacketReceive(unsigned char *packet, size_t nbytes);
+
+    // Flush all packets in receive buffer
+    int PacketFlushAll(void);
 
 public:
     EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
@@ -84,45 +77,21 @@ public:
 
     bool IsOK(void);
 
-    void Reset(void);
+    unsigned int GetPrefixOffset(MsgType msg) const;
+    unsigned int GetWritePostfixSize(void) const
+        { return FW_CRC_SIZE; }
+    unsigned int GetReadPostfixSize(void) const
+        { return (FW_CRC_SIZE+FW_EXTRA_SIZE); }
 
-    // Add board to list of boards in use
-    bool AddBoard(BoardIO *board);
+    unsigned int GetWriteQuadAlign(void) const
+        { return ((ETH_FRAME_HEADER_SIZE+FW_CTRL_SIZE)%sizeof(quadlet_t)); }
+    unsigned int GetReadQuadAlign(void) const
+        { return (ETH_FRAME_HEADER_SIZE%sizeof(quadlet_t)); }
 
-    // Remove board from list of boards in use
-    bool RemoveBoard(unsigned char boardId);
-
-    // Read all boards broadcasting
-    bool ReadAllBoardsBroadcast(void);
-
-    // Write to all boards using broadcasting
-    bool WriteAllBoardsBroadcast(void);
-
-    // ReadQuadlet in EthBasePort
-
-    // WriteQuadlet in EthBasePort
-
-    // Read a block from the specified board
-    bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                   unsigned int nbytes);
-
-    // Write a block to the specified board
-    bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                    unsigned int nbytes);
-
-    /*!
-     \brief Write a block of data using asynchronous broadcast
-
-     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param wdata  The pointer to write buffer data
-     \param nbytes  Number of bytes to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes);
-
-    //****************** Static methods ***************************
-
-    static void PrintFrame(unsigned char* buffer, int length);
+    // Get the maximum number of data bytes that can be read
+    // (via ReadBlock) or written (via WriteBlock).
+    unsigned int GetMaxReadDataSize(void) const;
+    unsigned int GetMaxWriteDataSize(void) const;
 };
 
 #endif  // __EthRawPort_H__

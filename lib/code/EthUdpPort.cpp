@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -17,27 +17,58 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EthUdpPort.h"
 #include "Amp1394Time.h"
+#include "Amp1394BSwap.h"
 
 #ifdef _MSC_VER
 #define WIN32_LEAN_AND_MEAN
 #include <string>
-#include <stdlib.h>   // for byteswap functions
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <Iphlpapi.h>
+#include <mswsock.h>
 #define WINSOCKVERSION MAKEWORD(2,2)
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
+#undef min   // to be able to use std::min
+#else // Linux, Mac
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <string.h>  // for memset
 #include <math.h>    // for floor
-#include <byteswap.h>
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
 // Following assertion checks that sizeof(struct in_addr) is equal to sizeof(unsigned long).
 // In C++11, could instead use static_assert.
 typedef char assertion_on_in_addr[(sizeof(struct in_addr)==sizeof(uint32_t))*2-1];
+
+// to query MTU setting
+#include <sys/ioctl.h>
+#include <net/if.h>
+
+#endif
+
+#include <algorithm>   // for std::min
+
+#ifdef _MSC_VER
+
+typedef WSAMSG     MsgHeaderType;
+typedef WSACMSGHDR CMsgHdrType;
+
+#ifndef CMSG_FIRSTHDR
+inline CMsgHdrType *CMSG_FIRSTHDR(MsgHeaderType *hdr)
+{ return WSA_CMSG_FIRSTHDR(hdr); }
+#endif
+#ifndef CMSG_NXTHDR
+inline CMsgHdrType *CMSG_NXTHDR(MsgHeaderType *hdr, CMsgHdrType *cmsg)
+{ return WSA_CMSG_NXTHDR(hdr, cmsg); }
+#endif
+#ifndef CMSG_DATA
+inline unsigned char *CMSG_DATA(CMsgHdrType *cmsg)
+{ return WSA_CMSG_DATA(cmsg); }
+#endif
+
+#else
+typedef struct msghdr  MsgHeaderType;
+typedef struct cmsghdr CMsgHdrType;
 #endif
 
 struct SocketInternals {
@@ -47,8 +78,14 @@ struct SocketInternals {
 #else
     int    SocketFD;
 #endif
+    int InterfaceIndex;
+    std::string InterfaceName;
+    int InterfaceMTU;
+
     struct sockaddr_in ServerAddr;
     struct sockaddr_in ServerAddrBroadcast;
+
+    bool FirstRun;
 
     SocketInternals(std::ostream &ostr);
     ~SocketInternals();
@@ -57,16 +94,20 @@ struct SocketInternals {
     bool Close();
 
     // Returns the number of bytes sent (-1 on error)
-    int Send(const char *bufsend, size_t msglen, bool useBroadcast = false);
+    int Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast = false);
 
     // Returns the number of bytes received (-1 on error)
-    int Recv(char *bufrecv, size_t maxlen, const double timeoutSec);
+    int Recv(unsigned char *bufrecv, size_t maxlen, const double timeoutSec);
 
     // Flush the receive buffer
     int FlushRecv(void);
+
+    // Extract interface info (index, name and MTU) from message header
+    bool ExtractInterfaceInfo(MsgHeaderType *hdr);
 };
 
-SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET)
+SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(INVALID_SOCKET),
+                 InterfaceIndex(0), InterfaceName("undefined"), InterfaceMTU(ETH_MTU_DEFAULT), FirstRun(true)
 {
     memset(&ServerAddr, 0, sizeof(ServerAddr));
     memset(&ServerAddrBroadcast, 0, sizeof(ServerAddrBroadcast));
@@ -100,14 +141,30 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
 
     // Enable broadcasts
 #ifdef _MSC_VER
-    char broadcastEnable = 1;
+    BOOL broadcastEnable = TRUE;
+    DWORD packetInfo = 1;
+    if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char *>(&broadcastEnable),
+                   sizeof(broadcastEnable)) != 0) {
+        outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
+        return false;
+    }
+
+    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, reinterpret_cast<const char *>(&packetInfo),
+                   sizeof(packetInfo)) != 0) {
+        outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
+    }
 #else
     int broadcastEnable = 1;
-#endif
+    int packetInfo = 1;
     if (setsockopt(SocketFD, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) != 0) {
         outStr << "Open: Failed to set SOCKET broadcast option" << std::endl;
         return false;
     }
+
+    if (setsockopt(SocketFD, IPPROTO_IP, IP_PKTINFO, &packetInfo, sizeof(packetInfo)) != 0) {
+        outStr << "Open: Failed to set SOCKET packet info option" << std::endl;
+    }
+#endif
 
     // Determine the broadcast address. For simplicity, we assume that this is a Class A, B, or C network,
     // as defined by the InterNIC:
@@ -115,7 +172,7 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
     //    Class B: first byte is 128-191, default subnet mask is 255.255.0.0
     //    Class C: first byte is 192-223, default subnet mask is 255.255.255.0
     // If the first byte is greater than 223, we use the global broadcast address, 255.255.255.255
-    
+
     ServerAddrBroadcast.sin_family = AF_INET;
     ServerAddrBroadcast.sin_port = htons(port);
     unsigned char firstByte = static_cast<unsigned char>(ServerAddr.sin_addr.s_addr&0x000000ff);
@@ -153,13 +210,15 @@ bool SocketInternals::Close()
     return true;
 }
 
-int SocketInternals::Send(const char *bufsend, size_t msglen, bool useBroadcast)
+int SocketInternals::Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast)
 {
     int retval;
     if (useBroadcast)
-        retval = sendto(SocketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&ServerAddrBroadcast), sizeof(ServerAddrBroadcast));
+        retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
+                        reinterpret_cast<struct sockaddr *>(&ServerAddrBroadcast), sizeof(ServerAddrBroadcast));
     else
-        retval = sendto(SocketFD, bufsend, msglen, 0, reinterpret_cast<struct sockaddr *>(&ServerAddr), sizeof(ServerAddr));
+        retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
+                        reinterpret_cast<struct sockaddr *>(&ServerAddr), sizeof(ServerAddr));
 
     if (retval == SOCKET_ERROR) {
 #ifdef _MSC_VER
@@ -175,7 +234,7 @@ int SocketInternals::Send(const char *bufsend, size_t msglen, bool useBroadcast)
     return retval;
 }
 
-int SocketInternals::Recv(char *bufrecv, size_t maxlen, const double timeoutSec)
+int SocketInternals::Recv(unsigned char *bufrecv, size_t maxlen, const double timeoutSec)
 {
     fd_set readfds;
     FD_ZERO(&readfds);
@@ -203,10 +262,73 @@ int SocketInternals::Recv(char *bufrecv, size_t maxlen, const double timeoutSec)
 #endif
     }
     else if (retval > 0) {
-        //struct sockaddr_in fromAddr;
-        //socklen_t length = sizeof(fromAddr);
-        //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
-        retval = recv(SocketFD, bufrecv, maxlen, 0);
+
+        if (FirstRun) {
+
+            const size_t CONTROL_DATA_SIZE = 1000;  // THIS NEEDS TO BE BIG ENOUGH.
+            char controldata[CONTROL_DATA_SIZE];
+            MsgHeaderType hdr;
+
+#ifdef _MSC_VER
+            SOCKADDR addrRemote;
+            GUID WSARecvMsg_GUID = WSAID_WSARECVMSG;
+            LPFN_WSARECVMSG WSARecvMsg;
+            DWORD nBytes;
+            retval = WSAIoctl(SocketFD, SIO_GET_EXTENSION_FUNCTION_POINTER, &WSARecvMsg_GUID,
+                              sizeof(WSARecvMsg_GUID), &WSARecvMsg, sizeof(WSARecvMsg), &nBytes,
+                              NULL, NULL);
+            if (retval == SOCKET_ERROR) {
+                outStr << "Recv: could not get WSARecvMsg function pointer" << std::endl;
+            }
+            else {
+                WSABUF WSAbuf;
+                WSAbuf.buf = reinterpret_cast<char *>(bufrecv);
+                WSAbuf.len = maxlen;
+
+                hdr.name = &addrRemote;
+                hdr.namelen = sizeof(addrRemote);
+                hdr.lpBuffers = &WSAbuf;
+                hdr.dwBufferCount = 1;
+                hdr.Control.buf = controldata;
+                hdr.Control.len = CONTROL_DATA_SIZE;
+                hdr.dwFlags = MSG_PEEK;  // Do not remove message from queue
+
+                retval = WSARecvMsg(SocketFD, &hdr, &nBytes, NULL, NULL);
+                if (retval == SOCKET_ERROR)
+                    outStr << "Recv: WSARecvMsg failed" << std::endl;
+                else
+                    ExtractInterfaceInfo(&hdr);
+            }
+            // For some reason, the call to WSARecvMsg (without MSG_PEEK flag) does
+            // not work, so we instead specify MSG_PEEK above and call recv again.
+            // This also handles the error case (unable to get WSARecvMsg pointer).
+            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+#else
+            sockaddr_storage addrRemote;
+
+            struct iovec vec;
+            vec.iov_base = bufrecv;
+            vec.iov_len = maxlen;
+
+            hdr.msg_name = &addrRemote;
+            hdr.msg_namelen = sizeof(addrRemote);
+            hdr.msg_iov = &vec;
+            hdr.msg_iovlen = 1;
+            hdr.msg_control = controldata;
+            hdr.msg_controllen = CONTROL_DATA_SIZE;
+
+            retval = recvmsg(SocketFD, &hdr, 0);
+            ExtractInterfaceInfo(&hdr);
+#endif
+
+            outStr << "Using interface " << InterfaceName << " (" << InterfaceIndex << "), MTU: " << InterfaceMTU << std::endl;
+            FirstRun = false;
+        } else {
+            //struct sockaddr_in fromAddr;
+            //socklen_t length = sizeof(fromAddr);
+            //retval = recvfrom(socketFD, bufrecv, maxlen, 0, reinterpret_cast<struct sockaddr *>(&fromAddr), &length);
+            retval = recv(SocketFD, reinterpret_cast<char *>(bufrecv), maxlen, 0);
+        }
         if (retval == SOCKET_ERROR) {
 #ifdef _MSC_VER
             outStr << "Recv: failed to receive: " << WSAGetLastError() << std::endl;
@@ -220,12 +342,87 @@ int SocketInternals::Recv(char *bufrecv, size_t maxlen, const double timeoutSec)
 
 int SocketInternals::FlushRecv(void)
 {
-    char buffer[FW_QRESPONSE_SIZE];
+    unsigned char buffer[FW_QRESPONSE_SIZE];
     int numFlushed = 0;
     // If the packet is larger than FW_QRESPONSE_SIZE, the excess bytes will be discarded.
     while (Recv(buffer, FW_QRESPONSE_SIZE, 0.0) > 0)
         numFlushed++;
     return numFlushed;
+}
+
+bool SocketInternals::ExtractInterfaceInfo(MsgHeaderType *hdr)
+{
+    InterfaceIndex = -1;
+    // iterate through all the control headers
+    for (CMsgHdrType * cmsg = CMSG_FIRSTHDR(hdr);
+         cmsg != NULL;
+         cmsg = CMSG_NXTHDR(hdr, cmsg)) {
+        // ignore the control headers that don't match what we want
+        if (cmsg->cmsg_level != IPPROTO_IP ||
+            cmsg->cmsg_type != IP_PKTINFO) {
+            continue;
+        }
+        // struct in_pktinfo * pi = CMSG_DATA(cmsg)->ipi;
+        // at this point, peeraddr is the source sockaddr
+        // pi->ipi_spec_dst is the destination in_addr
+        InterfaceIndex = ((struct in_pktinfo*)CMSG_DATA(cmsg))->ipi_ifindex;
+    }
+
+    // should check if index != -1
+
+#ifdef _MSC_VER
+    // Windows supports if_indextoname, but the name returned does not appear to be
+    // meaningful. Also, Windows does not appear to support ioctl (or WSAIoctl) to
+    // query the MTU value. Thus, we instead use GetAdaptersAddresses, which gives us
+    // both the InterfaceName and InterfaceMTU for the specified InterfaceIndex.
+    //
+    // We first call GetAdaptersAddresses with a null buffer to query the required buffer size.
+    PIP_ADAPTER_ADDRESSES addrList = 0;
+    ULONG bufSize = 0;
+    ULONG retval;
+    retval = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                  NULL, addrList, &bufSize);
+    if (retval != ERROR_BUFFER_OVERFLOW) {
+        outStr << "Recv: GetAdaptersAddresses failed to return buffer size" << std::endl;
+        return false;
+    }
+    // Now, bufSize indicates the correct buffer size. Allocate memory and then call
+    // GetAdaptersAddresses again to get the information.
+    char *buffer = new char[bufSize];
+    addrList = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer);
+    retval = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                  NULL, addrList, &bufSize);
+    if (retval == NO_ERROR) {
+        for (PIP_ADAPTER_ADDRESSES addr = addrList;  addr != 0; addr = addr->Next) {
+            if (addr->IfIndex == InterfaceIndex) {
+                char fname[256];  // Should be large enough
+                if (WideCharToMultiByte(CP_ACP, 0, addr->FriendlyName, -1, fname, sizeof(fname), NULL, NULL) > 0) {
+                        InterfaceName = fname;
+                        InterfaceMTU = addr->Mtu;
+                        break;
+                }
+            }
+        }
+    }
+    delete [] buffer;
+#else
+    // get interface name and MTU
+    char ifName[256];
+    if (if_indextoname(InterfaceIndex, ifName) == NULL) {
+        outStr << "Recv: failed if_indextoname: " << strerror(errno) << std::endl;
+        return false;
+    }
+    InterfaceName = ifName;
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, InterfaceName.c_str());
+    if (!ioctl(SocketFD, SIOCGIFMTU, &ifr)) {
+        InterfaceMTU = ifr.ifr_mtu;
+        return true;
+    }
+#endif
+    return false;
 }
 
 EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, EthCallbackType cb):
@@ -242,7 +439,7 @@ EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &d
 
 EthUdpPort::~EthUdpPort()
 {
-    sockPtr->Close();
+    Cleanup();
     delete sockPtr;
 }
 
@@ -251,46 +448,65 @@ bool EthUdpPort::Init(void)
     if (!sockPtr->Open(ServerIP, UDP_port))
         return false;
 
-    bool ret = InitNodes();
+    bool ret = ScanNodes();
+
     if (ret)
-        ret = ScanNodes();
+        SetDefaultProtocol();
+
     //if (!ret)
     //    sockPtr->Close();
     return ret;
 }
 
-bool EthUdpPort::InitNodes(void)
+void EthUdpPort::Cleanup(void)
 {
-    //  1. Set IP address of first connected board using UDP broadcast
-    //  2. Read hub/bridge board id using FireWire broadcast (via unicast UDP)
+    sockPtr->Close();
+}
 
+nodeid_t EthUdpPort::InitNodes(void)
+{
     // First, set IP address by Ethernet and FireWire broadcast
     if (!WriteQuadletNode(FW_NODE_BROADCAST, 11, sockPtr->ServerAddr.sin_addr.s_addr, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to write IP address" << std::endl;
-        return false;
+        return 0;
     }
+
     quadlet_t data = 0x0;   // initialize data to 0
-        
+
     // Check hardware version of hub board
     if (!ReadQuadletNode(FW_NODE_BROADCAST, 4, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
-        return false;
+        return 0;
     }
     if (data != QLA1_String) {
         outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
-        return false;
+        return 0;
+    }
+
+    // ReadQuadletNode should have updated bus generation
+    FwBusGeneration = newFwBusGeneration;
+    outStr << "InitNodes: Firewire bus generation = " << FwBusGeneration << std::endl;
+
+    // Broadcast a command to initiate a read of Firewire PHY Register 0. In cases where there is no
+    // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
+    // to obtain its Firewire node id.
+    data = 0;
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, 1, data)) {
+        outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
+        return 0;
     }
 
     // Find board id for first board (i.e., one connected by Ethernet) by FireWire broadcast
     if (!ReadQuadletNode(FW_NODE_BROADCAST, 0, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
-        return false;
+        return 0;
     }
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
 
-    return true;
+    // Scan for up to 16 nodes on bus
+    return BoardIO::MAX_BOARDS;
 }
 
 bool EthUdpPort::IsOK(void)
@@ -298,353 +514,67 @@ bool EthUdpPort::IsOK(void)
     return (sockPtr && (sockPtr->SocketFD != INVALID_SOCKET));
 }
 
-void EthUdpPort::Reset(void)
+unsigned int EthUdpPort::GetPrefixOffset(MsgType msg) const
 {
-    return;
+    switch (msg) {
+        case WR_CTRL:      return 0;
+        case WR_FW_HEADER: return FW_CTRL_SIZE;
+        case WR_FW_BDATA:  return FW_CTRL_SIZE+FW_BWRITE_HEADER_SIZE;
+        case RD_FW_HEADER: return 0;
+        case RD_FW_BDATA:  return FW_BRESPONSE_HEADER_SIZE;
+    }
+    outStr << "EthUdpPort::GetPrefixOffset: Invalid type: " << msg << std::endl;
+    return 0;
 }
 
-bool EthUdpPort::AddBoard(BoardIO *board)
+// The largest data size supported by the firmware is:
+//   1) Firewire limits maximum data size to 2048 bytes (MAX_POSSIBLE_DATA_SIZE)
+//   2) The FPGA firmware reduces this limit by 24 (FW_BRESPONSE_HEADER_SIZE + FW_CRC_SIZE)
+// But, there is also a limit imposed by the MTU (maximum Ethernet packet size); in addition
+// to the Firewire packet, we need to consider ETH_UDP_HEADER and FW_EXTRA_SIZE.
+unsigned int EthUdpPort::GetMaxReadDataSize(void) const
 {
-    bool ret = BasePort::AddBoard(board);
-    if (ret) {
-        // Allocate a buffer that is big enough for FireWire header as well
-        // as the data to be sent.
-        size_t block_write_len = (FW_BWRITE_HEADER_SIZE + board->GetWriteNumBytes() + FW_CRC_SIZE)/sizeof(quadlet_t);
-        quadlet_t * buf = new quadlet_t[block_write_len];
-        // Offset into the data part of the buffer
-        size_t offset = FW_BWRITE_HEADER_SIZE/sizeof(quadlet_t);
-        board->SetWriteBuffer(buf, offset);
-    }
-    return ret;
+    return (std::min(MAX_POSSIBLE_DATA_SIZE, sockPtr->InterfaceMTU-ETH_UDP_HEADER-FW_EXTRA_SIZE)
+            - FW_BRESPONSE_HEADER_SIZE - FW_CRC_SIZE);
 }
 
-bool EthUdpPort::RemoveBoard(unsigned char boardId)
+// The largest data size supported by the firmware is:
+//   1) Firewire limits maximum data size to 2048 bytes (MAX_POSSIBLE_DATA_SIZE)
+//   2) The FPGA firmware reduces this limit by 24 (FW_BWRITE_HEADER_SIZE + FW_CRC_SIZE)
+// But, there is also a limit imposed by the MTU (maximum Ethernet packet size); in addition
+// to the Firewire packet, we need to consider ETH_UDP_HEADER and FW_CTRL_SIZE.
+unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
 {
-    bool ret = false;
-    BoardIO *board = BoardList[boardId];
-    if (board) {
-        // Free up the memory that was allocated in AddBoard
-        delete [] BoardList[boardId]->GetWriteBuffer();
-        BoardList[boardId]->SetWriteBuffer(0, 0);
-        ret = BasePort::RemoveBoard(boardId);
-    }
-    else
-        outStr << "RemoveBoard: board " << static_cast<unsigned int>(boardId) << " not in use" << std::endl;
-    return ret;
+    return (std::min(MAX_POSSIBLE_DATA_SIZE, sockPtr->InterfaceMTU-ETH_UDP_HEADER-FW_CTRL_SIZE)
+            - FW_BWRITE_HEADER_SIZE - FW_CRC_SIZE);
 }
 
-bool EthUdpPort::ReadAllBoardsBroadcast(void)
+bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
-    if (!IsOK()) {
-        outStr << "ReadAllBoardsBroadcast: not initialized" << std::endl;
+    int nSent = sockPtr->Send(packet, nbytes, useEthernetBroadcast);
+
+    if (nSent != static_cast<int>(nbytes)) {
+        outStr << "PacketSend: failed to send via UDP: return value = " << nSent
+               << ", expected = " << nbytes << std::endl;
         return false;
     }
-
-    bool allOK = true;
-
-#if 0
-    // sequence number from 16 bits 0 to 65535
-    ReadSequence_++;
-    if (ReadSequence_ == 65536) {
-        ReadSequence_ = 1;
-    }
-    quadlet_t bcReqData = (ReadSequence_ << 16) | BoardInUseMask_;
-
-    // PK TODO: Fix the following to call make_bread_packet
-    //--- send out broadcast read request -----
-    const size_t length_fw = 5;
-    const size_t numBytes = length_fw*4;
-    quadlet_t packet_FW[length_fw];
-    // length field (big endian 16-bit integer)
-    frame_hdr[12] = 0;
-    frame_hdr[13] = numBytes;
-
-    packet_FW[0] = bswap_32(0xFFC00000);
-    packet_FW[1] = bswap_32(0xFFCFFFFF);
-    packet_FW[2] = bswap_32(0xFFFF000F);
-    packet_FW[3] = bswap_32(bcReqData);
-    packet_FW[4] = bswap_32(BitReverse32(crc32(0U, (void*)packet_FW, 16)));
-
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(packet_FW), numBytes);
-    if (nSent != numBytes) {
-        outStr << "ReadAllBoardsBroadcast: UDP send returned " << nSent << ", expected " << numBytes << std::endl;
-        return false;
-    }
-
-    bool ret = true;
-
-    // record the number of cycle
-    int loopSeq = 0;
-    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
-        if (BoardList[bid]) {
-            const int readSize = 17;  // 1 seq + 16 data, unit quadlet
-            quadlet_t readBuffer[readSize];
-
-            memcpy(readBuffer, packet + ETH_HEADER_LEN + loopSeq * readSize * 4, readSize * 4);
-
-            unsigned int seq = (bswap_32(readBuffer[0]) >> 16);
-
-            //! check boardID
-
-            static int errorcounter = 0;
-            if (ReadSequence_ != seq) {
-                errorcounter++;
-                outStr << "errorcounter = " << errorcounter << std::endl;
-                outStr << std::hex << seq << "  " << ReadSequence_ << "  " << (int)bid << std::endl;
-            }
-
-            memcpy(BoardList[bid]->GetReadBuffer(), &(readBuffer[1]), (readSize-1) * 4);
-
-            if (!ret) allOK = false;
-            BoardList[bid]->SetReadValid(ret);
-            loopSeq++;
-        }
-    }
-#else
-    outStr << "ReadAllBoardsBroadcast: not yet implemented" << std::endl;
-#endif
-
-    return allOK;
-}
-
-bool EthUdpPort::WriteAllBoardsBroadcast(void)
-{
-    if (!IsOK()) {
-        outStr << "WriteAllBoardsBroadcast: not initialized" << std::endl;
-        return false;
-    }
-
-    // sanity check vars
-    bool allOK = true;
-
-#if 0
-    // loop 1: broadcast write block
-
-    // construct broadcast write buffer
-    const int numOfChannel = 4;
-    quadlet_t bcBuffer[numOfChannel * BoardIO::MAX_BOARDS];
-    memset(bcBuffer, 0, sizeof(bcBuffer));
-    int bcBufferOffset = 0; // the offset for new data to be stored in bcBuffer (bytes)
-    int numOfBoards = 0;
-
-    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
-        if (BoardList[bid]) {
-            numOfBoards++;
-            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
-            unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
-            memcpy(bcBuffer + bcBufferOffset/4, buf, numBytes-4); // -4 for ctrl offset
-            // bcBufferOffset equals total numBytes to write, when the loop ends
-            bcBufferOffset = bcBufferOffset + numBytes - 4;
-        }
-    }
-
-    // now broadcast out the huge packet
-    bool ret = true;
-
-    ret = WriteBlockBroadcast(0xffffff000000,  // now the address is hardcoded
-                              bcBuffer,
-                              bcBufferOffset);
-
-    // loop 2: send out control quadlet if necessary
-    for (int bid = 0; bid < BoardIO::MAX_BOARDS; bid++) {
-        if (BoardList[bid]) {
-            quadlet_t *buf = BoardList[bid]->GetWriteBufferData();
-            unsigned int numBytes = BoardList[bid]->GetWriteNumBytes();
-            unsigned int numQuads = numBytes/4;
-            quadlet_t ctrl = buf[numQuads-1];  // Get last quedlet
-            bool ret2 = true;
-            if (ctrl) {  // if anything non-zero, write it
-                ret2 = WriteQuadlet(bid, 0x00, ctrl);
-                if (!ret2) allOK = false;
-            }
-            // Check for data collection callback
-            BoardList[bid]->CheckCollectCallback();
-            // SetWriteValid clears the buffer if the write was valid
-            BoardList[bid]->SetWriteValid(ret&&ret2);
-        }
-    }
-#else
-    outStr << "WriteAllBoardsBroadcast: not yet implemented" << std::endl;
-#endif
-    // return
-    return allOK;
-}
-
-bool EthUdpPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags)
-{
-    // Flush before reading
-    int numFlushed = sockPtr->FlushRecv();
-    if (numFlushed > 0)
-        outStr << "ReadQuadlet: flushed " << numFlushed << " packets" << std::endl;
-
-    // Create buffer that is large enough for Firewire packet
-    quadlet_t sendPacket[FW_QREAD_SIZE/sizeof(quadlet_t)];
-
-    // Increment transaction label
-    fw_tl = (fw_tl+1)&FW_TL_MASK;
-
-    // Build FireWire packet
-    make_qread_packet(sendPacket, node, addr, fw_tl, flags&FW_NODE_NOFORWARD_MASK);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_QREAD_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
-    if (nSent != static_cast<int>(FW_QREAD_SIZE)) {
-        outStr << "ReadQuadlet: failed to send read request via UDP: return value = " << nSent << ", expected = " << FW_QREAD_SIZE << std::endl;
-        return false;
-    }
-
-    // Invoke callback (if defined) between sending read request
-    // and checking for read response. If callback returns false, we
-    // skip checking for a received packet.
-    if (eth_read_callback && !(*eth_read_callback)(*this, node, outStr)) {
-        outStr << "ReadQuadlet: callback aborting (not reading packet)" << std::endl;
-        return false;
-    }
-
-    quadlet_t recvPacket[FW_QRESPONSE_SIZE/sizeof(quadlet_t)];
-    int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), FW_QRESPONSE_SIZE, ReceiveTimeout);
-    if (nRecv != static_cast<int>(FW_QRESPONSE_SIZE)) {
-        unsigned int boardId = Node2Board[node];
-        if (boardId < BoardIO::MAX_BOARDS) {
-            // Only print message if Node2Board contains valid board number, to avoid unnecessary error messages during ScanNodes.
-            outStr << "ReadQuadlet: failed to receive read response from board " << boardId << " via UDP: return value = "
-                   << nRecv << ", expected = " << FW_QRESPONSE_SIZE << std::endl;
-        }
-        return false;
-    }
-    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), 0, node, EthBasePort::QRESPONSE, fw_tl))
-        return false;
-    data = bswap_32(recvPacket[3]);
     return true;
 }
 
-
-bool EthUdpPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags)
+int EthUdpPort::PacketReceive(unsigned char *packet, size_t nbytes)
 {
-    // Create buffer that is large enough for Firewire packet
-    quadlet_t buffer[FW_QWRITE_SIZE/sizeof(quadlet_t)];
-
-    // Increment transaction label
-    fw_tl = (fw_tl+1)&FW_TL_MASK;
-
-    // Build FireWire packet
-    make_qwrite_packet(buffer, node, addr, data, fw_tl, flags&FW_NODE_NOFORWARD_MASK);
-
-
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(buffer), FW_QWRITE_SIZE, flags&FW_NODE_ETH_BROADCAST_MASK);
-    return (nSent == static_cast<int>(FW_QWRITE_SIZE));
+    int nRecv = sockPtr->Recv(packet, nbytes, ReceiveTimeout);
+    if (nRecv == static_cast<int>(FW_EXTRA_SIZE)) {
+        outStr << "PacketReceive: only extra data" << std::endl;
+        ProcessExtraData(packet);
+        nRecv = 0;
+    }
+    return nRecv;
 }
 
-bool EthUdpPort::ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
+int EthUdpPort::PacketFlushAll(void)
 {
-    if (nbytes == 4)
-        return ReadQuadlet(boardId, addr, *rdata);
-    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "ReadBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
-        return false;
-    }
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "ReadBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
-    // Flush before reading
-    int numFlushed = sockPtr->FlushRecv();
-    if (numFlushed > 0)
-        outStr << "ReadBlock: flushed " << numFlushed << " packets" << std::endl;
-
-    // Create buffer that is large enough for Firewire packet
-    quadlet_t sendPacket[FW_BREAD_SIZE/sizeof(quadlet_t)];
-
-    // Increment transaction label
-    fw_tl = (fw_tl+1)&FW_TL_MASK;
-
-    // Build FireWire packet
-    make_bread_packet(sendPacket, node, addr, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(sendPacket), FW_BREAD_SIZE, boardId&FW_NODE_ETH_BROADCAST_MASK);
-    if (nSent != static_cast<int>(FW_BREAD_SIZE)) {
-        outStr << "ReadBlock: failed to send read request via UDP: return value = " << nSent << ", expected = " << FW_BREAD_SIZE << std::endl;
-        return false;
-    }
-
-    // Invoke callback (if defined) between sending read request
-    // and checking for read response. If callback returns false, we
-    // skip checking for a received packet.
-    if (eth_read_callback && !(*eth_read_callback)(*this, node, outStr)) {
-        outStr << "ReadBlock: callback aborting (not reading packet)" << std::endl;
-        return false;
-    }
-
-    size_t packetSize = FW_BRESPONSE_HEADER_SIZE + nbytes + FW_CRC_SIZE;   // PK TEMP
-    quadlet_t *recvPacket = new quadlet_t[packetSize/sizeof(quadlet_t)];
-    int nRecv = sockPtr->Recv(reinterpret_cast<char *>(recvPacket), packetSize, ReceiveTimeout);
-    if (nRecv != static_cast<int>(packetSize)) {
-        outStr << "ReadBlock: failed to receive read response via UDP: return value = " << nRecv << ", expected = " << packetSize << std::endl;
-        return false;
-    }
-    if (!CheckFirewirePacket(reinterpret_cast<const unsigned char *>(recvPacket), nbytes, node, EthBasePort::BRESPONSE, fw_tl))
-        return false;
-    memcpy(rdata, &recvPacket[5], nbytes);   // PK TEMP
-    return true;
-}
-
-bool EthUdpPort::WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-    if (nbytes == 4) {
-        return WriteQuadlet(boardId, addr, *wdata);
-    }
-    else if ((nbytes == 0) || ((nbytes%4) != 0)) {
-        outStr << "WriteBlock: illegal size (" << nbytes << "), must be multiple of 4" << std::endl;
-        return false;
-    }
-
-    nodeid_t node = ConvertBoardToNode(boardId);
-    if (node == MAX_NODES) {
-        outStr << "WriteBlock: board " << static_cast<unsigned int>(boardId&FW_NODE_MASK) << " does not exist" << std::endl;
-        return false;
-    }
-
-    // Packet to send
-    quadlet_t *packet = 0;
-    size_t packetSize = FW_BWRITE_HEADER_SIZE + nbytes + FW_CRC_SIZE;  // includes CRC on data
-
-    // Check for real-time write
-    bool realTimeWrite = false;
-    boardId = boardId&FW_NODE_MASK;
-    if (boardId < BoardIO::MAX_BOARDS) {
-        if ((BoardList[boardId]->GetWriteBufferData() == wdata) &&
-            (nbytes <= BoardList[boardId]->GetWriteNumBytes())) {
-             realTimeWrite = true;
-             packet = BoardList[boardId]->GetWriteBuffer();
-        }
-    }
-    if (!packet) {
-        packet = new quadlet_t[packetSize];
-    }
-
-    // PK: temporarily save the last quadlet, which is the power control on a real-time write,
-    //     so that it does not get overwritten by the CRC.
-    quadlet_t temp_saved = wdata[nbytes/sizeof(quadlet_t)];
-
-    // Build FireWire packet
-    make_bwrite_packet(packet, node, addr, wdata, nbytes, fw_tl, boardId&FW_NODE_NOFORWARD_MASK);
-    int nSent = sockPtr->Send(reinterpret_cast<const char *>(packet), packetSize, boardId&FW_NODE_ETH_BROADCAST_MASK);
-    if (nSent != static_cast<int>(packetSize)) {
-        outStr << "WriteBlock: failed to send write via UDP: return value = " << nSent << ", expected = " << packetSize << std::endl;
-        return false;
-    }
-
-    wdata[nbytes/sizeof(quadlet_t)] = temp_saved;   // PK TEMP for real-time writes
-    if (!realTimeWrite)
-        delete [] packet;
-    return true;
-}
-
-bool EthUdpPort::WriteBlockBroadcast(
-        nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes)
-{
-    outStr << "WriteBlockBroadcast not yet implemented" << std::endl;
-    return false;
+    return sockPtr->FlushRecv();
 }
 
 // Convert IP address from uint32_t to string
@@ -672,4 +602,3 @@ uint32_t EthUdpPort::IP_ULong(const std::string &IPaddr)
 #endif
     return ret;
 }
-

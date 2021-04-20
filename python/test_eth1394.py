@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import amp1394
+import Amp1394Python as amp1394
 import time
 import numpy as np
 import argparse
 from random import randint
-from amp1394 import bswap32, bswap16
+from Amp1394Python import bswap32, bswap16
 
 def TestWriteQuadletBroadcast(fw):
     """Write Quadlet Broadcast"""
@@ -201,6 +201,7 @@ if __name__ == '__main__':
     print "bid = " + str(args.board)
     bid = args.board
 
+    eth = None
     if args.firewire:
         fw = amp1394.FirewirePort(0)
         bd1 = amp1394.AmpIO(bid)
@@ -210,7 +211,7 @@ if __name__ == '__main__':
         bd1 = amp1394.AmpIO(bid)
         fw.AddBoard(bd1)
         
-        eth = amp1394.Eth1394Port(0)
+        eth = amp1394.EthUdpPort(0)
         bd2 = amp1394.AmpIO(bid)
         eth.AddBoard(bd2)
 
@@ -220,4 +221,11 @@ if __name__ == '__main__':
         TestBRead(eth, fw, bid)
         TestBWrite(eth, fw, bid)
 
-import ipdb; ipdb.set_trace()
+    fw.RemoveBoard(bid)
+    if eth:
+        eth.RemoveBoard(bid)
+
+#try:
+#    import ipdb; ipdb.set_trace()
+#except ImportError:
+#    print 'Failed to import ipdb'

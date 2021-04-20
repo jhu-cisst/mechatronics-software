@@ -88,7 +88,7 @@ int main(int argc, char** argv)
     // ---------------------------------------
     bool rc;
     nodeaddr_t nodeaddress_wd = 0xffffff000003;
-    rc = fwport.WriteQuadletBroadcast(nodeaddress_wd, bswap_32(0x3888));
+    rc = fwport.WriteQuadlet(FW_NODE_BROADCAST, nodeaddress_wd, bswap_32(0x3888));
     if (!rc) {
         std::cerr << "Quadlet broadcast error" << std::endl;
     }
@@ -101,7 +101,6 @@ int main(int argc, char** argv)
                   << " watchdog = " << std::hex << bswap_32(dataQuadlet) << std::endl;
         dataQuadlet = 0x0000; // clear value
     }
-
 
     // ----- ---------------------------------
     // Block broadcast

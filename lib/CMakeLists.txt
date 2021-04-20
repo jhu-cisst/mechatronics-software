@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2019 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -15,16 +15,19 @@ set (HEADERS
      BoardIO.h
      AmpIO.h
      Amp1394Time.h
+     Amp1394BSwap.h
      BasePort.h
      EthBasePort.h
-     EthUdpPort.h)
+     EthUdpPort.h
+     PortFactory.h)
 
 set (SOURCE_FILES
      code/AmpIO.cpp
      code/Amp1394Time.cpp
      code/BasePort.cpp
      code/EthBasePort.cpp
-     code/EthUdpPort.cpp)
+     code/EthUdpPort.cpp
+     code/PortFactory.cpp)
 
 
 if (Amp1394_HAS_RAW1394)
@@ -55,6 +58,15 @@ if (Amp1394_BUILD_SWIG)
   find_package(PythonLibs)
   include_directories(${PYTHON_INCLUDE_PATH})
 
+  find_package(PythonInterp)
+  if (PYTHON_EXECUTABLE)
+    execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import numpy; print(numpy.get_include())"
+                    ERROR_QUIET
+                    OUTPUT_VARIABLE Amp1394_NUMPY_INCLUDE_DIR
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    include_directories(${Amp1394_NUMPY_INCLUDE_DIR} "${Amp1394_BINARY_DIR}/Amp1394")
+  endif()
+
   set_source_files_properties(Amp1394.i PROPERTIES CPLUSPLUS ON)
   swig_add_module(Amp1394Python python Amp1394.i ${HEADERS} ${SOURCE_FILES})
   swig_link_libraries(Amp1394Python ${PYTHON_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
@@ -69,8 +81,16 @@ if (Amp1394_BUILD_SWIG)
                      COMMAND ${CMAKE_COMMAND}
                      ARGS -E copy_if_different
                              ${CMAKE_CURRENT_BINARY_DIR}/Amp1394Python.py
-                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/Amp1394Python.py
-                     COMMENT "Copying Amp1394Python to ${LIBRARY_OUTPUT_PATH}" )
+                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/
+                     COMMAND ${CMAKE_COMMAND}
+                     ARGS -E copy_if_different
+                             ${Amp1394_SOURCE_DIR}/python/test_eth1394.py
+                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/
+                     COMMAND ${CMAKE_COMMAND}
+                     ARGS -E copy_if_different
+                             ${Amp1394_SOURCE_DIR}/python/test_amp1394.py
+                             ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/
+                     COMMENT "Copying Python files to ${LIBRARY_OUTPUT_PATH}" )
 endif (Amp1394_BUILD_SWIG)
 
 

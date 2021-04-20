@@ -5,7 +5,7 @@
   Author(s):  Zihan Chen, Anton Deguet
   Created on: 2015
 
-  (C) Copyright 2015-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2015-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -17,47 +17,71 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <stdlib.h> // for atoi
-#include <unistd.h> // for usleep
 #include <iostream>
+#include <vector>
+#include <string>
 
-#include <FirewirePort.h>
+#include <PortFactory.h>
 #include <AmpIO.h>
+#include "Amp1394Time.h"
 
 int main(int argc, char** argv)
 {
+    std::cerr << "qlacloserelays will soon be deprecated, use `qlacommand` instead.  Examples:" << std::endl
+              << "> qlacommand -c close-relays" << std::endl
+              << "> qlacommand -pfw:0 -c close-relays" << std::endl
+              << "> qlacommand -c open-relays" << std::endl;
+
     unsigned int i, j;
-    int port = 0;;
+    BasePort * port = 0;
+    std::string portArgs;
+    bool closing = true;
 
     for (i = 1; i < (unsigned int)argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            port = atoi(argv[i]+2);
+            portArgs = argv[i]+2;
+        }
+        if ((argv[i][0] == '-') && (argv[i][1] == 'o')) {
+            closing = false;
         }
     }
 
-    std::cout << "Using firewire port " << port << " (to change port, use -p)" << std::endl;
-
-    FirewirePort Port(port, std::cout);
-    if (!Port.IsOK()) {
-        std::cerr << "Failed to initialize firewire port " << port << std::endl;
+    // if port is not specified
+    port = PortFactory(portArgs.c_str());
+    if (!port) {
+        std::cerr << "Failed to create port using: " << portArgs << std::endl;
         return -1;
     }
 
-    std::vector<AmpIO *> BoardList;
-    for (i = 0; i < Port.GetNumOfNodes(); i++) {
-        int boardId = Port.GetBoardId(i);
+    if (closing) {
+        std::cout << "Closing all relays (to open all, use -o)" << std::endl;
+    } else {
+        std::cout << "Opening all relays" << std::endl;
+    }
+
+    std::vector<AmpIO *> boardList;
+    for (i = 0; i < port->GetNumOfNodes(); i++) {
+        int boardId = port->GetBoardId(i);
         if (boardId != BoardIO::MAX_BOARDS) {
             std::cout << "Adding firewire Node " << i << ", BoardID " << boardId << std::endl;
             AmpIO *board = new AmpIO(boardId);
-            BoardList.push_back(board);
-            Port.AddBoard(board);
+            boardList.push_back(board);
+            port->AddBoard(board);
         }
     }
 
-    for (j = 0; j < BoardList.size(); j++) {
-        BoardList[j]->WriteSafetyRelay(true);
-        usleep(40000); // sleep 40 ms
+    for (j = 0; j < boardList.size(); j++) {
+        boardList[j]->WriteSafetyRelay(closing);
+        Amp1394_Sleep(0.04); // sleep 40 ms
     }
 
-    std::cout << "Safety relays closed" << std::endl;
+    if (closing) {
+        std::cout << "Safety relays closed" << std::endl;
+    } else {
+        std::cout << "Safety relays opened" << std::endl;
+    }
+
+    delete port;
+
     return 0;
 }

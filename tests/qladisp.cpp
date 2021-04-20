@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
 
-  (C) Copyright 2012-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -30,24 +30,18 @@ http://www.cisst.org/cisst/license.txt.
  ******************************************************************************/
 
 #include <stdlib.h>
-#include <unistd.h>
-#include <curses.h>
 #include <iostream>
 #include <sstream>
 #include <fstream>
 #include <vector>
 
 #include <Amp1394/AmpIORevision.h>
-#if Amp1394_HAS_RAW1394
-#include "FirewirePort.h"
-#endif
-#if Amp1394_HAS_PCAP
-#include "EthRawPort.h"
-#endif
-#include "EthUdpPort.h"
-
+#include "PortFactory.h"
 #include "AmpIO.h"
+#include "Amp1394Time.h"
+#include "Amp1394Console.h"
 
+#include "EthBasePort.h"
 
 /*!
  \brief Increment encoder counts
@@ -78,10 +72,8 @@ void EncDown(AmpIO &bd)
 void PrintDebugStream(std::stringstream &debugStream)
 {
     char line[80];
-    while (!debugStream.eof()) {
-        debugStream.getline(line, sizeof(line));
+    while (debugStream.getline(line, sizeof(line)))
         std::cerr << line << std::endl;
-    }
     debugStream.clear();
     debugStream.str("");
 }
@@ -90,15 +82,11 @@ unsigned int collectFileNum = 0;
 std::ofstream collectFile;
 bool isCollecting = false;
 
-bool CollectCB(quadlet_t *buffer, short nquads, unsigned short readSize)
+bool CollectCB(quadlet_t *buffer, short nquads)
 {
     collectFile.write(reinterpret_cast<const char *>(buffer), nquads*sizeof(quadlet_t));
-    if (isCollecting)
-        mvwprintw(stdscr, 1, 76, "%4d,%4u", nquads, readSize);
-    else {
+    if (!isCollecting)
         collectFile.close();
-        mvwprintw(stdscr, 1, 76, "         ");
-    }
     return true;
 }
 
@@ -119,10 +107,10 @@ bool CollectFileConvert(const char *inFilename, const char *outFilename)
     while (inFile.good()) {
         inFile.read(reinterpret_cast<char *>(&value), sizeof(quadlet_t));
         outFile << std::dec
-                << ((value&0xC0000000)>>30) << ", "    // flag
-                << ((value&0x3FF00000)>>20) << ", "    // write index
-                << ((value&0x000F0000)>>16) << ", "    // channel
-                << std::hex << (value&0x0000FFFF)      // data
+                << ((value&0x80000000)>>31) << ", "    // type (0->commanded current, 1-> measured current)
+                << ((value&0x40000000)>>30) << ", "    // timer overflow
+                << ((value&0x3FFF0000)>>16) << ", "    // timer (14-bits)
+                << (value&0x0000FFFF)                  // data
                 << std::endl;
     }
     inFile.close();
@@ -130,35 +118,78 @@ bool CollectFileConvert(const char *inFilename, const char *outFilename)
     return true;
 }
 
+void UpdateStatusStrings(char *statusStr1, char *statusStr2, AmpIO_UInt32 statusChanged, AmpIO_UInt32 status)
+{
+    if (statusChanged&0x00080000) {  // power (mv-good)
+        if (status&0x00080000) {
+            statusStr1[0] = 'P';
+            statusStr1[1] = '+';
+        }
+        else {
+            statusStr1[3] = 'P';
+            statusStr1[4] = '-';
+        }
+    }
+    if (statusChanged&0x00020000) {  // safety relay
+        if (status&0x00020000) {
+            statusStr1[6] = 'S';
+            statusStr1[7] = '+';
+        }
+        else {
+            statusStr1[9] = 'S';
+            statusStr1[10] = '-';
+        }
+    }
+    if (statusChanged&0x00800000) {  // watchdog
+        if (status&0x00800000) {
+            statusStr1[12] = 'W';
+            statusStr1[13] = '+';
+        }
+        else {
+            statusStr1[15] = 'W';
+            statusStr1[16] = '-';
+        }
+    }
+    for (unsigned int i = 0; i < 4; i++) {  // amplifier status
+        AmpIO_UInt32 mask = (0x00000100 << i);
+        if (statusChanged&mask) {
+            if (status&mask) {
+                statusStr2[0] = 'A';
+                statusStr2[2+4*i] = '+';
+            }
+            else {
+                statusStr2[0] = 'A';
+                statusStr2[2+4*i+1] = '-';
+            }
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
     unsigned int i, j;
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
-#endif
-    int port = 0;
-    std::string IPaddr(ETH_UDP_DEFAULT_IP);
-    int board1 = BoardIO::MAX_BOARDS;
-    int board2 = BoardIO::MAX_BOARDS;
     BasePort::ProtocolType protocol = BasePort::PROTOCOL_SEQ_RW;
     bool fullvel = false;  // whether to display full velocity feedback
+    bool showTime = false; // whether to display time information
+
+    std::vector<AmpIO*> BoardList;
+    std::vector<AmpIO_UInt32> BoardStatusList;
 
     // measure time between reads
     AmpIO_UInt32 maxTime = 0;
     AmpIO_UInt32 lastTime = 0;
 
-    int args_found = 0;
+    unsigned int curAxis = 0;     // Current axis (0=all, 1-8)
+    unsigned int curBoardIndex = 0;
+    unsigned int curAxisIndex = 0;
+    char axisString[4] = "all";
+    std::string portDescription;
+
     for (i = 1; i < (unsigned int)argc; i++) {
         if (argv[i][0] == '-') {
             if (argv[i][1] == 'p') {
-                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                    std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                    return 0;
-                }
-                std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
+                portDescription = argv[i]+2;
             }
             else if (argv[i][1] == 'b') {
                 // -br -- enable broadcast read/write
@@ -170,45 +201,55 @@ int main(int argc, char** argv)
             }
             else if (argv[i][1] == 'v')
                 fullvel = true;
+            else if (argv[i][1] == 't')
+                showTime = true;
         }
         else {
-            if (args_found == 0) {
-                board1 = atoi(argv[i]);
-                std::cerr << "Selecting board " << board1 << std::endl;
+            int bnum = atoi(argv[i]);
+            if ((bnum >= 0) && (bnum < BoardIO::MAX_BOARDS)) {
+                BoardList.push_back(new AmpIO(bnum));
+                std::cerr << "Selecting board " << bnum << std::endl;
             }
-            else if (args_found == 1) {
-                board2 = atoi(argv[i]);
-                std::cerr << "Selecting board " << board2 << std::endl;
-            }
-            args_found++;
+            else
+                std::cerr << "Invalid board number: " << argv[i] << std::endl;
         }
     }
 
-    if (args_found < 1) {
+    if (BoardList.size() < 1) {
         // usage
-        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v]" << std::endl
+        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v] [-t]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
-                  << "                 can also specify -pfwP, -pethP or -pudp[xx.xx.xx.xx]" << std::endl
+                  << "                 can also specify -pfw[:P], -peth:P or -pudp[:xx.xx.xx.xx]" << std::endl
                   << "            -br enables broadcast read/write" << std::endl
                   << "            -bw enables broadcast write" << std::endl
                   << "            -v  displays full velocity feedback" << std::endl
-                  << std::endl;
+                  << "            -t  displays time information" << std::endl
+                  << std::endl
+                  << "Trying to detect boards on port:" << std::endl;
+    }
 
-#if Amp1394_HAS_RAW1394
-        std::cerr << "Trying to detect board on default port:" << std::endl;
-        if (desiredPort == BasePort::PORT_FIREWIRE) {
-            // try to locate all boards available on default port
-            FirewirePort testPort(port, std::cerr);
-            if (!testPort.IsOK()) {
-                std::cerr << "Failed to initialize FireWire port " << port << std::endl;
-            }
-        }
-#endif
+    std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
+    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
+    if (!Port) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to create port using: " << portDescription << std::endl;
+        return -1;
+    }
+    if (!Port->IsOK()) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
+        return -1;
+    }
+
+    if (BoardList.size() < 1) {
+        PrintDebugStream(debugStream);
         // keys
         std::cerr << std::endl << "Keys:" << std::endl
                   << "'r': reset FireWire port" << std::endl
-                  << "'d': turn watchdog on/off (25.0 ms)" << std::endl
+                  << "'a': axis to address (1-4 or 8) or all (0, default)" << std::endl
+                  << "'d': turn watchdog on/off (0.25 ms, this should be triggered immediately)" << std::endl
+                  << "'D': turn watchdog on/off (25.0 ms, can be triggered by unplugging cable to PC)" << std::endl
                   << "'p': turn power on/off (board and axis)" << std::endl
                   << "'o': turn power on/off (board only)" << std::endl
                   << "'i': turn power on/off (axis only, requires board first)" << std::endl
@@ -216,39 +257,23 @@ int main(int argc, char** argv)
                   << "'s': decrement encoders" << std::endl
                   << "'=': increase motor current by about 50mA" << std::endl
                   << "'-': increase motor current by about 50mA" << std::endl
-                  << "'c': start/stop data collection" << std::endl;
+                  << "'c': start/stop data collection" << std::endl
+                  << "'z': clear status events and r/w errors" << std::endl
+                  << "'0'-'3': toggle digital output bit" << std::endl;
         return 0;
     }
 
-    std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-
-    BasePort *Port;
-    if (desiredPort == BasePort::PORT_FIREWIRE) {
-#if Amp1394_HAS_RAW1394
-        Port = new FirewirePort(port, debugStream);
-#else
-        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    else if (desiredPort == BasePort::PORT_ETH_UDP) {
-        Port = new EthUdpPort(port, IPaddr, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
-    }
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-#if Amp1394_HAS_PCAP
-        Port = new EthRawPort(port, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
-#else
-        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    if (!Port->IsOK()) {
+    if (Port->GetNumOfNodes() == 0) {
         PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        std::cerr << "Failed to find any boards" << std::endl;
         return -1;
     }
+
+    // Check if an Ethernet port
+    EthBasePort *ethPort = dynamic_cast<EthBasePort *>(Port);
+
+    for (i = 0; i < BoardList.size(); i++)
+        Port->AddBoard(BoardList[i]);
 
     // Set protocol; default is PROTOCOL_SEQ_RW (not broadcast), but can be changed to
     // one of the broadcast protocols by specifying -br or -bw command line parameter.
@@ -256,165 +281,267 @@ int main(int argc, char** argv)
         std::cerr << "Setting protocol to broadcast read/write" << std::endl;
     else if (protocol == BasePort::PROTOCOL_SEQ_R_BC_W)
         std::cerr << "Setting protocol to broadcast write" << std::endl;
-    Port->SetProtocol(protocol);
+    if (!Port->SetProtocol(protocol))
+        protocol = Port->GetProtocol();  // on failure, get current protocol
+
+    // Number of boards to display (currently 1 or 2)
+    unsigned int numDisp = (BoardList.size() >= 2) ? 2 : 1;
 
     // Currently hard-coded for up to 2 boards; initialize at mid-range
     AmpIO_UInt32 MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
 
-    std::vector<AmpIO*> BoardList;
-    std::vector<AmpIO_UInt32> FirmwareVersionList;
-    BoardList.push_back(new AmpIO(board1));
-    Port->AddBoard(BoardList[0]);
-    if (board2 < BoardIO::MAX_BOARDS) {
-        BoardList.push_back(new AmpIO(board2));
-        Port->AddBoard(BoardList[1]);
-    }
-
-    FirmwareVersionList.clear();
+    bool allRev7 = true;
+    BoardStatusList.clear();
     for (j = 0; j < BoardList.size(); j++) {
-        FirmwareVersionList.push_back(BoardList[j]->GetFirmwareVersion());
+        AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
+        if (fver < 7) allRev7 = false;
     }
 
     for (i = 0; i < 4; i++) {
-        for (j = 0; j < BoardList.size(); j++)
+        for (j = 0; j < numDisp; j++)
             BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
     }
-    bool power_on = false;
-    bool power_board = false;
-    bool power_axis = false;
-    for (j = 0; j < BoardList.size(); j++) {
+    for (j = 0; j < numDisp; j++) {
         BoardList[j]->WriteSafetyRelay(false);
         BoardList[j]->WritePowerEnable(false);
         BoardList[j]->WriteAmpEnable(0x0f, 0);
+        AmpIO_UInt32 bstat = BoardList[j]->ReadStatus();
+        BoardStatusList.push_back(bstat);
     }
 
     bool watchdog_on = false;
 
-    initscr();
-    cbreak();
-    keypad(stdscr, TRUE);
-    noecho();
-    nodelay(stdscr, TRUE);
+    Amp1394Console console;
+    if (!console.IsOK()) {
+        std::cerr << "Failed to initialize console" << std::endl;
+        return -1;
+    }
 
-    if (BoardList.size() > 1) {
-        mvwprintw(stdscr, 1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+    int board1 = BoardList[0]->GetBoardId();
+    if (numDisp > 1) {
+       int board2 = BoardList[1]->GetBoardId();
+       if (protocol == BasePort::PROTOCOL_BC_QRW)
+           console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
+       else
+           console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
     } else {
-        mvwprintw(stdscr, 1, lm, "Sensor Feedback for Board %d", board1);
+        console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
-    mvwprintw(stdscr, 2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
-    mvwprintw(stdscr, 3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
+    console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
+    console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
 
-    unsigned int numAxes = (BoardList.size() > 1)?8:4;
+    unsigned int numAxes = (numDisp > 1) ? 8 : 4;
     for (i = 0; i < numAxes; i++) {
-        mvwprintw(stdscr, 5, lm+8+i*13, "Axis %d", i);
+        console.Print(5, lm+8+i*13, "Axis %d", i);
     }
-    mvwprintw(stdscr, 6, lm, "Enc:");
-    mvwprintw(stdscr, 7, lm, "Pot:");
-    mvwprintw(stdscr, 8, lm, "Vel:");
-    mvwprintw(stdscr, 9, lm, "Cur:");
-    mvwprintw(stdscr, 10, lm, "DAC:");
-    if (fullvel) mvwprintw(stdscr, 11, lm, "Acc:");
+    console.Print(6, lm, "Enc:");
+    console.Print(7, lm, "Pot:");
+    console.Print(8, lm, "Vel:");
+    console.Print(9, lm, "Cur:");
+    console.Print(10, lm, "DAC:");
+    if (fullvel) {
+        if (allRev7) {
+            console.Print(11, lm, "Qtr1:");
+            console.Print(12, lm, "Qtr5:");
+            console.Print(13, lm, "Run:");
+        }
+        else
+            console.Print(11, lm, "Acc:");
+    }
 
-    wrefresh(stdscr);
+    console.Refresh();
 
     unsigned char dig_out = 0x0f;
     unsigned char collect_axis = 1;
+    AmpIO_UInt32 status;
+    AmpIO_UInt32 statusChanged = 0;
+    const unsigned int STATUS_STR_LENGTH = 18;
+    char statusStr1[2][STATUS_STR_LENGTH];
+    memset(statusStr1[0], ' ', STATUS_STR_LENGTH-1);
+    memset(statusStr1[1], ' ', STATUS_STR_LENGTH-1);
+    statusStr1[0][STATUS_STR_LENGTH-1] = 0;
+    statusStr1[1][STATUS_STR_LENGTH-1] = 0;
+    char statusStr2[2][STATUS_STR_LENGTH];
+    memset(statusStr2[0], ' ', STATUS_STR_LENGTH-1);
+    memset(statusStr2[1], ' ', STATUS_STR_LENGTH-1);
+    statusStr2[0][STATUS_STR_LENGTH-1] = 0;
+    statusStr2[1][STATUS_STR_LENGTH-1] = 0;
 
-    int loop_cnt = 0;
-    const int DEBUG_START_LINE = fullvel ? 20 : 19;
+    unsigned int loop_cnt = 0;
+    const int STATUS_LINE = fullvel ? 16 : 13;
+    int timeLines = 0;   // how many lines for timing info
+    if (showTime) {
+        timeLines++;
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            timeLines++;
+    }
+    else if (ethPort)
+        timeLines++;
+    const int DEBUG_START_LINE = fullvel ? (22+timeLines) : (19+timeLines);
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
 
+    if (showTime)
+        console.Print(STATUS_LINE+5, lm, "Time (s):");
+    else if (ethPort)
+        console.Print(STATUS_LINE+5, lm, "Ethernet:");
+
+    double startTime = -1.0;   // indicates that startTime not yet set
+    double pcTime = 0.0;
+
     // control loop
-    while ((c = getch()) != ESC_CHAR) {
-        if (c == 'r') Port->Reset();
+    while ((c = console.GetChar()) != ESC_CHAR)
+    {
+
+        unsigned int startIndex = (curAxis == 0) ? 0 : curBoardIndex;
+        unsigned int endIndex = (curAxis == 0) ? numDisp : curBoardIndex+1;
+
+        if (c == 'r') {
+            Port->Reset();
+            Port->SetProtocol(protocol);
+        }
+        else if (c == 'a') {
+            if (curAxis < numAxes) {
+                curAxis++;
+                curBoardIndex = (curAxis-1)/4;
+                curAxisIndex = (curAxis-1)%4;
+                sprintf(axisString, "%d", curAxis);
+            }
+            else {
+                curAxis = 0;
+                strcpy(axisString, "all");
+            }
+        }
         else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
             dig_out = dig_out^(1<<(c-'0'));
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 BoardList[j]->WriteDigitalOutput(0x0f, dig_out);
         }
         else if (c == 'w') {
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 EncUp(*(BoardList[j]));
         }
         else if (c == 's') {
-            for (j = 0; j < BoardList.size(); j++)
+            for (j = startIndex; j < endIndex; j++)
                 EncDown(*(BoardList[j]));
         }
-        else if (c == 'd'){
+        else if (c == 'd') {
             watchdog_on = !watchdog_on;
-            for (j = 0; j < BoardList.size(); j++)
-                // 50 CNTS = 0.25 ms
-                BoardList[j]->WriteWatchdogPeriod(watchdog_on?50:0);
+            for (j = startIndex; j < endIndex; j++)
+                // 0.25 ms
+                BoardList[j]->WriteWatchdogPeriodInSeconds(watchdog_on?(0.00025):0);
+        }
+        else if (c == 'D') {
+            watchdog_on = !watchdog_on;
+            for (j = startIndex; j < endIndex; j++)
+                // 25.00 ms
+                BoardList[j]->WriteWatchdogPeriodInSeconds(watchdog_on?(0.025):0);
         }
         else if (c == 'p') {
-            power_on = !power_on;
-            for (j = 0; j < BoardList.size(); j++) {
-                if (power_on) {
-                    power_board = true;
-                    power_axis = true;
-                    BoardList[j]->WriteSafetyRelay(true);
+            // Only power on system if completely off; otherwise, we power off.
+            bool anyBoardPowered = false;
+            for (j = startIndex; j < endIndex; j++) {
+                // Also use safety relay for power status because GetPowerStatus relies on the motor
+                // power supply being connected to the QLA. Check GetPowerEnable in addition to
+                // GetPowerStatus because GetPowerStatus returns true if the QLA is not connected.
+                if (BoardList[j]->GetSafetyRelayStatus() || (BoardList[j]->GetPowerEnable() && BoardList[j]->GetPowerStatus()))
+                    anyBoardPowered = true;
+            }
+            for (j = startIndex; j < endIndex; j++) {
+                if (anyBoardPowered) {
+                    // Note that all axes will be disabled when board power is removed
+                    if (curAxis == 0)
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                    else
+                        BoardList[j]->SetAmpEnable(curAxisIndex, false);
+                    BoardList[j]->SetPowerEnable(false);
+                    BoardList[j]->SetSafetyRelay(false);
+                }
+                else {
+                    BoardList[j]->SetSafetyRelay(true);
+                    // Cannot enable Amp power unless Board power is
+                    // already enabled.
                     BoardList[j]->WritePowerEnable(true);
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
-                } else {
-                    power_board = false;
-                    power_axis = false;
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
-                    BoardList[j]->WritePowerEnable(false);
-                    BoardList[j]->WriteSafetyRelay(false);
+                    //BoardList[j]->SetPowerEnable(true);
+                    if (curAxis == 0)
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
+                    else
+                        BoardList[j]->SetAmpEnable(curAxisIndex, true);
                 }
             }
         }
         else if (c == 'o') {
-            power_board = !power_board;
-            for (j = 0; j < BoardList.size(); j++) {
-                if (power_board) {
-                    // if axis are on, it's like having all power on
-                    power_on = power_axis;
-                    BoardList[j]->WriteSafetyRelay(true);
-                    BoardList[j]->WritePowerEnable(true);
+            bool anyBoardPowered = false;
+            for (j = startIndex; j < endIndex; j++) {
+                // Also use safety relay for power status because GetPowerStatus relies on the motor
+                // power supply being connected to the QLA. Check GetPowerEnable in addition to
+                // GetPowerStatus because GetPowerStatus returns true if the QLA is not connected.
+                if (BoardList[j]->GetSafetyRelayStatus() || (BoardList[j]->GetPowerEnable() && BoardList[j]->GetPowerStatus()))
+                    anyBoardPowered = true;
+            }
+            for (j = startIndex; j < endIndex; j++) {
+                if (anyBoardPowered) {
+                    BoardList[j]->SetPowerEnable(false);
+                    BoardList[j]->SetSafetyRelay(false);
                 }
                 else {
-                    power_on = false;
-                    BoardList[j]->WritePowerEnable(false);
-                    BoardList[j]->WriteSafetyRelay(false);
+                    BoardList[j]->SetSafetyRelay(true);
+                    BoardList[j]->SetPowerEnable(true);
                 }
             }
         }
         else if (c == 'i') {
-            power_axis = !power_axis;
-            for (j = 0; j < BoardList.size(); j++) {
-                if (power_axis) {
-                    // if boards are on, it's like having all power on
-                    power_on = power_board;
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x0f);
+            if (curAxis == 0) {
+                bool anyAxisPowered = false;
+                for (j = 0; j < numDisp; j++) {
+                    if (BoardList[j]->GetAmpEnableMask() != 0)
+                        anyAxisPowered = true;
                 }
-                else {
-                    power_on = false;
-                    BoardList[j]->WriteAmpEnable(0x0f, 0x00);
+                for (j = 0; j < numDisp; j++) {
+                    if (anyAxisPowered) {
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
+                    }
+                    else {
+                        BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
+                    }
                 }
+            }
+            else {
+                bool isPowered = BoardList[curBoardIndex]->GetAmpEnable(curAxisIndex);
+                BoardList[curBoardIndex]->SetAmpEnable(curAxisIndex, !isPowered);
             }
         }
         else if (c == '=') {
-            for (j = 0; j < BoardList.size(); j++) {
-                for (i = 0; i < 4; i++)
-                    MotorCurrents[j][i] += 0x100;   // 0x100 is about 50 mA
+            if (curAxis == 0) {
+                for (j = 0; j < numDisp; j++) {
+                    for (i = 0; i < 4; i++)
+                        MotorCurrents[j][i] += 0x100;   // 0x100 is about 50 mA
+                }
+            }
+            else {
+                MotorCurrents[curBoardIndex][curAxisIndex] += 0x100;
             }
         }
         else if (c == '-') {
-            for (j = 0; j < BoardList.size(); j++) {
-                for (i = 0; i < 4; i++)
-                    MotorCurrents[j][i] -= 0x100;   // 0x100 is about 50 mA
+            if (curAxis == 0) {
+                for (j = 0; j < numDisp; j++) {
+                    for (i = 0; i < 4; i++)
+                        MotorCurrents[j][i] -= 0x100;   // 0x100 is about 50 mA
+                }
+            }
+            else {
+                MotorCurrents[curBoardIndex][curAxisIndex] -= 0x100;
             }
         }
         else if (c == 'c') {
             int collect_board = (collect_axis <= 4) ? 0 : 1;
             if (BoardList[collect_board]->IsCollecting()) {
                 BoardList[collect_board]->DataCollectionStop();
-                mvwprintw(stdscr, 1, 62, "             ");
+                console.Print(STATUS_LINE-1, lm, "             ");
+                console.Print(STATUS_LINE-1, lm+15, "                ");
                 if (collect_axis > collectFileNum)
                     collectFileNum = collect_axis;
                 collect_axis = (collect_axis == numAxes) ? 1 : collect_axis+1;
@@ -429,22 +556,35 @@ int main(int argc, char** argv)
                 unsigned char collect_chan = collect_axis-4*collect_board;
                 if (BoardList[collect_board]->DataCollectionStart(collect_chan, CollectCB)) {
                     isCollecting = true;
-                    mvwprintw(stdscr, 1, 62, "Collecting %d:", collect_axis);
+                    console.Print(STATUS_LINE-1, lm, "Collecting %d:", collect_axis);
                 }
+            }
+        }
+        else if (c == 'z') {
+            for (j = 0; j < numDisp; j++) {
+                memset(statusStr1[j], ' ', STATUS_STR_LENGTH-1);
+                statusStr1[j][STATUS_STR_LENGTH-1] = 0;
+                memset(statusStr2[j], ' ', STATUS_STR_LENGTH-1);
+                statusStr2[j][STATUS_STR_LENGTH-1] = 0;
+                console.Print(STATUS_LINE+4, lm+45+58*j, "            ");
+            }
+            for (j = 0; j < BoardList.size(); j++) {
+                BoardList[j]->ClearReadErrors();
+                BoardList[j]->ClearWriteErrors();
             }
         }
 
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
-            char line[80];
+            char line[120];
             memset(line, ' ', sizeof(line)-1);
             line[sizeof(line)-1] = 0;
             for (i = cur_line; i < last_debug_line; i++)
-                mvwprintw(stdscr, i, lm, line);
+                console.Print(i, lm, line);
             while (!debugStream.eof()) {
                 std::string stringLine;
                 std::getline(debugStream, stringLine);
-                mvwprintw(stdscr, cur_line++, lm, stringLine.c_str());
+                console.Print(cur_line++, lm, stringLine.c_str());
             }
             debugStream.clear();
             debugStream.str("");
@@ -453,54 +593,91 @@ int main(int argc, char** argv)
 
         if (!Port->IsOK()) continue;
 
-        char nodeStr[2][5];
-        int node = Port->GetNodeId(board1);
+        char nodeStr[2][3];
+        int node = Port->GetNodeId(BoardList[0]->GetBoardId());
         if (node < BoardIO::MAX_BOARDS)
-            sprintf(nodeStr[0], "%4d", node);
+            sprintf(nodeStr[0], "%2d", node);
         else
             strcpy(nodeStr[0], "none");
 
-        if (BoardList.size() > 1) {
-            node = Port->GetNodeId(board2);
+        if (numDisp > 1) {
+            node = Port->GetNodeId(BoardList[1]->GetBoardId());
             if (node < BasePort::MAX_NODES)
-                sprintf(nodeStr[1], "%4d", node);
+                sprintf(nodeStr[1], "%2d", node);
             else
-                strcpy(nodeStr[1], "none");
+                strcpy(nodeStr[1], "??");
         }
 
+        AmpIO::EncoderVelocityData encVelData;
         Port->ReadAllBoards();
-        unsigned int j = 0;
-        for (j = 0; j < BoardList.size(); j++) {
+        unsigned int j;
+        if (showTime) {
+            if (startTime < 0.0) {
+                startTime = Amp1394_GetTime();
+                pcTime = 0.0;
+                for (j = 0; j < numDisp; j++)
+                    BoardList[j]->SetFirmwareTime(0.0);
+            }
+            else {
+                pcTime = Amp1394_GetTime()-startTime;
+            }
+        }
+        for (j = 0; j < numDisp; j++) {
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
-                    mvwprintw(stdscr, 6, lm+5+(i+4*j)*13, "0x%07X", BoardList[j]->GetEncoderPosition(i)+0x800000);
-                    mvwprintw(stdscr, 7, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetAnalogInput(i));
+                    console.Print(6, lm+7+(i+4*j)*13, "%07X",
+                              BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
+                    console.Print(7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
-                        mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocityRaw(i));
-                    else
-                        mvwprintw(stdscr, 8, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderVelocity(i));
-                    mvwprintw(stdscr, 9, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetMotorCurrent(i));
-                    if (fullvel)
-                        mvwprintw(stdscr, 11, lm+8+(i+4*j)*13, "0x%04X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                        console.Print(8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
+                    else {
+                        BoardList[j]->GetEncoderVelocityData(i, encVelData);
+                        console.Print(8, lm+6+(i+4*j)*13, "%08X", encVelData.velPeriod);
+                    }
+                    console.Print(9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
+                    if (fullvel) {
+                        if (allRev7) {
+                            console.Print(11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
+                            console.Print(12, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
+                            console.Print(13, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
+                        }
+                        else
+                            console.Print(11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                    }
+                }
+                if (isCollecting) {
+                    bool fpgaCollecting;
+                    unsigned char fpgaChan;
+                    unsigned short fpgaAddr;
+                    if (BoardList[j]->GetCollectionStatus(fpgaCollecting, fpgaChan, fpgaAddr)) {
+                        console.Print(STATUS_LINE-1, lm+15, "writeAddr: %4d", fpgaAddr);
+                    }
                 }
                 dig_out = BoardList[j]->GetDigitalOutput();
-                mvwprintw(stdscr, 13, lm+58*j, "Status: 0x%08X   Timestamp: %08X  DigOut: 0x%01X",
-                          BoardList[j]->GetStatus(), BoardList[j]->GetTimestamp(),
+                status = BoardList[j]->GetStatus();
+                if (status != BoardStatusList[j]) {
+                    statusChanged = status^BoardStatusList[j];
+                    BoardStatusList[j] = status;
+                    UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status);
+                }
+                console.Print(STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
+                          status, BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
-                mvwprintw(stdscr, 14, lm+58*j, "NegLim: 0x%01X          PosLim: 0x%01X          Home: 0x%01X",
+                console.Print(STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
+                          statusStr1[j],
                           BoardList[j]->GetNegativeLimitSwitches(),
                           BoardList[j]->GetPositiveLimitSwitches(),
                           BoardList[j]->GetHomeSwitches());
-                mvwprintw(stdscr, 15, lm+58*j, "EncA: 0x%01X            EncB: 0x%01X            EncInd: 0x%01X",
+                console.Print(STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
+                          statusStr2[j],
                           BoardList[j]->GetEncoderChannelA(),
                           BoardList[j]->GetEncoderChannelB(),
                           BoardList[j]->GetEncoderIndex());
 
-                mvwprintw(stdscr, 17, lm+58*j, "Node: %s", nodeStr[j]);
-                mvwprintw(stdscr, 17, lm+18+58*j, "Temp:  0x%02X    0x%02X",
+                console.Print(STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
+                console.Print(STATUS_LINE+4, lm+14+58*j, "Temp:  %02X    %02X",
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
-                mvwprintw(stdscr, 17, lm+40, "Ct: %8d", loop_cnt++);
                 if (loop_cnt > 500) {
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
@@ -508,27 +685,80 @@ int main(int argc, char** argv)
                     }
                 }
             }
+            console.Print(STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
+                      BoardList[j]->GetReadErrors(),
+                      BoardList[j]->GetWriteErrors());
+            if (showTime)
+                console.Print(STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
+                          pcTime-BoardList[j]->GetFirmwareTime());
             for (i = 0; i < 4; i++) {
-                mvwprintw(stdscr, 10, lm+8+(i+4*j)*13, "0x%04X", MotorCurrents[j][i]);
+                console.Print(10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
             }
+            loop_cnt++;
+        }
+        if (showTime) {
+            console.Print(STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
+            if (protocol == BasePort::PROTOCOL_BC_QRW) {
+                BasePort::BroadcastReadInfo bcReadInfo;
+                bcReadInfo = Port->GetBroadcastReadInfo();
+                std::stringstream timingStr;
+                bcReadInfo.PrintTiming(timingStr, false);  // false --> no std::endl
+                timingStr << "   ";
+                console.Print(STATUS_LINE+6, lm, timingStr.str().c_str());
+            }
+        }
+        else if (ethPort) {
+            EthBasePort::FPGA_Status fpgaStatus;
+            ethPort->GetFpgaStatus(fpgaStatus);
+            char flagStr[8];
+            flagStr[0] = fpgaStatus.FwBusReset ? 'R' : ' ';
+            flagStr[1] = ' ';
+            flagStr[2] = fpgaStatus.FwPacketDropped ? 'D' : ' ';
+            flagStr[3] = ' ';
+            flagStr[4] = fpgaStatus.EthInternalError ? 'I' : ' ';
+            flagStr[5] = ' ';
+            flagStr[6] = fpgaStatus.EthSummaryError ? 'S' : ' ';
+            flagStr[7] = 0;
+            console.Print(STATUS_LINE+5, lm+12, "%s   StateError: %3d   PacketError: %3d",
+                          flagStr, fpgaStatus.numStateInvalid, fpgaStatus.numPacketError);
         }
         Port->WriteAllBoards();
 
-        mvwprintw(stdscr, 1, lm+41, "dt: %f",  (1.0 / 49125.0) * maxTime);
+        unsigned int readErrors = 0;
+        unsigned int writeErrors = 0;
+        for (j = 0; j < BoardList.size(); j++) {
+            readErrors += BoardList[j]->GetReadErrors();
+            writeErrors += BoardList[j]->GetWriteErrors();
+        }
 
-        wrefresh(stdscr);
-        usleep(500);
+        console.Print(1, lm+42, "Gen: %d",  Port->GetBusGeneration());
+        console.Print(1, lm+54, "Axis: %4s", axisString);
+        console.Print(1, lm+70, "dt: %.3f",  (1.0 / 49125.0) * maxTime);
+        console.Print(1, lm+85, "Ct: %8u", loop_cnt++);
+        console.Print(1, lm+100, "Err(r/w): %2d %2d", readErrors, writeErrors);
+
+        console.Refresh();
+        Amp1394_Sleep(0.0005);  // 500 usec
     }
 
-    for (j = 0; j < BoardList.size(); j++) {
+    for (j = 0; j < numDisp; j++) {
         BoardList[j]->WritePowerEnable(false);      // Turn power off
         BoardList[j]->WriteAmpEnable(0x0f, 0x00);   // Turn power off
         BoardList[j]->WriteSafetyRelay(false);
-        Port->RemoveBoard(BoardList[j]->GetBoardId());
     }
 
-    endwin();
+    // Reset encoder preloads to default
+    for (i = 0; i < 4; i++) {
+        for (j = 0; j < numDisp; j++)
+            BoardList[j]->WriteEncoderPreload(i, 0);
+    }
+
+    console.End();
+
+    for (j = 0; j < BoardList.size(); j++)
+        Port->RemoveBoard(BoardList[j]->GetBoardId());
+
     delete Port;
     // Process any data collection files (convert from binary to text)
     for (j = 1; j <= collectFileNum; j++) {

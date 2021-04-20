@@ -23,6 +23,12 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 
+static int RESULT_OK = 0;
+static int RESULT_NO_BOARD = -1;
+static int RESULT_NO_PROM_FILE = -2;
+static int RESULT_PROGRAM_FAILED = -3;
+static int RESULT_VERIFY_FAILED = -4;
+
 int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 {
 #ifndef _MSC_VER
@@ -33,8 +39,10 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     tcsetattr(STDIN_FILENO, TCSANOW, &newTerm);  // change terminal settings
 #endif
 
+    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
     int c = 0;
-    while ((c < '0') || (c > '7')) {
+    int maxChar = (fver >= 7) ? '8' : '7';
+    while ((c < '0') || (c > maxChar)) {
         if (c) {
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
         }
@@ -51,7 +59,10 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
                   << "4) Program FPGA SN" << std::endl
                   << "5) Program QLA SN" << std::endl
                   << "6) Read FPGA SN" << std::endl
-                  << "7) Read QLA SN" << std::endl  << std::endl;
+                  << "7) Read QLA SN" << std::endl;
+        if (fver >= 7)
+            std::cout << "8) Reboot FPGA and exit" << std::endl;
+        std::cout << std::endl;
 
         std::cout << "Select option: ";
         c = getchar();
@@ -79,9 +90,46 @@ bool PromProgramCallback(const char *msg)
     return true;   // continue
 }
 
+// Test ability to program the PROM by programming a page/sector not
+// currently used by the firmware (0x1E0000).
+bool PromProgramTest(AmpIO &Board)
+{
+    unsigned char testBuffer[256];
+    unsigned char readBuffer[256];
+    size_t i;
+    for (i = 0; i < sizeof(testBuffer); i++)
+        testBuffer[i] = i;
+
+    std::cout << "Testing PROM programming" << std::endl;
+    std::cout << "  Erasing sector 1E0000 " << std::flush;
+    Board.PromSectorErase(0x1E0000, PromProgramCallback);
+    std::cout << std::endl << "  Programming first page " << std::flush;
+    int ret = Board.PromProgramPage(0x1EFF00, (AmpIO_UInt8*)testBuffer, sizeof(testBuffer), PromProgramCallback);
+    if (ret != sizeof(testBuffer)) {
+        std::cout << std::endl << "  Cannot program test pattern, ret = " << ret << std::endl;
+        return false;
+    }
+    Amp1394_Sleep(0.005);
+    std::cout << std::endl << "  Reading first page " << std::endl;
+    if (!Board.PromReadData(0x1EFF00, readBuffer, sizeof(readBuffer))) {
+        std::cerr << "  Error reading PROM data" << std::endl;
+        return false;
+    }
+    // Compare bytes
+    for (i = 0; i < sizeof(testBuffer); i++) {
+        if (testBuffer[i] != readBuffer[i]) {
+            std::cout << "  Mismatch at offset " << i << ": wrote " << static_cast<unsigned int>(testBuffer[i])
+                      << ", read " << static_cast<unsigned int>(readBuffer[i]) << std::endl;
+            return false;
+        }
+    }
+    std::cout << "PROM programming test successful" << std::endl;
+    return true;
+}
 
 bool PromProgram(AmpIO &Board, mcsFile &promFile)
 {
+    std::cout << "Starting PROM programming" << std::endl;
     double startTime = Amp1394_GetTime();
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
@@ -89,7 +137,8 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         std::cout << "Erasing sector " << std::hex << addr << std::dec << std::flush;
         Callback_StartTime = Amp1394_GetTime();
         if (!Board.PromSectorErase(addr, PromProgramCallback)) {
-            std::cout << "Failed to erase sector " << addr << std::endl;
+            std::cout << std::endl;
+            std::cerr << "Failed to erase sector " << addr << std::endl;
             return false;
         }
         std::cout << std::endl << "Programming sector " << std::hex << addr
@@ -100,9 +149,10 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
         Callback_StartTime = Amp1394_GetTime();
         while (page < numBytes) {
             unsigned int bytesToProgram = ((numBytes-page)<256UL) ? (numBytes-page) : 256UL;
-            if (!Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram,
-                                       PromProgramCallback)) {
-                std::cout << "Failed to program page " << addr << std::endl;
+            int nRet = Board.PromProgramPage(addr+page, sectorData+page, bytesToProgram, PromProgramCallback);
+            if ((nRet < 0) || (static_cast<unsigned int>(nRet) != bytesToProgram)) {
+                std::cout << std::endl;
+                std::cerr << "Failed to program page " << addr << ", rc = " << nRet << std::endl;
                 return false;
             }
             page += bytesToProgram;
@@ -125,15 +175,17 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
         unsigned long numBytes = promFile.GetSectorNumBytes();
         std::cout << "Verifying sector " << std::hex << addr << std::flush;
         if (numBytes > sizeof(DownloadedSector)) {
-            std::cout << "Error: sector too large = " << numBytes << std::endl;
+            std::cerr << "Error: sector too large = " << numBytes << std::endl;
             return false;
         }
         if (!Board.PromReadData(addr, DownloadedSector, numBytes)) {
-            std::cout << "Error reading PROM data" << std::endl;
+            std::cerr << "Error reading PROM data" << std::endl;
             return false;
         }
-        if (!promFile.VerifySector(DownloadedSector, numBytes))
+        if (!promFile.VerifySector(DownloadedSector, numBytes)) {
+            std::cerr << "Error verifying sector" << std::endl;
             return false;
+        }
         std::cout << std::endl;
     }
     std::cout << std::dec;
@@ -308,6 +360,7 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
 int main(int argc, char** argv)
 {
     int i;
+    int result = RESULT_OK;
 #if Amp1394_HAS_RAW1394
     BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
 #else
@@ -350,7 +403,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    BasePort *Port;
+    BasePort *Port = 0;
     if (desiredPort == BasePort::PORT_FIREWIRE) {
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, std::cerr);
@@ -372,9 +425,9 @@ int main(int argc, char** argv)
         return -1;
 #endif
     }
-    if (!Port->IsOK()) {
+    if (!Port || !Port->IsOK()) {
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
-        return -1;
+        return RESULT_NO_BOARD;
     }
     AmpIO Board(board);
     Port->AddBoard(&Board);
@@ -388,28 +441,49 @@ int main(int argc, char** argv)
     mcsFile promFile;
     if (!promFile.OpenFile(mcsName)) {
         std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
-        return -1;
+        return RESULT_NO_PROM_FILE;
     }
+
+    unsigned long addr;
+    bool done = false;
 
     if (auto_mode) {
         std::cout << std::endl
                   << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
                   << "MCS file: " << mcsName << std::endl;
-        PromProgram(Board, promFile);
-        PromVerify(Board, promFile);
+        // test first ...
+        if (!PromProgramTest(Board)) {
+            std::cerr << "Error: programming test failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+            result = RESULT_PROGRAM_FAILED;
+        } else if (!PromProgram(Board, promFile)) { // ... then program
+            std::cerr << "Error: programming failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+            result = RESULT_PROGRAM_FAILED;
+        } else if (!PromVerify(Board, promFile)) { // ... and verify
+            std::cerr << "Error: verification failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+            result = RESULT_VERIFY_FAILED;
+        }
         goto cleanup;
     }
 
 
-    unsigned long addr;
-
-    while (int c = GetMenuChoice(Board, mcsName)) {
+    while (!done) {
+        int c = GetMenuChoice(Board, mcsName);
         switch (c) {
+        case 0:
+            done = true;
+            break;
         case 1:
-            PromProgram(Board, promFile);
+            if (PromProgramTest(Board)) {
+                std::cout << std::endl;
+                result = PromProgram(Board, promFile) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+            }
+            else {
+                std::cout << "Programming not started. Try power-cycling the FPGA" << std::endl;
+                result = RESULT_PROGRAM_FAILED;
+            }
             break;
         case 2:
-            PromVerify(Board, promFile);
+            result = PromVerify(Board, promFile) ? RESULT_OK : RESULT_VERIFY_FAILED;
             break;
         case 3:
             std::cout << "Enter address (hex): ";
@@ -418,10 +492,10 @@ int main(int argc, char** argv)
             PromDisplayPage(Board, addr);
             break;
         case 4:
-            PromFPGASerialNumberProgram(Board);
+            result = PromFPGASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 5:
-            PromQLASerialNumberProgram(Board);
+            result = PromQLASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 6:
             sn = Board.GetFPGASerialNumber();
@@ -433,6 +507,11 @@ int main(int argc, char** argv)
             if (!sn.empty())
                 std::cout << "QLA serial number: " << sn << std::endl;
             break;
+        case 8:
+            Board.WriteReboot();
+            std::cout << "Rebooting FPGA ..." << std::endl;
+            done = true;
+            break;
         default:
             std::cout << "Not yet implemented" << std::endl;
         }
@@ -442,4 +521,5 @@ cleanup:
     promFile.CloseFile();
     Port->RemoveBoard(board);
     delete Port;
+    return result;
 }

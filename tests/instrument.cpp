@@ -3,7 +3,7 @@
 
 /******************************************************************************
  *
- * (C) Copyright 2018-2019 Johns Hopkins University (JHU), All Rights Reserved.
+ * (C) Copyright 2018-2020 Johns Hopkins University (JHU), All Rights Reserved.
  *
  * This program is used to read the Dallas DS2505 chip inside a da Vinci instrument
  * via its 1-wire interface. The 1-wire interface is implemented in the FPGA,
@@ -34,10 +34,8 @@
 void PrintDebugStream(std::stringstream &debugStream)
 {
     char line[80];
-    while (!debugStream.eof()) {
-        debugStream.getline(line, sizeof(line));
+    while (debugStream.getline(line, sizeof(line)))
         std::cerr << line << std::endl;
-    }
     debugStream.clear();
     debugStream.str("");
 }
@@ -82,7 +80,7 @@ int main(int argc, char** argv)
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    BasePort *Port;
+    BasePort *Port = 0;
     if (desiredPort == BasePort::PORT_FIREWIRE) {
 #if Amp1394_HAS_RAW1394
         Port = new FirewirePort(port, debugStream);
@@ -93,18 +91,16 @@ int main(int argc, char** argv)
     }
     else if (desiredPort == BasePort::PORT_ETH_UDP) {
         Port = new EthUdpPort(port, IPaddr, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
     }
     else if (desiredPort == BasePort::PORT_ETH_RAW) {
 #if Amp1394_HAS_PCAP
         Port = new EthRawPort(port, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 #else
         std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
         return -1;
 #endif
     }
-    if (!Port->IsOK()) {
+    if (!Port || !Port->IsOK()) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
         return -1;

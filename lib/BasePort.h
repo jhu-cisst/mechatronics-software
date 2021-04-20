@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2019 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -44,9 +44,16 @@ http://www.cisst.org/cisst/license.txt.
  *     EthRawPort:    sends FireWire packets via raw Ethernet frames (using PCAP)
  */
 
+// Defined here for static methods ParseOptions and DefaultPort
+#define ETH_UDP_DEFAULT_IP "169.254.0.100"
+
 // Some useful constants
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
+
+// Maximum possible data size in bytes; this should only be used for sizing static buffers;
+// the actual limit is port-specific and generally less than this.
+const unsigned int MAX_POSSIBLE_DATA_SIZE = 2048;
 
 // The FireWire node number is represented by an unsigned char (8 bits), but only 6
 // bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
@@ -75,27 +82,70 @@ public:
     //   PROTOCOL_BC_QRW      broadcast query, read, and write to/from all boards
     enum ProtocolType { PROTOCOL_SEQ_RW, PROTOCOL_SEQ_R_BC_W, PROTOCOL_BC_QRW };
 
+    // Information about broadcast read.
+    // With Firmware V7+, each FPGA starts a timer when it receives the broadcast query command
+    // sent by the host PC. The following times are relative to this timer.
+    struct BroadcastReadInfo {
+        unsigned int readSequence;    // The sequence number sent with the broadcast query command
+        double readStartTime;         // When the PC started reading the hub feedback data
+        double readFinishTime;        // When the PC finished reading the hub feedback data
+        struct BroadcastBoardInfo {   // For each board:
+            bool inUse;               //   Whether board is participating in broadcast read
+            unsigned int sequence;    //   The sequence number received (should be same as readSequence)
+            double updateTime;        //   When the hub feedback data was updated
+
+            BroadcastBoardInfo() : inUse(false), sequence(0), updateTime(0.0) {}
+            ~BroadcastBoardInfo() {}
+        };
+        BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
+
+        BroadcastReadInfo() : readSequence(0), readStartTime(0.0), readFinishTime(0.0) {}
+        ~BroadcastReadInfo() {}
+        void PrintTiming(std::ostream &outStr, bool newLine = true) const;
+    };
+
 protected:
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
     ProtocolType Protocol_;         // protocol type in use
     bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
     bool IsAllBoardsBroadcastShorterWait_;   // TRUE if all nodes bc capable and support shorter wait
-    bool IsNoBoardsBroadcastShorterWait_;   // TRUE if no nodes support the shorter wait
-    unsigned int ReadSequence_;   // sequence number for WABB
+    bool IsNoBoardsBroadcastShorterWait_;    // TRUE if no nodes support the shorter wait
+    bool IsAllBoardsRev7_;                   // TRUE if all boards are Firmware Rev 7
+    bool IsNoBoardsRev7_;                    // TRUE if no boards are Firmware Rev 7
+
+    size_t ReadErrorCounter_;
 
     // Port Index, e.g. eth0 -> PortNum = 0
     int PortNum;
 
-    // Indicates whether board exists in network (might not be used in current configuration)
-    bool BoardExists[BoardIO::MAX_BOARDS];
+    unsigned int FwBusGeneration;     // Current Firewire bus generation
+    unsigned int newFwBusGeneration;  // New Firewire bus generation
+
+    bool autoReScan;                // Whether to automatically re-scan after bus reset
+
     unsigned int NumOfNodes_;       // number of nodes (boards) on bus
 
     // Indicates which boards are used in the current configuration
     BoardIO *BoardList[BoardIO::MAX_BOARDS];
     unsigned int NumOfBoards_;      // number of boards in use
     unsigned int BoardInUseMask_;   // mask indicating whether board in use
+    unsigned int max_board;         // highest index of used (non-zero) entry in BoardList
     unsigned char HubBoard;         // board number of hub/bridge
+
+    // Memory for ReadAllBoards/WriteAllBoards and ReadAllBoardsBroadcast/WriteAllBoardsBroadcast
+    // (used for both sequential and broadcast protocols)
+    unsigned char *WriteBufferBroadcast;
+    unsigned char *ReadBufferBroadcast;
+    // Memory for generic use
+    unsigned char *GenericBuffer;
+
+    // For debugging
+    bool rtWrite;
+    bool rtRead;
+
+    // Information about broadcast read
+    BroadcastReadInfo bcReadInfo;
 
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
@@ -104,15 +154,71 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
 
+    // Initialize port (called by constructor and Reset)
+    virtual bool Init(void) = 0;
+
+    // Cleanup port (called by destructor and Reset)
+    virtual void Cleanup(void) = 0;
+
+    // Sets default protocol based on firmware
+    void SetDefaultProtocol(void);
+
+    // Following initializes the generic buffer, if needed
+    void SetGenericBuffer(void);
+
+    // Following methods initialize the buffers, if needed, for
+    // the real-time read and write.
+    void SetReadBufferBroadcast(void);
+    void SetWriteBufferBroadcast(void);
+
+    // Convenience function
+    void SetReadInvalid(void);
+
+    // Initialize nodes on the bus; called by ScanNodes
+    // \return Maximum number of nodes on bus (0 if error)
+    virtual nodeid_t InitNodes(void) = 0;
+
+    // Look for nodes on the bus
+    virtual bool ScanNodes(void);
+
+    //! Read quadlet from node (internal method called by ReadQuadlet).
+    //  Flags are defined above (FW_NODE_xxx) and are only used for Ethernet interface.
+    virtual bool ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &data, unsigned char flags = 0) = 0;
+
+    //! Write quadlet to node (internal method called by WriteQuadlet)
+    //  Flags are defined above (FW_NODE_xxx) and are only used for Ethernet interface.
+    virtual bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0) = 0;
+
+    // Write a block to the specified node. Internal method called by WriteBlock and
+    // WriteAllBoardsBroadcast.
+    virtual bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
+                                unsigned int nbytes, unsigned char flags = 0) = 0;
+
+    // Read a block from the specified node. Internal method called by ReadBlock.
+    virtual bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
+                               unsigned int nbytes, unsigned char flags = 0) = 0;
+
+    // Method called by ReadAllBoards/ReadAllBoardsBroadcast if no data read
+    virtual void OnNoneRead(void) {}
+
+    // Method called by WriteAllBoards/WriteAllBoardsBroadcast if no data written
+    virtual void OnNoneWritten(void) {}
+
 public:
 
     // Constructor
     BasePort(int portNum, std::ostream &ostr = std::cerr);
 
-    virtual ~BasePort() {}
+    virtual ~BasePort();
+
+    // Get protocol
+    ProtocolType GetProtocol(void) const { return Protocol_; }
 
     // Set protocol type
-    void SetProtocol(ProtocolType prot);
+    bool SetProtocol(ProtocolType prot);
+
+    // Reset the port (call Cleanup, then Init)
+    virtual void Reset(void);
 
     // Add board to list of boards in use
     virtual bool AddBoard(BoardIO *board);
@@ -123,6 +229,9 @@ public:
 
     // Get number of boards that were added to BoardList
     unsigned int GetNumOfBoards(void) const { return NumOfBoards_; }
+
+    // Get highest board number present in BoardList
+    unsigned int GetMaxBoardNum(void) const { return max_board; }
 
     BoardIO *GetBoard(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? BoardList[boardId] : 0; }
@@ -155,77 +264,128 @@ public:
     unsigned long GetFirmwareVersion(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
 
+    // Get BroadcastReadInfo
+    BroadcastReadInfo GetBroadcastReadInfo(void) const
+    { return bcReadInfo; }
+
     // Return string version of PortType
     static std::string PortTypeString(PortType portType);
 
     // Helper function for parsing command line options.
     // In particular, this is typically called after a certain option, such as -p, is
     // recognized and it parses the rest of that option string:
-    // N               for FireWire, where N is the port number (backward compatibility)
-    // fwN             for FireWire, where N is the port number
-    // ethN            for raw Ethernet (PCAP), where N is the port number
-    // udpxx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
-    static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr);
+    // N                for FireWire, where N is the port number (backward compatibility)
+    // fw:N             for FireWire, where N is the port number
+    // eth:N            for raw Ethernet (PCAP), where N is the port number
+    // udp:xx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
+                             std::ostream &ostr = std::cerr);
+
+    static std::string DefaultPort(void);
 
     //*********************** Pure virtual methods **********************************
 
     virtual PortType GetPortType(void) const = 0;
 
+    inline std::string GetPortTypeString(void) const {
+        return BasePort::PortTypeString(GetPortType());
+    }
+
     virtual int NumberOfUsers(void) = 0;
 
     virtual bool IsOK(void) = 0;
 
-    virtual void Reset(void) = 0;
+    // Get the bus generation number
+    virtual unsigned int GetBusGeneration(void) const = 0;
+
+    // Update the bus generation number
+    virtual void UpdateBusGeneration(unsigned int gen) = 0;
+
+    enum MsgType {
+        WR_CTRL,          // Offset to Control word (used in Ethernet implementations)
+        WR_FW_HEADER,     // Offset to Firewire packet header (when writing)
+        WR_FW_BDATA,      // Offset to Firewire block write data
+        RD_FW_HEADER,     // Offset to Firewire packet header (when reading)
+        RD_FW_BDATA       // Offset to Firewire block read data
+    };
+
+    // Port-specific prefix/postfix sizes (in bytes).
+    // These are non-zero for the Ethernet ports.
+    virtual unsigned int GetPrefixOffset(MsgType msg) const = 0;
+    virtual unsigned int GetWritePostfixSize(void) const = 0;
+    virtual unsigned int GetReadPostfixSize(void) const = 0;
+
+    // Quadlet alignment offset, used to align buffers on 32-bit boundaries.
+    // Probably not necessary for modern processors/compilers.
+    virtual unsigned int GetWriteQuadAlign(void) const = 0;
+    virtual unsigned int GetReadQuadAlign(void) const = 0;
+
+    // Get the maximum number of data bytes that can be read
+    // (via ReadBlock) or written (via WriteBlock).
+    virtual unsigned int GetMaxReadDataSize(void) const = 0;
+    virtual unsigned int GetMaxWriteDataSize(void) const = 0;
+
+    //*********************** Virtual methods **********************************
+
+    // Check whether bus generation has changed. If doScan is true, then
+    // call ReScanNodes if bus generation mismatch.
+    virtual bool CheckFwBusGeneration(const std::string &caller, bool doScan = false);
+
+    // Rescan the Firewire bus (e.g., after bus reset)
+    virtual bool ReScanNodes(const std::string &caller);
+
+    // Get/Set autoReScan
+    // If true, system will automatically rescan the bus when the bus generation changes
+    // (e.g., due to a bus reset). If false, user application will need to rescan the bus,
+    // for example, by calling ReScanNodes or CheckFwBusGeneration (with doScan = true).
+    bool GetAutoReScan(void) const { return autoReScan; }
+    void SetAutoReScan(bool newValue) { autoReScan = newValue; }
 
     // Read all boards
-    virtual bool ReadAllBoards(void) = 0;
+    virtual bool ReadAllBoards(void);
 
     // Read all boards broadcasting
-    virtual bool ReadAllBoardsBroadcast(void) = 0;
+    virtual bool ReadAllBoardsBroadcast(void);
 
     // Write to all boards
-    virtual bool WriteAllBoards(void) = 0;
+    virtual bool WriteAllBoards(void);
 
     // Write to all boards using broadcasting
-    virtual bool WriteAllBoardsBroadcast(void) = 0;
+    virtual bool WriteAllBoardsBroadcast(void);
 
     // Read a quadlet from the specified board
-    virtual bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data) = 0;
+    virtual bool ReadQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t &data);
 
     // Write a quadlet to the specified board
-    virtual bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data) = 0;
+    virtual bool WriteQuadlet(unsigned char boardId, nodeaddr_t addr, quadlet_t data);
 
     // Write a No-op quadlet to reset watchdog counters on boards.
     // This is used by WriteAllBoards if no other valid command is written
     virtual bool WriteNoOp(unsigned char boardId)
     { return WriteQuadlet(boardId, 0x00, 0); }
 
-    /*!
-     \brief Write a quadlet to all boards using broadcasting
-
-     \param addr  The register address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The quadlet data to be broadcasted
-     \return bool  True on success or False on failure
-    */
-    virtual bool WriteQuadletBroadcast(nodeaddr_t addr, quadlet_t data) = 0;
-
     // Read a block from the specified board
     virtual bool ReadBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *rdata,
-                           unsigned int nbytes) = 0;
+                           unsigned int nbytes);
 
     // Write a block to the specified board
     virtual bool WriteBlock(unsigned char boardId, nodeaddr_t addr, quadlet_t *wdata,
-                            unsigned int nbytes) = 0;
+                            unsigned int nbytes);
 
     /*!
-     \brief Write a block of data using asynchronous broadcast
-
-     \param addr  The starting target address, should larger than CSR_REG_BASE + CSR_CONFIG_END
-     \param data  The pointer to write buffer data
-     \param nbytes  Number of bytes to be broadcasted
-     \return bool  True on success or False on failure
+     \brief Write the broadcast packet containing the DAC values and power control
     */
-    virtual bool WriteBlockBroadcast(nodeaddr_t addr, quadlet_t *data, unsigned int nbytes) = 0;
+    virtual bool WriteBroadcastOutput(quadlet_t *buffer, unsigned int size) = 0;
+
+    /*!
+     \brief Write the broadcast read request
+    */
+    virtual bool WriteBroadcastReadRequest(unsigned int seq) = 0;
+
+    /*!
+     \brief Wait for broadcast read data to be available
+    */
+    virtual void WaitBroadcastRead(void) = 0;
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations

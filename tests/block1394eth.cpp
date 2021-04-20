@@ -12,9 +12,10 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
-#include <byteswap.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "Amp1394BSwap.h"
+
 #include <Amp1394/AmpIORevision.h>
 #if Amp1394_HAS_RAW1394
 #include "FirewirePort.h"
@@ -23,15 +24,13 @@
 #include "EthRawPort.h"
 #endif
 #include "EthUdpPort.h"
-#include <AmpIO.h>
+#include "AmpIO.h"
 
 void PrintDebugStream(std::stringstream &debugStream)
 {
     char line[80];
-    while (!debugStream.eof()) {
-        debugStream.getline(line, sizeof(line));
+    while (debugStream.getline(line, sizeof(line)))
         std::cerr << line << std::endl;
-    }
     debugStream.clear();
     debugStream.str("");
 }
@@ -45,7 +44,7 @@ int main(int argc, char** argv)
     quadlet_t *data = &data1;
     bool isQuad1394 = (strstr(argv[0], "quad1394eth") != 0);
 
-    int i,j;
+    int i, j = 0;
     int bid = 0;
     bool verbose = false;
 #if Amp1394_HAS_RAW1394
@@ -121,12 +120,10 @@ int main(int argc, char** argv)
     }
     else if (desiredPort == BasePort::PORT_ETH_UDP) {
         Port = new EthUdpPort(port, IPaddr, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
     }
     else if (desiredPort == BasePort::PORT_ETH_RAW) {
 #if Amp1394_HAS_PCAP
         Port = new EthRawPort(port, debugStream);
-        Port->SetProtocol(BasePort::PROTOCOL_SEQ_RW);  // PK TEMP
 #else
         std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
         return -1;
