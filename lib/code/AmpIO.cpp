@@ -1747,3 +1747,87 @@ void AmpIO::CheckCollectCallback()
     if (!(*collect_cb)(collect_data, numAvail))
         DataCollectionStop();
 }
+
+bool AmpIO::WriteMotorControlMode(unsigned int index, AmpIO_UInt16 mode) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_MOTOR_CONTROL_MODE, mode) : false);
+}
+
+bool AmpIO::WriteCurrentKpRaw(unsigned int index, AmpIO_UInt16 val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, val) : false);
+}
+
+bool AmpIO::WriteCurrentKiRaw(unsigned int index, AmpIO_UInt16 val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, val) : false);
+}
+
+bool AmpIO::WriteCurrentITermLimitRaw(unsigned int index, AmpIO_UInt16 val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, val) : false);
+}
+
+bool AmpIO::WriteDutyCycleLimit(unsigned int index, AmpIO_UInt16 val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, val) : false);
+}
+
+AmpIO_UInt16 AmpIO::ReadMotorControlMode(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_MOTOR_CONTROL_MODE, read_data);
+    return read_data;
+}
+
+AmpIO_UInt16 AmpIO::ReadCurrentKpRaw(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, read_data);
+    return read_data;
+}
+
+AmpIO_UInt16 AmpIO::ReadCurrentKiRaw(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, read_data);
+    return read_data;
+}
+
+AmpIO_UInt16 AmpIO::ReadCurrentITermLimitRaw(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, read_data);
+    return read_data;
+}
+
+AmpIO_UInt16 AmpIO::ReadDutyCycleLimit(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, read_data);
+    return read_data;
+}
+
+AmpIO_Int16 AmpIO::ReadDutyCycle(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE, read_data);
+    return static_cast<AmpIO_Int16>(read_data);
+}
+
+AmpIO_Int16 AmpIO::ReadCurrentITerm(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM, read_data);
+    return static_cast<AmpIO_Int16>(read_data);
+}
+
+AmpIO_Int16 AmpIO::ReadFault(unsigned int index) const
+{
+    AmpIO_UInt32 read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_FAULT, read_data);
+    return static_cast<AmpIO_Int16>(read_data);
+}

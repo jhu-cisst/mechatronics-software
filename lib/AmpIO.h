@@ -38,6 +38,7 @@ class ostream;
 typedef int32_t  AmpIO_Int32;
 typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
+typedef int16_t AmpIO_Int16;
 typedef uint8_t  AmpIO_UInt8;
 
 // Conditional compilation so that EncoderVelocityData is internal to AmpIO, except when
@@ -619,6 +620,28 @@ public:
     /*! \brief Read collected data from FPGA memory buffer */
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
+    enum MotorControlMode {
+        RESET = 0,
+        VOLTAGE = 1,
+        CURRENT = 2
+    };
+
+    bool WriteMotorControlMode(unsigned int index, AmpIO_UInt16 val);
+    bool WriteCurrentKpRaw(unsigned int index, AmpIO_UInt16 val);
+    bool WriteCurrentKiRaw(unsigned int index, AmpIO_UInt16 val);
+    bool WriteCurrentITermLimitRaw(unsigned int index, AmpIO_UInt16 val);
+    bool WriteDutyCycleLimit(unsigned int index, AmpIO_UInt16 val);
+
+    AmpIO_UInt16 ReadMotorControlMode(unsigned int index) const;
+    AmpIO_UInt16 ReadCurrentKpRaw(unsigned int index) const;
+    AmpIO_UInt16 ReadCurrentKiRaw(unsigned int index) const;
+    AmpIO_UInt16 ReadCurrentITermLimitRaw(unsigned int index) const;
+    AmpIO_UInt16 ReadDutyCycleLimit(unsigned int index) const;
+
+    AmpIO_Int16 ReadDutyCycle(unsigned int index) const;
+    AmpIO_Int16 ReadCurrentITerm(unsigned int index) const;
+    AmpIO_Int16 ReadFault(unsigned int index) const;
+
 protected:
     unsigned int NumAxes;   // not currently used
 
@@ -732,6 +755,23 @@ protected:
         VEL_DP_DATA_OFFSET = 7,    // enc data register (velocity, DP/1 method)
         DOUT_CTRL_OFFSET = 8       // digital output control (PWM, one-shot)
     };
+
+    enum {
+        OFF_MOTOR_CONTROL_MODE = 0,
+        OFF_CURRENT_KP = 1,
+        OFF_CURRENT_KI = 2,
+        OFF_CURRENT_I_TERM_LIMIT = 3,
+        OFF_DUTY_CYCLE_LIMIT = 4,
+        OFF_DUTY_CYCLE = 10,
+        OFF_FAULT = 11,
+        OFF_CURRENT_I_TERM = 12 // awaiting new assignment
+    };
+
+    enum {
+        ADDR_MOTOR_CONTROL = 9
+    };
+
+
 };
 
 #endif // __AMPIO_H__
