@@ -1507,21 +1507,24 @@ bool AmpIO::DallasWaitIdle()
         // Wait 1 msec
         Amp1394_Sleep(0.001);
         if (!DallasReadStatus(status)) return false;
-        // Done when in idle state
-        if ((status&0x000000F0) == 0)
+        // Done when in idle state. The following test works for both Firmware Rev 7
+        // (state is bits 7:4) and Firmware Rev 8 (state is bits 8:4 and busy flag is bit 13)
+        if ((status&0x000020F0) == 0)
             break;
     }
     //std::cerr << "Wait time = " << i << " milliseconds" << std::endl;
     return (i < 500);
 }
 
-bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes)
+bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B)
 {
     if (GetFirmwareVersion() < 7) return false;
     AmpIO_UInt32 status = ReadStatus();
     // Check whether bi-directional I/O is available
     if ((status & 0x00300000) != 0x00300000) return false;
-    if (!DallasWriteControl((addr<<16)|2)) return false;
+    AmpIO_UInt32 ctrl = (addr<<16)|2;
+    if (useDS2480B) ctrl |= 4;
+    if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
     if (!DallasReadStatus(status)) return false;
     // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable

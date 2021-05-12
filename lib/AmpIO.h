@@ -542,7 +542,7 @@ public:
     bool DallasWriteControl(AmpIO_UInt32 ctrl);
     bool DallasReadStatus(AmpIO_UInt32 &status);
     bool DallasWaitIdle();
-    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
+    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B = false);
 
     // ************************ Ethernet Methods *************************************
     // Following functions enable access to the KSZ8851 Ethernet controller on the

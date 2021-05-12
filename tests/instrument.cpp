@@ -3,7 +3,7 @@
 
 /******************************************************************************
  *
- * (C) Copyright 2018-2020 Johns Hopkins University (JHU), All Rights Reserved.
+ * (C) Copyright 2018-2021 Johns Hopkins University (JHU), All Rights Reserved.
  *
  * This program is used to read the Dallas DS2505 chip inside a da Vinci instrument
  * via its 1-wire interface. The 1-wire interface is implemented in the FPGA,
@@ -51,6 +51,7 @@ int main(int argc, char** argv)
     int port = 0;
     int board = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
+    bool useDS2480B = false;
 
     if (argc > 1) {
         int args_found = 0;
@@ -63,11 +64,15 @@ int main(int argc, char** argv)
                     }
                     std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
                 }
+                else if (argv[i][1] == 'd') {
+                    useDS2480B = true;
+                }
                 else {
-                    std::cerr << "Usage: instrument <board-num> [-pP]" << std::endl
+                    std::cerr << "Usage: instrument <board-num> [-pP] [-d]" << std::endl
                               << "       where <board-num> = rotary switch setting (0-15)" << std::endl
                               << "             P = port number (default 0)" << std::endl
-                              << "       can also specify -pfwP, -pethP or -pudp" << std::endl;
+                              << "       can also specify -pfwP, -pethP or -pudp" << std::endl
+                              << "       -d option for DS2480B driver chip" << std::endl;
                     return 0;
                 }
             }
@@ -111,34 +116,54 @@ int main(int argc, char** argv)
     AmpIO_UInt32 fver = Board.GetFirmwareVersion();
     if (fver < 7) {
         std::cerr << "Instrument read requires firmware version 7+ (detected version " << fver << ")" << std::endl;
+        Port->RemoveBoard(board);
+        delete Port;
         return -1;
     }
     AmpIO_UInt32 status = Board.ReadStatus();
     // Check whether bi-directional I/O is available
     if ((status & 0x00300000) != 0x00300000) {
         std::cerr << "QLA does not support bidirectional I/O (QLA Rev 1.4+ required)" << std::endl;
+        Port->RemoveBoard(board);
+        delete Port;
         return -1;
     }
 
     // Now, we try to read the Dallas chip. This will also populate the status field.
     unsigned char buffer[2048];  // Buffer for entire contents of DS2505 memory (2 Kbytes)
-    bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
+    bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer), useDS2480B);
     if (!Board.DallasReadStatus(status)) {
         std::cerr << "Failed to read DS2505 status" << std::endl;
+        Port->RemoveBoard(board);
+        delete Port;
         return -1;
     }
+    // No longer need these
+    Port->RemoveBoard(board);
+    delete Port;
     if ((status & 0x00000001) != 0x00000001) {
         std::cerr << "DS2505 interface not enabled (hardware problem)" << std::endl;
         return -1;
     }
-    unsigned char ds_reset = static_cast<unsigned char>((status & 0x00000006)>>1);
-    if (ds_reset != 1) {
-        std::cerr << "Failed to communicate with DS2505" << std::endl;
-        if (ds_reset == 2)
-            std::cerr << "  - DOUT3 did not reach high state -- is pullup resistor missing?" << std::endl;
-        else if (ds_reset == 3)
-            std::cerr << "  - Did not received ACK from DS2505 -- is dMIB signal jumpered?" << std::endl;
-        return -1;
+    if (useDS2480B) {
+        unsigned int unexpected_idx = (status & 0x00000e00) >> 9;
+        if (unexpected_idx != 0)
+            std::cerr << "DS2480B failed to return expected response, idx = " << unexpected_idx << std::endl;
+        if ((status & 0x0000c000) != 0x0000c000) {
+            std::cerr << "DS2480B not initialized: status = " << std::hex << status << std::dec << std::endl;
+            return -1;
+        }
+    }
+    else {
+        unsigned char ds_reset = static_cast<unsigned char>((status & 0x00000006)>>1);
+        if (ds_reset != 1) {
+            std::cerr << "Failed to communicate with DS2505" << std::endl;
+            if (ds_reset == 2)
+                std::cerr << "  - DOUT3 did not reach high state -- is pullup resistor missing?" << std::endl;
+            else if (ds_reset == 3)
+                std::cerr << "  - Did not received ACK from DS2505 -- is dMIB signal jumpered?" << std::endl;
+            return -1;
+        }
     }
     unsigned char family_code = static_cast<unsigned char>((status&0xFF000000)>>24);
     if (family_code != 0x0B) {
@@ -146,8 +171,10 @@ int main(int argc, char** argv)
                   << " (DS2505 should be 0x0B)" << std::endl;
         return -1;
     }
-    unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
-    std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;
+    if (!useDS2480B) {
+        unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
+        std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;
+    }
     if (!ret) {
         std::cerr << "Failed to read instrument memory" << std::endl;
         return -1;
@@ -162,7 +189,5 @@ int main(int argc, char** argv)
         return -1;
     }
     outFile.close();
-    Port->RemoveBoard(board);
-    delete Port;
     return 0;
 }

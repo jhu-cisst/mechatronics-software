@@ -184,7 +184,8 @@ bool BasePort::ScanNodes(void)
                 outStr << "BasePort::ScanNodes: unable to read from node " << node << std::endl;
             continue;
         }
-        if (data != QLA1_String) {
+        // 0x54455354 == "TEST"
+        if ((data != QLA1_String) && (data !=  0x54455354)) {
             outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
                    << std::hex << data << std::dec << ")" << std::endl;
             continue;
