@@ -1,6 +1,32 @@
 Change log
 ==========
 
+1.6.0 (2021-04-08)
+==================
+* API changes:
+  * New packet format for firmware 7
+* New features:
+  * UDP support for firmware 7
+    * Compiles and tested on Linux, Windows and MacOS
+    * Uses link local
+    * Detects MTU on network interface
+  * Most applications support option to set port (e.g. `-pudp`, `-pfw`, `-pfw:1`...)
+  * Improved and tested velocity estimation with firmware 6 and 7, code cleanup
+  * `qladisp`
+    * Option to use different FireWire protocol (broadcast)
+    * Display more information
+    * Can be used to read from multiple boards, display data for first 2
+    * Power functions can be used per axis or for all
+  * Utilities
+    * Added `qlacommand` (replaces `qlacloserelays`) with commands to reboot, close/open relays, reset encoder offset, ethernet chip...
+    * Added `pgm1394multi` script to upload firmware on multiple boards
+  * Added method to test if encoders are preloaded to save time when homing
+  * Added data collection from FPGA with firmware 7
+* Bug fixes:
+  * Code refactorization and cleanup
+  * `qladisp` resets the encoder preloads to midrange on exit
+  * See Github
+
 1.5.0 (2019-04-19)
 ==================
 * API changes:

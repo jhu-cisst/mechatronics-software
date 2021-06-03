@@ -294,6 +294,32 @@ AmpIO *SelectBoard(const std::string &portName, std::vector<AmpIO *> boardList, 
     return newBoard;
 }
 
+void TestDacRW(BasePort *port, unsigned char boardNum)
+{
+    size_t i;
+    quadlet_t write_block[5];
+
+    // Read from DAC (quadlet reads), modify values, write them using
+    // a block write, then read them again to check.
+    for (i = 0; i < 4; i++) {
+        nodeaddr_t addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
+        write_block[i] = 0;
+        if (!port->ReadQuadlet(boardNum, addr, write_block[i]))
+            std::cout << "Failed to read quadlet for channel " << (i+1) << std::endl;
+        write_block[i] &= 0x0000ffff;
+    }
+    std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
+              << write_block[1] << ", " << write_block[2] << ", "
+              << write_block[3] << std::endl;
+    for (i = 0; i < 4; i++) {
+        write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
+    }
+    write_block[4] = 0;   // power control
+    std::cout << "Setting new values" << std::endl;
+    if (!port->WriteBlock(boardNum, 0, write_block, sizeof(write_block)))
+        std::cout << "Failed to write block data" << std::endl;
+}
+
 void  WriteAllBoardsTest(BasePort *port, std::vector<AmpIO *> &boardList)
 {
     std::cout << "Protocol: " << port->GetProtocol() << std::endl;
@@ -538,13 +564,30 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     unsigned int max_wait = 0;
     unsigned int max_wlen = WLEN_MAX;
     unsigned int numSilentMismatch = 0;
+
+    // Check if debug data available, in which case we can query bw_left
+    bool debugValid = false;
+    if (rboard->ReadEthernetData(waveform_read, 0x80, 16)) {
+        char *cptr = reinterpret_cast<char *>(waveform_read);
+        if (strncmp(cptr, "DBG1", 4) == 0) {
+            debugValid = true;
+        }
+        else {
+            std::cout << "Debug data not available" << std::endl;
+            std::cout << "Will only perform read/write test" << std::endl;
+        }
+    }
+
     for (size_t wlen = 2; wlen < WLEN_MAX; wlen++) {
         bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
         unsigned int len16 = 2*wlen;  // length in words
         unsigned int trigger_comp = 10 + len16/2+len16/8 + 2;   // computation on FPGA
         if (doOut) {
-            std::cout << "Len=" << std::dec << wlen << ": trigger = " << (3*wlen-2)/5.0
-                      << ", trigger_fpga = " << (trigger_comp-10)/2;
+            std::cout << "Len=" << std::dec << wlen << ": ";
+            if (debugValid) {
+                std::cout << "trigger = " << (3*wlen-2)/5.0
+                          << ", trigger_fpga = " << (trigger_comp-10)/2 << ", ";
+            }
         }
         for (i = 0; i < wlen; i++) {
             waveform[i] = ((wlen+i)<< 16) | (wlen-i);
@@ -556,31 +599,35 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             return;
         }
         Amp1394_Sleep(0.05);
-        if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
-            break;
-        unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
-        unsigned short bw_left = ptr[0];
-        if (bw_left < min_left) {
-            min_left = bw_left;
-            min_wlen = wlen;
-        }
-        unsigned short bw_wait = ptr[1];
-        if (bw_wait > max_wait) {
-            max_wait = bw_wait;
-            max_wlen = wlen;
-        }
-        if (doOut) {
-            std::cout << ", bw_left = " << bw_left << ", bw_wait = " << bw_wait;
+        if (debugValid) {
+            if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
+                break;
+            unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
+            unsigned short bw_left = ptr[0];
+            if (bw_left < min_left) {
+                min_left = bw_left;
+                min_wlen = wlen;
+            }
+            unsigned short bw_wait = ptr[1];
+            if (bw_wait > max_wait) {
+                max_wait = bw_wait;
+                max_wlen = wlen;
+            }
+            if (doOut) {
+                std::cout << "bw_left = " << bw_left << ", bw_wait = " << bw_wait;
+            }
         }
         if (!rboard->ReadWaveformTable(waveform_read, 0, wlen)) {
-            if (!doOut) std::cout << "Len=" << std::dec << wlen << ":";
-            std::cout << " ReadWaveformTable failed" << std::endl;
+            if (!doOut) std::cout << "Len=" << std::dec << wlen << ": ";
+            std::cout << "ReadWaveformTable failed" << std::endl;
             break;
         }
+        bool allOK = true;
         for (i = 0; i < wlen; i++) {
             if (waveform_read[i] != waveform[i]) {
+                allOK = false;
                 if (doOut) {
-                    std::cout << ", mismatch at quadlet " << std::dec << i << ", read "
+                    std::cout << "mismatch at quadlet " << std::dec << i << ", read "
                               << waveform_read[i] << ", expected " << waveform[i];
                     if (numSilentMismatch > 0) {
                         std::cout << std::endl << "There were " << numSilentMismatch
@@ -593,12 +640,18 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
                 break;
             }
         }
-        if (doOut) std::cout << std::endl;
+        if (doOut) {
+            if (!debugValid && allOK) std::cout << " Pass";
+            std::cout << std::endl;
+        }
     }
-    if (numSilentMismatch > 0)
+    if (numSilentMismatch > 0) {
         std::cout << "There were " << numSilentMismatch << " additional lengths with mismatches" << std::endl;
-    std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
-    std::cout << "Maximum bw_wait = " << std::dec << max_wait << " at wlen = " << max_wlen << std::endl;
+    }
+    if (debugValid) {
+        std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
+        std::cout << "Maximum bw_wait = " << std::dec << max_wait << " at wlen = " << max_wlen << std::endl;
+    }
 }
 
 void TestWaveform(AmpIO *board)
@@ -632,6 +685,7 @@ void TestWaveform(AmpIO *board)
         std::cout << "WriteWaveformTable failed" << std::endl;
         return;
     }
+    Amp1394_Sleep(0.05);
     std::cout << "Reading data" << std::endl;
     if (!board->ReadWaveformTable(waveform_read, 0, WLEN)) {
         std::cout << "ReadWaveformTable failed" << std::endl;
@@ -802,10 +856,10 @@ int main(int argc, char **argv)
             std::cout << "  1) Quadlet write (power/relay toggle) to board via Ethernet" << std::endl;
             std::cout << "  2) Quadlet read from board via Ethernet" << std::endl;
         }
-        if (curBoardEth || curBoardFw)
+        if (curBoardEth || curBoardFw) {
             std::cout << "  3) Block read from board via Ethernet and/or Firewire" << std::endl;
-        if (curBoardEth)
-            std::cout << "  4) Block write to board via Ethernet" << std::endl;
+            std::cout << "  4) Block write to board via Ethernet or Firewire" << std::endl;
+        }
         if (curBoardFw) {
             std::cout << "  5) Ethernet port status" << std::endl;
             std::cout << "  6) Initialize Ethernet port" << std::endl;
@@ -814,9 +868,8 @@ int main(int argc, char **argv)
             std::cout << "  7) Ethernet debug info" << std::endl;
         std::cout << "  8) Multicast quadlet read via Ethernet" << std::endl;
         if (curBoardEth) {
-            std::cout << "  9) Block write test to 0x4090" << std::endl;
             std::cout << "  a) WriteAllBoards test" << std::endl;
-            std::cout << "  B) BlockWrite test" << std::endl;
+            std::cout << "  B) BlockWrite test (Waveform table)" << std::endl;
         }
         if ((EthBoardList.size() > 0) || (FwBoardList.size() > 0))
             std::cout << "  b) Change Firewire/Ethernet board" << std::endl;
@@ -924,36 +977,16 @@ int main(int argc, char **argv)
             break;
 
         case '4':
-            if (curBoardEth) {
-                // Read from DAC (quadlet reads), modify values, write them using
-                // a block write, then read them again to check.
-                // Note that test can be done using FireWire by changing EthPort to FwPort.
-                for (i = 0; i < 4; i++) {
-                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
-                    EthPort->ReadQuadlet(boardNum, addr, write_block[i]);
-                    write_block[i] &= 0x0000ffff;
-                }
-                std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
-                          << write_block[1] << ", " << write_block[2] << ", "
-                          << write_block[3] << std::endl;
-                for (i = 0; i < 4; i++) {
-                    write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
-                }
-                write_block[4] = 0;
-                std::cout << "Setting new values" << std::endl;
-                if (!EthPort->WriteBlock(boardNum, 0, write_block, sizeof(write_block))) {
-                    std::cout << "Failed to write block data via Ethernet port" << std::endl;
-                    break;
-                }
-#if 0
-                for (i = 0; i < 4; i++) {
-                    addr = 0x0001 | ((i+1) << 4);  // channel 1-4, DAC Control
-                    EthPort->ReadQuadlet(boardNum, addr, write_block[i]);
-                }
-                std::cout << "Read from DAC: " << std::hex << write_block[0] << ", "
-                          << write_block[1] << ", " << write_block[2] << ", "
-                          << write_block[3] << std::endl;
+#if Amp1394_HAS_RAW1394
+            if (curBoardFw) {
+                std::cout << "Testing via Firewire" << std::endl;
+                TestDacRW(&FwPort, curBoardFw->GetBoardId());
+                break;
+            }
 #endif
+            if (curBoardEth) {
+                std::cout << "Testing via Ethernet" << std::endl;
+                TestDacRW(EthPort, curBoardEth->GetBoardId());
             }
             break;
 
@@ -981,28 +1014,6 @@ int main(int argc, char **argv)
                 std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
             else
                 std::cout << "Failed to read quadlet via Ethernet port" << std::endl;
-            break;
-
-        case '9':   // Block read test
-            if (curBoardEth) {
-                size_t i;
-                quadlet_t testBlock[16];
-                memset(testBlock, 0, sizeof(testBlock));
-                if (EthPort->ReadBlock(boardNum, 0x4090, testBlock, sizeof(testBlock))) {
-                   std::cout << "Current contents of block: " << std::endl;
-                   for (i = 0; i < 16; i++) {
-                       testBlock[i] = bswap_32(testBlock[i]);
-                       std::cout << testBlock[i] << " ";
-                   }
-                   std::cout << std::endl;
-                }
-                for (i = 0; i < 16; i++) {
-                    testBlock[i] += i;
-                    testBlock[i] = bswap_32(testBlock[i]);
-                }
-                std::cout << "Writing new data" << std::endl;
-                EthPort->WriteBlock(boardNum, 0x4090, testBlock, sizeof(testBlock));
-            }
             break;
 
         case 'a':

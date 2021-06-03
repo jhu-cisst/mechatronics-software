@@ -16,9 +16,7 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
-#include <stdlib.h> // for atoi
 #include <iostream>
-#include <vector>
 #include <string>
 
 #include <PortFactory.h>
@@ -27,7 +25,7 @@ http://www.cisst.org/cisst/license.txt.
 
 int main(int argc, char** argv)
 {
-    unsigned int i, j;
+    unsigned int i;
     unsigned int nbArgs = static_cast<unsigned int>(argc);
     BasePort * port = 0;
     std::string portArgs;
@@ -67,32 +65,18 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    std::vector<AmpIO *> boardList;
-    for (i = 0; i < port->GetNumOfNodes(); i++) {
-        int boardId = port->GetBoardId(i);
-        if (boardId != BoardIO::MAX_BOARDS) {
-            std::cout << "Adding firewire node " << i << ", BoardID " << boardId << std::endl;
-            AmpIO *board = new AmpIO(boardId);
-            boardList.push_back(board);
-            port->AddBoard(board);
-        }
-    }
-
-    // actual command
-    for (j = 0; j < boardList.size(); j++) {
-        std::cout << "Executing command \"" << command << "\" on node " << j << std::endl;
-        if (command == "open-relays") {
-            boardList[j]->WriteSafetyRelay(false);
-        } else if (command == "close-relays") {
-            boardList[j]->WriteSafetyRelay(true);
-        } else if (command == "reboot") {
-            boardList[j]->WriteReboot();
-        } else if (command == "reset-eth") {
-            boardList[j]->ResetKSZ8851();
-        } else if (command == "reset-encoder-preload") {
-            for (i = 0; i < 4; i++) {
-                boardList[j]->WriteEncoderPreload(i, 0);
-            }
+    std::cout << "Executing command \"" << command << "\" on " << port->GetNumOfNodes() << " nodes" << std::endl;
+    if (command == "open-relays") {
+        AmpIO::WriteSafetyRelayAll(port, false);
+    } else if (command == "close-relays") {
+        AmpIO::WriteSafetyRelayAll(port, true);
+    } else if (command == "reboot") {
+        AmpIO::WriteRebootAll(port);
+    } else if (command == "reset-eth") {
+        AmpIO::ResetKSZ8851All(port);
+    } else if (command == "reset-encoder-preload") {
+        for (i = 0; i < 4; i++) {
+            AmpIO::WriteEncoderPreloadAll(port, i, 0);
         }
     }
 

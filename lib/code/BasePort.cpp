@@ -32,7 +32,7 @@ void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr, bool newLine
     for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
         if (boardInfo[bnum].inUse) {
             outStr << bnum << ": " << std::fixed << std::setprecision(2) << (boardInfo[bnum].updateTime*1e6)
-                   << (boardInfo[bnum].updateValid ? "   " : "*  ");
+                   << "   ";
         }
     }
     outStr << "Read start: " << std::fixed << std::setprecision(2) << (readStartTime*1e6)
@@ -184,7 +184,8 @@ bool BasePort::ScanNodes(void)
                 outStr << "BasePort::ScanNodes: unable to read from node " << node << std::endl;
             continue;
         }
-        if (data != QLA1_String) {
+        // 0x54455354 == "TEST"
+        if ((data != QLA1_String) && (data !=  0x54455354)) {
             outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
                    << std::hex << data << std::dec << ")" << std::endl;
             continue;
@@ -645,8 +646,6 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
                     clkPeriod = board->GetFPGAClockPeriod();
                     bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
-                    // Currently, not using updateValid (should be redundant with sequence check)
-                    bcReadInfo.boardInfo[boardNum].updateValid = (quad0_lsb&0x8000);
                 }
                 if (bcReadInfo.boardInfo[boardNum].sequence == bcReadInfo.readSequence) {
                     thisOK = true;

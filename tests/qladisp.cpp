@@ -41,6 +41,8 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "Amp1394Console.h"
 
+#include "EthBasePort.h"
+
 /*!
  \brief Increment encoder counts
  \param[in] bd FPGA Board
@@ -267,6 +269,9 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    // Check if an Ethernet port
+    EthBasePort *ethPort = dynamic_cast<EthBasePort *>(Port);
+
     for (i = 0; i < BoardList.size(); i++)
         Port->AddBoard(BoardList[i]);
 
@@ -371,6 +376,8 @@ int main(int argc, char** argv)
         if (protocol == BasePort::PROTOCOL_BC_QRW)
             timeLines++;
     }
+    else if (ethPort)
+        timeLines++;
     const int DEBUG_START_LINE = fullvel ? (22+timeLines) : (19+timeLines);
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
@@ -378,6 +385,9 @@ int main(int argc, char** argv)
 
     if (showTime)
         console.Print(STATUS_LINE+5, lm, "Time (s):");
+    else if (ethPort)
+        console.Print(STATUS_LINE+5, lm, "Ethernet:");
+
     double startTime = -1.0;   // indicates that startTime not yet set
     double pcTime = 0.0;
 
@@ -697,6 +707,21 @@ int main(int argc, char** argv)
                 timingStr << "   ";
                 console.Print(STATUS_LINE+6, lm, timingStr.str().c_str());
             }
+        }
+        else if (ethPort) {
+            EthBasePort::FPGA_Status fpgaStatus;
+            ethPort->GetFpgaStatus(fpgaStatus);
+            char flagStr[8];
+            flagStr[0] = fpgaStatus.FwBusReset ? 'R' : ' ';
+            flagStr[1] = ' ';
+            flagStr[2] = fpgaStatus.FwPacketDropped ? 'D' : ' ';
+            flagStr[3] = ' ';
+            flagStr[4] = fpgaStatus.EthInternalError ? 'I' : ' ';
+            flagStr[5] = ' ';
+            flagStr[6] = fpgaStatus.EthSummaryError ? 'S' : ' ';
+            flagStr[7] = 0;
+            console.Print(STATUS_LINE+5, lm+12, "%s   StateError: %3d   PacketError: %3d",
+                          flagStr, fpgaStatus.numStateInvalid, fpgaStatus.numPacketError);
         }
         Port->WriteAllBoards();
 

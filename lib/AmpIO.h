@@ -198,7 +198,7 @@ public:
     AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
 
     /*! Returns midrange value of encoder position. */
-    AmpIO_Int32 GetEncoderMidRange(void) const;
+    static AmpIO_Int32 GetEncoderMidRange(void);
 
     /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
         between the most recent full cycle and the previous full cycle. If the encoder counter overflowed
@@ -311,7 +311,12 @@ public:
     bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
     bool IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const;
 
-    AmpIO_Int32 ReadWatchdogPeriod(void) const;
+    // Read the watchdog period (16 bit number).
+    // If applyMask is true, the upper 16 bits are cleared. This is the default
+    // behavior for backward compatibility.
+    // Starting with Firmware Rev 8, the upper bit (bit 31) indicates whether
+    // LED1 on the QLA displays the watchdog period status.
+    AmpIO_Int32 ReadWatchdogPeriod(bool applyMask = true) const;
     double ReadWatchdogPeriodInSeconds(void) const;
 
     AmpIO_UInt32 ReadDigitalIO(void) const;
@@ -367,8 +372,12 @@ public:
     // Start/stop driving waveform for specified digital outputs (mask)
     bool WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
 
+    // Write the watchdog period in counts. Starting with Firmware Rev 8, setting the upper
+    // bit (bit 31) will cause LED1 on the QLA to display the watchdog period status.
     bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
-    bool WriteWatchdogPeriodInSeconds(const double seconds);
+    // Write the watchdog period in seconds. Starting with Firmware Rev 8, setting ledDisplay
+    // true will cause LED1 on the QLA to display the watchdog period status.
+    bool WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay = false);
 
     /*! \brief Write DOUT control register to set digital output mode (e.g., PWM, one-shot (pulse), general out).
 
@@ -433,6 +442,20 @@ public:
         \returns Time, in counts
     */
     AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
+
+    // **************** Static WRITE Methods (for broadcast) ********************
+
+    static bool WriteRebootAll(BasePort *port);
+
+    static bool WritePowerEnableAll(BasePort *port, bool state);
+
+    static bool WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state);
+
+    static bool WriteSafetyRelayAll(BasePort *port, bool state);
+
+    static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata);
+
+    static bool ResetKSZ8851All(BasePort *port);
 
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming
@@ -520,7 +543,7 @@ public:
     bool DallasWriteControl(AmpIO_UInt32 ctrl);
     bool DallasReadStatus(AmpIO_UInt32 &status);
     bool DallasWaitIdle();
-    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
+    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B = false);
 
     // ************************ Ethernet Methods *************************************
     // Following functions enable access to the KSZ8851 Ethernet controller on the

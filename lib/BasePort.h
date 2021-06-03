@@ -93,9 +93,8 @@ public:
             bool inUse;               //   Whether board is participating in broadcast read
             unsigned int sequence;    //   The sequence number received (should be same as readSequence)
             double updateTime;        //   When the hub feedback data was updated
-            double updateValid;       //   If an update occurred since the broadcast query command
 
-            BroadcastBoardInfo() : inUse(false), sequence(0), updateTime(0.0), updateValid(false) {}
+            BroadcastBoardInfo() : inUse(false), sequence(0), updateTime(0.0) {}
             ~BroadcastBoardInfo() {}
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];

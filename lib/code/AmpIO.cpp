@@ -41,6 +41,7 @@ const AmpIO_UInt32 MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current a
 const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
+const AmpIO_UInt32 RESET_KSZ8851    = 0x04000000;  /*!< Mask to reset KSZ8851 Ethernet chip */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <= 5 (16 bits) */
@@ -553,7 +554,7 @@ double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
     return (encVelData[index].runPeriod)*(encVelData[index].clkPeriod);
 }
 
-AmpIO_Int32 AmpIO::GetEncoderMidRange(void) const
+AmpIO_Int32 AmpIO::GetEncoderMidRange(void)
 {
     return ENC_MIDRANGE;
 }
@@ -873,12 +874,14 @@ bool AmpIO::IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) cons
     return ret;
 }
 
-AmpIO_Int32 AmpIO::ReadWatchdogPeriod(void) const
+AmpIO_Int32 AmpIO::ReadWatchdogPeriod(bool applyMask) const
 {
     AmpIO_UInt32 counts = 0;
     if (port) {
         port->ReadQuadlet(BoardId, 3, counts);
     }
+    if (applyMask)
+        counts &= 0x0000ffff;
     return counts;
 }
 
@@ -980,16 +983,16 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
 {
     unsigned int channel = (index+1) << 4;
 
-    if ((sdata >= ENC_MIDRANGE)
-            || (sdata < -ENC_MIDRANGE)) {
+    if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
         std::cerr << "AmpIO::WriteEncoderPreload, preload out of range " << sdata << std::endl;
         return false;
     }
+    bool ret = false;
     if (port && (index < NUM_CHANNELS)) {
-        return port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET, static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
-    } else {
-        return false;
+        ret = port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET,
+                                 static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
     }
+    return ret;
 }
 
 bool AmpIO::WriteDoutConfigReset(void)
@@ -1026,7 +1029,7 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
     return port->WriteQuadlet(BoardId, 3, counts);
 }
 
-bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
+bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay)
 {
     AmpIO_UInt32 counts;
     if (seconds == 0.0) {
@@ -1039,6 +1042,8 @@ bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds)
         counts = static_cast<AmpIO_UInt32>(seconds/WDOG_ClockPeriod);
         counts = std::max(counts, static_cast<AmpIO_UInt32>(1));
     }
+    if (ledDisplay)
+        counts |= 0x80000000;
     return WriteWatchdogPeriod(counts);
 }
 
@@ -1109,6 +1114,60 @@ bool AmpIO::WriteIPv4Address(AmpIO_UInt32 IPaddr)
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
 {
     return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
+}
+
+/*******************************************************************************
+ * Static Write methods (for broadcast)
+ *
+ * These methods duplicate the board-specific methods (WriteReboot, WritePowerEnable,
+ * WriteAmpEnable, ...), but are sent to the broadcast address (FW_NODE_BROADCAST).
+ */
+
+bool AmpIO::WriteRebootAll(BasePort *port)
+{
+    // Note that Firmware V7+ supports the reboot command; earlier versions of
+    // firmware will instead perform a limited reset.
+    AmpIO_UInt32 write_data = REBOOT_FPGA;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WritePowerEnableAll(BasePort *port, bool state)
+{
+    AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state)
+{
+    quadlet_t write_data = (mask << 8) | state;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WriteSafetyRelayAll(BasePort *port, bool state)
+{
+    AmpIO_UInt32 write_data = state ? RELAY_ON : RELAY_OFF;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+}
+
+bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata)
+{
+    unsigned int channel = (index+1) << 4;
+
+    if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
+        std::cerr << "AmpIO::WriteEncoderPreloadAll, preload out of range " << sdata << std::endl;
+        return false;
+    }
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        ret = port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_OFFSET,
+                                 static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
+    }
+    return ret;
+}
+
+bool AmpIO::ResetKSZ8851All(BasePort *port) {
+    quadlet_t write_data = RESET_KSZ8851;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 12, write_data) : false);
 }
 
 /*******************************************************************************
@@ -1448,21 +1507,24 @@ bool AmpIO::DallasWaitIdle()
         // Wait 1 msec
         Amp1394_Sleep(0.001);
         if (!DallasReadStatus(status)) return false;
-        // Done when in idle state
-        if ((status&0x000000F0) == 0)
+        // Done when in idle state. The following test works for both Firmware Rev 7
+        // (state is bits 7:4) and Firmware Rev 8 (state is bits 8:4 and busy flag is bit 13)
+        if ((status&0x000020F0) == 0)
             break;
     }
     //std::cerr << "Wait time = " << i << " milliseconds" << std::endl;
     return (i < 500);
 }
 
-bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes)
+bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B)
 {
     if (GetFirmwareVersion() < 7) return false;
     AmpIO_UInt32 status = ReadStatus();
     // Check whether bi-directional I/O is available
     if ((status & 0x00300000) != 0x00300000) return false;
-    if (!DallasWriteControl((addr<<16)|2)) return false;
+    AmpIO_UInt32 ctrl = (addr<<16)|2;
+    if (useDS2480B) ctrl |= 4;
+    if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
     if (!DallasReadStatus(status)) return false;
     // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
@@ -1491,7 +1553,7 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
 bool AmpIO::ResetKSZ8851()
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x04000000;
+    quadlet_t write_data = RESET_KSZ8851;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
