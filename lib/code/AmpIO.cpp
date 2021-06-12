@@ -1503,32 +1503,32 @@ bool AmpIO::DallasWaitIdle()
     int i;
     AmpIO_UInt32 status;
     // Wait up to 500 msec. Based on measurements, approximate wait time is 250-300 msec.
-    for (i = 0; i < 500; i++) {
+    for (i = 0; i < 9; i++) {
         // Wait 1 msec
         Amp1394_Sleep(0.001);
-        if (!DallasReadStatus(status)) return false;
-        // Done when in idle state. The following test works for both Firmware Rev 7
-        // (state is bits 7:4) and Firmware Rev 8 (state is bits 8:4 and busy flag is bit 13)
-        if ((status&0x000020F0) == 0)
-            break;
+        // if (!DallasReadStatus(status)) return false;
+        // // Done when in idle state. The following test works for both Firmware Rev 7
+        // // (state is bits 7:4) and Firmware Rev 8 (state is bits 8:4 and busy flag is bit 13)
+        // if ((status&0x000020F0) == 0)
+        //     break;
     }
     //std::cerr << "Wait time = " << i << " milliseconds" << std::endl;
-    return (i < 500);
+    return (i < 10);
 }
 
 bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B)
 {
     if (GetFirmwareVersion() < 7) return false;
-    AmpIO_UInt32 status = ReadStatus();
-    // Check whether bi-directional I/O is available
-    if ((status & 0x00300000) != 0x00300000) return false;
-    AmpIO_UInt32 ctrl = (addr<<16)|2;
-    if (useDS2480B) ctrl |= 4;
-    if (!DallasWriteControl(ctrl)) return false;
+    // AmpIO_UInt32 status = ReadStatus();
+    // // Check whether bi-directional I/O is available
+    // if ((status & 0x00300000) != 0x00300000) return false;
+    // AmpIO_UInt32 ctrl = (addr<<16)|2;
+    // if (useDS2480B) ctrl |= 4;
+    // if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
-    if (!DallasReadStatus(status)) return false;
-    // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
-    if ((status & 0xFF00000F) != 0x0B00000B) return false;
+    // if (!DallasReadStatus(status)) return false;
+    // // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
+    // if ((status & 0xFF00000F) != 0x0B00000B) return false;
     nodeaddr_t address = 0x6000;
     unsigned char *ptr = data;
     // Read first block of data (up to 256 bytes)
@@ -1536,15 +1536,15 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
     ptr += nb;
     nbytes -= nb;
-    // Read additional blocks of data if necessary
-    while (nbytes > 0) {
-        if (!DallasWriteControl(3)) return false;
-        if (!DallasWaitIdle()) return false;
-        nb = (nbytes>256) ? 256 : nbytes;
-        if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
-        ptr += nb;
-        nbytes -= nb;
-    }
+    // // Read additional blocks of data if necessary
+    // while (nbytes > 0) {
+    //     if (!DallasWriteControl(3)) return false;
+    //     if (!DallasWaitIdle()) return false;
+    //     nb = (nbytes>256) ? 256 : nbytes;
+    //     if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
+    //     ptr += nb;
+    //     nbytes -= nb;
+    // }
     return true;
 }
 

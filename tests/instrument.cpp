@@ -130,58 +130,58 @@ int main(int argc, char** argv)
     }
 
     // Now, we try to read the Dallas chip. This will also populate the status field.
-    unsigned char buffer[2048];  // Buffer for entire contents of DS2505 memory (2 Kbytes)
+    unsigned char buffer[16];  // Buffer for entire contents of DS2505 memory (2 Kbytes)
     bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer), useDS2480B);
-    if (!Board.DallasReadStatus(status)) {
-        std::cerr << "Failed to read DS2505 status" << std::endl;
-        Port->RemoveBoard(board);
-        delete Port;
-        return -1;
-    }
-    // No longer need these
+    // if (!Board.DallasReadStatus(status)) {
+    //     std::cerr << "Failed to read DS2505 status" << std::endl;
+    //     Port->RemoveBoard(board);
+    //     delete Port;
+    //     return -1;
+    // }
+    // // No longer need these
     Port->RemoveBoard(board);
     delete Port;
-    if ((status & 0x00000001) != 0x00000001) {
-        std::cerr << "DS2505 interface not enabled (hardware problem)" << std::endl;
-        return -1;
-    }
-    if (useDS2480B) {
-        unsigned int unexpected_idx = (status & 0x00000e00) >> 9;
-        unsigned int state = (status & 0x000001f0) >> 4;
-        if ((unexpected_idx != 0) || (state != 0)) {
-            std::cerr << "DS2480B status = " << std::hex << status << std::dec << std::endl;
-            if (unexpected_idx != 0) {
-               unsigned int recv = (status&0x00FF0000)>>16;
-               std::cerr << "DS2480B failed to return expected response, idx = " << unexpected_idx
-                         << ", received = " << std::hex << recv << std::dec << std::endl;
-            }
-            if (state != 0)
-               std::cerr << "DS2480B state = " << state << std::endl;
-        }
-        if ((status & 0x0000c000) != 0x0000c000) {
-            std::cerr << "DS2480B not initialized: status = " << std::hex << status << std::dec << std::endl;
-            return -1;
-        }
-    }
-    unsigned char ds_reset = static_cast<unsigned char>((status & 0x00000006)>>1);
-    if (ds_reset != 1) {
-        std::cerr << "Failed to communicate with DS2505" << std::endl;
-        if (ds_reset == 2)
-            std::cerr << "  - DOUT3 did not reach high state -- is pullup resistor missing?" << std::endl;
-        else if (ds_reset == 3)
-            std::cerr << "  - Did not received ACK from DS2505 -- is dMIB signal jumpered?" << std::endl;
-        return -1;
-    }
-    unsigned char family_code = static_cast<unsigned char>((status&0xFF000000)>>24);
-    if (family_code != 0x0B) {
-        std::cerr << "Unknown device family code: 0x" << std::hex << static_cast<unsigned int>(family_code)
-                  << " (DS2505 should be 0x0B)" << std::endl;
-        return -1;
-    }
-    if (!useDS2480B) {
-        unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
-        std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;
-    }
+    // if ((status & 0x00000001) != 0x00000001) {
+    //     std::cerr << "DS2505 interface not enabled (hardware problem)" << std::endl;
+    //     return -1;
+    // }
+    // if (useDS2480B) {
+    //     unsigned int unexpected_idx = (status & 0x00000e00) >> 9;
+    //     unsigned int state = (status & 0x000001f0) >> 4;
+    //     if ((unexpected_idx != 0) || (state != 0)) {
+    //         std::cerr << "DS2480B status = " << std::hex << status << std::dec << std::endl;
+    //         if (unexpected_idx != 0) {
+    //            unsigned int recv = (status&0x00FF0000)>>16;
+    //            std::cerr << "DS2480B failed to return expected response, idx = " << unexpected_idx
+    //                      << ", received = " << std::hex << recv << std::dec << std::endl;
+    //         }
+    //         if (state != 0)
+    //            std::cerr << "DS2480B state = " << state << std::endl;
+    //     }
+    //     if ((status & 0x0000c000) != 0x0000c000) {
+    //         std::cerr << "DS2480B not initialized: status = " << std::hex << status << std::dec << std::endl;
+    //         return -1;
+    //     }
+    // }
+    // unsigned char ds_reset = static_cast<unsigned char>((status & 0x00000006)>>1);
+    // if (ds_reset != 1) {
+    //     std::cerr << "Failed to communicate with DS2505" << std::endl;
+    //     if (ds_reset == 2)
+    //         std::cerr << "  - DOUT3 did not reach high state -- is pullup resistor missing?" << std::endl;
+    //     else if (ds_reset == 3)
+    //         std::cerr << "  - Did not received ACK from DS2505 -- is dMIB signal jumpered?" << std::endl;
+    //     return -1;
+    // }
+    // unsigned char family_code = static_cast<unsigned char>((status&0xFF000000)>>24);
+    // if (family_code != 0x0B) {
+    //     std::cerr << "Unknown device family code: 0x" << std::hex << static_cast<unsigned int>(family_code)
+    //               << " (DS2505 should be 0x0B)" << std::endl;
+    //     return -1;
+    // }
+    // if (!useDS2480B) {
+    //     unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
+    //     std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;
+    // }
     if (!ret) {
         std::cerr << "Failed to read instrument memory" << std::endl;
         return -1;
