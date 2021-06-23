@@ -669,13 +669,14 @@ protected:
     unsigned int NumAxes;   // not currently used
 
     // Number of channels in the node (4 for QLA)
-    enum { NUM_CHANNELS = 4 };
+    enum { NUM_CHANNELS = 10, NUM_MOTORS = 10, NUM_ENCODERS = 7};
 
     // Sizes of real-time read and write buffers (see below for offsets into these buffers)
     // Firmware Rev 1-6 had ReadBufSize=4+4*NUM_CHANNELS. Using the larger buffer here
     // still retains compatibility with older firmware.
     enum { ReadBufSize_Old = 4+4*NUM_CHANNELS,
            ReadBufSize = 4+6*NUM_CHANNELS,
+           ReadBufSize_v8 = 4+2*NUM_MOTORS+5*NUM_ENCODERS, 
            WriteBufSize = NUM_CHANNELS+1 };
 
     // Buffer for real-time block reads. The Port class calls SetReadData to copy the
@@ -749,12 +750,13 @@ protected:
         TEMP_OFFSET       = 3,    // temperature (one quadlet)
         MOTOR_CURR_OFFSET = 4,    // half quadlet per channel (lower half)
         ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
-        ENC_POS_OFFSET    = 4+NUM_CHANNELS,    // one quadlet per channel
-        ENC_VEL_OFFSET    = 4+2*NUM_CHANNELS,  // one quadlet per channel
-        ENC_FRQ_OFFSET    = 4+3*NUM_CHANNELS,  // one quadlet per channel
-        ENC_QTR1_OFFSET   = 4+3*NUM_CHANNELS,  // one quadlet per channel
-        ENC_QTR5_OFFSET   = 4+4*NUM_CHANNELS,  // one quadlet per channel
-        ENC_RUN_OFFSET    = 4+5*NUM_CHANNELS   // one quadlet per channel
+        ENC_POS_OFFSET    = MOTOR_CURR_OFFSET + NUM_MOTORS,    // one quadlet per channel
+        ENC_VEL_OFFSET    = ENC_POS_OFFSET + NUM_ENCODERS,  // one quadlet per channel
+        ENC_FRQ_OFFSET    = ENC_VEL_OFFSET + NUM_ENCODERS,  // one quadlet per channel
+        ENC_QTR1_OFFSET   = ENC_FRQ_OFFSET + NUM_ENCODERS,  // one quadlet per channel
+        ENC_QTR5_OFFSET   = ENC_QTR1_OFFSET + NUM_ENCODERS,  // one quadlet per channel
+        ENC_RUN_OFFSET    = ENC_QTR5_OFFSET + NUM_ENCODERS,   // one quadlet per channel
+        MOTOR_STATUS_OFFSET = ENC_RUN_OFFSET + NUM_ENCODERS
     };
 
     // offsets of real-time write buffer contents

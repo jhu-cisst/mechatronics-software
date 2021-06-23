@@ -135,16 +135,23 @@ AmpIO::~AmpIO()
 
 unsigned int AmpIO::GetReadNumBytes() const
 {
-    return (GetFirmwareVersion() < 7) ? (ReadBufSize_Old*sizeof(quadlet_t)) : (ReadBufSize*sizeof(quadlet_t));
+    auto v = GetFirmwareVersion();
+    if (v < 7) {
+        return (ReadBufSize_Old*sizeof(quadlet_t));
+    } else if (v = 7) {
+        return (ReadBufSize*sizeof(quadlet_t));
+    } else {
+        return ReadBufSize_v8*sizeof(quadlet_t); // TODO
+    } 
 }
 
 void AmpIO::SetReadData(const quadlet_t *buf)
 {
-    unsigned int numQuads = (GetFirmwareVersion() < 7) ? ReadBufSize_Old : ReadBufSize;
+    unsigned int numQuads = GetReadNumBytes() / sizeof(quadlet_t);
     size_t i;
     for (i = 0; i < numQuads; i++)
         ReadBuffer[i] = bswap_32(buf[i]);
-    for (i = 0; i < NUM_CHANNELS; i++)
+    for (i = 0; i < NUM_ENCODERS; i++)
         SetEncoderVelocityData(i);
     // Add 1 to timestamp because block read clears counter, rather than incrementing
     firmwareTime += (GetTimestamp()+1)*GetFPGAClockPeriod();
