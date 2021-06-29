@@ -254,7 +254,7 @@ public:
     bool GetPowerStatus(void) const;
 
     // GetPowerFault: returns true if motor power fault is detected.
-    // This is supported from Rev 7 firmware and requires a QLA 1.4+
+    // This is supported from Rev 6 firmware and requires a QLA 1.4+
     bool GetPowerFault(void) const;
 
     // GetSafetyRelay: returns desired safety relay state

@@ -705,7 +705,7 @@ bool AmpIO::GetPowerStatus(void) const
 bool AmpIO::GetPowerFault(void) const
 {
     // Bit 15: motor power fault
-    return (GetStatus()&0x0000F000);
+    return (GetStatus()&0x00008000);
 }
 
 bool AmpIO::GetSafetyRelay(void) const
