@@ -642,6 +642,18 @@ public:
     /*! \brief Read collected data from FPGA memory buffer */
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
+    /*! \brief Write potentiometer FIR coefficient data */
+    bool WriteFirPot(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size);
+
+    /*! \brief Write current FIR coefficient data */
+    bool WriteFirCur(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size);
+
+    /*! \brief Enable/Disable potentiometer FIR*/
+    bool CtrlFirPot(unsigned int index, bool enable);
+
+    /*! \brief Enable/Disable current FIR*/
+    bool CtrlFirCur(unsigned int index, bool enable);
+
 protected:
     unsigned int NumAxes;   // not currently used
 

@@ -24,6 +24,16 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
+/*!< New address space: reg_raddr[15:12] of FPGA = ADDR_FIR = 9
+value is conflicting with ADDR_CTRL, consider change to 10(A) */
+const AmpIO_UInt32 ADDR_FIR         = 0x00009000;
+const AmpIO_UInt32 FIR_POT_ENABLE   = 0x00000100;
+const AmpIO_UInt32 FIR_CUR_ENABLE   = 0x00000200;
+const AmpIO_UInt32 FIR_POT_DISABLE  = 0x00000300;
+const AmpIO_UInt32 FIR_CUR_DISABLE  = 0x00000400;
+const AmpIO_UInt32 FIR_POT_RELOAD   = 0x00000500;
+const AmpIO_UInt32 FIR_CUR_RELOAD   = 0x00000600;
+
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 COLLECT_BIT      = 0x40000000;  /*!< Enable data collection on FPGA */
 const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
@@ -1808,4 +1818,60 @@ void AmpIO::CheckCollectCallback()
     }
     if (!(*collect_cb)(collect_data, numAvail))
         DataCollectionStop();
+}
+
+bool AmpIO::WriteFirPot(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    bool ret;
+    unsigned int i = 1;
+
+    while (i <= size && ret) {
+        ret = port->WriteQuadlet(BoardId, channel | ADDR_FIR | FIR_POT_RELOAD, static_cast<AmpIO_UInt32>(sdata[i]));
+    };
+
+    return ret;
+}
+
+bool AmpIO::WriteFirCur(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    bool ret;
+    unsigned int i = 1;
+
+    while (i <= size && ret) {
+        ret = port->WriteQuadlet(BoardId, channel | ADDR_FIR | FIR_CUR_RELOAD, static_cast<AmpIO_UInt32>(sdata[i]));
+    };
+
+    return ret;
+}
+
+bool AmpIO::CtrlFirPot(unsigned int index, bool enable)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    AmpIO_UInt32 status;
+    if (enable) {
+        status = FIR_POT_ENABLE;
+    } else {
+        status = FIR_POT_DISABLE;
+    }
+
+    return port->WriteQuadlet(BoardId, channel | ADDR_FIR | status, 0);
+}
+
+bool AmpIO::CtrlFirCur(unsigned int index, bool enable)
+{
+    unsigned int channel = (index + 1) << 4;
+
+    AmpIO_UInt32 status;
+    if (enable) {
+        status = FIR_CUR_ENABLE;
+    } else {
+        status = FIR_CUR_DISABLE;
+    }
+
+    return port->WriteQuadlet(BoardId, channel | ADDR_FIR | status, 0);
 }
