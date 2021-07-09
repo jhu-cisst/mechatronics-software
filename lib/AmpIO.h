@@ -31,6 +31,7 @@ typedef __int32          int32_t;
 #include <stdint.h>
 #endif
 #include <iostream>
+#include <vector>
 
 class ostream;
 
@@ -643,10 +644,13 @@ public:
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
     /*! \brief Write potentiometer FIR coefficient data */
-    bool WriteFirPot(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size);
+    bool WriteFirPot(unsigned int index, std::vector<AmpIO_UInt32> sdata, unsigned int size);
 
     /*! \brief Write current FIR coefficient data */
-    bool WriteFirCur(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size);
+    bool WriteFirCur(unsigned int index, std::vector<AmpIO_UInt32> sdata, unsigned int size);
+
+    /*! \brief Write current FIR coefficient data */
+    bool ReadFirStatus(unsigned int index, AmpIO_UInt32& sdata);
 
     /*! \brief Enable/Disable potentiometer FIR*/
     bool CtrlFirPot(unsigned int index, bool enable);
