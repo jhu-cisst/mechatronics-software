@@ -27,6 +27,7 @@ http://www.cisst.org/cisst/license.txt.
 /*!< New address space: reg_raddr[15:12] of FPGA = ADDR_FIR = 9
 value is conflicting with ADDR_CTRL, consider change to 10(A) */
 const AmpIO_UInt32 ADDR_FIR         = 0x00009000;
+const AmpIO_UInt32 FIR_STATUS       = 0x0000000B;  // corresponds to "OFF_FIR_STAT 4'hB" in Verilog
 const AmpIO_UInt32 FIR_POT_ENABLE   = 0x00000100;
 const AmpIO_UInt32 FIR_CUR_ENABLE   = 0x00000200;
 const AmpIO_UInt32 FIR_POT_DISABLE  = 0x00000300;
@@ -1820,7 +1821,7 @@ void AmpIO::CheckCollectCallback()
         DataCollectionStop();
 }
 
-bool AmpIO::WriteFirPot(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size)
+bool AmpIO::WriteFirPot(unsigned int index, std::vector<AmpIO_UInt32> sdata, unsigned int size)
 {
     unsigned int channel = (index + 1) << 4;
 
@@ -1828,13 +1829,13 @@ bool AmpIO::WriteFirPot(unsigned int index, AmpIO_UInt16 sdata[], unsigned int s
     unsigned int i = 1;
 
     while (i <= size && ret) {
-        ret = port->WriteQuadlet(BoardId, channel | ADDR_FIR | FIR_POT_RELOAD, static_cast<AmpIO_UInt32>(sdata[i]));
+        ret = port->WriteQuadlet(BoardId, channel | ADDR_FIR | FIR_POT_RELOAD, sdata[i]);
     };
 
     return ret;
 }
 
-bool AmpIO::WriteFirCur(unsigned int index, AmpIO_UInt16 sdata[], unsigned int size)
+bool AmpIO::WriteFirCur(unsigned int index, std::vector<AmpIO_UInt32> sdata, unsigned int size)
 {
     unsigned int channel = (index + 1) << 4;
 
@@ -1842,9 +1843,22 @@ bool AmpIO::WriteFirCur(unsigned int index, AmpIO_UInt16 sdata[], unsigned int s
     unsigned int i = 1;
 
     while (i <= size && ret) {
-        ret = port->WriteQuadlet(BoardId, channel | ADDR_FIR | FIR_CUR_RELOAD, static_cast<AmpIO_UInt32>(sdata[i]));
+        ret = port->WriteQuadlet(BoardId, channel | ADDR_FIR | FIR_CUR_RELOAD, sdata[i]);
     };
 
+    return ret;
+}
+
+bool AmpIO::ReadFirStatus(unsigned int index, AmpIO_UInt32& sdata)
+{
+    bool ret = false;
+    if (port && (index < NUM_CHANNELS)) {
+        AmpIO_UInt32 read_data;
+        unsigned int channel = (index + 1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | ADDR_FIR | FIR_STATUS, read_data);
+        if (ret)
+            sdata = static_cast<AmpIO_UInt32>(read_data);
+    }
     return ret;
 }
 
