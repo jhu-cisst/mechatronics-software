@@ -34,6 +34,8 @@ http://www.cisst.org/cisst/license.txt.
 #include <sstream>
 #include <fstream>
 #include <vector>
+#include <iterator>  // for ostream_iterator
+#include <cmath>     // for pow()
 
 #include <Amp1394/AmpIORevision.h>
 #include "PortFactory.h"
@@ -42,6 +44,12 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Console.h"
 
 #include "EthBasePort.h"
+
+const int NUM_FIR_COEFFICIENTS       = 14;  // number of unique filter coefficients, assuming symmetric coefficients
+const int NUM_FIR_FRAC_BITS          = 20;  // number of bits used to represent fractional part of coefficients
+                                            // defined in FIR ip core
+const AmpIO_UInt32 FIR_POT_STAT_MASK = 0x0001000;
+const AmpIO_UInt32 FIR_CUR_STAT_MASK = 0x0000001;
 
 /*!
  \brief Increment encoder counts
@@ -165,6 +173,32 @@ void UpdateStatusStrings(char *statusStr1, char *statusStr2, AmpIO_UInt32 status
     }
 }
 
+AmpIO_UInt32 Frac2Bits(double coeff) {
+    int n = -1;
+    int count = NUM_FIR_FRAC_BITS;
+    double epsilon = 2.2204e-16;
+
+    std::vector<int> bin_repr;
+    std::stringstream ss, hex_repr;
+
+    // compute binary representation of fractional values
+    while ((coeff != 0 || coeff > epsilon) && count > 0) {
+        if (coeff - pow(2, n) < 0) {
+            bin_repr.push_back(0);
+        } else {
+            bin_repr.push_back(1);
+            coeff = coeff - pow(2, n);
+        }
+        n = n - 1;
+        count = count - 1;
+    };
+    // concatenate result according to allowed number of bits
+    std::copy(bin_repr.begin(), bin_repr.end(), std::ostream_iterator<int>(ss, ""));
+
+    return static_cast<AmpIO_UInt32>(std::stoi(ss.str(), nullptr, 2));
+}
+
+
 int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
@@ -259,6 +293,10 @@ int main(int argc, char** argv)
                   << "'-': increase motor current by about 50mA" << std::endl
                   << "'c': start/stop data collection" << std::endl
                   << "'z': clear status events and r/w errors" << std::endl
+                  << "'f': start coefficient reload for pot FIR" << std::endl
+                  << "'g': start coefficient reload for cur FIR" << std::endl
+                  << "'t': enable/disable pot FIR" << std::endl
+                  << "'y': enable/disable cur FIR" << std::endl
                   << "'0'-'3': toggle digital output bit" << std::endl;
         return 0;
     }
@@ -571,6 +609,48 @@ int main(int argc, char** argv)
             for (j = 0; j < BoardList.size(); j++) {
                 BoardList[j]->ClearReadErrors();
                 BoardList[j]->ClearWriteErrors();
+            }
+        } else if (c == 'f') {
+            std::vector<AmpIO_UInt32> CoeVec;
+            // read coefficients from file and convert to 32 bits format
+            std::ifstream fCoe;
+            fCoe.open("coefficients_pot.txt");
+            double x;
+            while (fCoe >> x) {
+                CoeVec.push_back(Frac2Bits(x));
+            }
+            for (j = 0; j < numDisp; j++) {
+                BoardList[j]->WriteFirPot(curAxis, CoeVec, NUM_FIR_COEFFICIENTS);
+            }
+        } else if (c == 'g') {
+            std::vector<AmpIO_UInt32> CoeVec;
+            // read coefficients from file and convert to 32 bits format
+            std::ifstream fCoe;
+            fCoe.open("coefficients_cur.txt");
+            double x;
+            while (fCoe >> x) {
+                CoeVec.push_back(Frac2Bits(x));
+            }
+            for (j = 0; j < numDisp; j++) {
+                BoardList[j]->WriteFirCur(curAxis, CoeVec, NUM_FIR_COEFFICIENTS);
+            }
+        } else if (c == 't') {
+            AmpIO_UInt32 fir_stat;
+            // toggle current enable/disable status of pot fir
+            if (BoardList[j]->ReadFirStatus(curAxis, fir_stat)) {
+                bool enable = (fir_stat & FIR_POT_STAT_MASK) >> 16;
+                BoardList[j]->CtrlFirPot(curAxis, !enable);
+            } else {
+                std::cerr << "Failed reading FIR status..." << std::endl;
+            }
+        } else if (c == 'y') {
+            AmpIO_UInt32 fir_stat;
+            // toggle current enable/disable status of cur fir
+            if (BoardList[j]->ReadFirStatus(curAxis, fir_stat)) {
+                bool enable = fir_stat & FIR_CUR_STAT_MASK;
+                BoardList[j]->CtrlFirCur(curAxis, !enable);
+            } else {
+                std::cerr << "Failed reading FIR status..." << std::endl;
             }
         }
 
