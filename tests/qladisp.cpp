@@ -48,8 +48,8 @@ http://www.cisst.org/cisst/license.txt.
 const int NUM_FIR_COEFFICIENTS       = 14;  // number of unique filter coefficients, assuming symmetric coefficients
 const int NUM_FIR_FRAC_BITS          = 20;  // number of bits used to represent fractional part of coefficients
                                             // defined in FIR ip core
-const AmpIO_UInt32 FIR_POT_STAT_MASK = 0x0001000;
-const AmpIO_UInt32 FIR_CUR_STAT_MASK = 0x0000001;
+const AmpIO_UInt32 FIR_POT_STAT_MASK = 0x00010000;
+const AmpIO_UInt32 FIR_CUR_STAT_MASK = 0x00000001;
 
 /*!
  \brief Increment encoder counts
@@ -650,16 +650,16 @@ int main(int argc, char** argv)
                 }
             }
         } else if (c == 'y') {
-            AmpIO_UInt32 fir_stat;
+            AmpIO_UInt32 fir_stat = 0xffff;
             // toggle enable/disable status of cur fir
             for (j = 0; j < numDisp; j++) {
                 if (BoardList[j]->ReadFirStatus(curAxisIndex, fir_stat)) {
                     console.Print(STATUS_LINE+25, lm, "%08X", fir_stat); // debug line
                     bool enable = fir_stat & FIR_CUR_STAT_MASK;
                     if (enable) {
-                        console.Print(STATUS_LINE-1, lm, "FIR CUR disabled");
+                        console.Print(STATUS_LINE-1, lm+25, "FIR CUR disabled");
                     } else {
-                        console.Print(STATUS_LINE-1, lm, "FIR CUR enabled ");
+                        console.Print(STATUS_LINE-1, lm+25, "FIR CUR enabled ");
                     }
                     BoardList[j]->CtrlFirCur(curAxisIndex, !enable);
                 }
