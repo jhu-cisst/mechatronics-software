@@ -635,22 +635,34 @@ int main(int argc, char** argv)
                 BoardList[j]->WriteFirCur(curAxis, CoeVec, NUM_FIR_COEFFICIENTS);
             }
         } else if (c == 't') {
-            AmpIO_UInt32 fir_stat;
-            // toggle current enable/disable status of pot fir
-            if (BoardList[j]->ReadFirStatus(curAxis, fir_stat)) {
-                bool enable = (fir_stat & FIR_POT_STAT_MASK) >> 16;
-                BoardList[j]->CtrlFirPot(curAxis, !enable);
-            } else {
-                std::cerr << "Failed reading FIR status..." << std::endl;
+            AmpIO_UInt32 fir_stat = 0xffff;
+            // toggle enable/disable status of pot fir
+            for (j = 0; j < numDisp; j++) {
+                if (BoardList[j]->ReadFirStatus(curAxisIndex, fir_stat)) {
+                    console.Print(STATUS_LINE+25, lm, "%08X", fir_stat); // debug line
+                    bool enable = (fir_stat & FIR_POT_STAT_MASK) >> 16;
+                    if (enable) {
+                        console.Print(STATUS_LINE-1, lm, "FIR POT disabled");
+                    } else {
+                        console.Print(STATUS_LINE-1, lm, "FIR POT enabled ");
+                    }
+                    BoardList[j]->CtrlFirPot(curAxisIndex, !enable);
+                }
             }
         } else if (c == 'y') {
             AmpIO_UInt32 fir_stat;
-            // toggle current enable/disable status of cur fir
-            if (BoardList[j]->ReadFirStatus(curAxis, fir_stat)) {
-                bool enable = fir_stat & FIR_CUR_STAT_MASK;
-                BoardList[j]->CtrlFirCur(curAxis, !enable);
-            } else {
-                std::cerr << "Failed reading FIR status..." << std::endl;
+            // toggle enable/disable status of cur fir
+            for (j = 0; j < numDisp; j++) {
+                if (BoardList[j]->ReadFirStatus(curAxisIndex, fir_stat)) {
+                    console.Print(STATUS_LINE+25, lm, "%08X", fir_stat); // debug line
+                    bool enable = fir_stat & FIR_CUR_STAT_MASK;
+                    if (enable) {
+                        console.Print(STATUS_LINE-1, lm, "FIR CUR disabled");
+                    } else {
+                        console.Print(STATUS_LINE-1, lm, "FIR CUR enabled ");
+                    }
+                    BoardList[j]->CtrlFirCur(curAxisIndex, !enable);
+                }
             }
         }
 
