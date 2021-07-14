@@ -478,7 +478,7 @@ nodeid_t EthUdpPort::InitNodes(void)
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
         return 0;
     }
-    if (data != QLA1_String) {
+    if ((data != QLA1_String) && (data != dRA1_String)) {
         outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
         return 0;
     }

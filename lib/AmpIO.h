@@ -86,6 +86,8 @@ public:
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
+    int rtlen_debug = 0;
+
     AmpIO_UInt32 GetFirmwareVersion(void) const;
     // Return FPGA serial number (empty string if not found)
     std::string GetFPGASerialNumber(void);
@@ -152,6 +154,7 @@ public:
     AmpIO_UInt8 GetAmpTemperature(unsigned int index) const;
 
     AmpIO_UInt32 GetMotorCurrent(unsigned int index) const;
+    double GetMotorVoltageRatio(unsigned int index) const;
 
     AmpIO_UInt32 GetAnalogInput(unsigned int index) const;
 
@@ -278,6 +281,8 @@ public:
     // GetSafetyAmpDisable: returns true if current safety module in FPGA trip
     AmpIO_UInt32 GetSafetyAmpDisable(void) const;
 
+    AmpIO_UInt32 GetAmpFaultCode(unsigned int index) const;
+
     // *********************** SET Methods ***********************************
     // The SetXXX methods below write data to local buffers that are sent over
     // IEEE-1394 via FirewirePort::WriteAllBoards. To immediately write to
@@ -291,10 +296,11 @@ public:
 
     void SetPowerEnable(bool state);
     bool SetAmpEnable(unsigned int index, bool state);
-    bool SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state);
+    bool SetAmpEnableMask(AmpIO_UInt32 mask, AmpIO_UInt32 state);
     void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
+    bool SetMotorVoltageRatio(unsigned int index, double ratio);
 
     // ********************** READ Methods ***********************************
     // The ReadXXX methods below read data directly from the boards via IEEE-1394
@@ -644,9 +650,9 @@ public:
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
     enum MotorControlMode {
-        RESET = 0,
+        RESET = 2,
         VOLTAGE = 1,
-        CURRENT = 2
+        CURRENT = 0
     };
 
     bool WriteMotorControlMode(unsigned int index, AmpIO_UInt16 val);
@@ -677,15 +683,18 @@ protected:
     enum { ReadBufSize_Old = 4+4*NUM_CHANNELS,
            ReadBufSize = 4+6*NUM_CHANNELS,
            ReadBufSize_v8 = 4+2*NUM_MOTORS+5*NUM_ENCODERS, 
-           WriteBufSize = NUM_CHANNELS+1 };
+           ReadBufSize_max = 64,
+           WriteBufSize = NUM_CHANNELS + 1,
+           WriteBufSize_v8 = NUM_MOTORS + 2,
+           WriteBufSize_max = 64};
 
     // Buffer for real-time block reads. The Port class calls SetReadData to copy the
     // most recent data into this buffer, while also byteswapping.
-    quadlet_t ReadBuffer[ReadBufSize];
+    quadlet_t ReadBuffer[ReadBufSize_max];
 
     // Buffer for real-time block writes. The Port class calls GetWriteData to copy from
     // this buffer, while also byteswapping if needed.
-    quadlet_t WriteBuffer[WriteBufSize];
+    quadlet_t WriteBuffer[WriteBufSize_max];
 
     // Encoder velocity data (per axis)
     EncoderVelocityData encVelData[NUM_CHANNELS];
@@ -713,7 +722,12 @@ protected:
     unsigned int GetReadNumBytes() const;
     void SetReadData(const quadlet_t *buf);
 
-    unsigned int GetWriteNumBytes() const { return WriteBufSize*sizeof(quadlet_t); }
+    unsigned int GetWriteNumBytes() const { 
+        if (GetFirmwareVersion() < 8)
+            return WriteBufSize*sizeof(quadlet_t);
+        else
+            return WriteBufSize_v8*sizeof(quadlet_t);
+    }
     bool GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap = true) const;
     void InitWriteBuffer(void);
 
@@ -753,7 +767,7 @@ protected:
         ENC_POS_OFFSET    = MOTOR_CURR_OFFSET + NUM_MOTORS,    // one quadlet per channel
         ENC_VEL_OFFSET    = ENC_POS_OFFSET + NUM_ENCODERS,  // one quadlet per channel
         ENC_FRQ_OFFSET    = ENC_VEL_OFFSET + NUM_ENCODERS,  // one quadlet per channel
-        ENC_QTR1_OFFSET   = ENC_FRQ_OFFSET + NUM_ENCODERS,  // one quadlet per channel
+        ENC_QTR1_OFFSET   = ENC_FRQ_OFFSET,  // one quadlet per channel
         ENC_QTR5_OFFSET   = ENC_QTR1_OFFSET + NUM_ENCODERS,  // one quadlet per channel
         ENC_RUN_OFFSET    = ENC_QTR5_OFFSET + NUM_ENCODERS,   // one quadlet per channel
         MOTOR_STATUS_OFFSET = ENC_RUN_OFFSET + NUM_ENCODERS
@@ -761,8 +775,9 @@ protected:
 
     // offsets of real-time write buffer contents
     enum {
-        WB_CURR_OFFSET = 0,             // one quadlet per channel
-        WB_CTRL_OFFSET = NUM_CHANNELS   // control register (power control)
+        WB_HEADER_OFFSET = 0,
+        WB_CURR_OFFSET = 1,             // one quadlet per channel
+        WB_CTRL_OFFSET = NUM_MOTORS + 1   // control register (power control)
     };
 
     // Hardware device address offsets, not to be confused with buffer offsets.

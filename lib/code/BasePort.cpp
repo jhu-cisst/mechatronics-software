@@ -185,11 +185,13 @@ bool BasePort::ScanNodes(void)
             continue;
         }
         // 0x54455354 == "TEST"
-        if ((data != QLA1_String) && (data !=  0x54455354)) {
+        if ((data != QLA1_String) && (data !=  0x54455354) && (data != dRA1_String)) {
             outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
                    << std::hex << data << std::dec << ")" << std::endl;
             continue;
         }
+
+        auto hver = data;
 
         // read firmware version
         unsigned long fver = 0;
@@ -217,6 +219,7 @@ bool BasePort::ScanNodes(void)
 
         Node2Board[node] = static_cast<unsigned char>(board);
         FirmwareVersion[board] = fver;
+        HardwareVersion[board] = hver;
 
         // check firmware version
         // FirmwareVersion >= 4, broadcast capable
@@ -824,6 +827,10 @@ bool BasePort::WriteAllBoardsBroadcast(void)
     bool ret;
 
     ret = WriteBroadcastOutput(bcBuffer, bcBufferOffset);
+
+    // for (int i = 0; i < bcBufferOffset/4 + 1; i++) {
+    //     std::cout <<"WriteAllBoardsBroadcast "<< std::dec << i << "\t" << std::hex << bcBuffer[i] << std::endl;
+    // }
 
     // Send out control quadlet if necessary (firmware prior to Rev 7);
     //    also check for data collection

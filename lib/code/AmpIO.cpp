@@ -138,7 +138,7 @@ unsigned int AmpIO::GetReadNumBytes() const
     auto v = GetFirmwareVersion();
     if (v < 7) {
         return (ReadBufSize_Old*sizeof(quadlet_t));
-    } else if (v = 7) {
+    } else if (v == 7) {
         return (ReadBufSize*sizeof(quadlet_t));
     } else {
         return ReadBufSize_v8*sizeof(quadlet_t); // TODO
@@ -159,18 +159,19 @@ void AmpIO::SetReadData(const quadlet_t *buf)
 
 void AmpIO::InitWriteBuffer(void)
 {
-    quadlet_t data = (BoardId & 0x0F) << 24;
-    for (size_t i = 0; i < NUM_CHANNELS; i++)
-        WriteBuffer[WB_CURR_OFFSET+i] = data;
-    WriteBuffer[WB_CTRL_OFFSET] = 0;
+    if (GetFirmwareVersion() < 8) {
+        quadlet_t data = (BoardId & 0x0F) << 24;
+        for (size_t i = 0; i < NUM_CHANNELS; i++)
+            WriteBuffer[WB_CURR_OFFSET+i] = data;
+        WriteBuffer[WB_CTRL_OFFSET] = 0;
+    } else {
+        std::fill(std::begin(WriteBuffer), std::end(WriteBuffer), 0);
+        WriteBuffer[WB_HEADER_OFFSET] = (BoardId & 0x0F) << 8 | ((WriteBufSize_v8) & 0x0F);
+    }
 }
 
 bool AmpIO::GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap) const
 {
-    if ((offset+numQuads) > WriteBufSize) {
-        std::cerr << "AmpIO:GetWriteData: invalid args: " << offset << ", " << numQuads << std::endl;
-        return false;
-    }
 
     for (size_t i = 0; i < numQuads; i++)
         buf[i] = doSwap ? bswap_32(WriteBuffer[offset+i]) : WriteBuffer[offset+i];
@@ -370,6 +371,17 @@ AmpIO_UInt32 AmpIO::GetMotorCurrent(unsigned int index) const
     buff &= MOTOR_CURR_MASK;       // mask for applicable bits
 
     return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
+}
+
+double AmpIO::GetMotorVoltageRatio(unsigned int index) const
+{
+    if (index >= NUM_CHANNELS)
+        return 0.0;
+
+    quadlet_t buff;
+    buff = ReadBuffer[index+MOTOR_STATUS_OFFSET];
+    int16_t raw = buff & 0xffff;
+    return (raw >> 5) / 1023.0l;
 }
 
 AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
@@ -729,10 +741,16 @@ bool AmpIO::GetWatchdogTimeoutStatus(void) const
 
 bool AmpIO::GetAmpEnable(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
-        return false;
-    AmpIO_UInt32 mask = (0x00000001 << index);
-    return GetStatus()&mask;
+    if (GetFirmwareVersion() < 8) {
+        if (index >= NUM_CHANNELS)
+            return false;
+        AmpIO_UInt32 mask = (0x00000001 << index);
+        return GetStatus()&mask;
+    } else {
+        if (index >= NUM_MOTORS)
+            return false;
+        return ReadBuffer[MOTOR_STATUS_OFFSET + index] & (1 << 29);
+    }
 }
 
 AmpIO_UInt8 AmpIO::GetAmpEnableMask(void) const
@@ -742,10 +760,16 @@ AmpIO_UInt8 AmpIO::GetAmpEnableMask(void) const
 
 bool AmpIO::GetAmpStatus(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
-        return false;
-    AmpIO_UInt32 mask = (0x00000100 << index);
-    return GetStatus()&mask;
+    if (GetFirmwareVersion() < 8) {
+        if (index >= NUM_CHANNELS)
+            return false;
+        AmpIO_UInt32 mask = (0x00000100 << index);
+        return GetStatus()&mask;
+    } else {
+        if (index >= NUM_MOTORS)
+            return false;
+        return !(ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0xf0000));
+    }
 }
 
 AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
@@ -754,6 +778,10 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
     return (GetStatus() & mask) >> 4;
 }
 
+AmpIO_UInt32 AmpIO::GetAmpFaultCode(unsigned int index) const
+{
+    return (ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0xf0000)) >> 16;
+}
 
 /*******************************************************************************
  * Set commands
@@ -772,28 +800,49 @@ void AmpIO::SetPowerEnable(bool state)
 
 bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 {
-    if (index < NUM_CHANNELS) {
-        AmpIO_UInt32 enable_mask = 0x00000100 << index;
-        AmpIO_UInt32 state_mask  = 0x00000001 << index;
-        WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
-        if (state)
-            WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
-        else
-            WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
-        return true;
+    if (GetFirmwareVersion() < 8) {
+        if (index < NUM_CHANNELS) {
+            AmpIO_UInt32 enable_mask = 0x00000100 << index;
+            AmpIO_UInt32 state_mask  = 0x00000001 << index;
+            WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
+            if (state)
+                WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
+            else
+                WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
+            return true;
+        }
+        return false;
+    } else {
+        if (index < NUM_MOTORS) {
+            AmpIO_UInt32 enable_mask = 1 << 28;
+            AmpIO_UInt32 state_mask  = 1 << 29;
+            WriteBuffer[WB_CURR_OFFSET + index] |=  enable_mask;
+            if (state)
+                WriteBuffer[WB_CURR_OFFSET + index] |=  state_mask;
+            else
+                WriteBuffer[WB_CURR_OFFSET + index] &= ~state_mask;
+            return true;
+        }
+        return false;        
     }
-    return false;
 }
 
-bool AmpIO::SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state)
+bool AmpIO::SetAmpEnableMask(AmpIO_UInt32 mask, AmpIO_UInt32 state)
 {
-    AmpIO_UInt32 enable_mask = static_cast<AmpIO_UInt32>(mask) << 8;
-    AmpIO_UInt32 state_clr_mask = static_cast<AmpIO_UInt32>(mask);
-    AmpIO_UInt32 state_set_mask = static_cast<AmpIO_UInt32>(state);
-    // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
-    // with different masks
-    WriteBuffer[WB_CTRL_OFFSET] = (WriteBuffer[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
-    return true;
+    if (GetFirmwareVersion() < 8) { 
+        AmpIO_UInt32 enable_mask = static_cast<AmpIO_UInt32>(mask) << 8;
+        AmpIO_UInt32 state_clr_mask = static_cast<AmpIO_UInt32>(mask);
+        AmpIO_UInt32 state_set_mask = static_cast<AmpIO_UInt32>(state);
+        // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
+        // with different masks
+        WriteBuffer[WB_CTRL_OFFSET] = (WriteBuffer[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
+        return true;
+    } else {
+        for (int i = 0; i < NUM_MOTORS; i++) {
+            if (mask >> i & 1) SetAmpEnable(i, state >> i & 1);
+        }
+        return true;
+    }
 }
 
 void AmpIO::SetSafetyRelay(bool state)
@@ -809,16 +858,44 @@ void AmpIO::SetSafetyRelay(bool state)
 
 bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 {
-    quadlet_t data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
-    if (collect_state && (collect_chan == (index+1)))
-        data |= COLLECT_BIT;
+    if (GetFirmwareVersion() < 8) { 
+        quadlet_t data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
+        if (collect_state && (collect_chan == (index+1)))
+            data |= COLLECT_BIT;
 
-    if (index < NUM_CHANNELS) {
-        WriteBuffer[index+WB_CURR_OFFSET] = data;
+        if (index < NUM_CHANNELS) {
+            WriteBuffer[index+WB_CURR_OFFSET] = data;
+            return true;
+        }
+        else
+            return false;
+    } else {
+        if (index < NUM_MOTORS) {
+            if (collect_state && (collect_chan == (index+1)))
+                WriteBuffer[index+WB_CURR_OFFSET] |= COLLECT_BIT;
+            WriteBuffer[index+WB_CURR_OFFSET] |= VALID_BIT;
+            WriteBuffer[index+WB_CURR_OFFSET] &= ~0x0FFFFFFF;
+            WriteBuffer[index+WB_CURR_OFFSET] |= sdata & 0XFFFF;
         return true;
+        } else return false;
     }
-    else
+}
+
+bool AmpIO::SetMotorVoltageRatio(unsigned int index, double ratio)
+{
+    if (GetFirmwareVersion() < 8) { 
         return false;
+    } else {
+        if (index < NUM_MOTORS) {
+            if (collect_state && (collect_chan == (index+1)))
+                WriteBuffer[index+WB_CURR_OFFSET] |= COLLECT_BIT;
+            WriteBuffer[index+WB_CURR_OFFSET] |= VALID_BIT;
+            WriteBuffer[index+WB_CURR_OFFSET] &= ~0x0FFFFFFF;
+            WriteBuffer[index+WB_CURR_OFFSET] |= 1 << 24; // select voltage mode
+            WriteBuffer[index+WB_CURR_OFFSET] |= ((int)(ratio * 1023) & 0b11111111111) << 13;
+        return true;
+        } else return false;
+    }
 }
 
 /*******************************************************************************

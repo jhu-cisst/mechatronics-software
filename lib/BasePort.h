@@ -50,6 +50,7 @@ http://www.cisst.org/cisst/license.txt.
 // Some useful constants
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
+const unsigned long dRA1_String = 0x64524131;
 
 // Maximum possible data size in bytes; this should only be used for sizing static buffers;
 // the actual limit is port-specific and generally less than this.
@@ -149,6 +150,8 @@ protected:
 
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
+
+    unsigned long HardwareVersion[BoardIO::MAX_BOARDS];
 
     // Mappings between board numbers and node numbers
     unsigned char Node2Board[MAX_NODES];
@@ -263,6 +266,9 @@ public:
     */
     unsigned long GetFirmwareVersion(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
+
+    unsigned long GetHardwareVersion(unsigned char boardId) const
+    { return (boardId < BoardIO::MAX_BOARDS) ? HardwareVersion[boardId] : 0; }
 
     // Get BroadcastReadInfo
     BroadcastReadInfo GetBroadcastReadInfo(void) const
