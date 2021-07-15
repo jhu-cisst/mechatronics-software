@@ -1825,8 +1825,8 @@ bool AmpIO::WriteFirPot(unsigned int index, std::vector<AmpIO_UInt32> sdata, uns
     bool ret = true;
     unsigned int i = 0;
     while (i < size && ret) {
-        unsigned int coe_idx = i << 8;
-        ret = port->WriteQuadlet(BoardId, coe_idx | ADDR_FIR | FIR_POT_RELOAD, sdata[i]);
+        ret = port->WriteQuadlet(BoardId, i << 8 | ADDR_FIR | FIR_POT_RELOAD, sdata[i]);
+        i = i + 1;
     };
     return ret;
 }
@@ -1836,8 +1836,8 @@ bool AmpIO::WriteFirCur(unsigned int index, std::vector<AmpIO_UInt32> sdata, uns
     bool ret = true;
     unsigned int i = 0;
     while (i < size && ret) {
-        unsigned int coe_idx = i << 8;
-        ret = port->WriteQuadlet(BoardId, coe_idx | ADDR_FIR | FIR_CUR_RELOAD, sdata[i]);
+        ret = port->WriteQuadlet(BoardId, i << 8 | ADDR_FIR | FIR_CUR_RELOAD, sdata[i]);
+        i = i + 1;
     };
     return ret;
 }

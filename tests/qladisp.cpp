@@ -45,10 +45,10 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EthBasePort.h"
 
-const int NUM_FIR_COEFFICIENTS       = 14;  // number of unique filter coefficients, assuming symmetric coefficients
+const int NUM_FIR_COEFFICIENTS       = 15;  // number of unique filter coefficients, assuming symmetric coefficients
 const int NUM_FIR_FRAC_BITS          = 20;  // number of bits used to represent fractional part of coefficients
-                                            // defined in FIR ip core
-const AmpIO_UInt32 FIR_POT_STAT_MASK = 0x00010000;
+// defined in FIR ip core
+const AmpIO_UInt32 FIR_POT_STAT_MASK = 0x00000100;
 const AmpIO_UInt32 FIR_CUR_STAT_MASK = 0x00000001;
 
 /*!
@@ -358,11 +358,11 @@ int main(int argc, char** argv)
 
     int board1 = BoardList[0]->GetBoardId();
     if (numDisp > 1) {
-       int board2 = BoardList[1]->GetBoardId();
-       if (protocol == BasePort::PROTOCOL_BC_QRW)
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
-       else
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+        int board2 = BoardList[1]->GetBoardId();
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
+        else
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
     } else {
         console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
@@ -614,52 +614,66 @@ int main(int argc, char** argv)
             std::vector<AmpIO_UInt32> CoeVec;
             // read coefficients from file and convert to 32 bits format
             std::ifstream fCoe;
-            fCoe.open("coefficients_pot.txt");
-            double x;
-            while (fCoe >> x) {
-                CoeVec.push_back(Frac2Bits(x));
-            }
-            for (j = 0; j < numDisp; j++) {
-                BoardList[j]->WriteFirPot(curAxis, CoeVec, NUM_FIR_COEFFICIENTS);
+            fCoe.open("pot.txt");
+            if (fCoe.fail()) {
+                std::cerr << "Failed to find FIR pot coefficient reload file... [pot.txt]" << std::endl;
+            } else {
+                double x;
+                while (fCoe >> x) {
+                    CoeVec.push_back(Frac2Bits(x));
+                }
+                fCoe.close();
+                // starts reload
+                for (j = 0; j < numDisp; j++) {
+                    if (BoardList[j]->WriteFirPot(curAxisIndex, CoeVec, NUM_FIR_COEFFICIENTS)) {
+                        console.Print(STATUS_LINE-1, lm, "Board %d FIR POT coefficients reload successful!", j);
+                    }
+                }
             }
         } else if (c == 'g') {
             std::vector<AmpIO_UInt32> CoeVec;
             // read coefficients from file and convert to 32 bits format
             std::ifstream fCoe;
-            fCoe.open("coefficients_cur.txt");
-            double x;
-            while (fCoe >> x) {
-                CoeVec.push_back(Frac2Bits(x));
-            }
-            for (j = 0; j < numDisp; j++) {
-                BoardList[j]->WriteFirCur(curAxis, CoeVec, NUM_FIR_COEFFICIENTS);
+            fCoe.open("cur.txt");
+            if (fCoe.fail()) {
+                std::cerr << "Failed to find FIR cur coefficient reload file... [cur.txt]" << std::endl;
+            } else {
+                double x;
+                while (fCoe >> x) {
+                    CoeVec.push_back(Frac2Bits(x));
+                }
+                fCoe.close();
+                // starts reload
+                for (j = 0; j < numDisp; j++) {
+                    if (BoardList[j]->WriteFirCur(curAxisIndex, CoeVec, NUM_FIR_COEFFICIENTS)) {
+                        console.Print(STATUS_LINE-1, lm+50, "Board %d FIR CUR coefficients reload successful!", j);
+                    }
+                }
             }
         } else if (c == 't') {
-            AmpIO_UInt32 fir_stat = 0xffff;
+            AmpIO_UInt32 fir_stat = 0xffffffff;
             // toggle enable/disable status of pot fir
             for (j = 0; j < numDisp; j++) {
                 if (BoardList[j]->ReadFirStatus(curAxisIndex, fir_stat)) {
-                    console.Print(STATUS_LINE+25, lm, "%08X", fir_stat); // debug line
-                    bool enable = (fir_stat & FIR_POT_STAT_MASK) >> 16;
+                    bool enable = (fir_stat & FIR_POT_STAT_MASK) >> 8;
                     if (enable) {
-                        console.Print(STATUS_LINE-1, lm, "FIR POT disabled");
+                        console.Print(STATUS_LINE-2, lm, "Board %d FIR POT disabled", j);
                     } else {
-                        console.Print(STATUS_LINE-1, lm, "FIR POT enabled ");
+                        console.Print(STATUS_LINE-2, lm, "Board %d FIR POT enabled ", j);
                     }
                     BoardList[j]->CtrlFirPot(curAxisIndex, !enable);
                 }
             }
         } else if (c == 'y') {
-            AmpIO_UInt32 fir_stat = 0xffff;
+            AmpIO_UInt32 fir_stat = 0xffffffff;
             // toggle enable/disable status of cur fir
             for (j = 0; j < numDisp; j++) {
                 if (BoardList[j]->ReadFirStatus(curAxisIndex, fir_stat)) {
-                    console.Print(STATUS_LINE+25, lm, "%08X", fir_stat); // debug line
                     bool enable = fir_stat & FIR_CUR_STAT_MASK;
                     if (enable) {
-                        console.Print(STATUS_LINE-1, lm+25, "FIR CUR disabled");
+                        console.Print(STATUS_LINE-2, lm+25, "Board %d FIR CUR disabled", j);
                     } else {
-                        console.Print(STATUS_LINE-1, lm+25, "FIR CUR enabled ");
+                        console.Print(STATUS_LINE-2, lm+25, "Board %d FIR CUR enabled ", j);
                     }
                     BoardList[j]->CtrlFirCur(curAxisIndex, !enable);
                 }
@@ -718,7 +732,7 @@ int main(int argc, char** argv)
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
                     console.Print(6, lm+7+(i+4*j)*13, "%07X",
-                              BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
+                                  BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
                     console.Print(7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
                         console.Print(8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
@@ -753,23 +767,23 @@ int main(int argc, char** argv)
                     UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status);
                 }
                 console.Print(STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
-                          status, BoardList[j]->GetTimestamp(),
-                          (unsigned int)dig_out);
+                              status, BoardList[j]->GetTimestamp(),
+                              (unsigned int)dig_out);
                 console.Print(STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
-                          statusStr1[j],
-                          BoardList[j]->GetNegativeLimitSwitches(),
-                          BoardList[j]->GetPositiveLimitSwitches(),
-                          BoardList[j]->GetHomeSwitches());
+                              statusStr1[j],
+                              BoardList[j]->GetNegativeLimitSwitches(),
+                              BoardList[j]->GetPositiveLimitSwitches(),
+                              BoardList[j]->GetHomeSwitches());
                 console.Print(STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
-                          statusStr2[j],
-                          BoardList[j]->GetEncoderChannelA(),
-                          BoardList[j]->GetEncoderChannelB(),
-                          BoardList[j]->GetEncoderIndex());
+                              statusStr2[j],
+                              BoardList[j]->GetEncoderChannelA(),
+                              BoardList[j]->GetEncoderChannelB(),
+                              BoardList[j]->GetEncoderIndex());
 
                 console.Print(STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
                 console.Print(STATUS_LINE+4, lm+14+58*j, "Temp:  %02X    %02X",
-                          (unsigned int)BoardList[j]->GetAmpTemperature(0),
-                          (unsigned int)BoardList[j]->GetAmpTemperature(1));
+                              (unsigned int)BoardList[j]->GetAmpTemperature(0),
+                              (unsigned int)BoardList[j]->GetAmpTemperature(1));
                 if (loop_cnt > 500) {
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
@@ -778,11 +792,11 @@ int main(int argc, char** argv)
                 }
             }
             console.Print(STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
-                      BoardList[j]->GetReadErrors(),
-                      BoardList[j]->GetWriteErrors());
+                          BoardList[j]->GetReadErrors(),
+                          BoardList[j]->GetWriteErrors());
             if (showTime)
                 console.Print(STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
-                          pcTime-BoardList[j]->GetFirmwareTime());
+                              pcTime-BoardList[j]->GetFirmwareTime());
             for (i = 0; i < 4; i++) {
                 console.Print(10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
