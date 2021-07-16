@@ -1483,7 +1483,7 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 
-// ********************** Dallas DS2505 (1-wire) Methods ****************************************
+// ********************** Dallas DS2505 (1-wire / DS2480B) Reading Methods ****************************************
 bool AmpIO::DallasWriteControl(AmpIO_UInt32 ctrl)
 {
     if (GetFirmwareVersion() < 7) return false;
@@ -1502,7 +1502,9 @@ bool AmpIO::DallasWaitIdle()
 {
     int i;
     AmpIO_UInt32 status;
-    // Wait up to 500 msec. Based on measurements, approximate wait time is 250-300 msec.
+    // Wait up to 2000 msec. 
+    // Based on measurements, direct 1-wire interface's approximate wait time is 250-300 msec.
+    // For DS2480B serial method, the approximate wait time is about 4-5 sec.
     for (i = 0; i < 2000; i++) {
         // Wait 1 msec
         Amp1394_Sleep(0.001);
@@ -1520,18 +1522,14 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
 {
     if (GetFirmwareVersion() < 7) return false;
     AmpIO_UInt32 status = ReadStatus();
-    // // Check whether bi-directional I/O is available
-    // if ((status & 0x00300000) != 0x00300000) return false;
     AmpIO_UInt32 ctrl = (addr<<16)|2;
     if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
     if (!DallasReadStatus(status)) return false;
-    // // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
-    // if ((status & 0xFF00000F) != 0x0B00000B) return false;
     
     // Automatically detect interface in use
     useDS2480B = (status & 0x00008000) == 0x00008000; 
-    if (useDS2480B) ctrl |= 4;
+    if (useDS2480B) ctrl |= 4;  // corresponds to reg_wdata[2] in firmware
 
     nodeaddr_t address = 0x6000;
     unsigned char *ptr = data;
@@ -1550,7 +1548,7 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
         ptr += nb;
         nbytes -= nb;
     }
-    // End all blocks reading
+    // End all blocks reading for DS2480B interface
     if (nbytes <= 0 && useDS2480B) {
         if (!DallasWriteControl(13)) return false;
         if (!DallasWaitIdle()) return false;
