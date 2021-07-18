@@ -611,6 +611,14 @@ int main(int argc, char** argv)
                 BoardList[j]->ClearWriteErrors();
             }
         } else if (c == 'f') {
+             /* Note:
+              * 1. fir compiler ipcore in current firmware uses 29 symmetric coefficients, thus 15 coefficients are
+              *    required for reload process. Make sure to change NUM_FIR_COEFFICIENTS if fir uses more/less
+              *    coefficients, and NUM_FIR_FRAC_BITS if fir uses more/less bits to represent fractional part of the
+              *    coefficients.
+              * 2. place the desired coefficient in [pot/cur.txt], each line contains one coefficient in an order
+              *    specified by ipcore. Please refer to FIR.mif to check reload order.
+              * 3. coefficient set that gives gain larger than unity are not supported now.*/
             std::vector<AmpIO_UInt32> CoeVec;
             // read coefficients from file and convert to 32 bits format
             std::ifstream fCoe;
