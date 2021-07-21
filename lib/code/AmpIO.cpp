@@ -113,6 +113,14 @@ void AmpIO::EncoderVelocityData::Init()
     runOverflow = false;
 }
 
+// TODO: hack
+uint16_t ampio_pi_fixed_from_float(float val) {
+    int result = int(val * 4096);
+    if (result < 0) result = 0;
+    if (result > 0xffff) result = 0xffff;
+    return result;
+}
+
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes),
                                                            firmwareTime(0.0), collect_state(false), collect_cb(0)
 {
@@ -1109,6 +1117,16 @@ bool AmpIO::WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
 
 bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
+    //TODO: hack
+    if (port->GetHardwareVersion(BoardId) == dRA1_String) {
+        for (int axis = 1; axis < 11; axis ++) {
+            this->WriteCurrentKpRaw(axis - 1, ampio_pi_fixed_from_float(0.05));
+            WriteCurrentKiRaw(axis - 1, ampio_pi_fixed_from_float(0.01));
+            WriteCurrentITermLimitRaw(axis - 1, 600);
+            WriteDutyCycleLimit(axis - 1, 1000);
+        }
+    }
+    
     // period = counts(16 bits) * 5.208333 us (0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, counts);
 }
