@@ -1120,7 +1120,7 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
     //TODO: hack
     if (port->GetHardwareVersion(BoardId) == dRA1_String) {
         for (int axis = 1; axis < 11; axis ++) {
-            this->WriteCurrentKpRaw(axis - 1, ampio_pi_fixed_from_float(0.05));
+            WriteCurrentKpRaw(axis - 1, ampio_pi_fixed_from_float(0.05));
             WriteCurrentKiRaw(axis - 1, ampio_pi_fixed_from_float(0.01));
             WriteCurrentITermLimitRaw(axis - 1, 600);
             WriteDutyCycleLimit(axis - 1, 1000);
