@@ -113,14 +113,6 @@ void AmpIO::EncoderVelocityData::Init()
     runOverflow = false;
 }
 
-// TODO: hack
-uint16_t ampio_pi_fixed_from_float(float val) {
-    int result = int(val * 4096);
-    if (result < 0) result = 0;
-    if (result > 0xffff) result = 0xffff;
-    return result;
-}
-
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes),
                                                            firmwareTime(0.0), collect_state(false), collect_cb(0)
 {
@@ -1119,12 +1111,18 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     //TODO: hack
     if (port->GetHardwareVersion(BoardId) == dRA1_String) {
-        for (int axis = 1; axis < 11; axis ++) {
-            WriteCurrentKpRaw(axis - 1, ampio_pi_fixed_from_float(0.05));
-            WriteCurrentKiRaw(axis - 1, ampio_pi_fixed_from_float(0.01));
-            WriteCurrentITermLimitRaw(axis - 1, 600);
+        for (int axis = 1; axis < 8; axis ++) {
+            WriteCurrentKpRaw(axis - 1, 4500);
+            WriteCurrentKiRaw(axis - 1, 300);
+            WriteCurrentITermLimitRaw(axis - 1, 1000);
             WriteDutyCycleLimit(axis - 1, 1000);
         }
+        for (int axis = 8; axis < 11; axis ++) {
+            WriteCurrentKpRaw(axis - 1, 0);
+            WriteCurrentKiRaw(axis - 1, 200);
+            WriteCurrentITermLimitRaw(axis - 1, 1000);
+            WriteDutyCycleLimit(axis - 1, 1000);
+        }        
     }
     
     // period = counts(16 bits) * 5.208333 us (0 = no timeout)
@@ -1916,11 +1914,11 @@ bool AmpIO::WriteMotorControlMode(unsigned int index, AmpIO_UInt16 mode) {
     return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_MOTOR_CONTROL_MODE, mode) : false);
 }
 
-bool AmpIO::WriteCurrentKpRaw(unsigned int index, AmpIO_UInt16 val) {
+bool AmpIO::WriteCurrentKpRaw(unsigned int index, AmpIO_UInt32 val) {
     return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, val) : false);
 }
 
-bool AmpIO::WriteCurrentKiRaw(unsigned int index, AmpIO_UInt16 val) {
+bool AmpIO::WriteCurrentKiRaw(unsigned int index, AmpIO_UInt32 val) {
     return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, val) : false);
 }
 
@@ -1940,7 +1938,7 @@ AmpIO_UInt16 AmpIO::ReadMotorControlMode(unsigned int index) const
     return read_data;
 }
 
-AmpIO_UInt16 AmpIO::ReadCurrentKpRaw(unsigned int index) const
+AmpIO_UInt32 AmpIO::ReadCurrentKpRaw(unsigned int index) const
 {
     AmpIO_UInt32 read_data = 0;
     if (port)
@@ -1948,7 +1946,7 @@ AmpIO_UInt16 AmpIO::ReadCurrentKpRaw(unsigned int index) const
     return read_data;
 }
 
-AmpIO_UInt16 AmpIO::ReadCurrentKiRaw(unsigned int index) const
+AmpIO_UInt32 AmpIO::ReadCurrentKiRaw(unsigned int index) const
 {
     AmpIO_UInt32 read_data = 0;
     if (port)

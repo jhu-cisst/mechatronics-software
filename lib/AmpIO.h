@@ -656,14 +656,14 @@ public:
     };
 
     bool WriteMotorControlMode(unsigned int index, AmpIO_UInt16 val);
-    bool WriteCurrentKpRaw(unsigned int index, AmpIO_UInt16 val);
-    bool WriteCurrentKiRaw(unsigned int index, AmpIO_UInt16 val);
+    bool WriteCurrentKpRaw(unsigned int index, AmpIO_UInt32 val);
+    bool WriteCurrentKiRaw(unsigned int index, AmpIO_UInt32 val);
     bool WriteCurrentITermLimitRaw(unsigned int index, AmpIO_UInt16 val);
     bool WriteDutyCycleLimit(unsigned int index, AmpIO_UInt16 val);
 
     AmpIO_UInt16 ReadMotorControlMode(unsigned int index) const;
-    AmpIO_UInt16 ReadCurrentKpRaw(unsigned int index) const;
-    AmpIO_UInt16 ReadCurrentKiRaw(unsigned int index) const;
+    AmpIO_UInt32 ReadCurrentKpRaw(unsigned int index) const;
+    AmpIO_UInt32 ReadCurrentKiRaw(unsigned int index) const;
     AmpIO_UInt16 ReadCurrentITermLimitRaw(unsigned int index) const;
     AmpIO_UInt16 ReadDutyCycleLimit(unsigned int index) const;
 
