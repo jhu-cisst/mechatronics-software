@@ -173,32 +173,6 @@ void UpdateStatusStrings(char *statusStr1, char *statusStr2, AmpIO_UInt32 status
     }
 }
 
-AmpIO_UInt32 Frac2Bits(double coeff) {
-    int n = -1;
-    int count = NUM_FIR_FRAC_BITS;
-    double epsilon = 2.2204e-16;
-
-    std::vector<int> bin_repr;
-    std::stringstream ss, hex_repr;
-
-    // compute binary representation of fractional values
-    while ((coeff != 0 || coeff > epsilon) && count > 0) {
-        if (coeff - pow(2, n) < 0) {
-            bin_repr.push_back(0);
-        } else {
-            bin_repr.push_back(1);
-            coeff = coeff - pow(2, n);
-        }
-        n = n - 1;
-        count = count - 1;
-    };
-    // concatenate result according to allowed number of bits
-    std::copy(bin_repr.begin(), bin_repr.end(), std::ostream_iterator<int>(ss, ""));
-
-    return static_cast<AmpIO_UInt32>(std::stoi(ss.str(), nullptr, 2));
-}
-
-
 int main(int argc, char** argv)
 {
     const unsigned int lm = 5; // left margin
@@ -628,7 +602,7 @@ int main(int argc, char** argv)
             } else {
                 double x;
                 while (fCoe >> x) {
-                    CoeVec.push_back(Frac2Bits(x));
+                    CoeVec.push_back(static_cast<uint32_t>(x * pow(2, NUM_FIR_FRAC_BITS)));
                 }
                 fCoe.close();
                 // starts reload
@@ -648,7 +622,7 @@ int main(int argc, char** argv)
             } else {
                 double x;
                 while (fCoe >> x) {
-                    CoeVec.push_back(Frac2Bits(x));
+                    CoeVec.push_back(static_cast<uint32_t>(x * pow(2, NUM_FIR_FRAC_BITS)));
                 }
                 fCoe.close();
                 // starts reload
