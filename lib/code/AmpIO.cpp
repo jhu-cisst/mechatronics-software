@@ -724,7 +724,12 @@ bool AmpIO::GetPowerStatus(void) const
 bool AmpIO::GetPowerFault(void) const
 {
     // Bit 15: motor power fault
-    return (GetStatus()&0x00008000);
+    
+    if (GetFirmwareVersion() < 8) {
+        return (GetStatus()&0x00008000);
+    } else {
+        return false;
+    }
 }
 
 bool AmpIO::GetSafetyRelay(void) const
@@ -780,8 +785,12 @@ bool AmpIO::GetAmpStatus(unsigned int index) const
 
 AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 {
-    AmpIO_UInt32 mask = 0x000000F0;
-    return (GetStatus() & mask) >> 4;
+    if (GetFirmwareVersion() < 8) { 
+        AmpIO_UInt32 mask = 0x000000F0;
+        return (GetStatus() & mask) >> 4;
+    } else {
+        return 0; // hack
+    }
 }
 
 AmpIO_UInt32 AmpIO::GetAmpFaultCode(unsigned int index) const
