@@ -24,6 +24,14 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
+const AmpIO_UInt32 ADDR_DATA_BUF        = 0x00007000; // data buffer address space
+const AmpIO_UInt32 BUF_DATA_STRUCT      = 0x00000001; // configure buffer mask
+const AmpIO_UInt32 BUF_STAT             = 0x00000002; // control buffer mask
+const AmpIO_UInt32 BUF_SIG_SPEC         = 0x00000100; // signal specs mask
+const AmpIO_UInt32 BUF_SIG_NUM          = 0x00000200; // number of signals mask
+const AmpIO_UInt32 BUF_START_COLLECT    = 0x00000050; // start collection
+const AmpIO_UInt32 BUF_STOP_COLLECT     = 0x00000060; // stop collection
+
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 COLLECT_BIT      = 0x40000000;  /*!< Enable data collection on FPGA */
 const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
@@ -173,10 +181,10 @@ bool AmpIO::GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQu
 bool AmpIO::WriteBufferResetsWatchdog(void) const
 {
     return
-        (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 2] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
+            (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 2] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
 }
 
 AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
@@ -615,7 +623,7 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
         //   Q5: all 20 bits in accQtr1[19:0]
         encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_22;
         encVelData[index].qtr1Period = (((ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_REC_MS_MASK)>>12) |
-                          ((ReadBuffer[ENC_VEL_OFFSET+index] & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
+                                        ((ReadBuffer[ENC_VEL_OFFSET+index] & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
         encVelData[index].qtr5Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_PREV_MASK;
         encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
         encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
@@ -1098,7 +1106,7 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
         ret = WriteDoutControl(index, 0, 0);
         ret &= WriteDigitalOutput((1<<index), 0);
     }
-    // If lowTime is 0, then turn off PWM at high value
+        // If lowTime is 0, then turn off PWM at high value
     else if (lowTime == 0) {
         ret = WriteDoutControl(index, 0, 0);
         ret &= WriteDigitalOutput((1<<index), 1);
@@ -1720,20 +1728,26 @@ bool AmpIO::WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, u
     return port->WriteBlock(BoardId, address, localBuffer, nquads*sizeof(quadlet_t));
 }
 
-bool AmpIO::DataCollectionStart(unsigned char chan, CollectCallback collectCB)
+bool AmpIO::DataCollectionStart(const AmpIO_UInt32 collect_mode, CollectCallback collectCB, AmpIO_UInt32 numSample)
 {
     if (GetFirmwareVersion() < 7) return false;
-    if ((chan < 1) || (chan > NUM_CHANNELS)) return false;
+    // start collection on PC
     collect_state = true;
-    collect_chan = chan;
+    // TODO: reset collect_rindex to PC last read address
     collect_rindex = 0;
     collect_cb = collectCB;
-    return true;
+    // set collection mode, start collection on FPGA
+    bool ret = port->WriteQuadlet(BoardId, ADDR_DATA_BUF | collect_mode | BUF_STAT, numSample) &&
+               port->WriteQuadlet(BoardId, ADDR_DATA_BUF | BUF_START_COLLECT | BUF_STAT, 0);
+    return ret;
 }
 
-void AmpIO::DataCollectionStop()
+bool AmpIO::DataCollectionStop()
 {
+    // stop collection on PC
     collect_state = false;
+    // stop collection on FPGA
+    return port->WriteQuadlet(BoardId, ADDR_DATA_BUF | BUF_STOP_COLLECT | BUF_STAT, 0);
 }
 
 bool AmpIO::IsCollecting() const
@@ -1742,23 +1756,25 @@ bool AmpIO::IsCollecting() const
     return (collect_state&&(ReadBuffer[TEMP_OFFSET]&0x80000000));
 }
 
-bool AmpIO::GetCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const
+bool AmpIO::GetCollectionStatus(bool &collecting, unsigned char &numSignal, unsigned short &writeAddr) const
 {
     if (GetFirmwareVersion() < 7) return false;
+    // TODO: retrieve PC last read address, need dedicated offset for data buffer in sampler
     collecting = (ReadBuffer[TEMP_OFFSET]&0x80000000);
-    chan = (ReadBuffer[TEMP_OFFSET]&0x3c000000)>>26;
-    writeAddr = (ReadBuffer[TEMP_OFFSET]&0x03ff0000)>>16;;
+    numSignal = (ReadBuffer[TEMP_OFFSET]&0x3c000000)>>26;
+    writeAddr = (ReadBuffer[TEMP_OFFSET]&0x03ff0000)>>16;
     return true;
 }
 
-bool AmpIO::ReadCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const
+bool AmpIO::ReadCollectionStatus(bool &collecting, unsigned char &numSignal, unsigned short &writeAddr, unsigned short &lreadAddr) const
 {
     if (GetFirmwareVersion() < 7) return false;
     quadlet_t read_data;
     bool ret = port->ReadQuadlet(BoardId, 0x7800, read_data);
     if (ret) {
+        lreadAddr = (read_data&0x03ff0000)>>16;
         collecting = (read_data&0x00008000);
-        chan = (read_data&0x00003c00)>>10;
+        numSignal = (read_data&0x00003c00)>>10;
         writeAddr = (read_data&0x000003ff);
     }
     return ret;
@@ -1782,19 +1798,22 @@ void AmpIO::CheckCollectCallback()
 {
     if (collect_cb == 0) return;
     bool fpgaCollecting;
-    unsigned char fpgaChan;
+    unsigned char fpgaCollectNum;
     unsigned short collect_windex;
-    if (!GetCollectionStatus(fpgaCollecting, fpgaChan, collect_windex)) {
+    if (!GetCollectionStatus(fpgaCollecting, fpgaCollectNum, collect_windex)) {
         std::cerr << "CheckCollectCallback: failed to get collection status" << std::endl;
         return;
     }
+
     // Wait to make sure FPGA is collecting data
-    if (collect_state && !fpgaCollecting)
-        return;
-    if (fpgaChan != collect_chan) {
-        std::cerr << "CheckCollectCallback: channel mismatch: "
-                  << static_cast<unsigned int>(fpgaChan) << ", "
-                  << static_cast<unsigned int>(collect_chan) << std::endl;
+    // (Note: not necessary in struct data buffer since buffer state is enabled/disabled at the same time)
+    /* if (collect_state && !fpgaCollecting)
+        return; */
+    if (fpgaCollectNum != collect_num) {
+        // check if FPGA is collecting the PC requested signal
+        std::cerr << "CheckCollectCallback: data frame signal number mismatch: "
+                  << static_cast<unsigned int>(fpgaCollectNum) << ", "
+                  << static_cast<unsigned int>(collect_num) << std::endl;
         // Continue processing
     }
     // Figure out how much data is available
@@ -1815,3 +1834,31 @@ void AmpIO::CheckCollectCallback()
     if (!(*collect_cb)(collect_data, numAvail))
         DataCollectionStop();
 }
+
+bool AmpIO::ConfigDataFrame(std::vector<SignalConfig> DataFrame)
+{
+    bool ret = true;
+
+    // update number of signals in configured data frame
+    unsigned int size = DataFrame.size();
+    collect_num = size;
+
+    // write number of signals in one data frame
+    if (port->WriteQuadlet(BoardId, ADDR_DATA_BUF | BUF_SIG_NUM | BUF_DATA_STRUCT, static_cast<AmpIO_UInt32>(size))) {
+        // write signal type, channel, and format
+        unsigned int i = 0;
+        while (i < size && ret) {
+            AmpIO_UInt32 sig_spec = DataFrame[i].tgt_sig_type | DataFrame[i].tgt_sig_chan << 4 | DataFrame[i].tgt_sig_fmat;
+            ret = port->WriteQuadlet(BoardId, ADDR_DATA_BUF | BUF_SIG_SPEC | BUF_DATA_STRUCT, sig_spec);
+            i = i + 1;
+        }
+    }
+
+    return ret;
+}
+
+/*<data buffer debug only>*/
+bool AmpIO::ReadBufConfig(AmpIO_UInt32& type_data, AmpIO_UInt32& chan_data)
+{
+    return port->ReadQuadlet(BoardId, 0x9000, type_data) && port->ReadQuadlet(BoardId, 0xA000, chan_data);
+}/*<data buffer debug only>*/

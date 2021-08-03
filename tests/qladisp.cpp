@@ -33,7 +33,6 @@ http://www.cisst.org/cisst/license.txt.
 #include <iostream>
 #include <sstream>
 #include <fstream>
-#include <vector>
 
 #include <Amp1394/AmpIORevision.h>
 #include "PortFactory.h"
@@ -42,6 +41,44 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Console.h"
 
 #include "EthBasePort.h"
+
+class BUF_CONFIG_MAP {
+public:
+    std::map<std::string, const AmpIO_UInt32> forward_map;
+    std::map<const AmpIO_UInt32, std::string> backward_map;
+
+    BUF_CONFIG_MAP() {
+        forward_map.insert(std::make_pair("BUF_POT_DATA", 0x00001000)); // pot feedback
+        forward_map.insert(std::make_pair("BUF_CUR_DATA", 0x00002000)); // cur feedback
+        forward_map.insert(std::make_pair("BUF_DAC_DATA", 0x00003000)); // cur command
+        forward_map.insert(std::make_pair("BUF_ENC_DATA", 0x00004000)); // encoder edge count
+        forward_map.insert(std::make_pair("BUF_ENC_PER",  0x00005000)); // encoder period
+        forward_map.insert(std::make_pair("BUF_ENC_QTR1", 0x00006000)); // encoder period recent quarter
+        forward_map.insert(std::make_pair("BUF_ENC_QTR5", 0x00007000)); // encoder period old quarter
+        forward_map.insert(std::make_pair("BUF_ENC_RUN",  0x00008000)); // encoder running data
+        forward_map.insert(std::make_pair("BUF_UINT16",   0x00000001)); // save in uint16 format
+        forward_map.insert(std::make_pair("BUF_UINT32",   0x00000002)); // save in uint32 format
+
+        backward_map.insert(std::make_pair(0x00001000, "BUF_POT_DATA"));
+        backward_map.insert(std::make_pair(0x00002000, "BUF_CUR_DATA"));
+        backward_map.insert(std::make_pair(0x00003000, "BUF_DAC_DATA"));
+        backward_map.insert(std::make_pair(0x00004000, "BUF_ENC_DATA"));
+        backward_map.insert(std::make_pair(0x00005000, "BUF_ENC_PER"));
+        backward_map.insert(std::make_pair(0x00006000, "BUF_ENC_QTR1"));
+        backward_map.insert(std::make_pair(0x00007000, "BUF_ENC_QTR5"));
+        backward_map.insert(std::make_pair(0x00008000, "BUF_ENC_RUN"));
+        backward_map.insert(std::make_pair(0x00000001, "BUF_UINT16"));
+        backward_map.insert(std::make_pair(0x00000002, "BUF_UINT32"));
+    }
+
+    ~BUF_CONFIG_MAP() {
+        forward_map.clear();
+        backward_map.clear();
+    }
+};
+
+const AmpIO_UInt32 BUF_MODE_CONTINUOUS  = 0x00000300; // switch to continuous capture
+const AmpIO_UInt32 BUF_MODE_SAMPLE      = 0x00000400; // switch to sample number based capture
 
 /*!
  \brief Increment encoder counts
@@ -90,7 +127,7 @@ bool CollectCB(quadlet_t *buffer, short nquads)
     return true;
 }
 
-bool CollectFileConvert(const char *inFilename, const char *outFilename)
+bool CollectFileConvert(const char *inFilename, const char *outFilename, std::vector<SignalConfig> &DataFrame, BUF_CONFIG_MAP &configMap)
 {
     std::cerr << "Converting data collection file " << inFilename << " to " << outFilename << std::endl;
     std::ifstream inFile(inFilename, std::ifstream::binary);
@@ -104,14 +141,29 @@ bool CollectFileConvert(const char *inFilename, const char *outFilename)
         return false;
     }
     quadlet_t value;
+    unsigned int row_idx = 0;
     while (inFile.good()) {
         inFile.read(reinterpret_cast<char *>(&value), sizeof(quadlet_t));
-        outFile << std::dec
-                << ((value&0x80000000)>>31) << ", "    // type (0->commanded current, 1-> measured current)
-                << ((value&0x40000000)>>30) << ", "    // timer overflow
-                << ((value&0x3FFF0000)>>16) << ", "    // timer (14-bits)
-                << (value&0x0000FFFF)                  // data
-                << std::endl;
+        if (row_idx == 0) {
+            outFile << "time stamp"  << ", " << std::dec
+                    << "overflow: "  << ((value&0x00004000) >> 14) << ", "    // timer overflow
+                    << "timer: "     << (value&0x00003FFF) << ", "    // timer (14-bits)
+                    << std::endl;
+        } else {
+            // TODO: add format mask
+
+            /*<data buffer debug only>*/
+            std::cerr << configMap.backward_map.find(DataFrame[row_idx-1].tgt_sig_type)->second << ","
+                      << "chan: " << DataFrame[row_idx-1].tgt_sig_chan << ", "
+                      << "value = " << std::dec << (value&0xFFFFFFFF) << ", " // data
+                      << std::endl;/*<data buffer debug only>*/
+
+            outFile << configMap.backward_map.find(DataFrame[row_idx-1].tgt_sig_type)->second << ","
+                    << DataFrame[row_idx-1].tgt_sig_chan << ", "
+                    << std::dec << (value&0xFFFFFFFF) << ", " // data
+                    << std::endl;
+        }
+        row_idx = (row_idx == DataFrame.size()) ? 0 : row_idx + 1;
     }
     inFile.close();
     outFile.close();
@@ -320,11 +372,11 @@ int main(int argc, char** argv)
 
     int board1 = BoardList[0]->GetBoardId();
     if (numDisp > 1) {
-       int board2 = BoardList[1]->GetBoardId();
-       if (protocol == BasePort::PROTOCOL_BC_QRW)
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
-       else
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+        int board2 = BoardList[1]->GetBoardId();
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
+        else
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
     } else {
         console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
@@ -351,6 +403,11 @@ int main(int argc, char** argv)
     }
 
     console.Refresh();
+
+    // initialize configuration map
+    BUF_CONFIG_MAP bufConfigMap;
+    // initialize data frame
+    std::vector<SignalConfig> DataFrame;
 
     unsigned char dig_out = 0x0f;
     unsigned char collect_axis = 1;
@@ -537,26 +594,55 @@ int main(int argc, char** argv)
             }
         }
         else if (c == 'c') {
-            int collect_board = (collect_axis <= 4) ? 0 : 1;
-            if (BoardList[collect_board]->IsCollecting()) {
-                BoardList[collect_board]->DataCollectionStop();
-                console.Print(STATUS_LINE-1, lm, "             ");
-                console.Print(STATUS_LINE-1, lm+15, "                ");
-                if (collect_axis > collectFileNum)
-                    collectFileNum = collect_axis;
-                collect_axis = (collect_axis == numAxes) ? 1 : collect_axis+1;
-                isCollecting = false;
+            // MODE_CONTINUOUS: continuously capture data frame
+            // NOTE: need to manually stop collection
+            for (j = 0; j < numDisp; j++) {
+                if (BoardList[j]->IsCollecting()) {
+                    if (BoardList[j]->DataCollectionStop()) {
+                        console.Print(STATUS_LINE + 21, lm, "Collection stopped.......");
+                        isCollecting = false;
+                    }
+                } else {
+                    char fileName[20];
+                    sprintf(fileName, "CollectCONT.raw");
+                    collectFile.open(fileName, std::ofstream::binary | std::ofstream::trunc);
+                    if (!collectFile.good())
+                        std::cerr << "Failed to open data collection file " << fileName << std::endl;
+                    if (BoardList[j]->DataCollectionStart(BUF_MODE_CONTINUOUS, CollectCB, 0)) {
+                        isCollecting = true;
+                        console.Print(STATUS_LINE + 21, lm, "Continuously collecting...");
+                    }
+                }
             }
-            else {
-                char fileName[20];
-                sprintf(fileName, "Collect%d.raw", collect_axis);
-                collectFile.open(fileName, std::ofstream::binary|std::ofstream::trunc);
-                if (!collectFile.good())
-                    std::cerr << "Failed to open data collection file " << fileName << std::endl;
-                unsigned char collect_chan = collect_axis-4*collect_board;
-                if (BoardList[collect_board]->DataCollectionStart(collect_chan, CollectCB)) {
-                    isCollecting = true;
-                    console.Print(STATUS_LINE-1, lm, "Collecting %d:", collect_axis);
+        }
+        else if (c == 'x') {
+            // MODE_SAMPLE: capture data frame based on configured sample number
+            // NOTE: collection would stop automatically, or be stopped manually
+            for (j = 0; j < numDisp; j++) {
+                if (BoardList[j]->IsCollecting()) {
+                    if (BoardList[j]->DataCollectionStop()) {
+                        console.Print(STATUS_LINE + 20, lm, "Collection forced to stop........");
+                        isCollecting = false;
+                    }
+                } else {
+                    std::ifstream fsmp;
+                    fsmp.open("num_sample.txt");
+                    if (fsmp.fail()) {
+                        std::cerr << "Failed to find data buffer sample number configuration file..." << std::endl;
+                    } else {
+                        char fileName[20];
+                        sprintf(fileName, "CollectSAMP.raw");
+                        collectFile.open(fileName, std::ofstream::binary | std::ofstream::trunc);
+                        if (!collectFile.good())
+                            std::cerr << "Failed to open data collection file " << fileName << std::endl;
+                        double num;
+                        fsmp >> num;
+                        if (BoardList[j]->DataCollectionStart(BUF_MODE_SAMPLE, CollectCB, static_cast<AmpIO_UInt32>(num))) {
+                            isCollecting = true;
+                            console.Print(STATUS_LINE + 20, lm, "Collecting by configured sample number... Collection would stop automatically");
+                        }
+                    }
+                    fsmp.close();
                 }
             }
         }
@@ -573,6 +659,66 @@ int main(int argc, char** argv)
                 BoardList[j]->ClearWriteErrors();
             }
         }
+        else if (c == 'f') {
+            // configure data frame to be collected in data buffer
+            for (j = 0; j < numDisp; j++) {
+                std::ifstream fdbuf;
+                fdbuf.open("data_frame.txt");
+                if (fdbuf.fail()) {
+                    std::cerr << "Failed to find data frame configuration file..." << std::endl;
+                } else {
+                    // reset data frame
+                    DataFrame.clear();
+                    // template signal configuration
+                    SignalConfig signalConfig;
+                    std::string sig_type, sig_chan, sig_fmat;
+                    while (fdbuf >> sig_type >> sig_chan >> sig_fmat) {
+                        signalConfig.tgt_sig_type = bufConfigMap.forward_map.find(sig_type)->second;
+                        signalConfig.tgt_sig_chan = std::stoi(sig_chan);
+                        signalConfig.tgt_sig_fmat = bufConfigMap.forward_map.find(sig_fmat)->second;
+                        DataFrame.push_back(signalConfig);
+                    }
+                    if (BoardList[j]->ConfigDataFrame(DataFrame)) {
+                        console.Print(STATUS_LINE+30, lm+25, "data frame configuration completed...");
+                    }
+                }
+            }
+        }
+
+        /*<data buffer debug only>*/
+        for (j = 0; j < numDisp; j++) {
+            AmpIO_UInt32 type_data = 0xffffffff;
+            AmpIO_UInt32 chan_data = 0xffffffff;
+            if (BoardList[j]->ReadBufConfig(type_data, chan_data)) {
+                console.Print(STATUS_LINE + 31, lm + 25, "type config = %08X", type_data);
+                console.Print(STATUS_LINE + 32, lm + 25, "chan config = %08X", chan_data);
+            }
+        }/*<data buffer debug only>*/
+
+        /*<data buffer debug only>*/
+        for (j = 0; j < numDisp; j++) {
+            bool fpgaCollecting;
+            unsigned char fpgaCollectNum;
+            unsigned short collect_windex;
+            unsigned short lreadAddr;
+            BoardList[j]->ReadCollectionStatus(fpgaCollecting, fpgaCollectNum, collect_windex, lreadAddr);
+            console.Print(STATUS_LINE+34, lm+25, "lreadAddr = %d", lreadAddr);
+            console.Print(STATUS_LINE+35, lm+25, "collect_windex = %d", collect_windex);
+            console.Print(STATUS_LINE+36, lm+25, "fpgaCollectNum = %d", fpgaCollectNum);
+            int tmp_is_Collecting = 0;
+            if (fpgaCollecting) {
+                tmp_is_Collecting = 1;
+            } else {
+                tmp_is_Collecting = 0;
+                isCollecting = false;
+            }
+            console.Print(STATUS_LINE+37, lm+25, "fpgaCollect = %d", tmp_is_Collecting);
+            if (isCollecting) {
+                console.Print(STATUS_LINE+38, lm+25, "pcCollect = %d", 1);
+            } else {
+                console.Print(STATUS_LINE+38, lm+25, "pcCollect = %d", 0);
+            }
+        }/*<data buffer debug only>*/
 
         if (!debugStream.str().empty()) {
             int cur_line = DEBUG_START_LINE;
@@ -626,7 +772,7 @@ int main(int argc, char** argv)
             if (BoardList[j]->ValidRead()) {
                 for (i = 0; i < 4; i++) {
                     console.Print(6, lm+7+(i+4*j)*13, "%07X",
-                              BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
+                                  BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
                     console.Print(7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
                         console.Print(8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
@@ -661,23 +807,23 @@ int main(int argc, char** argv)
                     UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status);
                 }
                 console.Print(STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
-                          status, BoardList[j]->GetTimestamp(),
-                          (unsigned int)dig_out);
+                              status, BoardList[j]->GetTimestamp(),
+                              (unsigned int)dig_out);
                 console.Print(STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
-                          statusStr1[j],
-                          BoardList[j]->GetNegativeLimitSwitches(),
-                          BoardList[j]->GetPositiveLimitSwitches(),
-                          BoardList[j]->GetHomeSwitches());
+                              statusStr1[j],
+                              BoardList[j]->GetNegativeLimitSwitches(),
+                              BoardList[j]->GetPositiveLimitSwitches(),
+                              BoardList[j]->GetHomeSwitches());
                 console.Print(STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
-                          statusStr2[j],
-                          BoardList[j]->GetEncoderChannelA(),
-                          BoardList[j]->GetEncoderChannelB(),
-                          BoardList[j]->GetEncoderIndex());
+                              statusStr2[j],
+                              BoardList[j]->GetEncoderChannelA(),
+                              BoardList[j]->GetEncoderChannelB(),
+                              BoardList[j]->GetEncoderIndex());
 
                 console.Print(STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
                 console.Print(STATUS_LINE+4, lm+14+58*j, "Temp:  %02X    %02X",
-                          (unsigned int)BoardList[j]->GetAmpTemperature(0),
-                          (unsigned int)BoardList[j]->GetAmpTemperature(1));
+                              (unsigned int)BoardList[j]->GetAmpTemperature(0),
+                              (unsigned int)BoardList[j]->GetAmpTemperature(1));
                 if (loop_cnt > 500) {
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
@@ -686,11 +832,11 @@ int main(int argc, char** argv)
                 }
             }
             console.Print(STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
-                      BoardList[j]->GetReadErrors(),
-                      BoardList[j]->GetWriteErrors());
+                          BoardList[j]->GetReadErrors(),
+                          BoardList[j]->GetWriteErrors());
             if (showTime)
                 console.Print(STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
-                          pcTime-BoardList[j]->GetFirmwareTime());
+                              pcTime-BoardList[j]->GetFirmwareTime());
             for (i = 0; i < 4; i++) {
                 console.Print(10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
                 BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
@@ -760,13 +906,19 @@ int main(int argc, char** argv)
         Port->RemoveBoard(BoardList[j]->GetBoardId());
 
     delete Port;
+
     // Process any data collection files (convert from binary to text)
-    for (j = 1; j <= collectFileNum; j++) {
-        char inFile[20];
-        char outFile[20];
-        sprintf(inFile,  "Collect%d.raw", j);
-        sprintf(outFile, "Collect%d.csv", j);
-        CollectFileConvert(inFile, outFile);
-    }
+    // NOTE: maximum number of collected data file is 2 for struct data buffer
+    char inFile[20];
+    char outFile[20];
+    /*<convert mode continuous output if there is any>*/
+    sprintf(inFile,  "CollectCONT.raw", j);
+    sprintf(outFile, "CollectCONT.csv", j);
+    CollectFileConvert(inFile, outFile, DataFrame, bufConfigMap);
+    /*<convert mode sample output if there is any>*/
+    sprintf(inFile,  "CollectSAMP.raw", j);
+    sprintf(outFile, "CollectSAMP.csv", j);
+    CollectFileConvert(inFile, outFile, DataFrame, bufConfigMap);
+
     return 0;
 }

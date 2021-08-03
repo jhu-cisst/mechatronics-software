@@ -31,6 +31,9 @@ typedef __int32          int32_t;
 #include <stdint.h>
 #endif
 #include <iostream>
+#include <vector>
+#include <map>
+#include <utility>
 
 class ostream;
 
@@ -39,6 +42,13 @@ typedef int32_t  AmpIO_Int32;
 typedef uint32_t AmpIO_UInt32;
 typedef uint16_t AmpIO_UInt16;
 typedef uint8_t  AmpIO_UInt8;
+
+// struct for target data frame to be stored in data buffer
+typedef struct {
+    AmpIO_UInt32  tgt_sig_type;  // target signal type
+    unsigned int  tgt_sig_chan;  // target signal channel
+    AmpIO_UInt32  tgt_sig_fmat;  // target signal format
+}SignalConfig;
 
 // Conditional compilation so that EncoderVelocityData is internal to AmpIO, except when
 // parsing with SWIG, since SWIG cannot handle internal classes.
@@ -77,7 +87,7 @@ public:
     };
 
 #ifdef SWIG
-/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
+    /*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
 class AmpIO : public BoardIO
 {
 public:
@@ -621,30 +631,37 @@ public:
         \returns true   if data collection available (Firmware Rev 7+) and parameters are valid
         \note  If callback not specified, must call ReadCollectedData to read data
     */
-    bool DataCollectionStart(unsigned char chan, CollectCallback collectCB = 0);
+    bool DataCollectionStart(const AmpIO_UInt32 collect_mode = 0, CollectCallback collectCB = 0, AmpIO_UInt32 numSample = 0);
     /*! \brief Stop data collection on FPGA */
-    void DataCollectionStop();
+    bool DataCollectionStop();
     /*! \brief Returns true if data collection is active */
     bool IsCollecting() const;
 
     /*! \brief Gets FPGA data collection status, from real-time block read (Firmware Rev 7+)
         \param collecting Whether FPGA is currently collecting data
-        \param chan Channel being collected (1-4)
+        \param numSignal number of signals in configured data frame
         \param writeAddr Buffer address being written by FPGA (can read up to writeAddr-1)
         \returns true if successful
         \sa ReadCollectionStatus  */
-    bool GetCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const;
+    bool GetCollectionStatus(bool &collecting, unsigned char &numSignal, unsigned short &writeAddr) const;
 
     /*! \brief Reads FPGA data collection status, via quadlet read command (Firmware Rev 7+)
         \param collecting Whether FPGA is currently collecting data
-        \param chan Channel being collected (1-4)
+        \param numSignal number of signals in configured data frame
         \param writeAddr Buffer address being written by FPGA (can read up to writeAddr-1)
+        \param lreadAddr PC last read address on FPGA buffer
         \returns true if successful
         \sa GetCollectionStatus  */
-    bool ReadCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const;
+    bool ReadCollectionStatus(bool &collecting, unsigned char &numSignal, unsigned short &writeAddr, unsigned short &lreadAddr) const;
 
     /*! \brief Read collected data from FPGA memory buffer */
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
+
+    /*! \brief Configure data frame to be collected from FPGA memory buffer */
+    bool ConfigDataFrame(std::vector<SignalConfig> DataFrame);
+
+    /*<data buffer debug only>*/
+    bool ReadBufConfig(AmpIO_UInt32& type_data, AmpIO_UInt32& chan_data);/*<data buffer debug only>*/
 
 protected:
     unsigned int NumAxes;   // not currently used
@@ -656,8 +673,8 @@ protected:
     // Firmware Rev 1-6 had ReadBufSize=4+4*NUM_CHANNELS. Using the larger buffer here
     // still retains compatibility with older firmware.
     enum { ReadBufSize_Old = 4+4*NUM_CHANNELS,
-           ReadBufSize = 4+6*NUM_CHANNELS,
-           WriteBufSize = NUM_CHANNELS+1 };
+        ReadBufSize = 4+6*NUM_CHANNELS,
+        WriteBufSize = NUM_CHANNELS+1 };
 
     // Buffer for real-time block reads. The Port class calls SetReadData to copy the
     // most recent data into this buffer, while also byteswapping.
@@ -681,13 +698,15 @@ protected:
     // Data collection is enabled by setting the COLLECT_BIT when writing the desired motor current.
     // Data can only be collected on one channel, specified by collect_chan.
     enum { COLLECT_BUFSIZE = 1024,     // must match firmware buffer size
-           COLLECT_MAX = 512           // maximum read request size (at 400 MBit/sec)
-         };
+        COLLECT_MAX = 512           // maximum read request size (at 400 MBit/sec)
+    };
     quadlet_t collect_data[COLLECT_MAX];
     bool collect_state;                // true if collecting data
-    unsigned char collect_chan;        // which channel is being collected
+    unsigned char collect_chan;        // which channel is being collected (NOTE: deprecation warning, not needed in struct data buffer)
     CollectCallback collect_cb;        // user-supplied callback (if non-zero)
     unsigned short collect_rindex;     // current read index
+    unsigned short collect_lrindex;    // last read index
+    unsigned char collect_num;        // number of samples to be collected in configured data frame
 
     // Virtual methods
     unsigned int GetReadNumBytes() const;
