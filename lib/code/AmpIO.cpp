@@ -779,7 +779,7 @@ bool AmpIO::GetAmpStatus(unsigned int index) const
     } else {
         if (index >= NUM_MOTORS)
             return false;
-        return !(ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0xf0000));
+        return !(ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0xf0000)) && GetAmpEnable(index);
     }
 }
 
