@@ -214,6 +214,21 @@ public:
     // Get protocol
     ProtocolType GetProtocol(void) const { return Protocol_; }
 
+    inline std::string GetProtocolString(void) const {
+        return BasePort::ProtocolString(GetProtocol());
+    }
+
+    // Return string version of protocol
+    static std::string ProtocolString(ProtocolType protocol);
+
+    // Helper function for parsing protocol as string
+    // Return true is protocol is one of:
+    // - "sequential-read-write" or "srw" and sets type to PROTOCOL_SEQ_RW
+    // - "sequential-read-broadcast-write" or "srbw" and sets type to PROTOCOL_SEQ_R_BC_W
+    // - "broadcast-read-write", "brw", "broadcast-query-read-write" or "bqrw" and sets type to PROTOCOL_BC_QRW
+    static bool ParseProtocol(const char * arg, ProtocolType & protocol,
+                              std::ostream & ostr = std::cerr);
+
     // Set protocol type
     bool SetProtocol(ProtocolType prot);
 
