@@ -80,6 +80,50 @@ BasePort::~BasePort()
     delete [] GenericBuffer;
 }
 
+std::string BasePort::ProtocolString(ProtocolType protocol)
+{
+    if (protocol == PROTOCOL_SEQ_RW) {
+        return std::string("sequential-read-write");
+    } else if (protocol == PROTOCOL_SEQ_R_BC_W) {
+        return std::string("sequential-read-broadcast-write");
+    } else if (protocol == PROTOCOL_BC_QRW) {
+        return std::string("broadcast-query-read-write");
+    }
+    return std::string("Unknown");
+}
+
+bool BasePort::ParseProtocol(const char * arg, ProtocolType & protocol,
+                             std::ostream & ostr)
+{
+    // no option, using default
+    if ((arg == 0) || (strlen(arg) == 0)) {
+        ostr << "ParseProtocol: no protocol provided" << std::endl;
+        return false;
+    }
+    // convert arg to string
+    std::string name(arg);
+
+    // this could likely be implemented using a static map
+    if ((name == "sequential-read-write") ||
+        (name == "srw")) {
+        protocol = PROTOCOL_SEQ_RW;
+        return true;
+    } else if ((name == "sequential-read-broadcast-write") ||
+               (name == "srbw")) {
+        protocol = PROTOCOL_SEQ_R_BC_W;
+        return true;
+    } else if ((name == "broadcast-read-write") ||
+               (name == "brw") ||
+               (name == "broadcast-query-read-write") ||
+               (name == "bqrw")) {
+        protocol = PROTOCOL_BC_QRW;
+        return true;
+    }
+    ostr << "ParseProtocol: no protocol \"" << name << "\" is not supported, use sequential-read-write, srw, sequential-read-broadcast-write, srbw, broadcast-query-read-write or bqrw" << std::endl;
+    return false;
+}
+
+
 bool BasePort::SetProtocol(ProtocolType prot) {
     if (prot != BasePort::PROTOCOL_SEQ_RW) {
         if (!IsAllBoardsBroadcastCapable_) {
