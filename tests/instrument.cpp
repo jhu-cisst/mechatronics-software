@@ -134,6 +134,10 @@ int main(int argc, char** argv)
     // No longer need these
     Port->RemoveBoard(board);
     delete Port;
+    if ((status & 0x00000001) != 0x00000001) {
+        std::cerr << "DS2505 interface not enabled (hardware problem)" << std::endl;
+        return -1;
+    }
     unsigned char ds_reset = static_cast<unsigned char>((status & 0x00000006)>>1);
     if (ds_reset != 1) {
         std::cerr << "Failed to communicate with DS2505" << std::endl;

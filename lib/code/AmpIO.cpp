@@ -1529,7 +1529,6 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     
     // Automatically detect interface in use
     useDS2480B = (status & 0x00008000) == 0x00008000; 
-    if (useDS2480B) ctrl |= 4;  // corresponds to reg_wdata[2] in firmware
 
     nodeaddr_t address = 0x6000;
     unsigned char *ptr = data;
@@ -1540,8 +1539,8 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     nbytes -= nb;
     // Read additional blocks of data if necessary
     while (nbytes > 0) {
-        ctrl |= 1;
-        if (!DallasWriteControl(ctrl)) return false;
+        // 0x03 indicates reg_wdata[1:0] == 11 in firmware DS2505.v
+        if (!DallasWriteControl(0x03)) return false;
         if (!DallasWaitIdle()) return false;
         nb = (nbytes>256) ? 256 : nbytes;
         if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
@@ -1550,7 +1549,8 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     }
     // End all blocks reading for DS2480B interface
     if (nbytes <= 0 && useDS2480B) {
-        if (!DallasWriteControl(13)) return false;
+        // 0x09 indicates reg_wdata[3] == 1 && reg_wdata[1:0] == 01 in firmware DS2505.v
+        if (!DallasWriteControl(0x09)) return false;
         if (!DallasWaitIdle()) return false;
     }
     return true;
