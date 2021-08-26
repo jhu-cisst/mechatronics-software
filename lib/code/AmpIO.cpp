@@ -1502,9 +1502,9 @@ bool AmpIO::DallasWaitIdle()
 {
     int i;
     AmpIO_UInt32 status;
-    // Wait up to 2000 msec. 
-    // Based on measurements, direct 1-wire interface's approximate wait time is 250-300 msec.
-    // For DS2480B serial method, the approximate wait time is about 4-5 sec.
+    // For each block (256 bytes), wait up to 2000 msec. The actual processing time varies according to system setting.
+    // Based on measurements, direct 1-wire interface costs about 250-300 msec to read entire 2048 bytes.
+    // For DS2480B serial method, the approximate read time is 5 sec.
     for (i = 0; i < 2000; i++) {
         // Wait 1 msec
         Amp1394_Sleep(0.001);
