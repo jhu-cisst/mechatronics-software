@@ -1489,7 +1489,7 @@ bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 
-// ********************** Dallas DS2505 (1-wire) Methods ****************************************
+// ********************** Dallas DS2505 (1-wire / DS2480B) Reading Methods ****************************************
 bool AmpIO::DallasWriteControl(AmpIO_UInt32 ctrl)
 {
     if (GetFirmwareVersion() < 7) return false;
@@ -1508,8 +1508,10 @@ bool AmpIO::DallasWaitIdle()
 {
     int i;
     AmpIO_UInt32 status;
-    // Wait up to 500 msec. Based on measurements, approximate wait time is 250-300 msec.
-    for (i = 0; i < 500; i++) {
+    // For each block (256 bytes), wait up to 2000 msec. The actual processing time varies according to system setting.
+    // Based on measurements, direct 1-wire interface costs about 250-300 msec to read entire 2048 bytes.
+    // For DS2480B serial method, the approximate read time is 5 sec.
+    for (i = 0; i < 2000; i++) {
         // Wait 1 msec
         Amp1394_Sleep(0.001);
         if (!DallasReadStatus(status)) return false;
@@ -1519,22 +1521,21 @@ bool AmpIO::DallasWaitIdle()
             break;
     }
     //std::cerr << "Wait time = " << i << " milliseconds" << std::endl;
-    return (i < 500);
+    return (i < 2000);
 }
 
 bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B)
 {
     if (GetFirmwareVersion() < 7) return false;
     AmpIO_UInt32 status = ReadStatus();
-    // Check whether bi-directional I/O is available
-    if ((status & 0x00300000) != 0x00300000) return false;
     AmpIO_UInt32 ctrl = (addr<<16)|2;
-    if (useDS2480B) ctrl |= 4;
     if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
     if (!DallasReadStatus(status)) return false;
-    // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
-    if ((status & 0xFF00000F) != 0x0B00000B) return false;
+    
+    // Automatically detect interface in use
+    useDS2480B = (status & 0x00008000) == 0x00008000; 
+
     nodeaddr_t address = 0x6000;
     unsigned char *ptr = data;
     // Read first block of data (up to 256 bytes)
@@ -1544,12 +1545,19 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     nbytes -= nb;
     // Read additional blocks of data if necessary
     while (nbytes > 0) {
-        if (!DallasWriteControl(3)) return false;
+        // 0x03 indicates reg_wdata[1:0] == 11 in firmware DS2505.v
+        if (!DallasWriteControl(0x03)) return false;
         if (!DallasWaitIdle()) return false;
         nb = (nbytes>256) ? 256 : nbytes;
         if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
         ptr += nb;
         nbytes -= nb;
+    }
+    // End all blocks reading for DS2480B interface
+    if (nbytes <= 0 && useDS2480B) {
+        // 0x09 indicates reg_wdata[3] == 1 && reg_wdata[1:0] == 01 in firmware DS2505.v
+        if (!DallasWriteControl(0x09)) return false;
+        if (!DallasWaitIdle()) return false;
     }
     return true;
 }
