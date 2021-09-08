@@ -407,6 +407,7 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 
 bool AmpIO::GetEncoderOverflow(unsigned int index) const
 {
+    if (GetFirmwareVersion() >= 8) return false;
     if (index < NUM_CHANNELS) {
         return ReadBuffer[index+ENC_POS_OFFSET] & ENC_OVER_MASK;
     }
@@ -1135,6 +1136,12 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
         for (int axis = 8; axis < 11; axis ++) {
             WriteCurrentKpRaw(axis - 1, 0);
             WriteCurrentKiRaw(axis - 1, 200);
+            WriteCurrentITermLimitRaw(axis - 1, 1000);
+            WriteDutyCycleLimit(axis - 1, 1000);
+        }        
+        for (int axis = 3; axis < 5; axis ++) {
+            WriteCurrentKpRaw(axis - 1, 1500);
+            WriteCurrentKiRaw(axis - 1, 150);
             WriteCurrentITermLimitRaw(axis - 1, 1000);
             WriteDutyCycleLimit(axis - 1, 1000);
         }        
