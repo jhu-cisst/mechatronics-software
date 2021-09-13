@@ -100,9 +100,9 @@ public:
 
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
-    // by FirewirePort::ReadAllBoards. To read data immediately from the boards,
-    // use the ReadXXX methods, but note that individual reads via IEEE-1394 are
-    // less efficient than block transfers.
+    // by BasePort::ReadAllBoards. To read data immediately from the boards,
+    // use the ReadXXX methods, but note that individual reads are less
+    // efficient than block transfers.
 
     AmpIO_UInt32 GetStatus(void) const;
 
@@ -283,7 +283,7 @@ public:
 
     // *********************** SET Methods ***********************************
     // The SetXXX methods below write data to local buffers that are sent over
-    // IEEE-1394 via FirewirePort::WriteAllBoards. To immediately write to
+    // the bus via BasePort::WriteAllBoards. To immediately write to
     // the boards, you can use a WriteXXX method.
     // Note that SetAmpEnableMask is equivalent to WriteAmpEnable, whereas
     // SetAmpEnable affects only the specified amplifier index.
@@ -300,10 +300,10 @@ public:
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
 
     // ********************** READ Methods ***********************************
-    // The ReadXXX methods below read data directly from the boards via IEEE-1394
-    // (Firewire) using quadlet reads. In most cases, it is better to use the
+    // The ReadXXX methods below read data directly from the boards via the
+    // bus using quadlet reads. In most cases, it is better to use the
     // GetXXX methods which read data from a buffer that is read from the board
-    // via the more efficient IEEE-1394 block transfer.
+    // via the more efficient block transfer.
 
     AmpIO_UInt32 ReadStatus(void) const;
     bool ReadBlock(nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
@@ -715,7 +715,7 @@ protected:
     // all releases of firmware. The other offsets are related to velocity (and
     // acceleration) estimation and have varied based on the firmware.
     // ENC_VEL_OFFSET has always measured the encoder period (time between consecutive
-    // encoder edges of th same type), though the resolution of that measurement (i.e.,
+    // encoder edges of the same type), though the resolution of that measurement (i.e.,
     // clock ticks per second) varies between different firmware versions.
     // ENC_FRQ_OFFSET originally measured the number of encoder counts over a fixed
     // time period (about 8.5 ms), but was never used by the higher-level software.

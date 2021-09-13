@@ -26,6 +26,10 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
+// Starting with C++11, can initialize using an initializer list.
+// Currently, the supported hardware (e.g., QLA1) is added in the BasePort constructor.
+std::vector<unsigned long> BasePort::SupportedHardware;
+
 void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr, bool newLine) const
 {
     outStr << "Updates (usec): ";
@@ -64,6 +68,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     for (i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardList[i] = 0;
         FirmwareVersion[i] = 0;
+        HardwareVersion[i] = 0;
         Board2Node[i] = MAX_NODES;
     }
     ReadBufferBroadcast = 0;
@@ -71,6 +76,9 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     GenericBuffer = 0;
     for (i = 0; i < MAX_NODES; i++)
         Node2Board[i] = BoardIO::MAX_BOARDS;
+    // Note that AddHardwareVersion will not add duplicates
+    BasePort::AddHardwareVersion(QLA1_String);
+    BasePort::AddHardwareVersion(0x54455354); // "TEST"
 }
 
 BasePort::~BasePort()
@@ -222,15 +230,17 @@ bool BasePort::ScanNodes(void)
     // Iterate through all possible nodes
     for (node = 0; node < max_nodes; node++) {
         quadlet_t data;
+        unsigned long hver = 0;
         // check hardware version
         if (!ReadQuadletNode(node, 4, data)) {
             if (GetPortType() == PORT_FIREWIRE)
                 outStr << "BasePort::ScanNodes: unable to read from node " << node << std::endl;
             continue;
         }
-        // 0x54455354 == "TEST"
-        if ((data != QLA1_String) && (data !=  0x54455354)) {
-            outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
+        hver = data;
+
+        if (!HardwareVersionValid(hver)) {
+            outStr << "BasePort::ScanNodes: node " << node << " is not a supported board (data = "
                    << std::hex << data << std::dec << ")" << std::endl;
             continue;
         }
@@ -251,16 +261,17 @@ bool BasePort::ScanNodes(void)
         }
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
         board = (data & BOARD_ID_MASK) >> 24;
+        HardwareVersion[board] = hver;
+        FirmwareVersion[board] = fver;
         outStr << "  Node " << node << ", BoardId = " << board
-               << ", Firmware Version = " << fver << std::endl;
+               << ", Hardware = " << GetHardwareVersionString(board)
+               << ", Firmware Version = " << GetFirmwareVersion(board) << std::endl;
 
         if (Node2Board[node] < BoardIO::MAX_BOARDS) {
             outStr << "    Duplicate entry, previous value = "
                    << static_cast<int>(Node2Board[node]) << std::endl;
         }
-
         Node2Board[node] = static_cast<unsigned char>(board);
-        FirmwareVersion[board] = fver;
 
         // check firmware version
         // FirmwareVersion >= 4, broadcast capable
@@ -465,6 +476,35 @@ nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
     else if (boardId == FW_NODE_BROADCAST)
         node = FW_NODE_BROADCAST;
     return node;
+}
+
+std::string BasePort::GetHardwareVersionString(unsigned char boardId) const
+{
+    std::string hStr("Invalid");
+    if ((boardId < BoardIO::MAX_BOARDS) && HardwareVersion[boardId]) {
+        unsigned long hver = bswap_32(HardwareVersion[boardId]);
+        hStr.assign(reinterpret_cast<const char *>(&hver), sizeof(unsigned long));
+    }
+    return hStr;
+}
+
+void BasePort::AddHardwareVersion(unsigned long hver)
+{
+    // Add if not already on list
+    if (!HardwareVersionValid(hver))
+        SupportedHardware.push_back(hver);
+}
+
+bool BasePort::HardwareVersionValid(unsigned long hver)
+{
+    bool valid = false;
+    for (size_t i = 0; i < SupportedHardware.size(); i++) {
+        if (SupportedHardware[i] == hver) {
+            valid = true;
+            break;
+        }
+    }
+    return valid;
 }
 
 bool BasePort::CheckFwBusGeneration(const std::string &caller, bool doScan)

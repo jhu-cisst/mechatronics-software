@@ -19,6 +19,7 @@ http://www.cisst.org/cisst/license.txt.
 #define __BasePort_H__
 
 #include <iostream>
+#include <vector>
 #include "BoardIO.h"
 
 /*
@@ -150,6 +151,13 @@ protected:
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
+    // Hardware versions (e.g., QLA1)
+    unsigned long HardwareVersion[BoardIO::MAX_BOARDS];
+
+    // List of supported hardware versions.
+    // Static so that it can be initialized before calling constructor.
+    static std::vector<unsigned long> SupportedHardware;
+
     // Mappings between board numbers and node numbers
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
@@ -278,6 +286,34 @@ public:
     */
     unsigned long GetFirmwareVersion(unsigned char boardId) const
     { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
+
+    /*!
+     \brief Get hardware version
+     \param boardId: board ID
+     \return unsigned long: hardware version (a 32-bit value that identifies the type of board
+             connected to the FPGA).
+    */
+    unsigned long GetHardwareVersion(unsigned char boardId) const
+    { return (boardId < BoardIO::MAX_BOARDS) ? HardwareVersion[boardId] : 0; }
+
+    /*!
+     \brief Get hardware version as a string
+     \param boardId: board ID
+     \return A string that identifies the hardware version of the board connected to the FPGA (e.g., "QLA1")
+     \note Assumes that all valid (non-zero) hardware versions contain printable characters.
+    */
+    std::string GetHardwareVersionString(unsigned char boardId) const;
+
+    /*!
+     \brief Add a hardware version to the list of supported (valid) hardware
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersion(unsigned long hver);
+
+    /*!
+     \brief Whether hardware version is valid (i.e., supported hardware)
+    */
+    static bool HardwareVersionValid(unsigned long hver);
 
     // Get BroadcastReadInfo
     BroadcastReadInfo GetBroadcastReadInfo(void) const
