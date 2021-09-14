@@ -20,6 +20,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <stdio.h>
 #include <string>
 #include <algorithm>   // for std::max
+#include <cstdlib>
 
 #include <Amp1394/AmpIORevision.h>
 #include "BasePort.h"
@@ -490,9 +491,40 @@ std::string BasePort::GetHardwareVersionString(unsigned char boardId) const
 
 void BasePort::AddHardwareVersion(unsigned long hver)
 {
-    // Add if not already on list
-    if (!HardwareVersionValid(hver))
+    // Add if non-zero and not already on list
+    if (hver && !HardwareVersionValid(hver))
         SupportedHardware.push_back(hver);
+}
+
+void BasePort::AddHardwareVersionString(const std::string &hStr)
+{
+    if (hStr.empty()) return;
+    unsigned long hver = 0;
+    if ((hStr.compare(0,2,"0x") == 0) || (hStr.compare(0,2,"0X") == 0)) {
+        // if hex
+        hver = std::strtoul(hStr.c_str()+2, 0, 16);
+    }
+    else {
+        std::string(hStr.rbegin(), hStr.rend()).copy(reinterpret_cast<char *>(&hver), sizeof(unsigned long));
+    }
+    AddHardwareVersion(hver);
+}
+
+void BasePort::AddHardwareVersionStringList(const std::string &hStr)
+{
+    if (hStr.empty()) return;
+    std::string::size_type n = 0;
+    while (n != std::string::npos) {
+        std::string::size_type p = hStr.find(',', n);
+        if (p == std::string::npos) {
+            AddHardwareVersionString(hStr.substr(n, p));
+            n = std::string::npos;
+        }
+        else {
+            AddHardwareVersionString(hStr.substr(n, (p-n)));
+            n = p+1;
+        }
+    }
 }
 
 bool BasePort::HardwareVersionValid(unsigned long hver)

@@ -372,21 +372,28 @@ int main(int argc, char** argv)
     std::string sn;
     bool auto_mode = false;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
+    std::string hwList;
 
     std::cout << "Started " << argv[0]
               << ", using AmpIO version " << Amp1394_VERSION << std::endl;
     int args_found = 0;
     for (i = 1; i < argc; i++) {
-        if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                return 0;
+        if (argv[i][0] == '-') {
+            if (argv[i][1] == 'p') {
+                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                    std::cerr << "Failed to parse option: " << argv[i] << std::endl;
+                    return 0;
+                }
+                std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
             }
-            std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
-        }
-        else if ((argv[i][0] == '-') && (argv[i][1] == 'a')) {
-            std::cerr << "Running in auto mode" << std::endl;
-            auto_mode = true;
+            else if (argv[i][1] == 'h') {
+                hwList = argv[i]+2;
+                std::cerr << "Adding hardware versions: " << hwList << std::endl;
+            }
+            else if (argv[i][1] == 'a') {
+                std::cerr << "Running in auto mode" << std::endl;
+                auto_mode = true;
+            }
         }
         else {
             if (args_found == 0)
@@ -397,11 +404,14 @@ int main(int argc, char** argv)
         }
     }
     if (args_found < 1) {
-        std::cerr << "Usage: pgm1394 <board-num> [<mcs-file>] [-pP]" << std::endl
-                  << "       where P = port number (default 0)" << std::endl
-                  << "       can also specify -pfwP, -pethP or -pudp" << std::endl;
+        std::cerr << "Usage: pgm1394 <board-num> [<mcs-file>] [-pP] [-hH]" << std::endl
+                  << "       P = port number (default 0)" << std::endl
+                  << "       can also specify -pfwP, -pethP or -pudp" << std::endl
+                  << "       H = additional supported hardware versions" << std::endl;
         return 0;
     }
+
+    BasePort::AddHardwareVersionStringList(hwList);
 
     BasePort *Port = 0;
     if (desiredPort == BasePort::PORT_FIREWIRE) {

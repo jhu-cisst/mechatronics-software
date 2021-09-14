@@ -185,11 +185,15 @@ int main(int argc, char** argv)
     unsigned int curAxisIndex = 0;
     char axisString[4] = "all";
     std::string portDescription;
+    std::string hardwareList;
 
     for (i = 1; i < (unsigned int)argc; i++) {
         if (argv[i][0] == '-') {
             if (argv[i][1] == 'p') {
                 portDescription = argv[i]+2;
+            }
+            else if (argv[i][1] == 'h') {
+                hardwareList = argv[i]+2;
             }
             else if (argv[i][1] == 'b') {
                 // -br -- enable broadcast read/write
@@ -217,9 +221,10 @@ int main(int argc, char** argv)
 
     if (BoardList.size() < 1) {
         // usage
-        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-b<r|w>] [-v] [-t]" << std::endl
+        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-hH] [-b<r|w>] [-v] [-t]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
                   << "                 can also specify -pfw[:P], -peth:P or -pudp[:xx.xx.xx.xx]" << std::endl
+                  << "             H = additional supported hardware versions" << std::endl
                   << "            -br enables broadcast read/write" << std::endl
                   << "            -bw enables broadcast write" << std::endl
                   << "            -v  displays full velocity feedback" << std::endl
@@ -229,6 +234,7 @@ int main(int argc, char** argv)
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
+    BasePort::AddHardwareVersionStringList(hardwareList);
 
     BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
     if (!Port) {

@@ -311,6 +311,20 @@ public:
     static void AddHardwareVersion(unsigned long hver);
 
     /*!
+     \brief Add a hardware version (specified as a 4-character string)
+            to the list of supported (valid) hardware.
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersionString(const std::string &hStr);
+
+    /*!
+     \brief Add comma-separated hardware versions (specified as 4-character strings)
+            to the list of supported (valid) hardware.
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersionStringList(const std::string &hStr);
+
+    /*!
      \brief Whether hardware version is valid (i.e., supported hardware)
     */
     static bool HardwareVersionValid(unsigned long hver);
