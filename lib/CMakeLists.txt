@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2020 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -49,7 +49,6 @@ add_library(Amp1394 STATIC
 
 target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES})
 
-
 option (Amp1394_BUILD_SWIG  "Build Amp1394 with Python wrapper" OFF)
 if (Amp1394_BUILD_SWIG)
   find_package(SWIG REQUIRED)
@@ -93,17 +92,29 @@ if (Amp1394_BUILD_SWIG)
                      COMMENT "Copying Python files to ${LIBRARY_OUTPUT_PATH}" )
 endif (Amp1394_BUILD_SWIG)
 
+# Create Amp1394 console library
+
+if (NOT WIN32)
+  if (CURSES_FOUND)
+    add_definitions(-DAmp1394Console_HAS_CURSES)
+    include_directories (${CURSES_INCLUDE_DIR})
+  endif (CURSES_FOUND)
+endif (NOT WIN32)
+
+add_library(Amp1394Console STATIC Amp1394Console.h code/Amp1394Console.cpp)
+
+target_link_libraries(Amp1394Console ${Amp1394Console_EXTRA_LIBRARIES})
 
 # revision file
 configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/AmpIORevision.h.in"
                 "${Amp1394_BINARY_DIR}/Amp1394/AmpIORevision.h")
 
 # Install files
-install (TARGETS Amp1394 COMPONENT Amp1394
+install (TARGETS Amp1394 Amp1394Console COMPONENT Amp1394
          RUNTIME DESTINATION bin
          LIBRARY DESTINATION lib
          ARCHIVE DESTINATION lib)
 
-install (FILES ${HEADERS}
+install (FILES ${HEADERS} Amp1394Console.h
          DESTINATION include/Amp1394
          COMPONENT Amp1394-dev)

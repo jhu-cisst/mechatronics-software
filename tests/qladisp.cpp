@@ -18,8 +18,8 @@ http://www.cisst.org/cisst/license.txt.
 /******************************************************************************
  *
  * This program continuously displays the sensor feedback from the selected
- * board. It relies on the curses library and the AmpIO library (which
- * depends on libraw1394 and/or pcap).
+ * board. It relies on the Amp1394 library (which depends on libraw1394 and/or pcap)
+ * and on the Amp1394Console library (which may depend on curses).
  *
  * Usage: qladisp [-pP] [-b<r|w>] [-v] <board num> [<board_num>]
  *        where P is the Firewire port number (default 0),

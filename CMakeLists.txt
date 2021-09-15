@@ -35,6 +35,8 @@ endif (NOT EXECUTABLE_OUTPUT_PATH)
 set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Amp1394_BINARY_DIR}")
 set (Amp1394_LIBRARY_DIR ${LIBRARY_OUTPUT_PATH})
 set (Amp1394_LIBRARIES   Amp1394)
+set (Amp1394Console_LIBRARIES Amp1394Console)
+set (Amp1394Console_EXTRA_LIBRARIES "")
 
 if (WIN32)
 
@@ -66,6 +68,17 @@ else (WIN32)
     set (PCAP_LIBRARIES "pcap")
   endif (Amp1394_HAS_PCAP)
 
+  option (Amp1394Console_HAS_CURSES "Build Amp1394 console library with curses (OFF --> VT100 mode)" ON)
+
+  if (Amp1394Console_HAS_CURSES)
+    find_package (Curses)
+    if (CURSES_FOUND)
+      set (Amp1394Console_EXTRA_LIBRARIES ${Amp1394Console_EXTRA_LIBRARIES} ${CURSES_LIBRARIES})
+    else (CURSES_FOUND)
+      message ("Cannot find Curses library, changing to VT100 mode")
+    endif (CURSES_FOUND)
+  endif (Amp1394Console_HAS_CURSES)
+
 endif (WIN32)
 
 # TODO: Determine whether it is necessary to have separate EXTRA variables for LIBRARY_DIR
@@ -93,6 +106,7 @@ endif (WIN32)
 set (CONF_INCLUDE_DIR ${Amp1394_INCLUDE_DIR})
 set (CONF_LIBRARY_DIR ${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 set (CONF_LIBRARIES   ${Amp1394_LIBRARIES}   ${Amp1394_EXTRA_LIBRARIES})
+set (CONF_CONSOLE_LIBRARIES ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
 configure_file (Amp1394Config.cmake.in
                 "${Amp1394_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
 
@@ -123,7 +137,7 @@ endif (Amp1394_HAS_RAW1394)
 # Code for library Amp1394
 add_subdirectory (lib)
 
-# Test programs (some use curses for text based display)
+# Test programs
 add_subdirectory (tests)
 
 # Utility to flash/test board

@@ -25,7 +25,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <Windows.h>
 #else
 #include <unistd.h>
-#ifdef Amp1394_HAS_CURSES
+#ifdef Amp1394Console_HAS_CURSES
 #include <curses.h>
 #else
 #include <termios.h>
@@ -34,7 +34,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "Amp1394Console.h"
 
-#ifdef Amp1394_HAS_CURSES
+#ifdef Amp1394Console_HAS_CURSES
 
 // Implementation using Curses library
 

@@ -4,8 +4,9 @@
 /******************************************************************************
  *
  * This program is used to test the FPGA1394+QLA board, assuming that it is
- * connected to the FPGA1394-QLA-Test board. It relies on the curses library
- * and the AmpIO library (which depends on libraw1394 and/or pcap).
+ * connected to the FPGA1394-QLA-Test board. It relies on the Amp1394 library
+ * (which depends on libraw1394 and/or pcap) and on the Amp1394Console library
+ * (which may depend on curses).
  *
  * Usage: qlatest [-pP] <board num>
  *        where P is the Firewire port number (default 0),
