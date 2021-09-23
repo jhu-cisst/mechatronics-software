@@ -101,7 +101,7 @@ public:
     /*! Get the encoder running counter, in seconds. This is primarily used for Firmware Rev 7+, but
         also supports the running counter in Firmware Rev 4-5.
     */
-    double EncoderVelocity::GetEncoderRunningCounterSeconds() const;
+    double GetEncoderRunningCounterSeconds() const;
 
     /* Returns true if an encoder error was detected (V7+) */
     bool IsEncoderError() { return encError; }

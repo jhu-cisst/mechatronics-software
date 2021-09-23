@@ -157,6 +157,7 @@ uint32_t bswap32(uint32_t in);
 %constant int VERSION_PATCH = Amp1394_VERSION_PATCH;
 %constant std::string VERSION = Amp1394_VERSION;
 
+%include "Amp1394Types.h"
 %include "EncoderVelocity.h"
 %include "BoardIO.h"
 %include "Spartan6IO.h"
