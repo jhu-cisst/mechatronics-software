@@ -21,7 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <Amp1394/AmpIORevision.h>
 
-#include "BoardIO.h"
+#include "Spartan6IO.h"
 #ifdef _MSC_VER
 typedef unsigned __int8  uint8_t;
 typedef unsigned __int16 uint16_t;
@@ -45,7 +45,7 @@ typedef uint8_t  AmpIO_UInt8;
 
 #ifndef SWIG
 /*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
-class AmpIO : public BoardIO
+class AmpIO : public Spartan6IO
 {
 public:
 #endif
@@ -78,25 +78,16 @@ public:
 
 #ifdef SWIG
 /*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
-class AmpIO : public BoardIO
+class AmpIO : public Spartan6IO
 {
 public:
 #endif
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
-    AmpIO_UInt32 GetFirmwareVersion(void) const;
-    // Return FPGA serial number (empty string if not found)
-    std::string GetFPGASerialNumber(void);
     // Return QLA serial number (empty string if not found)
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
-
-    // Returns FPGA clock period in seconds
-    double GetFPGAClockPeriod(void) const;
-
-    // Returns true if FPGA has Ethernet (Rev 2.0+)
-    bool HasEthernet(void) const;
 
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
@@ -110,14 +101,6 @@ public:
 
     // Get timestamp in seconds (time between two consecutive reads)
     double GetTimestampSeconds(void) const;
-
-    // Get elapsed time, in seconds, based on FPGA clock. This is computed by accumulating
-    // the timestamp values in the real-time read packet; thus, it is only accurate when
-    // there are periodic calls to ReadAllBoards or ReadAllBoardsBroadcast.
-    double GetFirmwareTime(void) const { return firmwareTime; }
-
-    // Set firmware time
-    void SetFirmwareTime(double newTime = 0.0) { firmwareTime = newTime; }
 
     // Return digital output state
     AmpIO_UInt8 GetDigitalOutput(void) const;
@@ -305,8 +288,6 @@ public:
     // GetXXX methods which read data from a buffer that is read from the board
     // via the more efficient block transfer.
 
-    AmpIO_UInt32 ReadStatus(void) const;
-    bool ReadBlock(nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes);
     bool ReadPowerStatus(void) const;
     bool ReadSafetyRelayStatus(void) const;
     AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
@@ -344,15 +325,7 @@ public:
     */
     bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
 
-    /*! Read IPv4 address (only relevant for FPGA boards with Ethernet support)
-        \returns IPv4 address (uint32) or 0 if error
-     */
-    AmpIO_UInt32 ReadIPv4Address(void) const;
-
     // ********************** WRITE Methods **********************************
-
-    // Reboot FPGA
-    bool WriteReboot(void);
 
     // Enable motor power to the entire board (it is still necessary
     // to enable power to the individual amplifiers).
@@ -433,12 +406,6 @@ public:
     */
     bool WritePWM(unsigned int index, double freq, double duty);
 
-    /*! Write IPv4 address.
-        \param IP address to write, as uint32
-        \returns true if successful; false otherwise
-    */
-    bool WriteIPv4Address(AmpIO_UInt32 IPaddr);
-
     /*! \brief Get digital output time (in counts) corresponding to specified time in seconds.
 
         \param time Time, in seconds
@@ -448,8 +415,6 @@ public:
 
     // **************** Static WRITE Methods (for broadcast) ********************
 
-    static bool WriteRebootAll(BasePort *port);
-
     static bool WritePowerEnableAll(BasePort *port, bool state);
 
     static bool WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state);
@@ -458,130 +423,12 @@ public:
 
     static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata);
 
-    static bool ResetKSZ8851All(BasePort *port);
-
-    // ********************** PROM Methods ***********************************
-    // Methods for reading or programming
-    //   1 - the FPGA configuration PROM (M25P16)
-    //   2 - QLA PROM (25AA128)
-    // NOTE:
-    //   - M25P16 & 25AA128 Have exact same command table, except M25P16 has
-    //     a few extra commands (e.g. ReadID, DeepSleep)
-    //   - address length
-    //     - M25P16: 24-bit
-    //     - 25AA128: 16-bit (2 MSB are ignored)
-    enum PromType{
-        PROM_M25P16 = 1,
-        PROM_25AA128 = 2
-    };
-
-    /*!
-     \brief Get PROM read/write address (1394 space) based on prom type
-
-     \param type   PROM type e.g. M25P16/25AA128
-     \param isWrite  write address or read address
-     \return nodeaddr_t  return address in FPGA 1394 address space
-    */
-    nodeaddr_t GetPromAddress(PromType type = PROM_M25P16, bool isWrite = true);
-
-    // User-supplied callback, called when software needs to wait for an
-    // action, or when an error occurs. In the latter case, the error message
-    // is passed as a parameter (NULL if no error). If the callback returns
-    // false, the current wait operation is aborted.
-    typedef bool (*ProgressCallback)(const char *msg);
-
-    // Returns the PROM ID (M25P15 ONLY)
-    // should be 0x00202015 for the M25P16
-    // returns 0 on error
-    AmpIO_UInt32 PromGetId(void);
-
-    // PromGetStatus (General)
-    // returns the status register from the M25P16 PROM
-    // (this is different than the interface status read from address offset 8)
-    // The following masks are for the useful status register bits.
-    enum { MASK_WIP = 1, MASK_WEL = 2 };   // status register bit masks
-    bool PromGetStatus(AmpIO_UInt32 &status, PromType type = PROM_M25P16);
-
-    // PromGetResult (General)
-    // returns the result (if any) from the last command sent
-    bool PromGetResult(AmpIO_UInt32 &result, PromType type = PROM_M25P16);
-
-    // Returns nbytes data read from the specified address
-    bool PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
-                      unsigned int nbytes);
-
-    // Enable programming commands (erase and program page) (General)
-    // This sets the WEL bit in the status register.
-    // This mode is automatically cleared after a programming command is executed.
-    bool PromWriteEnable(PromType type = PROM_M25P16);
-
-    // Disable programming commands (General)
-    // This clears the WEL bit in the status register.
-    bool PromWriteDisable(PromType type = PROM_M25P16);
-
-    // Erase a sector (64K) at the specified address. (M25P16 ONLY)
-    // This command calls PromWriteEnable.
-    // If non-zero, the callback (cb) is called while the software is waiting
-    // for the PROM to be erased, or if there is an error.
-    bool PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb = 0);
-
-    // Program a page (up to 256 bytes) at the specified address.
-    // This command calls PromWriteEnable.
-    // nbytes must be a multiple of 4.
-    // If non-zero, the callback (cb) is called while the software is waiting
-    // for the PROM to be programmed, or if there is an error.
-    // Returns the number of bytes programmed (-1 if error).
-    int PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
-                        unsigned int nbytes, const ProgressCallback cb = 0);
-
-
-    // ********************** QLA PROM ONLY Methods ***********************************
-    // ZC: meta data only, so don't care speed that much
-    bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
-    bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data);
-    bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
-    bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
-
     // ********************** Dallas DS2505 (1-wire) Methods **************************
     bool DallasWriteControl(AmpIO_UInt32 ctrl);
     bool DallasReadStatus(AmpIO_UInt32 &status);
     bool DallasWaitIdle();
-    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B = false);
-
-    // ************************ Ethernet Methods *************************************
-    // Following functions enable access to the KSZ8851 Ethernet controller on the
-    // FPGA V2 board via FireWire. They are provided for testing/debugging.
-    // Note that both 8-bit and 16-bit transactions are supported.
-    bool ResetKSZ8851();   // Reset the chip (requires ~60 msec)
-    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data);
-    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data);
-    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
-    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata);
-    // Following are for DMA access (assumes chip has been placed in DMA mode)
-    bool WriteKSZ8851DMA(const AmpIO_UInt16 &data);
-    bool ReadKSZ8851DMA(AmpIO_UInt16 &rdata);
-    // Read Chip ID from register 0xC0
-    AmpIO_UInt16 ReadKSZ8851ChipID();
-    // Get KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
-    //    VALID=1 indicates that Ethernet is present
-    //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
-    //    PME is the state of the Power Management Event pin
-    //    IRQ is the state of the Interrupt Request pin (active low)
-    //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
-    // Returns 0 on error (i.e., if Ethernet not present, or read fails)
-    AmpIO_UInt16 ReadKSZ8851Status();
-    // Read Ethernet data
-    //    buffer  buffer for storing data
-    //    offset  address offset (in quadlets)
-    //    nquads  number of quadlets to read (not more than 64)
-    bool ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
-
-    // ************************ FireWire Methods *************************************
-    // Read FireWire data
-    //    buffer  buffer for storing data
-    //    offset  address offset (in quadlets)
-    //    nquads  number of quadlets to read (not more than 64)
-    bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
+    bool DallasReadBlock(unsigned char *data, unsigned int nbytes) const;
+    bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
 
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
@@ -672,9 +519,6 @@ protected:
 
     // Counts received encoder errors
     unsigned int encErrorCount[NUM_CHANNELS];
-
-    // Accumulated firmware time
-    double firmwareTime;
 
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.

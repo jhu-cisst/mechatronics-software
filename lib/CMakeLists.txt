@@ -13,6 +13,7 @@ project (Amp1394Lib)
 
 set (HEADERS
      BoardIO.h
+     Spartan6IO.h
      AmpIO.h
      Amp1394Time.h
      Amp1394BSwap.h
@@ -22,6 +23,8 @@ set (HEADERS
      PortFactory.h)
 
 set (SOURCE_FILES
+     code/BoardIO.cpp
+     code/Spartan6IO.cpp
      code/AmpIO.cpp
      code/Amp1394Time.cpp
      code/BasePort.cpp

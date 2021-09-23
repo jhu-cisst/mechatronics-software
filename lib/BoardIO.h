@@ -124,8 +124,29 @@ public:
     inline void ClearReadErrors() { numReadErrors = 0; }
     inline void ClearWriteErrors() { numWriteErrors = 0; }
 
+    uint32_t GetFirmwareVersion(void) const;
+
     // Returns FPGA clock period in seconds
     virtual double GetFPGAClockPeriod(void) const = 0;
+
+    // ********************** READ Methods ***********************************
+    // The ReadXXX methods below read data directly from the boards via the
+    // bus using quadlet reads.
+
+    uint32_t ReadStatus(void) const;
+
+    /*! Read IPv4 address (only relevant for FPGA boards with Ethernet support)
+        \returns IPv4 address (uint32) or 0 if error
+     */
+    uint32_t ReadIPv4Address(void) const;
+
+    // ********************** WRITE Methods **********************************
+
+    /*! Write IPv4 address.
+        \param IP address to write, as uint32
+        \returns true if successful; false otherwise
+    */
+    bool WriteIPv4Address(uint32_t IPaddr);
 };
 
 #endif // __BOARDIO_H__

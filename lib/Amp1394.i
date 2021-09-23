@@ -149,8 +149,8 @@ uint32_t bswap32(uint32_t in);
 // ReadEncoderPreload
 %apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata};
 
-%ignore AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
-%ignore AmpIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
+%ignore Spartan6IO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
+%ignore Spartan6IO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
 
 %import "AmpIORevision.h"
 
@@ -160,6 +160,7 @@ uint32_t bswap32(uint32_t in);
 %constant std::string VERSION = Amp1394_VERSION;
 
 %include "BoardIO.h"
+%include "Spartan6IO.h"
 %include "AmpIO.h"
 
 %apply (int* IN_ARRAY1, int DIM1) {(int* data, int size)};

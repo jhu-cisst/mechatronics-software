@@ -51,7 +51,6 @@ int main(int argc, char** argv)
     int port = 0;
     int board = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
-    bool useDS2480B = false;
 
     if (argc > 1) {
         int args_found = 0;
@@ -64,15 +63,11 @@ int main(int argc, char** argv)
                     }
                     std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
                 }
-                else if (argv[i][1] == 'd') {
-                    useDS2480B = true;
-                }
                 else {
                     std::cerr << "Usage: instrument <board-num> [-pP] [-d]" << std::endl
                               << "       where <board-num> = rotary switch setting (0-15)" << std::endl
                               << "             P = port number (default 0)" << std::endl
-                              << "       can also specify -pfwP, -pethP or -pudp" << std::endl
-                              << "       -d option for DS2480B driver chip" << std::endl;
+                              << "       can also specify -pfwP, -pethP or -pudp" << std::endl;
                     return 0;
                 }
             }
@@ -124,7 +119,7 @@ int main(int argc, char** argv)
 
     // Now, we try to read the Dallas chip. This will also populate the status field.
     unsigned char buffer[2048];  // Buffer for entire contents of DS2505 memory (2 Kbytes)
-    bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer), useDS2480B);
+    bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
     if (!Board.DallasReadStatus(status)) {
         std::cerr << "Failed to read DS2505 status" << std::endl;
         Port->RemoveBoard(board);
@@ -153,6 +148,7 @@ int main(int argc, char** argv)
                   << " (DS2505 should be 0x0B)" << std::endl;
         return -1;
     }
+    bool useDS2480B = (status & 0x00008000) == 0x00008000;
     if (!useDS2480B) {
         unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
         std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;
