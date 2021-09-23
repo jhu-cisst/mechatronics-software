@@ -614,7 +614,7 @@ int main(int argc, char** argv)
                 strcpy(nodeStr[1], "??");
         }
 
-        AmpIO::EncoderVelocityData encVelData;
+        EncoderVelocity encVelData;
         Port->ReadAllBoards();
         unsigned int j;
         if (showTime) {
@@ -638,7 +638,7 @@ int main(int argc, char** argv)
                         console.Print(8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
                     else {
                         BoardList[j]->GetEncoderVelocityData(i, encVelData);
-                        console.Print(8, lm+6+(i+4*j)*13, "%08X", encVelData.velPeriod);
+                        console.Print(8, lm+6+(i+4*j)*13, "%08X", encVelData.GetEncoderVelocityPeriod());
                     }
                     console.Print(9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
                     if (fullvel) {

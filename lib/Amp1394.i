@@ -8,8 +8,6 @@
 #include "AmpIO.h"
 #include "EthUdpPort.h"
 
-typedef AmpIO::EncoderVelocityData EncoderVelocityData;
-
 #if Amp1394_HAS_RAW1394
   #include "FirewirePort.h"
 #endif
@@ -159,6 +157,7 @@ uint32_t bswap32(uint32_t in);
 %constant int VERSION_PATCH = Amp1394_VERSION_PATCH;
 %constant std::string VERSION = Amp1394_VERSION;
 
+%include "EncoderVelocity.h"
 %include "BoardIO.h"
 %include "Spartan6IO.h"
 %include "AmpIO.h"

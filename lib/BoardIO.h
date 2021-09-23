@@ -21,19 +21,11 @@ http://www.cisst.org/cisst/license.txt.
 // Base class for custom boards with IEEE-1394 (Firewire) and Ethernet interface.
 
 #include <string.h>  // for memset
-#ifdef _MSC_VER
-typedef unsigned __int8  uint8_t;
-typedef unsigned __int16 uint16_t;
-typedef unsigned __int32 uint32_t;
-typedef unsigned __int64 uint64_t;
-#else
-#include <stdint.h>
-#endif
+#include "Amp1394Types.h"
 
 typedef uint32_t quadlet_t;
 typedef uint64_t nodeaddr_t;
 typedef uint16_t nodeid_t;
-
 
 class BasePort;
 class FirewirePort;

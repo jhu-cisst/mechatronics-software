@@ -40,27 +40,8 @@ const AmpIO_UInt32 MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current a
 const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
 const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
-const AmpIO_UInt32 RESET_KSZ8851    = 0x04000000;  /*!< Mask to reset KSZ8851 Ethernet chip */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
-const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <= 5 (16 bits) */
-const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version == 6 (22 bits) */
-const AmpIO_UInt32 ENC_VEL_MASK_26  = 0x03ffffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >= 7 (26 bits) */
-
-// The following masks read the most recent quarter-cycle period and the previous one of the same type, which are used
-// for estimating acceleration in Firmware Rev 6+.
-// Following are for Firmware Rev 6, which split the bits among different fields due to packet size limitations.
-const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder freq/acc) for upper 12 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */
-// Following are for Firmware Rev 7+, which increased the block read packet size, allowing all bits to be grouped together
-const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x03ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 26 bits of quarter cycle period */
-
-// Following offsets are for FPGA Firmware Version 6 (22 bits) and 7+ (26 bits)
-// (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
-const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
-const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
-const AmpIO_UInt32 ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
 const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
@@ -73,29 +54,6 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
                                 0x2, 0xA, 0x6, 0xE,         // 0100, 0101, 0110, 0111
                                 0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
-
-void AmpIO::EncoderVelocityData::Init()
-{
-    clkPeriod = 1.0;
-    velPeriod = 0;
-    velOverflow = false;
-    velPeriodMax = 0;
-    velDir = false;
-    dirChange = false;
-    encError = false;
-    partialCycle = true;
-    qtr1Period = 0;
-    qtr1Overflow = false;
-    qtr1Dir = false;
-    qtr1Edges = 0;
-    qtr5Period = 0;
-    qtr5Overflow = false;
-    qtr5Dir = false;
-    qtr5Edges = 0;
-    qtrPeriodMax = 0;
-    runPeriod = 0;
-    runOverflow = false;
-}
 
 AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : Spartan6IO(board_id), NumAxes(numAxes),
                                                            collect_state(false), collect_cb(0)
@@ -354,99 +312,25 @@ double AmpIO::GetEncoderVelocity(unsigned int index) const
 {
     if (index >= NUM_CHANNELS)
         return 0L;
-
-    double clkPeriod = encVelData[index].clkPeriod;
-    AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;
-
-    // Avoid divide by 0 (should never happen)
-    if (velPeriod == 0) velPeriod = 1;
-
-    double vel = 0.0;
-    if (!encVelData[index].velOverflow && !encVelData[index].dirChange) {
-        vel = 4.0/(velPeriod*clkPeriod);
-        if (!encVelData[index].velDir)
-            vel = -vel;
-    }
-
-    return vel;
+    return encVelData[index].GetEncoderVelocity();
 }
 
 // Returns predicted encoder velocity in counts/sec, taking into account
 // acceleration and running counter.
 double AmpIO::GetEncoderVelocityPredicted(unsigned int index, double percent_threshold) const
 {
-    double encVel = GetEncoderVelocity(index);
-    double encAcc = GetEncoderAcceleration(index, percent_threshold);
-    // The encoder measurement delay is half the measured period, based on the assumption that measuring the
-    // period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
-    double encDelay = encVelData[index].velPeriod*encVelData[index].clkPeriod/2.0;
-    double encRun = GetEncoderRunningCounterSeconds(index);
-    double deltaVel = encAcc*(encDelay+encRun);
-    double predVel = encVel+deltaVel;
-    if (encVel < 0) {
-        // Do not change velocity direction
-        if (predVel > 0.0)
-            predVel = 0.0;
-        // Maximum velocity limited by 1 count (i.e., we know
-        // that a count has not happened for encRun seconds)
-        if (predVel*encRun < -1.0)
-            predVel = -1.0/encRun;
-    }
-    else if (encVel > 0.0) {
-        // Do not change velocity direction
-        if (predVel < 0.0)
-            predVel = 0.0;
-        // Maximum velocity limited by 1 count (i.e., we know
-        // that a count has not happened for encRun seconds)
-        if (predVel*encRun > 1.0)
-            predVel = 1.0/encRun;
-    }
-    else {
-        // If not moving, do not attempt to predict
-        predVel = 0.0;
-    }
-    return predVel;
+    if (index >= NUM_CHANNELS)
+        return 0.0;
+    return encVelData[index].GetEncoderVelocityPredicted(percent_threshold);
 }
 
 // Estimate acceleration from two quarters of the same type; units are counts/second**2
 // Valid for firmware version 6+.
 double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshold) const
 {
-
     if (index >= NUM_CHANNELS)
         return 0.0;
-
-    if (encVelData[index].velOverflow)
-        return 0.0;
-
-    double clkPeriod = encVelData[index].clkPeriod;
-    AmpIO_UInt32 qtr1Period = encVelData[index].qtr1Period;               // Current quarter-cycle period
-    AmpIO_UInt32 qtr5Period = encVelData[index].qtr5Period;               // Previous quarter-cycle period of same type
-    AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;                 // Current full-cycle period
-    AmpIO_UInt32 velPeriodPrev = velPeriod - qtr1Period + qtr5Period;     // Previous full-cycle period
-    if (encVelData[index].qtr5Overflow)
-        velPeriodPrev = encVelData[index].velPeriodMax;
-
-    // Should never happen
-    if ((qtr1Period == 0) || (qtr5Period == 0) || (velPeriod == 0) || (velPeriodPrev == 0))
-        return 0.0;
-
-    if (encVelData[index].qtr1Edges != encVelData[index].qtr5Edges)
-        return 0.0;
-
-    if ((encVelData[index].qtr1Dir != encVelData[index].qtr5Dir) || (encVelData[index].qtr1Dir != encVelData[index].velDir))
-        return 0.0;
-
-    double acc = 0.0;
-    if (1.0/qtr1Period <= percent_threshold) {
-        double qtrDiff = static_cast<double>(qtr5Period) - static_cast<double>(qtr1Period);
-        double qtrSum = static_cast<double>(qtr5Period + qtr1Period);
-        double velProd = static_cast<double>(velPeriod)*static_cast<double>(velPeriodPrev)*clkPeriod*clkPeriod;
-        acc = (8.0*qtrDiff)/(velProd*qtrSum);
-        if (!encVelData[index].velDir)
-            acc = -acc;
-    }
-    return acc;
+    return encVelData[index].GetEncoderAcceleration(percent_threshold);
 }
 
 // Raw velocity field; includes period of velocity and other data, depending on firmware version.
@@ -491,7 +375,9 @@ AmpIO_UInt32 AmpIO::GetEncoderRunningCounterRaw(unsigned int index) const
 // also supports the running counter in Firmware Rev 4-5.
 double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
 {
-    return (encVelData[index].runPeriod)*(encVelData[index].clkPeriod);
+    if (index >= NUM_CHANNELS)
+        return 0.0;
+    return encVelData[index].GetEncoderRunningCounterSeconds();
 }
 
 AmpIO_Int32 AmpIO::GetEncoderMidRange(void)
@@ -504,101 +390,25 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
     if (index >= NUM_CHANNELS)
         return false;
 
-    encVelData[index].Init();  // Set default values
     AmpIO_UInt32 fver = GetFirmwareVersion();
-
     if (fver < 6) {
-        // Prior to Firmware Version 6, the latched counter value is returned
-        // as the lower 16 bits. Starting with Firmware Version 4, the upper 16 bits are
-        // the free-running counter, which was not used.
-        // Note that the counter values are signed, so we convert to unsigned and set a direction bit
-        // to be consistent with later versions of firmware.
-        encVelData[index].clkPeriod = VEL_PERD_OLD;
-        encVelData[index].velPeriodMax = ENC_VEL_MASK_16;
-        AmpIO_UInt16 velPeriod = static_cast<AmpIO_UInt16>(ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_16);
-        // Convert from signed count to unsigned count and direction
-        if (velPeriod == 0x8000) { // if overflow
-            encVelData[index].velPeriod = 0x00007fff;
-            encVelData[index].velOverflow = true;
-            // Firmware also sets velPeriod to overflow when direction change occurred, so could potentially
-            // set encVelData[index].dirChange = true.
-        }
-        else if (velPeriod & 0x8000) {  // if negative
-            velPeriod = ~velPeriod;     // ones complement (16-bits)
-            encVelData[index].velPeriod = velPeriod + 1;  // twos complement (32-bits)
-            encVelData[index].velDir = false;
-        }
-        else {
-            encVelData[index].velPeriod = velPeriod;
-            encVelData[index].velDir = true;
-        }
-        if (fver >= 4) {
-            AmpIO_UInt16 runCtr = static_cast<AmpIO_UInt16>((ReadBuffer[ENC_VEL_OFFSET+index]>>16) & ENC_VEL_MASK_16);
-            // Convert from signed count to unsigned count and direction
-            if (runCtr == 0x8000) {  // if overflow
-                encVelData[index].runOverflow = true;
-                runCtr = 0x7fff;
-            }
-            else if (runCtr & 0x8000) {  // if negative
-                runCtr = ~runCtr;        // ones complement (16-bits)
-                runCtr += 1;             // twos complement (16-bits)
-            }
-            encVelData[index].runPeriod = static_cast<AmpIO_UInt32>(runCtr);
-        }
+        encVelData[index].SetDataOld(ReadBuffer[ENC_VEL_OFFSET+index], (fver >= 4));
     }
     else if (fver == 6) {
-        encVelData[index].clkPeriod = VEL_PERD_REV6;
-        encVelData[index].velPeriodMax = ENC_VEL_MASK_22;
-        encVelData[index].qtrPeriodMax = ENC_ACC_PREV_MASK;  // 20 bits
-        // Firmware 6 has bits stuffed in different places:
-        //   Q1: lower 8 bits in velPeriod[29:22] and upper 12 bits in accQtr1[31:20]
-        //   Q5: all 20 bits in accQtr1[19:0]
-        encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_22;
-        encVelData[index].qtr1Period = (((ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_REC_MS_MASK)>>12) |
-                          ((ReadBuffer[ENC_VEL_OFFSET+index] & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
-        encVelData[index].qtr5Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_PREV_MASK;
-        encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
-        // Qtr1 and Qtr5 overflow at 0x000fffff (no overflow bit is set by firmware)
-        if (encVelData[index].qtr1Period == encVelData[index].qtrPeriodMax)
-            encVelData[index].qtr1Overflow = true;
-        if (encVelData[index].qtr5Period == encVelData[index].qtrPeriodMax)
-            encVelData[index].qtr5Overflow = true;
-        // Qtr1 and Qtr5 direction are not recorded, so set them same as velDir;
-        // i.e., assume that there hasn't been a direction change.
-        encVelData[index].qtr1Dir = encVelData[index].velDir;
-        encVelData[index].qtr5Dir = encVelData[index].velDir;
+        encVelData[index].SetDataRev6(ReadBuffer[ENC_VEL_OFFSET+index], ReadBuffer[ENC_QTR1_OFFSET+index]);
     }
     else {  // V7+
-        encVelData[index].clkPeriod = VEL_PERD;
-        encVelData[index].velPeriodMax = ENC_VEL_MASK_26;
-        encVelData[index].qtrPeriodMax = ENC_VEL_QTR_MASK;  // 26 bits
-        encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_26;
-        encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
-        encVelData[index].dirChange = ReadBuffer[ENC_VEL_OFFSET+index] & 0x20000000;
-        encVelData[index].encError = ReadBuffer[ENC_VEL_OFFSET+index] & 0x10000000;
-        encVelData[index].partialCycle = ReadBuffer[ENC_VEL_OFFSET+index] & 0x08000000;
-        encVelData[index].qtr1Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_VEL_QTR_MASK;
-        encVelData[index].qtr1Overflow = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].qtr1Dir = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_DIR_MASK;
-        encVelData[index].qtr1Edges = (ReadBuffer[ENC_QTR1_OFFSET+index]>>26)&0x0f;
-        encVelData[index].qtr5Period = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_VEL_QTR_MASK;
-        encVelData[index].qtr5Overflow = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].qtr5Dir = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_DIR_MASK;
-        encVelData[index].qtr5Edges = (ReadBuffer[ENC_QTR5_OFFSET+index]>>26)&0x0f;
-        encVelData[index].runPeriod = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_QTR_MASK;
-        encVelData[index].runOverflow = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_OVER_MASK;
+        encVelData[index].SetData(ReadBuffer[ENC_VEL_OFFSET+index], ReadBuffer[ENC_QTR1_OFFSET+index],
+                                  ReadBuffer[ENC_QTR5_OFFSET+index], ReadBuffer[ENC_RUN_OFFSET+index]);
     }
-
     // Increment error counter if necessary
-    if (encVelData[index].encError)
+    if (encVelData[index].IsEncoderError())
         encErrorCount[index]++;
 
     return true;
 }
 
-bool AmpIO::GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data) const
+bool AmpIO::GetEncoderVelocityData(unsigned int index, EncoderVelocity &data) const
 {
     if (index >= NUM_CHANNELS)
         return false;

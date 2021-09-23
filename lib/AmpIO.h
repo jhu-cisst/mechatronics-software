@@ -22,66 +22,15 @@ http://www.cisst.org/cisst/license.txt.
 #include <Amp1394/AmpIORevision.h>
 
 #include "Spartan6IO.h"
-#ifdef _MSC_VER
-typedef unsigned __int8  uint8_t;
-typedef unsigned __int16 uint16_t;
-typedef unsigned __int32 uint32_t;
-typedef __int32          int32_t;
-#else
-#include <stdint.h>
-#endif
+#include "EncoderVelocity.h"
 #include <iostream>
 
 class ostream;
 
-
-typedef int32_t  AmpIO_Int32;
-typedef uint32_t AmpIO_UInt32;
-typedef uint16_t AmpIO_UInt16;
-typedef uint8_t  AmpIO_UInt8;
-
-// Conditional compilation so that EncoderVelocityData is internal to AmpIO, except when
-// parsing with SWIG, since SWIG cannot handle internal classes.
-
-#ifndef SWIG
-/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
+/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/Interface-Specification */
 class AmpIO : public Spartan6IO
 {
 public:
-#endif
-
-    struct EncoderVelocityData {
-        double clkPeriod;            // Clock period, in seconds
-        AmpIO_UInt32 velPeriod;      // Encoder full-cycle period (for velocity)
-        bool velOverflow;            // Velocity (period) overflow
-        AmpIO_UInt32 velPeriodMax;   // Maximum possible velocity period
-        bool velDir;                 // Velocity direction (true -> positive direction)
-        bool dirChange;              // Direction change during last velocity period, V7+
-        bool encError;               // Encoder error detected, V7+
-        bool partialCycle;           // No full cycle yet, V7+
-        AmpIO_UInt32 qtr1Period;     // Encoder quarter-cycle period 1 (for accel), V6+
-        bool qtr1Overflow;           // Qtr1 overflow, V7+
-        bool qtr1Dir;                // Qtr1 direction (true -> positive direction), V7+
-        unsigned char qtr1Edges;     // Qtr1 edge mask (A-up, B-up, A-down, B-down), V7+
-        AmpIO_UInt32 qtr5Period;     // Encoder quarter-cycle period 5 (for accel), V6+
-        bool qtr5Overflow;           // Qtr5 overflow, V7+
-        bool qtr5Dir;                // Qtr5 direction (true -> positive direction), V7+
-        unsigned char qtr5Edges;     // Qtr5 edge mask (A-up, B-up, A-down, B-down), V7+
-        AmpIO_UInt32 qtrPeriodMax;   // Maximum Qtr1 or Qtr5 period
-        AmpIO_UInt32 runPeriod;      // Time since last encoder edge, Firmware V4,5,7+
-        bool runOverflow;            // Running counter overflow, V7+
-
-        EncoderVelocityData() { Init(); }
-        ~EncoderVelocityData() {}
-        void Init();
-    };
-
-#ifdef SWIG
-/*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/InterfaceSpec */
-class AmpIO : public Spartan6IO
-{
-public:
-#endif
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
     ~AmpIO();
 
@@ -165,7 +114,7 @@ public:
 
     /*! Returns the predicted encoder velocity, in counts per second, based on the FPGA measurement of the
         encoder period (i.e., time between two consecutive edges), with compensation for the measurement delay.
-        For firmware Rev 6+, the predicted encoder velocity uses the estimated acceleration to predict the
+        For Firmware Rev 6+, the predicted encoder velocity uses the estimated acceleration to predict the
         velocity at the current time. For Rev 7+, the prediction also uses the encoder running counter (time
         since last edge). There are two limits enforced:
         1) The predicted velocity will not change sign (i.e., be in the opposite direction from the measured velocity).
@@ -209,11 +158,13 @@ public:
         for internal use and testing (Rev 7+). */
     AmpIO_UInt32 GetEncoderRunningCounterRaw(unsigned int index) const;
 
-    /*! Get the encoder running counter, in seconds */
+    /*! Get the encoder running counter, in seconds. This is primarily used for Firmware Rev 7+, but
+        also supports the running counter in Firmware Rev 4-5.
+    */
     double GetEncoderRunningCounterSeconds(unsigned int index) const;
 
     /*! Returns the data available for computing encoder velocity (and acceleration). */
-    bool GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data) const;
+    bool GetEncoderVelocityData(unsigned int index, EncoderVelocity &data) const;
 
     /*! Returns the number of encoder errors (invalid transitions on the A or B channel). The errors
         are detected on the FPGA, with Firmware V7+, which sets an error bit in the encoder period used
@@ -515,7 +466,7 @@ protected:
     quadlet_t WriteBuffer[WriteBufSize];
 
     // Encoder velocity data (per axis)
-    EncoderVelocityData encVelData[NUM_CHANNELS];
+    EncoderVelocity encVelData[NUM_CHANNELS];
 
     // Counts received encoder errors
     unsigned int encErrorCount[NUM_CHANNELS];

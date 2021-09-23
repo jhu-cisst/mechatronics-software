@@ -15,8 +15,10 @@ set (HEADERS
      BoardIO.h
      Spartan6IO.h
      AmpIO.h
+     Amp1394Types.h
      Amp1394Time.h
      Amp1394BSwap.h
+     EncoderVelocity.h
      BasePort.h
      EthBasePort.h
      EthUdpPort.h
@@ -27,6 +29,7 @@ set (SOURCE_FILES
      code/Spartan6IO.cpp
      code/AmpIO.cpp
      code/Amp1394Time.cpp
+     code/EncoderVelocity.cpp
      code/BasePort.cpp
      code/EthBasePort.cpp
      code/EthUdpPort.cpp

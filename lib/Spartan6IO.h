@@ -21,20 +21,6 @@ http://www.cisst.org/cisst/license.txt.
 #include <Amp1394/AmpIORevision.h>
 
 #include "BoardIO.h"
-#ifdef _MSC_VER
-typedef unsigned __int8  uint8_t;
-typedef unsigned __int16 uint16_t;
-typedef unsigned __int32 uint32_t;
-typedef __int32          int32_t;
-#else
-#include <stdint.h>
-#endif
-
-typedef int32_t  AmpIO_Int32;
-typedef uint32_t AmpIO_UInt32;
-typedef uint16_t AmpIO_UInt16;
-typedef uint8_t  AmpIO_UInt8;
-
 
 // Methods specific to Spartan6 FPGA board (Rev 1.x or Rev 2.x)
 //
