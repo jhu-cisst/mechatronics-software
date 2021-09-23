@@ -466,7 +466,7 @@ void EthUdpPort::Cleanup(void)
 nodeid_t EthUdpPort::InitNodes(void)
 {
     // First, set IP address by Ethernet and FireWire broadcast
-    if (!WriteQuadletNode(FW_NODE_BROADCAST, 11, sockPtr->ServerAddr.sin_addr.s_addr, FW_NODE_ETH_BROADCAST_MASK)) {
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::IP_ADDR, sockPtr->ServerAddr.sin_addr.s_addr, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to write IP address" << std::endl;
         return 0;
     }
@@ -474,7 +474,7 @@ nodeid_t EthUdpPort::InitNodes(void)
     quadlet_t data = 0x0;   // initialize data to 0
 
     // Check hardware version of hub board
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, 4, data, FW_NODE_NOFORWARD_MASK)) {
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
         return 0;
     }
@@ -491,13 +491,13 @@ nodeid_t EthUdpPort::InitNodes(void)
     // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
     // to obtain its Firewire node id.
     data = 0;
-    if (!WriteQuadletNode(FW_NODE_BROADCAST, 1, data)) {
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
         outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
         return 0;
     }
 
     // Find board id for first board (i.e., one connected by Ethernet) by FireWire broadcast
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, 0, data, FW_NODE_NOFORWARD_MASK)) {
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data, FW_NODE_NOFORWARD_MASK)) {
         outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
         return 0;
     }

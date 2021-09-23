@@ -233,7 +233,7 @@ bool BasePort::ScanNodes(void)
         quadlet_t data;
         unsigned long hver = 0;
         // check hardware version
-        if (!ReadQuadletNode(node, 4, data)) {
+        if (!ReadQuadletNode(node, BoardIO::HARDWARE_VERSION, data)) {
             if (GetPortType() == PORT_FIREWIRE)
                 outStr << "BasePort::ScanNodes: unable to read from node " << node << std::endl;
             continue;
@@ -248,7 +248,7 @@ bool BasePort::ScanNodes(void)
 
         // read firmware version
         unsigned long fver = 0;
-        if (!ReadQuadletNode(node, 7, data)) {
+        if (!ReadQuadletNode(node, BoardIO::FIRMWARE_VERSION, data)) {
             outStr << "BasePort::ScanNodes: unable to read firmware version from node "
                    << node << std::endl;
             continue;
@@ -256,7 +256,7 @@ bool BasePort::ScanNodes(void)
         fver = data;
 
         // read board id
-        if (!ReadQuadletNode(node, 0, data)) {
+        if (!ReadQuadletNode(node, BoardIO::BOARD_STATUS, data)) {
             outStr << "BasePort::ScanNodes: unable to read status from node " << node << std::endl;
             continue;
         }

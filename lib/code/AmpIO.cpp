@@ -827,7 +827,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 AmpIO_UInt32 AmpIO::ReadStatus(void) const
 {
     AmpIO_UInt32 read_data = 0;
-    if (port) port->ReadQuadlet(BoardId, 0, read_data);
+    if (port) port->ReadQuadlet(BoardId, BoardIO::BOARD_STATUS, read_data);
     return read_data;
 }
 
@@ -852,10 +852,9 @@ bool AmpIO::ReadSafetyRelayStatus(void) const
 
 AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
 {
-    AmpIO_UInt32 read_data = 0;
-    // 11: quadlet read address for Safety Amp Disable
-    if (port) port->ReadQuadlet(BoardId, 11, read_data);
-    return read_data & 0x0000000F;
+    // This field has been present in the Status register since Firmware Rev 3
+    // (Firmware Rev 2 used register 11 and Firmware Rev 1 did not have this field)
+    return (ReadStatus()&0x000000F0) >> 4;
 }
 
 bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
@@ -947,7 +946,7 @@ AmpIO_UInt32 AmpIO::ReadIPv4Address(void) const
     }
     AmpIO_UInt32 read_data = 0;
     if (port)
-        port->ReadQuadlet(BoardId, 11, read_data);
+        port->ReadQuadlet(BoardId, BoardIO::IP_ADDR, read_data);
     return read_data;
 }
 
@@ -964,25 +963,25 @@ bool AmpIO::WriteReboot(void)
         return false;
     }
     AmpIO_UInt32 write_data = REBOOT_FPGA;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WritePowerEnable(bool state)
 {
     AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteAmpEnable(AmpIO_UInt8 mask, AmpIO_UInt8 state)
 {
     quadlet_t write_data = (mask << 8) | state;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteSafetyRelay(bool state)
 {
     AmpIO_UInt32 write_data = state ? RELAY_ON : RELAY_OFF;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
@@ -1003,7 +1002,7 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
 
 bool AmpIO::WriteDoutConfigReset(void)
 {
-    return (port && (GetFirmwareVersion() >= 7)) ? port->WriteQuadlet(BoardId, 0, DOUT_CFG_RESET) : false;
+    return (port && (GetFirmwareVersion() >= 7)) ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, DOUT_CFG_RESET) : false;
 }
 
 bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
@@ -1114,7 +1113,7 @@ bool AmpIO::WriteIPv4Address(AmpIO_UInt32 IPaddr)
         std::cerr << "AmpIO::WriteIPv4Address: requires firmware 7 or above" << std::endl;
         return false;
     }
-    return (port ? port->WriteQuadlet(BoardId, 11, IPaddr) : false);
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::IP_ADDR, IPaddr) : false);
 }
 
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
@@ -1134,25 +1133,25 @@ bool AmpIO::WriteRebootAll(BasePort *port)
     // Note that Firmware V7+ supports the reboot command; earlier versions of
     // firmware will instead perform a limited reset.
     AmpIO_UInt32 write_data = REBOOT_FPGA;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WritePowerEnableAll(BasePort *port, bool state)
 {
     AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state)
 {
     quadlet_t write_data = (mask << 8) | state;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteSafetyRelayAll(BasePort *port, bool state)
 {
     AmpIO_UInt32 write_data = state ? RELAY_ON : RELAY_OFF;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata)

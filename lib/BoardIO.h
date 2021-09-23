@@ -86,6 +86,26 @@ protected:
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards
 
+    // The following registers are required to be supported on all boards because
+    // they are used by the Port classes when scanning/configuring the bus.
+    //
+    //   BOARD_STATUS:     Bits 27-24 contain the board number (e.g., rotary switch)
+    //   FW_PHY_REQ:       Write 0 to this register to initiate a read of PHY register 0 (self-id);
+    //                     needed for an unmanaged Firewire bus (e.g., PC not connected to Firewire)
+    //   FW_PHY_RESP:      PHY response; not used by Port classes
+    //   HARDWARE_VERSION: Indicates type of connected board (e.g., QLA, dRAC)
+    //   FIRMWARE_VERSION: Version of FPGA firmware
+    //   IP_ADDR:          Ethernet IP address (written during Ethernet configuration)
+    //
+    enum Registers {
+        BOARD_STATUS = 0,      // RW: Board status/control register
+        FW_PHY_REQ = 1,        // WO: Firewire PHY register read/write request
+        FW_PHY_RESP = 2,       // RO: Firewire PHY register read response
+        HARDWARE_VERSION = 4,  // RO: Companion board type (e.g., "QLA1")
+        FIRMWARE_VERSION = 7,  // RO: Firmware version number
+        IP_ADDR = 11           // RW: Ethernet IP address (Firmware V7+)
+    };
+
     BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
                                       numReadErrors(0), numWriteErrors(0) {}
     virtual ~BoardIO() {}
