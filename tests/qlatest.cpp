@@ -889,6 +889,7 @@ int main(int argc, char** argv)
     logFile << "FPGA Firmware Version: " << Board.GetFirmwareVersion() << std::endl;
 
     Amp1394Console console(Amp1394Console::FLAG_ECHO|Amp1394Console::FLAG_BLOCKING);
+    console.Init();
     if (!console.IsOK()) {
         std::cerr << "Failed to initialize console" << std::endl;
         Port->RemoveBoard(board);

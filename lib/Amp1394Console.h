@@ -32,7 +32,7 @@ public:
 
     Amp1394Console(unsigned int flags = FLAG_DEFAULT) :
         isOk(false), noEcho(!(flags&FLAG_ECHO)), noBlock(!(flags&FLAG_BLOCKING)), Internals(0)
-    { isOk = Init(); }
+    { }
     ~Amp1394Console()
     { End(); }
 

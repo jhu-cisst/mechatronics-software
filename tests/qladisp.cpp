@@ -319,6 +319,7 @@ int main(int argc, char** argv)
     bool watchdog_on = false;
 
     Amp1394Console console;
+    console.Init();
     if (!console.IsOK()) {
         std::cerr << "Failed to initialize console" << std::endl;
         return -1;
