@@ -49,8 +49,9 @@ http://www.cisst.org/cisst/license.txt.
 #define ETH_UDP_DEFAULT_IP "169.254.0.100"
 
 // Some useful constants
-const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
+const unsigned long BOARD_ID_MASK = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
+const unsigned long dRA1_String = 0x64524131;
 
 // Maximum possible data size in bytes; this should only be used for sizing static buffers;
 // the actual limit is port-specific and generally less than this.
@@ -284,8 +285,9 @@ public:
      \param boardId: board ID (rotary switch value)
      \return unsigned long: firmware version number
     */
-    unsigned long GetFirmwareVersion(unsigned char boardId) const
-    { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
+    inline unsigned long GetFirmwareVersion(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0;
+    }
 
     /*!
      \brief Get hardware version
@@ -293,8 +295,9 @@ public:
      \return unsigned long: hardware version (a 32-bit value that identifies the type of board
              connected to the FPGA).
     */
-    unsigned long GetHardwareVersion(unsigned char boardId) const
-    { return (boardId < BoardIO::MAX_BOARDS) ? HardwareVersion[boardId] : 0; }
+    inline unsigned long GetHardwareVersion(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? HardwareVersion[boardId] : 0;
+    }
 
     /*!
      \brief Get hardware version as a string

@@ -79,6 +79,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         Node2Board[i] = BoardIO::MAX_BOARDS;
     // Note that AddHardwareVersion will not add duplicates
     BasePort::AddHardwareVersion(QLA1_String);
+    BasePort::AddHardwareVersion(dRA1_String);
     BasePort::AddHardwareVersion(0x54455354); // "TEST"
 }
 

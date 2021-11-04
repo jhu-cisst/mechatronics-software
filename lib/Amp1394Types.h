@@ -24,14 +24,16 @@ typedef unsigned __int8  uint8_t;
 typedef unsigned __int16 uint16_t;
 typedef unsigned __int32 uint32_t;
 typedef unsigned __int64 uint64_t;
+typedef  __int16         int16_t;
 typedef __int32          int32_t;
 #else
 #include <stdint.h>
 #endif
 
-typedef int32_t  AmpIO_Int32;
-typedef uint32_t AmpIO_UInt32;
-typedef uint16_t AmpIO_UInt16;
 typedef uint8_t  AmpIO_UInt8;
+typedef uint16_t AmpIO_UInt16;
+typedef uint32_t AmpIO_UInt32;
+typedef int16_t  AmpIO_Int16;
+typedef int32_t  AmpIO_Int32;
 
 #endif // __AMP1394_TYPES_H__
