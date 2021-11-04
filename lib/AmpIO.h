@@ -116,7 +116,7 @@ public:
 
     /*! Returns the predicted encoder velocity, in counts per second, based on the FPGA measurement of the
         encoder period (i.e., time between two consecutive edges), with compensation for the measurement delay.
-        For Firmware Rev 6+, the predicted encoder velocity uses the estimated acceleration to predict the
+        For firmware Rev 6+, the predicted encoder velocity uses the estimated acceleration to predict the
         velocity at the current time. For Rev 7+, the prediction also uses the encoder running counter (time
         since last edge). There are two limits enforced:
         1) The predicted velocity will not change sign (i.e., be in the opposite direction from the measured velocity).

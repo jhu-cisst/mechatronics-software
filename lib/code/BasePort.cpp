@@ -942,6 +942,10 @@ bool BasePort::WriteAllBoardsBroadcast(void)
 
     ret = WriteBroadcastOutput(bcBuffer, bcBufferOffset);
 
+    // for (int i = 0; i < bcBufferOffset/4 + 1; i++) {
+    //     std::cout <<"WriteAllBoardsBroadcast "<< std::dec << i << "\t" << std::hex << bcBuffer[i] << std::endl;
+    // }
+
     // Send out control quadlet if necessary (firmware prior to Rev 7);
     //    also check for data collection
     for (unsigned int board = 0; board < max_board; board++) {
