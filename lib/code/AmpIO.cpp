@@ -1073,6 +1073,17 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     return true;
 }
 
+AmpIO_UInt32 AmpIO::SPSMReadToolModel() {
+    uint32_t instrument_id;
+    port->ReadQuadlet(BoardId, 0xb012, instrument_id);
+    return bswap_32(instrument_id);
+}
+AmpIO_UInt8 AmpIO::SPSMReadToolVersion() {
+    uint32_t q;
+    port->ReadQuadlet(BoardId, 0xb013, q);
+    return q & 0xFF;
+}
+
 // ************************************* Waveform methods ****************************************
 
 bool AmpIO::ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
