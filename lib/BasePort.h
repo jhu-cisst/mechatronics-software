@@ -51,6 +51,7 @@ http://www.cisst.org/cisst/license.txt.
 // Some useful constants
 const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
+const unsigned long dRA1_String = 0x64524131;
 
 // Maximum possible data size in bytes; this should only be used for sizing static buffers;
 // the actual limit is port-specific and generally less than this.

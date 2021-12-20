@@ -915,7 +915,7 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
     if (!DallasReadStatus(status)) return false;
-    
+
     // Automatically detect interface in use
     bool useDS2480B = (status & 0x00008000) == 0x00008000;
 
@@ -942,6 +942,26 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
         if (!DallasWaitIdle()) return false;
     }
     return true;
+}
+
+AmpIO_UInt32 AmpIO::SPSMReadToolModel(void) const
+{
+    uint32_t instrument_id = 0;
+    if (GetHardwareVersion() == dRA1_String) {
+        port->ReadQuadlet(BoardId, 0xb012, instrument_id);
+        return bswap_32(instrument_id);
+    }
+    return 0;
+}
+
+AmpIO_UInt8 AmpIO::SPSMReadToolVersion(void) const
+{
+    uint32_t q = 0;
+    if (GetHardwareVersion() == dRA1_String) {
+        port->ReadQuadlet(BoardId, 0xb013, q);
+        return q & 0xFF;
+    }
+    return q;
 }
 
 // ************************************* Waveform methods ****************************************

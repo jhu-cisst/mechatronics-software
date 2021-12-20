@@ -27,6 +27,11 @@ uint32_t BoardIO::GetFirmwareVersion(void) const
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
 }
 
+uint32_t BoardIO::GetHardwareVersion(void) const
+{
+    return (port ? port->GetHardwareVersion(BoardId) : 0);
+}
+
 /*******************************************************************************
  * Read commands
  */

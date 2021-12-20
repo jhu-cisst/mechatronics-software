@@ -381,6 +381,16 @@ public:
     bool DallasReadBlock(unsigned char *data, unsigned int nbytes) const;
     bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
 
+    /*! \brief Reads model number of the tool on an S PSM
+        \returns Model number. 0xffffffff when no tool is present.
+    */
+    AmpIO_UInt32 SPSMReadToolModel(void) const;
+
+    /*! \brief Reads version of the tool on an S PSM
+        \returns Version. 0xff when no tool is present.
+    */
+    AmpIO_UInt8 SPSMReadToolVersion(void) const;
+
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
     // any combination of the 4 digital outputs. The waveform table length is 1024,
