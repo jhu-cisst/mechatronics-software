@@ -59,7 +59,6 @@ AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : Spartan6IO(board_id),
                                                            collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
-    InitWriteBuffer();
     for (size_t i = 0; i < NUM_CHANNELS; i++) {
         encVelData[i].Init();
         encErrorCount[i] = 0;
@@ -101,13 +100,14 @@ void AmpIO::SetReadData(const quadlet_t *buf)
 
 void AmpIO::InitWriteBuffer(void)
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         quadlet_t data = (BoardId & 0x0F) << 24;
         for (size_t i = 0; i < NUM_CHANNELS; i++) {
             WriteBuffer[WB_CURR_OFFSET+i] = data;
         }
         WriteBuffer[WB_CTRL_OFFSET] = 0;
     } else {
+        // dRA1
         std::fill(std::begin(WriteBuffer), std::end(WriteBuffer), 0);
         WriteBuffer[WB_HEADER_OFFSET] = (BoardId & 0x0F) << 8 | ((WriteBufSize_v8) & 0x0F);
     }
@@ -310,16 +310,16 @@ AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
 
 bool AmpIO::GetEncoderOverflow(unsigned int index) const
 {
-    if (GetFirmwareVersion() >= 8) {
-        return false;
+    if (GetHardwareVersion() == QLA1_String) {
+        if (index < NUM_CHANNELS) {
+            return ReadBuffer[index+ENC_POS_OFFSET] & ENC_OVER_MASK;
+        } else {
+            std::cerr << "AmpIO::GetEncoderOverflow: index out of range " << index
+                      << ", nb channels is " << NUM_CHANNELS << std::endl;
+        }
+        return true; // send error "code"
     }
-    if (index < NUM_CHANNELS) {
-        return ReadBuffer[index+ENC_POS_OFFSET] & ENC_OVER_MASK;
-    } else {
-        std::cerr << "AmpIO::GetEncoderOverflow: index out of range " << index
-                  << ", nb channels is " << NUM_CHANNELS << std::endl;
-    }
-    return true; // send error "code"
+    return false;
 }
 
 double AmpIO::GetEncoderClockPeriod(void) const
@@ -481,8 +481,7 @@ bool AmpIO::GetPowerStatus(void) const
 bool AmpIO::GetPowerFault(void) const
 {
     // Bit 15: motor power fault
-    
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         return (GetStatus()&0x00008000);
     } else {
         return false;
@@ -509,14 +508,14 @@ bool AmpIO::GetWatchdogTimeoutStatus(void) const
 
 bool AmpIO::GetAmpEnable(unsigned int index) const
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         if (index >= NUM_CHANNELS) {
             return false;
         }
         AmpIO_UInt32 mask = (0x00000001 << index);
         return GetStatus()&mask;
     }
-    // 8 and above
+    // dRA1
     if (index >= NUM_MOTORS) {
         return false;
     }
@@ -530,14 +529,14 @@ AmpIO_UInt8 AmpIO::GetAmpEnableMask(void) const
 
 bool AmpIO::GetAmpStatus(unsigned int index) const
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         if (index >= NUM_CHANNELS) {
             return false;
         }
         AmpIO_UInt32 mask = (0x00000100 << index);
         return GetStatus()&mask;
     }
-    // 8 and above
+    // dRA1
     if (index >= NUM_MOTORS) {
         return false;
     }
@@ -546,11 +545,11 @@ bool AmpIO::GetAmpStatus(unsigned int index) const
 
 AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         AmpIO_UInt32 mask = 0x000000F0;
         return (GetStatus() & mask) >> 4;
     }
-    // 8 and above
+    // dRA1
     return 0;
 }
 
@@ -576,7 +575,7 @@ void AmpIO::SetPowerEnable(bool state)
 
 bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         if (index < NUM_CHANNELS) {
             AmpIO_UInt32 enable_mask = 0x00000100 << index;
             AmpIO_UInt32 state_mask  = 0x00000001 << index;
@@ -589,7 +588,7 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
         }
         return false;
     }
-    // 8 and above
+    // dRA1
     if (index < NUM_MOTORS) {
         AmpIO_UInt32 enable_mask = 1 << 28;
         AmpIO_UInt32 state_mask  = 1 << 29;
@@ -605,7 +604,7 @@ bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 
 bool AmpIO::SetAmpEnableMask(AmpIO_UInt32 mask, AmpIO_UInt32 state)
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         AmpIO_UInt32 enable_mask = static_cast<AmpIO_UInt32>(mask) << 8;
         AmpIO_UInt32 state_clr_mask = static_cast<AmpIO_UInt32>(mask);
         AmpIO_UInt32 state_set_mask = static_cast<AmpIO_UInt32>(state);
@@ -614,7 +613,7 @@ bool AmpIO::SetAmpEnableMask(AmpIO_UInt32 mask, AmpIO_UInt32 state)
         WriteBuffer[WB_CTRL_OFFSET] = (WriteBuffer[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
         return true;
     }
-    // 8 and above
+    // dRA1
     for (int i = 0; i < NUM_MOTORS; i++) {
         if (mask >> i & 1) SetAmpEnable(i, state >> i & 1);
     }
@@ -633,7 +632,7 @@ void AmpIO::SetSafetyRelay(bool state)
 
 bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         quadlet_t data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
         if (collect_state && (collect_chan == (index+1))) {
             data |= COLLECT_BIT;
@@ -645,7 +644,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
             return false;
         }
     }
-    // 8 and above
+    // dRA1
     if (index < NUM_MOTORS) {
         if (collect_state && (collect_chan == (index+1)))
             WriteBuffer[index+WB_CURR_OFFSET] |= COLLECT_BIT;
@@ -660,10 +659,10 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
 
 bool AmpIO::SetMotorVoltageRatio(unsigned int index, double ratio)
 {
-    if (GetFirmwareVersion() < 8) {
+    if (GetHardwareVersion() == QLA1_String) {
         return false;
     }
-    // 8 and above
+    // dRA1
     if (index < NUM_MOTORS) {
         if (collect_state && (collect_chan == (index+1))) {
                 WriteBuffer[index+WB_CURR_OFFSET] |= COLLECT_BIT;
@@ -850,7 +849,7 @@ bool AmpIO::WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
 bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 {
     //TODO: hack
-    if (port->GetHardwareVersion(BoardId) == dRA1_String) {
+    if (GetHardwareVersion() == dRA1_String) {
         for (int axis = 1; axis < 8; axis ++) {
             WriteCurrentKpRaw(axis - 1, 4500);
             WriteCurrentKiRaw(axis - 1, 300);
@@ -996,16 +995,20 @@ bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int
 // ********************** Dallas DS2505 (1-wire / DS2480B) Reading Methods ****************************************
 bool AmpIO::DallasWriteControl(AmpIO_UInt32 ctrl)
 {
-    if (GetFirmwareVersion() < 7) return false;
-    return port->WriteQuadlet(BoardId, 13, ctrl);
+    if (GetHardwareVersion() == QLA1_String) {
+        return port->WriteQuadlet(BoardId, 13, ctrl);
+    }
+    return false;
 }
 
 
 bool AmpIO::DallasReadStatus(AmpIO_UInt32 &status)
 {
     status = 0;
-    if (GetFirmwareVersion() < 7) return false;
-    return port->ReadQuadlet(BoardId, 13, status);
+    if (GetHardwareVersion() == QLA1_String) {
+        return port->ReadQuadlet(BoardId, 13, status);
+    }
+    return false;
 }
 
 bool AmpIO::DallasWaitIdle()
@@ -1033,12 +1036,17 @@ bool AmpIO::DallasReadBlock(unsigned char *data, unsigned int nbytes) const
     nodeaddr_t address = 0x6000;
     if (nbytes > 256)
         return false;
-    return port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(data), nbytes);
+    if (port)
+        return port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(data), nbytes);
+    return false;
 }
 
 bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes)
 {
-    if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() != QLA1_String) {
+        return false;
+    }
+
     AmpIO_UInt32 status = ReadStatus();
     AmpIO_UInt32 ctrl = (addr<<16)|2;
     if (!DallasWriteControl(ctrl)) return false;
@@ -1073,15 +1081,24 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     return true;
 }
 
-AmpIO_UInt32 AmpIO::SPSMReadToolModel() {
-    uint32_t instrument_id;
-    port->ReadQuadlet(BoardId, 0xb012, instrument_id);
-    return bswap_32(instrument_id);
+AmpIO_UInt32 AmpIO::SPSMReadToolModel(void) const
+{
+    uint32_t instrument_id = 0;
+    if (GetHardwareVersion() == dRA1_String) {
+        port->ReadQuadlet(BoardId, 0xb012, instrument_id);
+        return bswap_32(instrument_id);
+    }
+    return 0;
 }
-AmpIO_UInt8 AmpIO::SPSMReadToolVersion() {
-    uint32_t q;
-    port->ReadQuadlet(BoardId, 0xb013, q);
-    return q & 0xFF;
+
+AmpIO_UInt8 AmpIO::SPSMReadToolVersion(void) const
+{
+    uint32_t q = 0;
+    if (GetHardwareVersion() == dRA1_String) {
+        port->ReadQuadlet(BoardId, 0xb013, q);
+        return q & 0xFF;
+    }
+    return q;
 }
 
 // ************************************* Waveform methods ****************************************
