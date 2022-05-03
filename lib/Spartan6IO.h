@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -158,7 +158,7 @@ public:
     bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
     bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
 
-    // ************************ Ethernet Methods *************************************
+    // ********************** KSZ8851 Ethernet MAC/PHY Methods ************************
     // Following functions enable access to the KSZ8851 Ethernet controller on the
     // FPGA V2 board via FireWire. They are provided for testing/debugging.
     // Note that both 8-bit and 16-bit transactions are supported.
@@ -180,6 +180,19 @@ public:
     //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
     // Returns 0 on error (i.e., if Ethernet not present, or read fails)
     AmpIO_UInt16 ReadKSZ8851Status();
+
+    // *********************** RTL8211F Ethernet PHY Methods **************************
+    // The following functions enable access to both of the RTL8211F Ethernet PHYs on
+    // the FPGA V3 board via FireWire. They are provided for testing/debugging.
+
+    // Read PHY register
+    //    chan    1 or 2 for PHY1 or PHY2
+    //    regNum  PHY register to read
+    //    data    data read from PHY register
+    // Returns true if read was successful
+    bool ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 &data);
+
+    // ************************ Ethernet Methods *************************************
     // Read Ethernet data
     //    buffer  buffer for storing data
     //    offset  address offset (in quadlets)

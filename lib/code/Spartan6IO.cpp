@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -563,6 +563,25 @@ AmpIO_UInt16 Spartan6IO::ReadKSZ8851Status()
     return static_cast<AmpIO_UInt16>(read_data>>16);
 }
 
+// ************************** RTL8211F Ethernet PHY Methods *************************************
+
+bool Spartan6IO::ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 &data)
+{
+    // Should have firmware/hardware checks
+    nodeaddr_t address = 0x4080 | (chan << 8);
+    // Format: 0110 0000 0RRR RRXX X(16), where R indicates regNum, X is don't care (0)
+    AmpIO_UInt32 write_data = 0x60000000 | (regNum << 18);
+    if (!port->WriteQuadlet(BoardId, address, write_data))
+        return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, address, read_data))
+        return false;
+    data = static_cast<AmpIO_UInt16>(read_data & 0x0000ffff);
+    unsigned int regNumRead = (read_data & 0x001f0000)>>16;
+    return (regNumRead == regNum);
+}
+
+// ***************************** Methods shared by V2/V3 ****************************************
 bool Spartan6IO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
     if (GetFirmwareVersion() < 5) return false;
