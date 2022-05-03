@@ -117,6 +117,7 @@ public:
     inline void ClearWriteErrors() { numWriteErrors = 0; }
 
     uint32_t GetFirmwareVersion(void) const;
+    uint32_t GetHardwareVersion(void) const;
 
     // Returns FPGA clock period in seconds
     virtual double GetFPGAClockPeriod(void) const = 0;

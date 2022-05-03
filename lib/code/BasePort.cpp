@@ -334,6 +334,7 @@ bool BasePort::AddBoard(BoardIO *board)
     }
     BoardList[id] = board;
     board->port = this;
+    board->InitWriteBuffer();
 
     // Make sure read/write buffers are allocated
     SetReadBufferBroadcast();

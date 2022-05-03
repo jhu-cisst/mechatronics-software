@@ -389,12 +389,12 @@ public:
     /*! \brief Reads model number of the tool on an S PSM
         \returns Model number. 0xffffffff when no tool is present.
     */
-    AmpIO_UInt32 SPSMReadToolModel();
+    AmpIO_UInt32 SPSMReadToolModel(void) const;
 
     /*! \brief Reads version of the tool on an S PSM
         \returns Version. 0xff when no tool is present.
-    */    
-    AmpIO_UInt8 SPSMReadToolVersion();
+    */
+    AmpIO_UInt8 SPSMReadToolVersion(void) const;
 
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
