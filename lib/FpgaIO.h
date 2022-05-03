@@ -15,17 +15,18 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
-#ifndef __Spartan6IO_H__
-#define __Spartan6IO_H__
+#ifndef __Fpga_IO_H__
+#define __Fpga_IO_H__
 
 #include <Amp1394/AmpIORevision.h>
 
 #include "BoardIO.h"
 
-// Methods specific to Spartan6 FPGA board (Rev 1.x or Rev 2.x)
+// Methods specific to FPGA board (Rev 1.x, Rev 2.x or Rev 3.x).
+// Rev 1.x and 2.x use a Spartan6 FPGA, whereas Rev 3.x uses a Zynq FPGA.
 //
 // Supports:
-//   - Read/Write FPGA PROM (M25P16) to reprogram firmware or FPGA serial number
+//   - Read/Write FPGA PROM (M25P16) to reprogram firmware or FPGA serial number (Rev 1.x, 2.x)
 //   - Read/Write external PROM (25AA128); although this PROM is not on the FPGA board,
 //     it is suggested that all companion boards (e.g., QLA) include a 25AA128
 //     (or compatible) PROM connected to pins IO1-1 through IO1-4.
@@ -39,12 +40,12 @@ http://www.cisst.org/cisst/license.txt.
 // This class also contains a firmwareTime member (and accessor methods), which is
 // updated by the derived class to keep a running timer based on the FPGA clock.
 
-class Spartan6IO : public BoardIO
+class FpgaIO : public BoardIO
 {
 public:
 
-    Spartan6IO(AmpIO_UInt8 board_id);
-    ~Spartan6IO();
+    FpgaIO(AmpIO_UInt8 board_id);
+    ~FpgaIO();
 
     // Return FPGA serial number (empty string if not found)
     std::string GetFPGASerialNumber(void);
@@ -213,4 +214,4 @@ protected:
 
 };
 
-#endif // __Spartan6IO_H__
+#endif // __FpgaIO_H__

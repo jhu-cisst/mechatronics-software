@@ -21,14 +21,14 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <Amp1394/AmpIORevision.h>
 
-#include "Spartan6IO.h"
+#include "FpgaIO.h"
 #include "EncoderVelocity.h"
 #include <iostream>
 
 class ostream;
 
 /*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/Interface-Specification */
-class AmpIO : public Spartan6IO
+class AmpIO : public FpgaIO
 {
 public:
     AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);

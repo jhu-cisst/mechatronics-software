@@ -13,7 +13,7 @@ project (Amp1394Lib)
 
 set (HEADERS
      BoardIO.h
-     Spartan6IO.h
+     FpgaIO.h
      AmpIO.h
      Amp1394Types.h
      Amp1394Time.h
@@ -26,7 +26,7 @@ set (HEADERS
 
 set (SOURCE_FILES
      code/BoardIO.cpp
-     code/Spartan6IO.cpp
+     code/FpgaIO.cpp
      code/AmpIO.cpp
      code/Amp1394Time.cpp
      code/EncoderVelocity.cpp
