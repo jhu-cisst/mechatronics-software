@@ -47,6 +47,10 @@ public:
     FpgaIO(AmpIO_UInt8 board_id);
     ~FpgaIO();
 
+    // Return FPGA major version number (1, 2, 3)
+    // Returns 0 if unknown (e.g., could not read from FPGA)
+    unsigned int GetFPGAVersionMajor(void) const;
+
     // Return FPGA serial number (empty string if not found)
     std::string GetFPGASerialNumber(void);
 
@@ -54,6 +58,7 @@ public:
     double GetFPGAClockPeriod(void) const;
 
     // Returns true if FPGA has Ethernet (Rev 2.0+)
+    // NOTE: FPGA V3 Ethernet not yet working, so returns false in that case.
     bool HasEthernet(void) const;
 
     // Get elapsed time, in seconds, based on FPGA clock. This is computed by accumulating

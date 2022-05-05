@@ -61,6 +61,26 @@ FpgaIO::~FpgaIO()
 #endif
 }
 
+unsigned int FpgaIO::GetFPGAVersionMajor(void) const
+{
+    if (GetFirmwareVersion() < 5) return 1;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return 0;
+    unsigned int ver = 0;   // unknown version
+    // Version 1:  all bits are 0
+    // Version 2:  bit 31 is 1
+    // Version 3:  bits[31:30] are 01
+    if (read_data == 0)
+        ver = 1;
+    else if (read_data&0x80000000)
+        ver = 2;
+    //else if (read_data&0x40000000)
+    else             // PK TEMP: firmware bug
+        ver = 3;
+    return ver;
+}
+
 std::string FpgaIO::GetFPGASerialNumber(void)
 {
     // Format: FPGA 1234-56 (12 bytes) or FPGA 1234-567 (13 bytes).
