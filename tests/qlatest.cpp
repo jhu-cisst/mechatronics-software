@@ -714,7 +714,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
     return pass;
 }
 
-bool TestEthernet(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
+bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
     logFile << std::endl << "=== Ethernet (KSZ8851) Test ===" << std::endl;
     if (Board.GetFirmwareVersion() < 5) {
@@ -777,6 +777,29 @@ bool TestEthernet(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     }
     // Reset the board again (to restore MAC address)
     Board.ResetKSZ8851();
+    return ret;
+}
+
+bool TestEthernetV3(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
+{
+    logFile << std::endl << "=== Ethernet (RTL8211F) Test ===" << std::endl;
+    bool ret = true;
+    for (unsigned int i = 1; i < 2; i++) {
+        AmpIO_UInt16 phyreg2 = 0, phyreg3 = 0;
+        if (!Board.ReadRTL8211F_Register(1, 2, phyreg2))
+            logFile << "Failed to read PHY" << i << " Reg 2" << std::endl;
+        if (!Board.ReadRTL8211F_Register(1, 3, phyreg3))
+            logFile << "Failed to read PHY" << i << " Reg 3" << std::endl;
+        logFile << "PHY" << i << " reg 2,3 = " << std::hex
+                << phyreg2 << ", " << phyreg3;
+        if ((phyreg2 == 0x001c) && (phyreg3 == 0xc916)) {
+            logFile << " - PASS" << std::dec << std::endl;
+        }
+        else {
+            logFile << " - FAIL (should be 1c, c916)" << std::dec << std::endl;
+            ret = false;
+        }
+    }
     return ret;
 }
 
@@ -881,10 +904,16 @@ int main(int argc, char** argv)
     logFile << "====== TEST REPORT ======" << std::endl << std::endl;
     logFile << "QLA S/N: " << QLA_SN << std::endl;
 
-    std::string FPGA_SN = Board.GetFPGASerialNumber();
-    if (FPGA_SN.empty())
-        FPGA_SN.assign("Unknown");
-    logFile << "FPGA S/N: " << FPGA_SN << std::endl;
+    unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+    if (fpgaVer == 3) {
+        logFile << "FPGA V3" << std::endl;
+    }
+    else {
+        std::string FPGA_SN = Board.GetFPGASerialNumber();
+        if (FPGA_SN.empty())
+            FPGA_SN.assign("Unknown");
+        logFile << "FPGA S/N: " << FPGA_SN << std::endl;
+    }
 
     logFile << "FPGA Firmware Version: " << Board.GetFirmwareVersion() << std::endl;
 
@@ -905,7 +934,7 @@ int main(int argc, char** argv)
     console.Print(6, 9, "3) Test analog feedback:");
     console.Print(7, 9, "4) Test motor power control:");
     console.Print(8, 9, "5) Test power amplifier:");   // includes current feedback & temp sense
-    if ((desiredPort == BasePort::PORT_FIREWIRE) && Board.HasEthernet())
+    if ((desiredPort == BasePort::PORT_FIREWIRE) && (fpgaVer > 1))
         console.Print(9, 9, "6) Test Ethernet controller:");
 
     console.Refresh();
@@ -981,9 +1010,11 @@ int main(int argc, char** argv)
                 break;
 
             case '6':
-                if ((desiredPort == BasePort::PORT_FIREWIRE) && Board.HasEthernet()) {
+                if ((desiredPort == BasePort::PORT_FIREWIRE) && (fpgaVer > 1)) {
                     ClearLines(TEST_START_LINE, DEBUG_START_LINE);
-                    if (TestEthernet(TEST_START_LINE, Board, Port, logFile))
+                    if ((fpgaVer == 2) && TestEthernetV2(TEST_START_LINE, Board, Port, logFile))
+                        console.Print(9, 46, "PASS");
+                    else if ((fpgaVer == 3) && TestEthernetV3(TEST_START_LINE, Board, Port, logFile))
                         console.Print(9, 46, "PASS");
                     else
                         console.Print(9, 46, "FAIL");

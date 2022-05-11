@@ -122,6 +122,19 @@ public:
 
     // Indicates whether running counter has overflowed
     bool IsRunningCounterOverflow() const {return runOverflow; }
+
+    enum EdgeMask { A_UP = 0x08, B_UP = 0x04, A_DN = 0x02, B_DN = 0x01 };
+
+    // Returns the quarter 1 edge mask
+    // Normally, only one edge should be detected (see EdgeMask)
+    unsigned char GetEncoderQuarter1Edges() const { return qtr1Edges; }
+
+    // Returns the quarter 5 edge mask
+    // Normally, only one edge should be detected (see EdgeMask)
+    unsigned char GetEncoderQuarter5Edges() const { return qtr5Edges; }
+
+    // Returns whether there was a direction change
+    bool GetEncoderDirChange() const { return dirChange; }
 };
 
 #endif // __ENCODER_VELOCITY_H__

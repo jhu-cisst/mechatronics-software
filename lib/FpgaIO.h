@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -15,17 +15,18 @@ http://www.cisst.org/cisst/license.txt.
 --- end cisst license ---
 */
 
-#ifndef __Spartan6IO_H__
-#define __Spartan6IO_H__
+#ifndef __Fpga_IO_H__
+#define __Fpga_IO_H__
 
 #include <Amp1394/AmpIORevision.h>
 
 #include "BoardIO.h"
 
-// Methods specific to Spartan6 FPGA board (Rev 1.x or Rev 2.x)
+// Methods specific to FPGA board (Rev 1.x, Rev 2.x or Rev 3.x).
+// Rev 1.x and 2.x use a Spartan6 FPGA, whereas Rev 3.x uses a Zynq FPGA.
 //
 // Supports:
-//   - Read/Write FPGA PROM (M25P16) to reprogram firmware or FPGA serial number
+//   - Read/Write FPGA PROM (M25P16) to reprogram firmware or FPGA serial number (Rev 1.x, 2.x)
 //   - Read/Write external PROM (25AA128); although this PROM is not on the FPGA board,
 //     it is suggested that all companion boards (e.g., QLA) include a 25AA128
 //     (or compatible) PROM connected to pins IO1-1 through IO1-4.
@@ -39,12 +40,16 @@ http://www.cisst.org/cisst/license.txt.
 // This class also contains a firmwareTime member (and accessor methods), which is
 // updated by the derived class to keep a running timer based on the FPGA clock.
 
-class Spartan6IO : public BoardIO
+class FpgaIO : public BoardIO
 {
 public:
 
-    Spartan6IO(AmpIO_UInt8 board_id);
-    ~Spartan6IO();
+    FpgaIO(AmpIO_UInt8 board_id);
+    ~FpgaIO();
+
+    // Return FPGA major version number (1, 2, 3)
+    // Returns 0 if unknown (e.g., could not read from FPGA)
+    unsigned int GetFPGAVersionMajor(void) const;
 
     // Return FPGA serial number (empty string if not found)
     std::string GetFPGASerialNumber(void);
@@ -53,6 +58,7 @@ public:
     double GetFPGAClockPeriod(void) const;
 
     // Returns true if FPGA has Ethernet (Rev 2.0+)
+    // NOTE: FPGA V3 Ethernet not yet working, so returns false in that case.
     bool HasEthernet(void) const;
 
     // Get elapsed time, in seconds, based on FPGA clock. This is computed by accumulating
@@ -158,7 +164,7 @@ public:
     bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
     bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
 
-    // ************************ Ethernet Methods *************************************
+    // ********************** KSZ8851 Ethernet MAC/PHY Methods ************************
     // Following functions enable access to the KSZ8851 Ethernet controller on the
     // FPGA V2 board via FireWire. They are provided for testing/debugging.
     // Note that both 8-bit and 16-bit transactions are supported.
@@ -180,6 +186,19 @@ public:
     //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
     // Returns 0 on error (i.e., if Ethernet not present, or read fails)
     AmpIO_UInt16 ReadKSZ8851Status();
+
+    // *********************** RTL8211F Ethernet PHY Methods **************************
+    // The following functions enable access to both of the RTL8211F Ethernet PHYs on
+    // the FPGA V3 board via FireWire. They are provided for testing/debugging.
+
+    // Read PHY register
+    //    chan    1 or 2 for PHY1 or PHY2
+    //    regNum  PHY register to read
+    //    data    data read from PHY register
+    // Returns true if read was successful
+    bool ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 &data);
+
+    // ************************ Ethernet Methods *************************************
     // Read Ethernet data
     //    buffer  buffer for storing data
     //    offset  address offset (in quadlets)
@@ -200,4 +219,4 @@ protected:
 
 };
 
-#endif // __Spartan6IO_H__
+#endif // __FpgaIO_H__

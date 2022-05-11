@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -18,7 +18,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <iostream>
 #include <sstream>
 
-#include "Spartan6IO.h"
+#include "FpgaIO.h"
 #include "BasePort.h"
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
@@ -45,23 +45,43 @@ const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (fro
     else { std::cerr << MSG.str() << std::endl; }
 
 
-Spartan6IO::Spartan6IO(AmpIO_UInt8 board_id) : BoardIO(board_id), firmwareTime(0.0)
+FpgaIO::FpgaIO(AmpIO_UInt8 board_id) : BoardIO(board_id), firmwareTime(0.0)
 {
 }
 
-Spartan6IO::~Spartan6IO()
+FpgaIO::~FpgaIO()
 {
 #if 0
     // Do not need this because derived class (e.g., AmpIO) also performs this check
     if (port) {
-        std::cerr << "Warning: Spartan6IO being destroyed while still in use by "
+        std::cerr << "Warning: FpgaIO being destroyed while still in use by "
                   << BasePort::PortTypeString(port->GetPortType()) <<" Port" << std::endl;
         port->RemoveBoard(this);
     }
 #endif
 }
 
-std::string Spartan6IO::GetFPGASerialNumber(void)
+unsigned int FpgaIO::GetFPGAVersionMajor(void) const
+{
+    if (GetFirmwareVersion() < 5) return 1;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, 12, read_data))
+        return 0;
+    unsigned int ver = 0;   // unknown version
+    // Version 1:  all bits are 0
+    // Version 2:  bit 31 is 1
+    // Version 3:  bits[31:30] are 01
+    if (read_data == 0)
+        ver = 1;
+    else if (read_data&0x80000000)
+        ver = 2;
+    //else if (read_data&0x40000000)
+    else             // PK TEMP: firmware bug
+        ver = 3;
+    return ver;
+}
+
+std::string FpgaIO::GetFPGASerialNumber(void)
 {
     // Format: FPGA 1234-56 (12 bytes) or FPGA 1234-567 (13 bytes).
     // Note that on PROM, the string is terminated by 0xff because the sector
@@ -81,16 +101,16 @@ std::string Spartan6IO::GetFPGASerialNumber(void)
         }
     }
     else
-        std::cerr << "Spartan6IO::GetFPGASerialNumber: failed to read FPGA Serial Number" << std::endl;
+        std::cerr << "FpgaIO::GetFPGASerialNumber: failed to read FPGA Serial Number" << std::endl;
     return sn;
 }
 
-double Spartan6IO::GetFPGAClockPeriod(void) const
+double FpgaIO::GetFPGAClockPeriod(void) const
 {
     return (1.0e-6/FPGA_sysclk_MHz);
 }
 
-bool Spartan6IO::HasEthernet(void) const
+bool FpgaIO::HasEthernet(void) const
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t read_data;
@@ -104,12 +124,12 @@ bool Spartan6IO::HasEthernet(void) const
  * Write commands
  */
 
-bool Spartan6IO::WriteReboot(void)
+bool FpgaIO::WriteReboot(void)
 {
     if (GetFirmwareVersion() < 7) {
         // Could instead allow this to be used with older firmware, where the "reboot"
         // flag was instead used as a "soft reset".
-        std::cerr << "Spartan6IO::WriteReboot: requires firmware 7 or above" << std::endl;
+        std::cerr << "FpgaIO::WriteReboot: requires firmware 7 or above" << std::endl;
         return false;
     }
     AmpIO_UInt32 write_data = REBOOT_FPGA;
@@ -117,7 +137,7 @@ bool Spartan6IO::WriteReboot(void)
 }
 
 // Note that with the QLA, this also enables board power
-bool Spartan6IO::WriteLED(bool status)
+bool FpgaIO::WriteLED(bool status)
 {
     AmpIO_UInt32 write_data = status ? LED_ON : LED_OFF;
     return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
@@ -130,7 +150,7 @@ bool Spartan6IO::WriteLED(bool status)
  * but are sent to the broadcast address (FW_NODE_BROADCAST).
  */
 
-bool Spartan6IO::WriteRebootAll(BasePort *port)
+bool FpgaIO::WriteRebootAll(BasePort *port)
 {
     // Note that Firmware V7+ supports the reboot command; earlier versions of
     // firmware will instead perform a limited reset.
@@ -138,7 +158,7 @@ bool Spartan6IO::WriteRebootAll(BasePort *port)
     return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
-bool Spartan6IO::ResetKSZ8851All(BasePort *port) {
+bool FpgaIO::ResetKSZ8851All(BasePort *port) {
     quadlet_t write_data = RESET_KSZ8851;
     return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 12, write_data) : false);
 }
@@ -149,7 +169,7 @@ bool Spartan6IO::ResetKSZ8851All(BasePort *port) {
  *    see DataSheet Table 5: Command Set Codes
  */
 
-AmpIO_UInt32 Spartan6IO::PromGetId(void)
+AmpIO_UInt32 FpgaIO::PromGetId(void)
 {
     AmpIO_UInt32 id = 0;
     quadlet_t data = 0x9f000000;
@@ -161,7 +181,7 @@ AmpIO_UInt32 Spartan6IO::PromGetId(void)
     return id;
 }
 
-bool Spartan6IO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
+bool FpgaIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
 {
     quadlet_t data = 0x05000000;
     nodeaddr_t address = GetPromAddress(type, true);
@@ -175,7 +195,7 @@ bool Spartan6IO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
     return ret;
 }
 
-bool Spartan6IO::PromGetResult(AmpIO_UInt32 &result, PromType type)
+bool FpgaIO::PromGetResult(AmpIO_UInt32 &result, PromType type)
 {
     quadlet_t read_data;
     nodeaddr_t address = GetPromAddress(type, false);
@@ -186,7 +206,7 @@ bool Spartan6IO::PromGetResult(AmpIO_UInt32 &result, PromType type)
     return ret;
 }
 
-bool Spartan6IO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
+bool FpgaIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
                          unsigned int nbytes)
 {
     AmpIO_UInt32 addr24 = addr&0x00ffffff;
@@ -244,21 +264,21 @@ bool Spartan6IO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
     return true;
 }
 
-bool Spartan6IO::PromWriteEnable(PromType type)
+bool FpgaIO::PromWriteEnable(PromType type)
 {
     quadlet_t write_data = 0x06000000;
     nodeaddr_t address = GetPromAddress(type, true);
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 
-bool Spartan6IO::PromWriteDisable(PromType type)
+bool FpgaIO::PromWriteDisable(PromType type)
 {
     quadlet_t write_data = 0x04000000;
     nodeaddr_t address = GetPromAddress(type, true);
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 
-bool Spartan6IO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
+bool FpgaIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
 {
     PromWriteEnable();
     quadlet_t write_data = 0xd8000000 | (addr&0x00ffffff);
@@ -276,13 +296,13 @@ bool Spartan6IO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
     return true;
 }
 
-int Spartan6IO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
+int FpgaIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
                            unsigned int nbytes, const ProgressCallback cb)
 {
     const unsigned int MAX_PAGE = 256;  // 64 quadlets
     if (nbytes > MAX_PAGE) {
         std::ostringstream msg;
-        msg << "Spartan6IO::PromProgramPage: error, nbytes = " << nbytes
+        msg << "FpgaIO::PromProgramPage: error, nbytes = " << nbytes
             << " (max = " << MAX_PAGE << ")";
         ERROR_CALLBACK(cb, msg);
         return -1;
@@ -304,7 +324,7 @@ int Spartan6IO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     else {address = 0xc0;}
     if (!port->WriteBlock(BoardId, address, data_ptr, nbytes+sizeof(quadlet_t))) {
         std::ostringstream msg;
-        msg << "Spartan6IO::PromProgramPage: failed to write block, nbytes = " << nbytes;
+        msg << "FpgaIO::PromProgramPage: failed to write block, nbytes = " << nbytes;
         ERROR_CALLBACK(cb, msg);
         return -1;
     }
@@ -317,21 +337,21 @@ int Spartan6IO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     }
     if (read_data & 0xff000000) { // shouldn't happen
         std::ostringstream msg;
-        msg << "Spartan6IO::PromProgramPage: FPGA error = " << read_data;
+        msg << "FpgaIO::PromProgramPage: FPGA error = " << read_data;
         ERROR_CALLBACK(cb, msg);
     }
     // Now, read result. This should be the number of quadlets written.
     AmpIO_UInt32 nWritten;
     if (!PromGetResult(nWritten)) {
         std::ostringstream msg;
-        msg << "Spartan6IO::PromProgramPage: could not get PROM result";
+        msg << "FpgaIO::PromProgramPage: could not get PROM result";
         ERROR_CALLBACK(cb, msg);
     }
     if (nWritten > 0)
         nWritten = 4*(nWritten-1);  // convert from quadlets to bytes
     if (nWritten != nbytes) {
         std::ostringstream msg;
-        msg << "Spartan6IO::PromProgramPage: wrote " << nWritten << " of "
+        msg << "FpgaIO::PromProgramPage: wrote " << nWritten << " of "
             << nbytes << " bytes";
         ERROR_CALLBACK(cb, msg);
     }
@@ -344,7 +364,7 @@ int Spartan6IO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         }
         else {
             std::ostringstream msg;
-            msg << "Spartan6IO::PromProgramPage: could not get PROM status" << std::endl;
+            msg << "FpgaIO::PromProgramPage: could not get PROM status" << std::endl;
             ERROR_CALLBACK(cb, msg);
         }
         ret = PromGetStatus(status);
@@ -353,7 +373,7 @@ int Spartan6IO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
 }
 
 
-nodeaddr_t Spartan6IO::GetPromAddress(PromType type, bool isWrite)
+nodeaddr_t FpgaIO::GetPromAddress(PromType type, bool isWrite)
 {
     if (type == PROM_M25P16 && isWrite)
         return 0x0008;
@@ -364,14 +384,14 @@ nodeaddr_t Spartan6IO::GetPromAddress(PromType type, bool isWrite)
     else if (type == PROM_25AA128 && !isWrite)
         return 0x3002;
     else
-        std::cerr << "Spartan6IO::GetPromAddress: unsupported PROM type " << type << std::endl;
+        std::cerr << "FpgaIO::GetPromAddress: unsupported PROM type " << type << std::endl;
 
     return 0x00;
 }
 
 
 // ********************** HW PROM ONLY Methods ***********************************
-bool Spartan6IO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
+bool FpgaIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
 {
     // 8-bit cmd + 16-bit addr (2 MSBs ignored)
     AmpIO_UInt32 result = 0x00000000;
@@ -392,7 +412,7 @@ bool Spartan6IO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     }
 }
 
-bool Spartan6IO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
+bool FpgaIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
 {
     // enable write
     PromWriteEnable(PROM_25AA128);
@@ -412,7 +432,7 @@ bool Spartan6IO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data
 
 
 // Read block data (quadlet)
-bool Spartan6IO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
+bool FpgaIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
 {
     // nquads sanity check
     if (nquads == 0 || nquads > 16) {
@@ -435,7 +455,7 @@ bool Spartan6IO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsign
 
 
 // Write block data (quadlet)
-bool Spartan6IO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
+bool FpgaIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
 {
     // address sanity check
     if (nquads == 0 || nquads > 16) {
@@ -458,28 +478,28 @@ bool Spartan6IO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsig
 
 // ********************** KSZ8851 Ethernet Controller Methods ***********************************
 
-bool Spartan6IO::ResetKSZ8851()
+bool FpgaIO::ResetKSZ8851()
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = RESET_KSZ8851;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool Spartan6IO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data)
+bool FpgaIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool Spartan6IO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
+bool FpgaIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool Spartan6IO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata)
+bool FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | rdata;
@@ -496,7 +516,7 @@ bool Spartan6IO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata)
     return true;
 }
 
-bool Spartan6IO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
+bool FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | rdata;
@@ -521,14 +541,14 @@ bool Spartan6IO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
 // This assumes that the chip has already been placed in DMA mode
 // (e.g., by writing to register 0x82).
 
-bool Spartan6IO::WriteKSZ8851DMA(const AmpIO_UInt16 &data)
+bool FpgaIO::WriteKSZ8851DMA(const AmpIO_UInt16 &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x0B000000 | data;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool Spartan6IO::ReadKSZ8851DMA(AmpIO_UInt16 &rdata)
+bool FpgaIO::ReadKSZ8851DMA(AmpIO_UInt16 &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x09000000 | rdata;
@@ -545,7 +565,7 @@ bool Spartan6IO::ReadKSZ8851DMA(AmpIO_UInt16 &rdata)
     return true;
 }
 
-AmpIO_UInt16 Spartan6IO::ReadKSZ8851ChipID()
+AmpIO_UInt16 FpgaIO::ReadKSZ8851ChipID()
 {
     AmpIO_UInt16 data;
     if (ReadKSZ8851Reg(0xC0, data))
@@ -554,7 +574,7 @@ AmpIO_UInt16 Spartan6IO::ReadKSZ8851ChipID()
         return 0;
 }
 
-AmpIO_UInt16 Spartan6IO::ReadKSZ8851Status()
+AmpIO_UInt16 FpgaIO::ReadKSZ8851Status()
 {
     if (GetFirmwareVersion() < 5) return 0;
     quadlet_t read_data;
@@ -563,7 +583,26 @@ AmpIO_UInt16 Spartan6IO::ReadKSZ8851Status()
     return static_cast<AmpIO_UInt16>(read_data>>16);
 }
 
-bool Spartan6IO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
+// ************************** RTL8211F Ethernet PHY Methods *************************************
+
+bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 &data)
+{
+    // Should have firmware/hardware checks
+    nodeaddr_t address = 0x4080 | (chan << 8);
+    // Format: 0110 0000 0RRR RRXX X(16), where R indicates regNum, X is don't care (0)
+    AmpIO_UInt32 write_data = 0x60000000 | (regNum << 18);
+    if (!port->WriteQuadlet(BoardId, address, write_data))
+        return false;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, address, read_data))
+        return false;
+    data = static_cast<AmpIO_UInt16>(read_data & 0x0000ffff);
+    unsigned int regNumRead = (read_data & 0x001f0000)>>16;
+    return (regNumRead == regNum);
+}
+
+// ***************************** Methods shared by V2/V3 ****************************************
+bool FpgaIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
     if (GetFirmwareVersion() < 5) return false;
     // Firmware currently cannot read more than 64 quadlets
@@ -578,7 +617,7 @@ bool Spartan6IO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsign
 }
 
 // Following not yet fully implemented in firmware
-bool Spartan6IO::ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
+bool FpgaIO::ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
     if (GetFirmwareVersion() < 5) return false;
     // Firmware currently cannot read more than 64 quadlets

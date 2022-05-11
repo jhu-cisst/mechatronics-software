@@ -55,7 +55,7 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
                                 0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
-AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : Spartan6IO(board_id), NumAxes(numAxes),
+AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : FpgaIO(board_id), NumAxes(numAxes),
                                                            collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));

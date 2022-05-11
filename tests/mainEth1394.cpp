@@ -191,7 +191,7 @@ bool CheckRegister(AmpIO &Board, AmpIO_UInt8 regNum, AmpIO_UInt16 mask, AmpIO_UI
 }
 
 // Check whether Ethernet initialized correctly
-bool CheckEthernet(AmpIO &Board)
+bool CheckEthernetV2(AmpIO &Board)
 {
     std::cout << "Checking --- start ---" << "\n";
     bool ret = true;
@@ -214,6 +214,19 @@ bool CheckEthernet(AmpIO &Board)
     ret &= CheckRegister(Board, 0x90, 0xffff, 0xa000);  // Enable receive and link change interrupts
     std::cout << "Checking ---- end ----" << "\n";
     return ret;
+}
+
+bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
+{
+    // 0110 0000 0RRR RRXX X(16)
+    AmpIO_UInt16 phyreg2 = 0, phyreg3 = 0;
+    if (!Board.ReadRTL8211F_Register(chan, 2, phyreg2))
+        std::cout << "Failed to read PHY" << chan << " Reg 2" << std::endl;
+    if (!Board.ReadRTL8211F_Register(chan, 3, phyreg3))
+        std::cout << "Failed to read PHY" << chan << " Reg 3" << std::endl;
+    std::cout << "PHY" << chan << std::hex << " Register 2: " << phyreg2 << " (should be 001c)"
+              << ", 3: " << phyreg3 << " (should be c916)" << std::dec << std::endl;
+    return (phyreg2 == 0x001c) && (phyreg3 == 0xc916);
 }
 
 bool InitEthernet(AmpIO &Board)
@@ -255,7 +268,7 @@ bool InitEthernet(AmpIO &Board)
 
 
     // Check that KSZ8851 registers are as expected
-    if (!CheckEthernet(Board)) {
+    if (!CheckEthernetV2(Board)) {
         PrintEthernetDebug(Board);
         return false;
     }
@@ -1164,9 +1177,17 @@ int main(int argc, char **argv)
 #if Amp1394_HAS_RAW1394
         case 'z':
             if (curBoardFw) {
-                // Check that KSZ8851 registers are as expected
-                if (!CheckEthernet(*curBoardFw))
-                    PrintEthernetDebug(*curBoardFw);
+                unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
+                std::cout << "FPGA Rev " << fpgaVer << std::endl;
+                if (fpgaVer == 2) {
+                    // Check that KSZ8851 registers are as expected
+                    if (!CheckEthernetV2(*curBoardFw))
+                        PrintEthernetDebug(*curBoardFw);
+                }
+                else if (fpgaVer == 3) {
+                    CheckEthernetV3(*curBoardFw, 1);
+                    CheckEthernetV3(*curBoardFw, 2);
+                }
             }
             break;
 #endif
