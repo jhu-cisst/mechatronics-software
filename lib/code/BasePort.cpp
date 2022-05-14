@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -334,7 +334,7 @@ bool BasePort::AddBoard(BoardIO *board)
     }
     BoardList[id] = board;
     board->port = this;
-    board->InitWriteBuffer();
+    board->InitBoard();
 
     // Make sure read/write buffers are allocated
     SetReadBufferBroadcast();
@@ -942,10 +942,6 @@ bool BasePort::WriteAllBoardsBroadcast(void)
     bool ret;
 
     ret = WriteBroadcastOutput(bcBuffer, bcBufferOffset);
-
-    // for (int i = 0; i < bcBufferOffset/4 + 1; i++) {
-    //     std::cout <<"WriteAllBoardsBroadcast "<< std::dec << i << "\t" << std::hex << bcBuffer[i] << std::endl;
-    // }
 
     // Send out control quadlet if necessary (firmware prior to Rev 7);
     //    also check for data collection

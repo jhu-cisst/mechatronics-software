@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -31,7 +31,7 @@ class ostream;
 class AmpIO : public FpgaIO
 {
 public:
-    AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes = 4);
+    AmpIO(AmpIO_UInt8 board_id);
     ~AmpIO();
 
     // Return QLA serial number (empty string if not found)
@@ -175,9 +175,9 @@ public:
         not include any errors detected on the FPGA that were cleared before being read by the PC. */
     unsigned int GetEncoderErrorCount(unsigned int index) const;
 
-    /*! Clears the count of encoder errors for the specified channel. Specifying NUM_CHANNELS (default
+    /*! Clears the count of encoder errors for the specified channel. Specifying MAX_CHANNELS (default
         value) clears the counter for all channels. */
-    bool ClearEncoderErrorCount(unsigned int index = NUM_CHANNELS);
+    bool ClearEncoderErrorCount(unsigned int index = MAX_CHANNELS);
 
     //********************************************************************************************
 
@@ -288,7 +288,7 @@ public:
     bool WritePowerEnable(bool state);
 
     // Enable individual amplifiers
-    bool WriteAmpEnable(AmpIO_UInt8 mask, AmpIO_UInt8 state);
+    bool WriteAmpEnable(AmpIO_UInt32 mask, AmpIO_UInt32 state);
 
     bool WriteSafetyRelay(bool state);
 
@@ -373,7 +373,7 @@ public:
 
     static bool WritePowerEnableAll(BasePort *port, bool state);
 
-    static bool WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state);
+    static bool WriteAmpEnableAll(BasePort *port, AmpIO_UInt32 mask, AmpIO_UInt32 state);
 
     static bool WriteSafetyRelayAll(BasePort *port, bool state);
 
@@ -459,6 +459,7 @@ public:
     /*! \brief Read collected data from FPGA memory buffer */
     bool ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads);
 
+    // Motor control mode for Firmware Rev 8+
     enum MotorControlMode {
         RESET = 2,
         VOLTAGE = 1,
@@ -482,35 +483,29 @@ public:
     AmpIO_Int16 ReadFault(unsigned int index) const;
 
 protected:
-    unsigned int NumAxes;   // not currently used
+    unsigned int NumMotors;
+    unsigned int NumEncoders;
 
-    // Number of channels in the node (4 for QLA)
-    enum { NUM_CHANNELS = 10, NUM_MOTORS = 10, NUM_ENCODERS = 7};
+    // Maximum number of channels (avoids need to dynamically allocate memory)
+    enum { MAX_CHANNELS = 16 };
 
-    // Sizes of real-time read and write buffers (see below for offsets into these buffers)
-    // Firmware Rev 1-6 had ReadBufSize=4+4*NUM_CHANNELS. Using the larger buffer here
-    // still retains compatibility with older firmware.
-    enum { ReadBufSize_Old = 4+4*NUM_CHANNELS,
-           ReadBufSize = 4+6*NUM_CHANNELS,
-           ReadBufSize_v8 = 4+2*NUM_MOTORS+5*NUM_ENCODERS,
-           ReadBufSize_max = 64,
-           WriteBufSize = NUM_CHANNELS + 1,
-           WriteBufSize_v8 = NUM_MOTORS + 2,
-           WriteBufSize_max = 64};
+    // Maximum read and write buffer sizes (in quadlets)
+    enum { ReadBufSize_Max = 64,
+           WriteBufSize_Max = 64 };
 
     // Buffer for real-time block reads. The Port class calls SetReadData to copy the
     // most recent data into this buffer, while also byteswapping.
-    quadlet_t ReadBuffer[ReadBufSize_max];
+    quadlet_t ReadBuffer[ReadBufSize_Max];
 
     // Buffer for real-time block writes. The Port class calls GetWriteData to copy from
     // this buffer, while also byteswapping if needed.
-    quadlet_t WriteBuffer[WriteBufSize_max];
+    quadlet_t WriteBuffer[WriteBufSize_Max];
 
     // Encoder velocity data (per axis)
-    EncoderVelocity encVelData[NUM_CHANNELS];
+    EncoderVelocity encVelData[MAX_CHANNELS];
 
     // Counts received encoder errors
-    unsigned int encErrorCount[NUM_CHANNELS];
+    unsigned int encErrorCount[MAX_CHANNELS];
 
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.
@@ -526,17 +521,16 @@ protected:
     unsigned short collect_rindex;     // current read index
 
     // Virtual methods
+
+    // InitBoard sets the number of motors and encoders, based on the hardware
+    // (e.g., QLA or dRA1) and firmware version. It assumes that the port member
+    // data has already been set.
+    void InitBoard(void);
+
     unsigned int GetReadNumBytes() const;
     void SetReadData(const quadlet_t *buf);
 
-    inline unsigned int GetWriteNumBytes(void) const {
-        if (GetFirmwareVersion() < 8) {
-            return WriteBufSize * sizeof(quadlet_t);
-        } else {
-            return WriteBufSize_v8 * sizeof(quadlet_t);
-        }
-    }
-
+    unsigned int GetWriteNumBytes(void) const;
     bool GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap = true) const;
     void InitWriteBuffer(void);
 
@@ -553,10 +547,10 @@ protected:
     */
     void CheckCollectCallback();
 
-    // Offsets of real-time read buffer contents, 28 = 4 + 4 * 6 quadlets
-    // Offsets from TIMESTAMP_OFFSET to ENC_POS_OFFSET have remained stable through
-    // all releases of firmware. The other offsets are related to velocity (and
-    // acceleration) estimation and have varied based on the firmware.
+    // Offsets of real-time read buffer contents, in quadlets
+    // Offsets from TIMESTAMP_OFFSET to ANALOG_POS_OFFSET have remained stable through
+    // all releases of firmware and for both QLA1 and dRA1. The other offsets are related
+    // to velocity (and acceleration) estimation and have varied based on the firmware.
     // ENC_VEL_OFFSET has always measured the encoder period (time between consecutive
     // encoder edges of the same type), though the resolution of that measurement (i.e.,
     // clock ticks per second) varies between different firmware versions.
@@ -566,28 +560,27 @@ protected:
     // counts over the last quarter-cycle, which is used for acceleration estimation.
     // Firmware V7 added ENC_QTR5_OFFSET and ENC_RUN_OFFSET; in V6, the QTR5 data
     // was stuffed into unused bits in other fields.
+    // Firmware V8 added MOTOR_STATUS_OFFSET.
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet
         DIGIO_OFFSET      = 2,    // digital I/O (one quadlet)
         TEMP_OFFSET       = 3,    // temperature (one quadlet)
         MOTOR_CURR_OFFSET = 4,    // half quadlet per channel (lower half)
-        ANALOG_POS_OFFSET = 4,    // half quadlet per channel (upper half)
-        ENC_POS_OFFSET    = MOTOR_CURR_OFFSET + NUM_MOTORS,    // one quadlet per channel
-        ENC_VEL_OFFSET    = ENC_POS_OFFSET + NUM_ENCODERS,  // one quadlet per channel
-        ENC_FRQ_OFFSET    = ENC_VEL_OFFSET + NUM_ENCODERS,  // one quadlet per channel
-        ENC_QTR1_OFFSET   = ENC_FRQ_OFFSET,  // one quadlet per channel
-        ENC_QTR5_OFFSET   = ENC_QTR1_OFFSET + NUM_ENCODERS,  // one quadlet per channel
-        ENC_RUN_OFFSET    = ENC_QTR5_OFFSET + NUM_ENCODERS,   // one quadlet per channel
-        MOTOR_STATUS_OFFSET = ENC_RUN_OFFSET + NUM_ENCODERS
+        ANALOG_POS_OFFSET = 4     // half quadlet per channel (upper half)
     };
+    unsigned int ENC_POS_OFFSET;  // one quadlet per channel
+    unsigned int ENC_VEL_OFFSET;  // one quadlet per channel
+    unsigned int ENC_FRQ_OFFSET;  // one quadlet per channel
+    unsigned int ENC_QTR1_OFFSET; // one quadlet per channel
+    unsigned int ENC_QTR5_OFFSET; // one quadlet per channel
+    unsigned int ENC_RUN_OFFSET;  // one quadlet per channel
+    unsigned int MOTOR_STATUS_OFFSET;
 
     // offsets of real-time write buffer contents
-    enum {
-        WB_HEADER_OFFSET = 0,
-        WB_CURR_OFFSET = 1,             // one quadlet per channel
-        WB_CTRL_OFFSET = NUM_MOTORS + 1   // control register (power control)
-    };
+    unsigned int WB_HEADER_OFFSET; // write header (Firmware Rev 8+)
+    unsigned int WB_CURR_OFFSET;   // one quadlet per channel
+    unsigned int WB_CTRL_OFFSET;   // control register (power control)
 
     // Hardware device address offsets, not to be confused with buffer offsets.
     // Format is [4-bit channel address (1-7) | 4-bit device offset]
@@ -605,6 +598,7 @@ protected:
         DOUT_CTRL_OFFSET = 8       // digital output control (PWM, one-shot)
     };
 
+    // Following offsets are for dRA1
     enum {
         OFF_MOTOR_CONTROL_MODE = 0,
         OFF_CURRENT_KP = 1,

@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -54,6 +54,11 @@ protected:
     friend class EthBasePort;
     friend class EthRawPort;
     friend class EthUdpPort;
+
+    // InitBoard sets the number of motors and encoders, based on the hardware
+    // (e.g., QLA or dRA1) and firmware version. It assumes that the port member
+    // data has already been set.
+    virtual void InitBoard(void) = 0;
 
     // For real-time block reads and writes, the board class (i.e., derived classes from BoardIO)
     // determines the data size (NumBytes), but the port classes (i.e., derived classes from BasePort)
