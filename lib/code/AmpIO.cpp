@@ -58,7 +58,7 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
                                 0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
-AmpIO::AmpIO(AmpIO_UInt8 board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0),
+AmpIO::AmpIO(AmpIO_UInt8 board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0), NumDouts(0),
                                      collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
@@ -115,9 +115,23 @@ void AmpIO::InitBoard(void)
     if (GetHardwareVersion() == dRA1_String) {
         NumMotors = 10;   // Motors with and without encoders
         NumEncoders = 7;  // Motors with encoders
+        NumDouts = 0;
     } else {
         NumMotors = 4;
         NumEncoders = 4;
+        NumDouts = 4;
+    }
+
+    // Check whether buffers are too small (should never happen, but if it does, would
+    // be better to exit rather than just print a message). The alternative is to use
+    // dynamic memory allocation.
+    if ((GetReadNumBytes()/sizeof(quadlet_t)) > ReadBufSize_Max) {
+        std::cerr << "AmpIO: Read buffer size too large: " << GetReadNumBytes()/sizeof(quadlet_t)
+                  << " (max = " << ReadBufSize_Max << ") quadlets" << std::endl;
+    }
+    if ((GetWriteNumBytes()/sizeof(quadlet_t)) > WriteBufSize_Max) {
+        std::cerr << "AmpIO: Write buffer size too large: " << GetWriteNumBytes()/sizeof(quadlet_t)
+                  << " (max = " << WriteBufSize_Max << ") quadlets" << std::endl;
     }
 
     ENC_POS_OFFSET      = MOTOR_CURR_OFFSET + NumMotors;
@@ -824,7 +838,7 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
 
     AmpIO_UInt32 read_data;
     unsigned int channel = (index+1) << 4;
-    if (port && (index < NumMotors)) {  // TODO: NumMotors or NumEncoders or NumDout?
+    if (port && (index < NumDouts)) {
         if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, read_data)) {
             // Starting with Version 1.3.0 of this library, we swap the high and low times
             // because the digital outputs are inverted in hardware.
@@ -962,7 +976,7 @@ bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_
     //    Max high/low time = (2^16-1)/49.152 usec = 1333.3 usec = 1.33 msec
     //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec
     unsigned int channel = (index+1) << 4;
-    if (port && (index < NumMotors)) {   // TODO: NumMotors or NumEncoders or NumDout
+    if (port && (index < NumDouts)) {
         // Starting with Version 1.3.0 of this library, we swap the high and low times
         // because the digital outputs are inverted in hardware.
         AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsLow) << 16) | countsHigh;

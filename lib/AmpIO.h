@@ -483,8 +483,9 @@ public:
     AmpIO_Int16 ReadFault(unsigned int index) const;
 
 protected:
-    unsigned int NumMotors;
-    unsigned int NumEncoders;
+    unsigned int NumMotors;    // Total number of motors (with and without encoders)
+    unsigned int NumEncoders;  // Number of motors with encoders
+    unsigned int NumDouts;     // Number of digital outputs
 
     // Maximum number of channels (avoids need to dynamically allocate memory)
     enum { MAX_CHANNELS = 16 };
