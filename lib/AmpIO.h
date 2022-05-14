@@ -483,8 +483,17 @@ public:
     AmpIO_Int16 ReadFault(unsigned int index) const;
 
 protected:
-    unsigned int NumMotors;    // Total number of motors (with and without encoders)
-    unsigned int NumEncoders;  // Number of motors with encoders
+    // NumMotors specifies the number of motors/brakes and NumEncoders specifies the
+    // number of encoders. Motors and encoders are paired up to T = min(NumMotors, NumEncoders),
+    // e.g., motor[i] is paired with encoder[i] for i = 0 ... (T-1).
+    //   QLA (QLA1):  NumMotors=NumEncoders=4, so there are 4 motor/encoder pairs
+    //   dRAC (dRA1): NumMotors=10, NumEncoders=7, so there are 7 motor/encoder pairs and
+    //                the last 3 motors (brakes) do not have encoders
+    // NumDouts specifies the number of digital outputs, which can also be driven in PWM mode.
+    // The number of digital inputs is not specified, but a 32-bit register is allocated so there
+    // may be up to 32 digital inputs.
+    unsigned int NumMotors;    // Number of motors/brakes
+    unsigned int NumEncoders;  // Number of encoders
     unsigned int NumDouts;     // Number of digital outputs
 
     // Maximum number of channels (avoids need to dynamically allocate memory)

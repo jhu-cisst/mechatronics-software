@@ -113,8 +113,8 @@ void AmpIO::InitBoard(void)
     // If the port is not yet valid, these methods will both return 0, so board will be
     // initialized as a 4-axis QLA and assume firmware version < 8.
     if (GetHardwareVersion() == dRA1_String) {
-        NumMotors = 10;   // Motors with and without encoders
-        NumEncoders = 7;  // Motors with encoders
+        NumMotors = 10;
+        NumEncoders = 7;
         NumDouts = 0;
     } else {
         NumMotors = 4;
