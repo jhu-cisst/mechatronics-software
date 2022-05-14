@@ -162,7 +162,7 @@ void PrintEthernetDebug(AmpIO &Board)
 
 #if Amp1394_HAS_RAW1394
 // Ethernet status, as reported by KSZ8851 on FPGA board
-void PrintEthernetStatus(AmpIO &Board)
+void PrintEthernetStatusV2(AmpIO &Board)
 {
     AmpIO_UInt16 reg;
     Board.ReadKSZ8851Reg(0xF8, reg);
@@ -174,6 +174,25 @@ void PrintEthernetStatus(AmpIO &Board)
     if (reg & 0x0400) std::cout << " 100Mbps";
     else std::cout << " 10Mbps";
     if (reg & 0x2000) std::cout << " polarity-reversed";
+    std::cout << std::endl;
+}
+
+void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
+{
+    std::cout << "PHY" << chan << ":";
+    AmpIO_UInt16 reg;
+    if (!Board.ReadRTL8211F_Register(chan, 0x1a, reg)) {
+        std::cout << " failed to read Reg 0x1A" << std::endl;
+        return;
+    }
+    if (reg & 0x0004) std::cout << " link-good";
+    if (reg & 0x0008) std::cout << " full-duplex";
+    else std::cout << " half-duplex";
+    unsigned int speed = (reg & 0x0030)>>4;
+    if (speed == 0) std::cout << " 10Mbps";
+    else if (speed == 1) std::cout << " 100 Mbps";
+    else if (speed == 2) std::cout << " 1000 Mbps";
+    if (reg & 0x0002) std::cout << " polarity-reversed";
     std::cout << std::endl;
 }
 
@@ -1005,8 +1024,16 @@ int main(int argc, char **argv)
 
 #if Amp1394_HAS_RAW1394
         case '5':
-            if (curBoardFw)
-                PrintEthernetStatus(*curBoardFw);
+            if (curBoardFw) {
+                unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
+                if (fpgaVer == 2) {
+                    PrintEthernetStatusV2(*curBoardFw);
+                }
+                else if (fpgaVer == 3) {
+                    PrintEthernetStatusV3(*curBoardFw, 1);
+                    PrintEthernetStatusV3(*curBoardFw, 2);
+                }
+            }
             break;
 
         case '6':
