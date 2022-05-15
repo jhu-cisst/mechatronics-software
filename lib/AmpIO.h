@@ -84,6 +84,8 @@ public:
 
     AmpIO_UInt32 GetMotorCurrent(unsigned int index) const;
 
+    AmpIO_UInt32 GetMotorStatus(unsigned int index) const;
+
     double GetMotorVoltageRatio(unsigned int index) const;
 
     AmpIO_UInt32 GetAnalogInput(unsigned int index) const;

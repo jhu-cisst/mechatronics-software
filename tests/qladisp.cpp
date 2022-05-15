@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
 
-  (C) Copyright 2012-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -297,11 +297,13 @@ int main(int argc, char** argv)
     AmpIO_UInt32 MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
                                          {0x8000, 0x8000, 0x8000, 0x8000 }};
 
-    bool allRev7 = true;
+    bool someRev7plus = false;
+    bool someRev8plus = false;
     BoardStatusList.clear();
     for (j = 0; j < BoardList.size(); j++) {
         AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
-        if (fver < 7) allRev7 = false;
+        if (fver >= 7) someRev7plus = true;
+        if (fver >= 8) someRev8plus = true;
     }
 
     for (i = 0; i < 4; i++) {
@@ -340,21 +342,25 @@ int main(int argc, char** argv)
 
     unsigned int numAxes = (numDisp > 1) ? 8 : 4;
     for (i = 0; i < numAxes; i++) {
-        console.Print(5, lm+8+i*13, "Axis %d", i);
+        console.Print(5, lm+8+i*13, "Axis %d", i+1);
     }
     console.Print(6, lm, "Enc:");
     console.Print(7, lm, "Pot:");
     console.Print(8, lm, "Vel:");
     console.Print(9, lm, "Cur:");
     console.Print(10, lm, "DAC:");
+    int nextLine = 11;
+    if (someRev8plus)
+        console.Print(nextLine++, lm, "MSt:");   // Motor status
     if (fullvel) {
-        if (allRev7) {
-            console.Print(11, lm, "Qtr1:");
-            console.Print(12, lm, "Qtr5:");
-            console.Print(13, lm, "Run:");
+        if (someRev7plus) {
+            console.Print(nextLine++, lm, "Qtr1:");
+            console.Print(nextLine++, lm, "Qtr5:");
+            console.Print(nextLine++, lm, "Run:");
         }
-        else
-            console.Print(11, lm, "Acc:");
+        else {
+            console.Print(nextLine++, lm, "Acc:");
+        }
     }
 
     console.Refresh();
@@ -376,7 +382,7 @@ int main(int argc, char** argv)
     statusStr2[1][STATUS_STR_LENGTH-1] = 0;
 
     unsigned int loop_cnt = 0;
-    const int STATUS_LINE = fullvel ? 16 : 13;
+    const int STATUS_LINE = fullvel ? 17 : 14;
     int timeLines = 0;   // how many lines for timing info
     if (showTime) {
         timeLines++;
@@ -385,7 +391,7 @@ int main(int argc, char** argv)
     }
     else if (ethPort)
         timeLines++;
-    const int DEBUG_START_LINE = fullvel ? (22+timeLines) : (19+timeLines);
+    const int DEBUG_START_LINE = fullvel ? (23+timeLines) : (20+timeLines);
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
@@ -642,14 +648,24 @@ int main(int argc, char** argv)
                         console.Print(8, lm+6+(i+4*j)*13, "%08X", encVelData.GetEncoderVelocityPeriod());
                     }
                     console.Print(9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
+                    // Line 10 is DAC
+                    int nextLine = 11;
+                    AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
+                    if (someRev8plus) {
+                        if (fver >= 8)
+                            console.Print(nextLine, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetMotorStatus(i));
+                        nextLine++;
+                    }
                     if (fullvel) {
-                        if (allRev7) {
-                            console.Print(11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
-                            console.Print(12, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
-                            console.Print(13, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
+                        if (someRev7plus) {
+                            if (fver >= 7) {
+                                console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
+                                console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
+                                console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
+                            }
                         }
                         else
-                            console.Print(11, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                            console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
                     }
                 }
                 if (isCollecting) {

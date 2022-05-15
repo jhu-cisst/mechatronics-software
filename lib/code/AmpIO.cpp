@@ -169,7 +169,7 @@ void AmpIO::InitWriteBuffer(void)
         //std::fill(std::begin(WriteBuffer), std::end(WriteBuffer), 0);
         memset(WriteBuffer, 0, sizeof(WriteBuffer));
         // Write buffer size = NumMotors+2 (quadlets)
-        WriteBuffer[WB_HEADER_OFFSET] = (BoardId & 0x0F) << 8 | ((NumMotors+2) & 0x0F);
+        WriteBuffer[WB_HEADER_OFFSET] = (BoardId & 0x0F) << 8 | ((NumMotors+2) & 0xFF);
     }
 }
 
@@ -367,6 +367,17 @@ AmpIO_UInt32 AmpIO::GetMotorCurrent(unsigned int index) const
     buff &= MOTOR_CURR_MASK;       // mask for applicable bits
 
     return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
+}
+
+AmpIO_UInt32 AmpIO::GetMotorStatus(unsigned int index) const
+{
+    if (index >= NumMotors)
+        return 0L;
+
+    if (GetFirmwareVersion() < 8)
+        return 0L;
+
+    return static_cast<AmpIO_UInt32>(ReadBuffer[index+MOTOR_STATUS_OFFSET]);
 }
 
 // For dRA1 only
@@ -736,7 +747,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
         data |= COLLECT_BIT;
     if (GetFirmwareVersion() < 8)
         data |= ((BoardId & 0x0F) << 24);
-    WriteBuffer[WB_CURR_OFFSET+index] = data;
+    WriteBuffer[WB_CURR_OFFSET+index] |= data;
     return true;
 }
 
