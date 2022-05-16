@@ -184,11 +184,11 @@ int main(int argc, char** argv)
     AmpIO_UInt32 maxTime = 0;
     AmpIO_UInt32 lastTime = 0;
 
-    unsigned int curAxis = 0;               // Current axis (0=all, 1-MAX_AXES)
-    unsigned int Axis2BoardNum[MAX_AXES];   // Maps curAxis to board number (0 or 1)
-    unsigned int Axis2BoardAxis[MAX_AXES];  // Maps curAxis to board axis (0 to NumEncoders)
-    unsigned int curBoardIndex = 0;         // Current board (when curAxis != 0)
-    unsigned int curAxisIndex = 0;          // Current axis on current board (when curAxis != 0)
+    unsigned int curAxis = 0;                 // Current axis (0=all, 1-MAX_AXES)
+    unsigned int Axis2BoardNum[MAX_AXES+1];   // Maps curAxis (1-MAX_AXES) to board number (0 or 1)
+    unsigned int Axis2BoardAxis[MAX_AXES+1];  // Maps curAxis (1-MAX_AXES) to board axis (0 to NumEncoders)
+    unsigned int curBoardIndex = 0;           // Current board (when curAxis != 0)
+    unsigned int curAxisIndex = 0;            // Current axis on current board (when curAxis != 0)
     char axisString[4] = "all";
     std::string portDescription;
     std::string hardwareList;
@@ -288,13 +288,18 @@ int main(int argc, char** argv)
     unsigned int numDisp = 0;
     // Total number of encoders to display
     unsigned int numAxes = 0;
+    // Note that Axis2BoardNum and Axis2BoardAxis start at 1 because
+    // curAxis 0 is used to select all axes. The first entry should
+    // not be used, but we initialize it to something reasonable (0).
+    Axis2BoardNum[0] = 0;
+    Axis2BoardAxis[0] = 0;
     for (i = 0; i < BoardList.size(); i++) {
         Port->AddBoard(BoardList[i]);
         int numEnc = BoardList[i]->GetNumEncoders();
         if (numAxes + numEnc <= MAX_AXES) {
             for (int j = 0; j < numEnc; j++) {
-                Axis2BoardNum[numAxes+j] = i;
-                Axis2BoardAxis[numAxes+j] = j;
+                Axis2BoardNum[1+numAxes+j] = i;
+                Axis2BoardAxis[1+numAxes+j] = j;
             }
             numDisp++;
             numAxes += numEnc;
@@ -546,26 +551,20 @@ int main(int argc, char** argv)
         }
         else if (c == '=') {
             if (curAxis == 0) {
-                unsigned int axis = 0;
-                for (j = 0; j < numDisp; j++) {
-                    for (i = 0; i < BoardList[j]->GetNumEncoders(); i++)
-                        MotorCurrents[axis++] += 0x100;   // 0x100 is about 50 mA
-                }
+                for (unsigned int axis = 0; axis < numAxes; axis++)
+                    MotorCurrents[axis] += 0x100;   // 0x100 is about 50 mA
             }
             else {
-                MotorCurrents[curAxis] += 0x100;
+                MotorCurrents[curAxis-1] += 0x100;
             }
         }
         else if (c == '-') {
             if (curAxis == 0) {
-                unsigned int axis = 0;
-                for (j = 0; j < numDisp; j++) {
-                    for (i = 0; i < BoardList[j]->GetNumEncoders(); i++)
-                        MotorCurrents[axis++] -= 0x100;   // 0x100 is about 50 mA
-                }
+                for (unsigned int axis = 0; axis < numAxes; axis++)
+                    MotorCurrents[axis] -= 0x100;   // 0x100 is about 50 mA
             }
             else {
-                MotorCurrents[curAxis] -= 0x100;
+                MotorCurrents[curAxis-1] -= 0x100;
             }
         }
         else if (c == 'c') {
