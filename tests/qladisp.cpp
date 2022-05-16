@@ -43,6 +43,9 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EthBasePort.h"
 
+// Maximum number of axes (channels) to display
+const unsigned int MAX_AXES = 8;
+
 /*!
  \brief Increment encoder counts
  \param[in] bd FPGA Board
@@ -150,6 +153,7 @@ void UpdateStatusStrings(char *statusStr1, char *statusStr2, AmpIO_UInt32 status
             statusStr1[16] = '-';
         }
     }
+    // NOTE: hard-coded for 4 amplifiers
     for (unsigned int i = 0; i < 4; i++) {  // amplifier status
         AmpIO_UInt32 mask = (0x00000100 << i);
         if (statusChanged&mask) {
@@ -180,9 +184,11 @@ int main(int argc, char** argv)
     AmpIO_UInt32 maxTime = 0;
     AmpIO_UInt32 lastTime = 0;
 
-    unsigned int curAxis = 0;     // Current axis (0=all, 1-8)
-    unsigned int curBoardIndex = 0;
-    unsigned int curAxisIndex = 0;
+    unsigned int curAxis = 0;               // Current axis (0=all, 1-MAX_AXES)
+    unsigned int Axis2BoardNum[MAX_AXES];   // Maps curAxis to board number (0 or 1)
+    unsigned int Axis2BoardAxis[MAX_AXES];  // Maps curAxis to board axis (0 to NumEncoders)
+    unsigned int curBoardIndex = 0;         // Current board (when curAxis != 0)
+    unsigned int curAxisIndex = 0;          // Current axis on current board (when curAxis != 0)
     char axisString[4] = "all";
     std::string portDescription;
     std::string hardwareList;
@@ -253,7 +259,7 @@ int main(int argc, char** argv)
         // keys
         std::cerr << std::endl << "Keys:" << std::endl
                   << "'r': reset FireWire port" << std::endl
-                  << "'a': axis to address (1-4 or 8) or all (0, default)" << std::endl
+                  << "'a': axis to address (1-N) or all (0, default)" << std::endl
                   << "'d': turn watchdog on/off (0.25 ms, this should be triggered immediately)" << std::endl
                   << "'D': turn watchdog on/off (25.0 ms, can be triggered by unplugging cable to PC)" << std::endl
                   << "'p': turn power on/off (board and axis)" << std::endl
@@ -278,8 +284,22 @@ int main(int argc, char** argv)
     // Check if an Ethernet port
     EthBasePort *ethPort = dynamic_cast<EthBasePort *>(Port);
 
-    for (i = 0; i < BoardList.size(); i++)
+    // Number of boards to display (currently 1 or 2)
+    unsigned int numDisp = 0;
+    // Total number of encoders to display
+    unsigned int numAxes = 0;
+    for (i = 0; i < BoardList.size(); i++) {
         Port->AddBoard(BoardList[i]);
+        int numEnc = BoardList[i]->GetNumEncoders();
+        if (numAxes + numEnc <= MAX_AXES) {
+            for (int j = 0; j < numEnc; j++) {
+                Axis2BoardNum[numAxes+j] = i;
+                Axis2BoardAxis[numAxes+j] = j;
+            }
+            numDisp++;
+            numAxes += numEnc;
+        }
+    }
 
     // Set protocol; default is PROTOCOL_SEQ_RW (not broadcast), but can be changed to
     // one of the broadcast protocols by specifying -br or -bw command line parameter.
@@ -290,12 +310,10 @@ int main(int argc, char** argv)
     if (!Port->SetProtocol(protocol))
         protocol = Port->GetProtocol();  // on failure, get current protocol
 
-    // Number of boards to display (currently 1 or 2)
-    unsigned int numDisp = (BoardList.size() >= 2) ? 2 : 1;
-
-    // Currently hard-coded for up to 2 boards; initialize at mid-range
-    AmpIO_UInt32 MotorCurrents[2][4] = { {0x8000, 0x8000, 0x8000, 0x8000 },
-                                         {0x8000, 0x8000, 0x8000, 0x8000 }};
+    // Initialize motor currents at mid-range
+    AmpIO_UInt32 MotorCurrents[MAX_AXES];
+    for (i = 0; i < MAX_AXES; i++)
+        MotorCurrents[i] = 0x8000;
 
     bool someRev7plus = false;
     bool someRev8plus = false;
@@ -306,8 +324,8 @@ int main(int argc, char** argv)
         if (fver >= 8) someRev8plus = true;
     }
 
-    for (i = 0; i < 4; i++) {
-        for (j = 0; j < numDisp; j++)
+    for (j = 0; j < numDisp; j++) {
+        for (i = 0; i < BoardList[j]->GetNumEncoders(); i++)
             BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
     }
     for (j = 0; j < numDisp; j++) {
@@ -340,7 +358,6 @@ int main(int argc, char** argv)
     console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
     console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
 
-    unsigned int numAxes = (numDisp > 1) ? 8 : 4;
     for (i = 0; i < numAxes; i++) {
         console.Print(5, lm+8+i*13, "Axis %d", i+1);
     }
@@ -418,8 +435,8 @@ int main(int argc, char** argv)
         else if (c == 'a') {
             if (curAxis < numAxes) {
                 curAxis++;
-                curBoardIndex = (curAxis-1)/4;
-                curAxisIndex = (curAxis-1)%4;
+                curBoardIndex = Axis2BoardNum[curAxis];
+                curAxisIndex = Axis2BoardAxis[curAxis];
                 sprintf(axisString, "%d", curAxis);
             }
             else {
@@ -529,28 +546,30 @@ int main(int argc, char** argv)
         }
         else if (c == '=') {
             if (curAxis == 0) {
+                unsigned int axis = 0;
                 for (j = 0; j < numDisp; j++) {
-                    for (i = 0; i < 4; i++)
-                        MotorCurrents[j][i] += 0x100;   // 0x100 is about 50 mA
+                    for (i = 0; i < BoardList[j]->GetNumEncoders(); i++)
+                        MotorCurrents[axis++] += 0x100;   // 0x100 is about 50 mA
                 }
             }
             else {
-                MotorCurrents[curBoardIndex][curAxisIndex] += 0x100;
+                MotorCurrents[curAxis] += 0x100;
             }
         }
         else if (c == '-') {
             if (curAxis == 0) {
+                unsigned int axis = 0;
                 for (j = 0; j < numDisp; j++) {
-                    for (i = 0; i < 4; i++)
-                        MotorCurrents[j][i] -= 0x100;   // 0x100 is about 50 mA
+                    for (i = 0; i < BoardList[j]->GetNumEncoders(); i++)
+                        MotorCurrents[axis++] -= 0x100;   // 0x100 is about 50 mA
                 }
             }
             else {
-                MotorCurrents[curBoardIndex][curAxisIndex] -= 0x100;
+                MotorCurrents[curAxis] -= 0x100;
             }
         }
         else if (c == 'c') {
-            int collect_board = (collect_axis <= 4) ? 0 : 1;
+            int collect_board = (collect_axis <= BoardList[0]->GetNumEncoders()) ? 0 : 1;
             if (BoardList[collect_board]->IsCollecting()) {
                 BoardList[collect_board]->DataCollectionStop();
                 console.Print(STATUS_LINE-1, lm, "             ");
@@ -566,7 +585,7 @@ int main(int argc, char** argv)
                 collectFile.open(fileName, std::ofstream::binary|std::ofstream::trunc);
                 if (!collectFile.good())
                     std::cerr << "Failed to open data collection file " << fileName << std::endl;
-                unsigned char collect_chan = collect_axis-4*collect_board;
+                unsigned char collect_chan = collect_axis-(BoardList[0]->GetNumEncoders())*collect_board;
                 if (BoardList[collect_board]->DataCollectionStart(collect_chan, CollectCB)) {
                     isCollecting = true;
                     console.Print(STATUS_LINE-1, lm, "Collecting %d:", collect_axis);
@@ -635,9 +654,10 @@ int main(int argc, char** argv)
                 pcTime = Amp1394_GetTime()-startTime;
             }
         }
+        unsigned int axisNum = 0;
         for (j = 0; j < numDisp; j++) {
             if (BoardList[j]->ValidRead()) {
-                for (i = 0; i < 4; i++) {
+                for (i = 0; i < BoardList[j]->GetNumEncoders(); i++) {
                     console.Print(6, lm+7+(i+4*j)*13, "%07X",
                               BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
                     console.Print(7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
@@ -714,9 +734,10 @@ int main(int argc, char** argv)
             if (showTime)
                 console.Print(STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
                           pcTime-BoardList[j]->GetFirmwareTime());
-            for (i = 0; i < 4; i++) {
-                console.Print(10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[j][i]);
-                BoardList[j]->SetMotorCurrent(i, MotorCurrents[j][i]);
+            for (i = 0; i < BoardList[j]->GetNumEncoders(); i++) {
+                console.Print(10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[axisNum]);
+                BoardList[j]->SetMotorCurrent(i, MotorCurrents[axisNum]);
+                axisNum++;
             }
             loop_cnt++;
         }
@@ -772,9 +793,10 @@ int main(int argc, char** argv)
     }
 
     // Reset encoder preloads to default
-    for (i = 0; i < 4; i++) {
-        for (j = 0; j < numDisp; j++)
+    for (j = 0; j < numDisp; j++) {
+        for (i = 0; i < BoardList[j]->GetNumEncoders(); i++) {
             BoardList[j]->WriteEncoderPreload(i, 0);
+        }
     }
 
     console.End();

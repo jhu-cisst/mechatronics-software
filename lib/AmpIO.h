@@ -34,6 +34,15 @@ public:
     AmpIO(AmpIO_UInt8 board_id);
     ~AmpIO();
 
+    // Return number of motors (4 for QLA, 10 for dRAC)
+    unsigned int GetNumMotors(void) const { return NumMotors; }
+
+    // Return number of encoders (4 for QLA, 7 for dRAC)
+    unsigned int GetNumEncoders(void) const { return NumEncoders; }
+
+    // Return number of digital outputs (4 for QLA)
+    unsigned int GetNumDouts(void) const { return NumDouts; }
+
     // Return QLA serial number (empty string if not found)
     std::string GetQLASerialNumber(void);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
