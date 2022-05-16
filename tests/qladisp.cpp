@@ -34,6 +34,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <sstream>
 #include <fstream>
 #include <vector>
+#include <algorithm>   // for std::max
 
 #include <Amp1394/AmpIORevision.h>
 #include "PortFactory.h"
@@ -44,7 +45,21 @@ http://www.cisst.org/cisst/license.txt.
 #include "EthBasePort.h"
 
 // Maximum number of axes (channels) to display
-const unsigned int MAX_AXES = 8;
+const unsigned int MAX_AXES = 11;
+
+class AxisInfo {
+public:
+    enum AxisType { AXIS_UNKNOWN, MOTOR_ENCODER, MOTOR_ONLY, ENCODER_ONLY };
+
+    AxisInfo() : axisType(AXIS_UNKNOWN) {}
+    AxisInfo(AxisType ax) : axisType(ax) {}
+    ~AxisInfo() {}
+
+    bool HasMotor(void) const   { return (axisType == MOTOR_ENCODER) || (axisType == MOTOR_ONLY); }
+    bool HasEncoder(void) const { return (axisType == MOTOR_ENCODER) || (axisType == ENCODER_ONLY); }
+protected:
+    AxisType axisType;
+};
 
 /*!
  \brief Increment encoder counts
@@ -176,6 +191,7 @@ int main(int argc, char** argv)
     BasePort::ProtocolType protocol = BasePort::PROTOCOL_SEQ_RW;
     bool fullvel = false;  // whether to display full velocity feedback
     bool showTime = false; // whether to display time information
+    bool useMaxAxis = false; // true --> use max(NumEncoders, NumMotors); false --> NumEncoders
 
     std::vector<AmpIO*> BoardList;
     std::vector<AmpIO_UInt32> BoardStatusList;
@@ -187,6 +203,7 @@ int main(int argc, char** argv)
     unsigned int curAxis = 0;                 // Current axis (0=all, 1-MAX_AXES)
     unsigned int Axis2BoardNum[MAX_AXES+1];   // Maps curAxis (1-MAX_AXES) to board number (0 or 1)
     unsigned int Axis2BoardAxis[MAX_AXES+1];  // Maps curAxis (1-MAX_AXES) to board axis (0 to NumEncoders)
+    AxisInfo AxisData[MAX_AXES+1];            // Indicates whether motor, encoder or both
     unsigned int curBoardIndex = 0;           // Current board (when curAxis != 0)
     unsigned int curAxisIndex = 0;            // Current axis on current board (when curAxis != 0)
     char axisString[4] = "all";
@@ -213,6 +230,8 @@ int main(int argc, char** argv)
                 fullvel = true;
             else if (argv[i][1] == 't')
                 showTime = true;
+            else if (argv[i][1] == 'm')
+                useMaxAxis = true;
         }
         else {
             int bnum = atoi(argv[i]);
@@ -227,7 +246,7 @@ int main(int argc, char** argv)
 
     if (BoardList.size() < 1) {
         // usage
-        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-hH] [-b<r|w>] [-v] [-t]" << std::endl
+        std::cerr << "Usage: qladisp <board-num> [<board-num>] [-pP] [-hH] [-b<r|w>] [-v] [-t] [-m]" << std::endl
                   << "       where P = port number (default 0)" << std::endl
                   << "                 can also specify -pfw[:P], -peth:P or -pudp[:xx.xx.xx.xx]" << std::endl
                   << "             H = additional supported hardware versions" << std::endl
@@ -235,6 +254,7 @@ int main(int argc, char** argv)
                   << "            -bw enables broadcast write" << std::endl
                   << "            -v  displays full velocity feedback" << std::endl
                   << "            -t  displays time information" << std::endl
+                  << "            -m  include motors without encoders (if any)" << std::endl
                   << std::endl
                   << "Trying to detect boards on port:" << std::endl;
     }
@@ -286,23 +306,32 @@ int main(int argc, char** argv)
 
     // Number of boards to display (currently 1 or 2)
     unsigned int numDisp = 0;
-    // Total number of encoders to display
+    // Total number of axes to display
     unsigned int numAxes = 0;
     // Note that Axis2BoardNum and Axis2BoardAxis start at 1 because
     // curAxis 0 is used to select all axes. The first entry should
     // not be used, but we initialize it to something reasonable (0).
     Axis2BoardNum[0] = 0;
     Axis2BoardAxis[0] = 0;
+    AxisData[0] = AxisInfo::AXIS_UNKNOWN;
     for (i = 0; i < BoardList.size(); i++) {
         Port->AddBoard(BoardList[i]);
         int numEnc = BoardList[i]->GetNumEncoders();
-        if (numAxes + numEnc <= MAX_AXES) {
-            for (int j = 0; j < numEnc; j++) {
+        int numMot = BoardList[i]->GetNumMotors();
+        int numThisBoard = useMaxAxis ? std::max(numEnc,numMot) : numEnc;
+        if (numAxes + numThisBoard <= MAX_AXES) {
+            for (int j = 0; j < numThisBoard; j++) {
                 Axis2BoardNum[1+numAxes+j] = i;
                 Axis2BoardAxis[1+numAxes+j] = j;
+                if ((j < numEnc) && (j < numMot))
+                    AxisData[1+numAxes+j] = AxisInfo(AxisInfo::MOTOR_ENCODER);
+                else if (j < numEnc)
+                    AxisData[1+numAxes+j] = AxisInfo(AxisInfo::ENCODER_ONLY);
+                else
+                    AxisData[1+numAxes+j] = AxisInfo(AxisInfo::MOTOR_ONLY);
             }
             numDisp++;
-            numAxes += numEnc;
+            numAxes += numThisBoard;
         }
     }
 
@@ -363,8 +392,10 @@ int main(int argc, char** argv)
     console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
     console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
 
-    for (i = 0; i < numAxes; i++) {
-        console.Print(5, lm+8+i*13, "Axis %d", i+1);
+    for (i = 1; i <= numAxes; i++) {
+        unsigned int dx = lm+8+(i-1)*13;
+        if (i >= 10) dx--;
+        console.Print(5, dx, "Axis %d", i);
     }
     console.Print(6, lm, "Enc:");
     console.Print(7, lm, "Pot:");
@@ -653,40 +684,51 @@ int main(int argc, char** argv)
                 pcTime = Amp1394_GetTime()-startTime;
             }
         }
-        unsigned int axisNum = 0;
-        for (j = 0; j < numDisp; j++) {
+        for (unsigned int axisNum = 1; axisNum <= numAxes; axisNum++) {
+            j = Axis2BoardNum[axisNum];
+            unsigned int dx = (axisNum-1)*13;   // offset between columns
             if (BoardList[j]->ValidRead()) {
-                for (i = 0; i < BoardList[j]->GetNumEncoders(); i++) {
-                    console.Print(6, lm+7+(i+4*j)*13, "%07X",
+                i = Axis2BoardAxis[axisNum];
+                AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
+                if (AxisData[axisNum].HasEncoder()) {
+                    console.Print(6, lm+7+dx, "%07X",
                               BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());
-                    console.Print(7, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetAnalogInput(i));
+                    console.Print(7, lm+10+dx, "%04X", BoardList[j]->GetAnalogInput(i));
                     if (fullvel)
-                        console.Print(8, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
+                        console.Print(8, lm+6+dx, "%08X", BoardList[j]->GetEncoderVelocityRaw(i));
                     else {
                         BoardList[j]->GetEncoderVelocityData(i, encVelData);
-                        console.Print(8, lm+6+(i+4*j)*13, "%08X", encVelData.GetEncoderVelocityPeriod());
+                        console.Print(8, lm+6+dx, "%08X", encVelData.GetEncoderVelocityPeriod());
                     }
-                    console.Print(9, lm+10+(i+4*j)*13, "%04X", BoardList[j]->GetMotorCurrent(i));
-                    // Line 10 is DAC
-                    int nextLine = 11;
-                    AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
+                }
+                if (AxisData[axisNum].HasMotor()) {
+                    console.Print(9, lm+10+dx, "%04X", BoardList[j]->GetMotorCurrent(i));
+                    console.Print(10, lm+10+dx, "%04X", MotorCurrents[axisNum-1]);
+                    BoardList[j]->SetMotorCurrent(i, MotorCurrents[axisNum-1]);
                     if (someRev8plus) {
                         if (fver >= 8)
-                            console.Print(nextLine, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetMotorStatus(i));
-                        nextLine++;
+                            console.Print(11, lm+6+dx, "%08X", BoardList[j]->GetMotorStatus(i));
                     }
+                }
+                nextLine = someRev8plus ? 12 : 11;
+                if (AxisData[axisNum].HasEncoder()) {
                     if (fullvel) {
                         if (someRev7plus) {
                             if (fver >= 7) {
-                                console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
-                                console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
-                                console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
+                                console.Print(nextLine++, lm+6+dx, "%08X", BoardList[j]->GetEncoderQtr1Raw(i));
+                                console.Print(nextLine++, lm+6+dx, "%08X", BoardList[j]->GetEncoderQtr5Raw(i));
+                                console.Print(nextLine++, lm+6+dx, "%08X", BoardList[j]->GetEncoderRunningCounterRaw(i));
                             }
                         }
                         else
-                            console.Print(nextLine++, lm+6+(i+4*j)*13, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
+                            console.Print(nextLine++, lm+6+dx, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
                     }
                 }
+            }
+        }
+        unsigned int bdx = 0;
+        for (j = 0; j < numDisp; j++) {
+            if (BoardList[j]->ValidRead()) {
                 if (isCollecting) {
                     bool fpgaCollecting;
                     unsigned char fpgaChan;
@@ -702,22 +744,22 @@ int main(int argc, char** argv)
                     BoardStatusList[j] = status;
                     UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status);
                 }
-                console.Print(STATUS_LINE, lm+58*j, "Status: %08X   Timestamp: %08X   DigOut: %01X",
+                console.Print(STATUS_LINE, lm+bdx, "Status: %08X   Timestamp: %08X   DigOut: %01X",
                           status, BoardList[j]->GetTimestamp(),
                           (unsigned int)dig_out);
-                console.Print(STATUS_LINE+1, lm+58*j, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
+                console.Print(STATUS_LINE+1, lm+bdx, "%17s  NegLim: %01X  PosLim: %01X  Home: %01X",
                           statusStr1[j],
                           BoardList[j]->GetNegativeLimitSwitches(),
                           BoardList[j]->GetPositiveLimitSwitches(),
                           BoardList[j]->GetHomeSwitches());
-                console.Print(STATUS_LINE+2, lm+58*j, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
+                console.Print(STATUS_LINE+2, lm+bdx, "%17s  EncA: %01X    EncB: %01X    EncI: %01X",
                           statusStr2[j],
                           BoardList[j]->GetEncoderChannelA(),
                           BoardList[j]->GetEncoderChannelB(),
                           BoardList[j]->GetEncoderIndex());
 
-                console.Print(STATUS_LINE+4, lm+58*j, "Node: %s", nodeStr[j]);
-                console.Print(STATUS_LINE+4, lm+14+58*j, "Temp:  %02X    %02X",
+                console.Print(STATUS_LINE+4, lm+bdx, "Node: %s", nodeStr[j]);
+                console.Print(STATUS_LINE+4, lm+14+bdx, "Temp:  %02X    %02X",
                           (unsigned int)BoardList[j]->GetAmpTemperature(0),
                           (unsigned int)BoardList[j]->GetAmpTemperature(1));
                 if (loop_cnt > 500) {
@@ -727,17 +769,16 @@ int main(int argc, char** argv)
                     }
                 }
             }
-            console.Print(STATUS_LINE+4, lm+35+58*j, "Err(r/w): %2d %2d",
+            console.Print(STATUS_LINE+4, lm+35+bdx, "Err(r/w): %2d %2d",
                       BoardList[j]->GetReadErrors(),
                       BoardList[j]->GetWriteErrors());
             if (showTime)
-                console.Print(STATUS_LINE+5, lm+20+58*j, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
+                console.Print(STATUS_LINE+5, lm+20+bdx, "%9.3lf (%7.4lf)", BoardList[j]->GetFirmwareTime(),
                           pcTime-BoardList[j]->GetFirmwareTime());
-            for (i = 0; i < BoardList[j]->GetNumEncoders(); i++) {
-                console.Print(10, lm+10+(i+4*j)*13, "%04X", MotorCurrents[axisNum]);
-                BoardList[j]->SetMotorCurrent(i, MotorCurrents[axisNum]);
-                axisNum++;
-            }
+            int numEnc = BoardList[j]->GetNumEncoders();
+            int numMot = BoardList[j]->GetNumMotors();
+            int numTot = useMaxAxis ? std::max(numEnc,numMot) : numEnc;
+            bdx += (6 + numTot*13);
             loop_cnt++;
         }
         if (showTime) {
