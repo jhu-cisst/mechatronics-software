@@ -50,10 +50,11 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         outStr(ostr),
         Protocol_(BasePort::PROTOCOL_SEQ_RW),
         IsAllBoardsBroadcastCapable_(false),
-        IsAllBoardsBroadcastShorterWait_(false),
-        IsNoBoardsBroadcastShorterWait_(true),
+        IsAllBoardsRev4_5_(false),
+        IsAllBoardsRev4_6_(true),
+        IsAllBoardsRev6_(false),
         IsAllBoardsRev7_(false),
-        IsNoBoardsRev7_(false),
+        IsAllBoardsRev8_(false),
         ReadErrorCounter_(0),
         PortNum(portNum),
         FwBusGeneration(0),
@@ -142,10 +143,10 @@ bool BasePort::SetProtocol(ProtocolType prot) {
                    << "          please upgrade your firmware"  << std::endl;
             return false;
         }
-        if (!(IsAllBoardsRev7_ || IsNoBoardsRev7_)) {
+        if (!IsBroadcastFirmwareMixValid()) {
             outStr << "BasePort::SetProtocol" << std::endl
-                   << "***Error: cannot use broadcast mode with mix of Rev 7 and older boards, " << std::endl
-                   << "          please upgrade your firmware to Rev 7" << std::endl;
+                   << "***Error: cannot use broadcast mode with this mix of firmware, " << std::endl
+                   << "          please upgrade your firmware" << std::endl;
             return false;
         }
     }
@@ -220,10 +221,11 @@ bool BasePort::ScanNodes(void)
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
     IsAllBoardsBroadcastCapable_ = true;
-    IsAllBoardsBroadcastShorterWait_ = true;
-    IsNoBoardsBroadcastShorterWait_ = true;
+    IsAllBoardsRev4_5_ = true;
+    IsAllBoardsRev4_6_ = true;
+    IsAllBoardsRev6_ = true;
     IsAllBoardsRev7_ = true;
-    IsNoBoardsRev7_ = true;
+    IsAllBoardsRev8_ = true;
     NumOfNodes_ = 0;
 
     nodeid_t max_nodes = InitNodes();
@@ -276,14 +278,23 @@ bool BasePort::ScanNodes(void)
         Node2Board[node] = static_cast<unsigned char>(board);
 
         // check firmware version
-        // FirmwareVersion >= 4, broadcast capable
-        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
-        // FirmwareVersion >= 6, broadcast with possibly shorter wait (i.e., skipping nodes
+        // Firmware Version >= 4, broadcast capable
+        if (fver < 4) {
+            IsAllBoardsBroadcastCapable_ = false;
+            IsAllBoardsRev4_5_ = false;
+            IsAllBoardsRev4_6_ = false;
+        }
+        if (fver > 5) IsAllBoardsRev4_5_ = false;
+        if (fver > 6) IsAllBoardsRev4_6_ = false;
+        // Firmware Version 6, broadcast with possibly shorter wait (i.e., skipping nodes
         // on the bus that are not part of the current configuration).
-        if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
-        else          IsNoBoardsBroadcastShorterWait_ = false;
-        if (fver < 7) IsAllBoardsRev7_ = false;
-        else          IsNoBoardsRev7_ = false;
+        if (fver != 6) IsAllBoardsRev6_ = false;
+        // Firmware Version 7, added power control to block write; added velocity estimation
+        // fields to block read
+        if (fver != 7) IsAllBoardsRev7_ = false;
+        // Firmware Version 8, added header quadlet to block write; support larger entries in
+        // block read (both changes to support dRAC).
+        if (fver != 8) IsAllBoardsRev8_ = false;
         NumOfNodes_++;
     }
     outStr << "BasePort::ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
@@ -311,17 +322,17 @@ void BasePort::SetDefaultProtocol(void)
     Protocol_ = BasePort::PROTOCOL_SEQ_RW;
     // Use broadcast by default if all firmware are bc capable
     if ((NumOfNodes_ > 0) && IsAllBoardsBroadcastCapable_) {
-        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
+        if (IsBroadcastFirmwareMixValid()) {
             Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-            if (IsAllBoardsBroadcastShorterWait_)
+            if (IsBroadcastShorterWait())
                 outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and support shorter wait" << std::endl;
-            else if (IsNoBoardsBroadcastShorterWait_)
+            else if (IsAllBoardsRev4_5_)
                 outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and do not support shorter wait" << std::endl;
-            else
+            else if (IsAllBoardsRev4_6_)
                 outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and some support shorter wait" << std::endl;
         }
         else
-            outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
+            outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable, but disabled due to mix of firmware" << std::endl;
     }
 }
 
@@ -684,7 +695,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
+    if (!IsBroadcastFirmwareMixValid()) {
         outStr << "BasePort::ReadAllBoardsBroadcast: invalid mix of firmware" << std::endl;
         OnNoneRead();
         return false;
@@ -719,16 +730,18 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     WaitBroadcastRead();
 
     int readSize;        // Block size per board (depends on firmware version)
-    if (IsNoBoardsRev7_)
+    if (IsAllBoardsRev4_6_)
         readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
-    else
+    else if (IsAllBoardsRev7_)
         readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
+    else
+        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8) -- TODO: update for dRAC
 
     int hubReadSize;        // Actual read size (depends on firmware version)
-    if (IsNoBoardsRev7_)
+    if (IsAllBoardsRev4_6_)
         hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
     else
-        hubReadSize = readSize*NumOfBoards_+1;         // Rev 7: NumOfBoards * 29 + 1
+        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7: NumOfBoards * readSize + 1
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
     memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
@@ -786,13 +799,13 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             }
             curPtr += readSize;
         }
-        else if (IsNoBoardsRev7_) {
+        else if (IsAllBoardsRev4_6_) {
             // Skip unused boards for firmware < 7
             curPtr += readSize;
         }
     }
 
-    if (IsAllBoardsRev7_) {
+    if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
         quadlet_t timingInfo = bswap_32(hubReadBuffer[hubReadSize-1]);
         bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
         bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
@@ -805,7 +818,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         outStr << "BasePort::ReadAllBoardsBroadcast: rtRead is false" << std::endl;
 
 #if 0
-    if (IsAllBoardsRev7_) {
+    if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
         bcReadInfo.PrintTiming(outStr);
     }
 #endif
@@ -899,7 +912,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
+    if (!IsBroadcastFirmwareMixValid()) {
         outStr << "BasePort::WriteAllBoardsBroadcast: invalid mix of firmware" << std::endl;
         OnNoneWritten();
         return false;
@@ -924,7 +937,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         if (BoardList[board]) {
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
             quadlet_t *bcPtr = bcBuffer+bcBufferOffset/sizeof(quadlet_t);
-            if (IsNoBoardsRev7_) {
+            if (IsAllBoardsRev4_6_) {
                 numBytes -= sizeof(quadlet_t);   // for ctrl offset
                 unsigned int numQuads = numBytes/4;
                 BoardList[board]->GetWriteData(bcPtr, 0, numQuads);

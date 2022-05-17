@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -109,12 +109,13 @@ public:
 protected:
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
-    ProtocolType Protocol_;         // protocol type in use
-    bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
-    bool IsAllBoardsBroadcastShorterWait_;   // TRUE if all nodes bc capable and support shorter wait
-    bool IsNoBoardsBroadcastShorterWait_;    // TRUE if no nodes support the shorter wait
-    bool IsAllBoardsRev7_;                   // TRUE if all boards are Firmware Rev 7
-    bool IsNoBoardsRev7_;                    // TRUE if no boards are Firmware Rev 7
+    ProtocolType Protocol_;               // protocol type in use
+    bool IsAllBoardsBroadcastCapable_;    // TRUE if all nodes bc capable (Firmware Rev 4+)
+    bool IsAllBoardsRev4_5_;              // TRUE if all boards are Firmware Rev 4 or 5
+    bool IsAllBoardsRev4_6_;              // TRUE if all boards are Firmware Rev 4-6
+    bool IsAllBoardsRev6_;                // TRUE if all boards are Firmware Rev 6 (shorter wait)
+    bool IsAllBoardsRev7_;                // TRUE if all boards are Firmware Rev 7
+    bool IsAllBoardsRev8_;                // TRUE if all boards are Firmware Rev 8
 
     size_t ReadErrorCounter_;
 
@@ -168,6 +169,14 @@ protected:
 
     // Cleanup port (called by destructor and Reset)
     virtual void Cleanup(void) = 0;
+
+    // Whether all boards support broadcast with shorter wait
+    bool IsBroadcastShorterWait(void) const
+    { return (IsAllBoardsRev6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_); }
+
+    // Whether a valid mix of firmware for broadcast
+    bool IsBroadcastFirmwareMixValid(void) const
+    { return (IsAllBoardsRev4_6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_); }
 
     // Sets default protocol based on firmware
     void SetDefaultProtocol(void);
