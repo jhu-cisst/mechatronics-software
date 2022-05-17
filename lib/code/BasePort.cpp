@@ -51,7 +51,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         Protocol_(BasePort::PROTOCOL_SEQ_RW),
         IsAllBoardsBroadcastCapable_(false),
         IsAllBoardsRev4_5_(false),
-        IsAllBoardsRev4_6_(true),
+        IsAllBoardsRev4_6_(false),
         IsAllBoardsRev6_(false),
         IsAllBoardsRev7_(false),
         IsAllBoardsRev8_(false),
