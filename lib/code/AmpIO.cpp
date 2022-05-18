@@ -59,7 +59,7 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
 AmpIO::AmpIO(AmpIO_UInt8 board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0), NumDouts(0),
-                                     dallasState(ST_DALLAS_START), dallasTimeoutSec(2.0), collect_state(false), collect_cb(0)
+                                     dallasState(ST_DALLAS_START), dallasTimeoutSec(10.0), collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
     memset(WriteBuffer, 0, sizeof(WriteBuffer));
@@ -1149,7 +1149,7 @@ AmpIO::DallasStatus AmpIO::DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &vers
                     // model number uses only 3 bytes, set first one to zero just in case
                     buffer[DALLAS_MODEL_OFFSET] = 0;
                     model = *(reinterpret_cast<AmpIO_UInt32 *>(buffer + (DALLAS_MODEL_OFFSET - DALLAS_START_READ)));
-                    bswap_32(model);
+                    model = bswap_32(model);
                     // version number
                     version = static_cast<AmpIO_UInt8>(buffer[DALLAS_VERSION_OFFSET - DALLAS_START_READ]);
                     // name
@@ -1241,7 +1241,6 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     if (GetFirmwareVersion() < 7) return false;
     if (GetHardwareVersion() != QLA1_String) return false;
 
-    AmpIO_UInt32 status;
     AmpIO_UInt32 ctrl = (addr<<16)|2;
     if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
