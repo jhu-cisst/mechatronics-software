@@ -59,7 +59,7 @@ AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010,
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
 AmpIO::AmpIO(AmpIO_UInt8 board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0), NumDouts(0),
-                                     collect_state(false), collect_cb(0)
+                                     dallasState(ST_DALLAS_START), dallasTimeoutSec(2.0), collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
     memset(WriteBuffer, 0, sizeof(WriteBuffer));
@@ -1080,6 +1080,113 @@ bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int
 }
 
 // ********************** Dallas DS2505 (1-wire / DS2480B) Reading Methods ****************************************
+AmpIO::DallasStatus AmpIO::DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &version, std::string &name,
+                                          double timeoutSec)
+{
+    if (GetHardwareVersion() == dRA1_String) {
+        if (!port->ReadQuadlet(BoardId, 0xb012, model))
+            return DALLAS_IO_ERROR;
+        bswap_32(model);
+        AmpIO_UInt32 ver;
+        if (!port->ReadQuadlet(BoardId, 0xb013, ver))
+            return DALLAS_IO_ERROR;
+        version = ver & 0x000000ff;
+        name = "";
+        return DALLAS_OK;
+    }
+    else if (GetHardwareVersion() == QLA1_String) {
+        if (GetFirmwareVersion() < 7)
+            return DALLAS_NONE;
+
+        AmpIO_UInt32 status;
+        AmpIO_UInt32 ctrl;
+        char buffer[256];
+
+        dallasTimeoutSec = timeoutSec;
+        DallasStatus ret = DALLAS_WAIT;
+
+        switch (dallasState) {
+
+        case ST_DALLAS_START:
+            // Start reading at address DALLAS_START_READ
+            ctrl = (DALLAS_START_READ<<16)|2;
+            if (DallasWriteControl(ctrl)) {
+                dallasState = ST_DALLAS_WAIT;
+                dallasStateNext = ST_DALLAS_READ;
+                dallasWaitStart = Amp1394_GetTime();
+            }
+            else {
+                ret = DALLAS_IO_ERROR;
+            }
+            break;
+
+        case ST_DALLAS_WAIT:
+            if (DallasReadStatus(status)) {
+                // Done when in idle state. The following test works for both Firmware Rev 7
+                // (state is bits 7:4) and Firmware Rev 8 (state is bits 8:4 and busy flag is bit 13)
+                if ((status&0x000020F0) == 0) {
+                    dallasState = dallasStateNext;
+                    // Automatically detect interface in use
+                    dallasUseDS2480B = (status & 0x00008000) == 0x00008000;
+                }
+                else if (Amp1394_GetTime() > dallasWaitStart + dallasTimeoutSec) {
+                    ret = DALLAS_TIMEOUT;
+                }
+            }
+            else {
+                ret = DALLAS_IO_ERROR;
+            }
+            break;
+
+        case ST_DALLAS_READ:
+            if (DallasReadBlock(reinterpret_cast<unsigned char *>(buffer), sizeof(buffer))) {
+                // make sure we read the 997 from company statement
+                if (strncmp(buffer, "997", 3) == 0) {
+                    // get model and name of tool to create unique string identifier
+                    // model number uses only 3 bytes, set first one to zero just in case
+                    buffer[DALLAS_MODEL_OFFSET] = 0;
+                    model = *(reinterpret_cast<AmpIO_UInt32 *>(buffer + (DALLAS_MODEL_OFFSET - DALLAS_START_READ)));
+                    bswap_32(model);
+                    // version number
+                    version = static_cast<AmpIO_UInt8>(buffer[DALLAS_VERSION_OFFSET - DALLAS_START_READ]);
+                    // name
+                    buffer[DALLAS_NAME_END - DALLAS_START_READ] = '\0';
+                    name = buffer + (DALLAS_NAME_OFFSET - DALLAS_START_READ);
+                    ret = DALLAS_OK;
+                }
+                else {
+                    ret = DALLAS_DATA_ERROR;
+                }
+                dallasState = dallasUseDS2480B ? ST_DALLAS_END : ST_DALLAS_START;
+            }
+            else {
+                ret = DALLAS_IO_ERROR;
+            }
+            break;
+
+        case ST_DALLAS_END:
+            // This state is only used for the DS2480B.
+            // 0x09 indicates reg_wdata[3] == 1 && reg_wdata[1:0] == 01 in firmware DS2505.v
+            if (DallasWriteControl(0x09)){
+                dallasState = ST_DALLAS_WAIT;
+                dallasStateNext = ST_DALLAS_START;
+                dallasWaitStart = Amp1394_GetTime();
+            }
+            else {
+                ret = DALLAS_IO_ERROR;
+            }
+            break;
+        }
+
+        if ((ret == DALLAS_IO_ERROR) || (ret == DALLAS_TIMEOUT) || (ret == DALLAS_DATA_ERROR)) {
+            dallasState = ST_DALLAS_START;
+        }
+        return ret;
+    }
+
+    return DALLAS_NONE;   // Not QLA or dRAC
+}
+
 bool AmpIO::DallasWriteControl(AmpIO_UInt32 ctrl)
 {
     if (GetFirmwareVersion() < 7) return false;
@@ -1134,7 +1241,7 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     if (GetFirmwareVersion() < 7) return false;
     if (GetHardwareVersion() != QLA1_String) return false;
 
-    AmpIO_UInt32 status = ReadStatus();
+    AmpIO_UInt32 status;
     AmpIO_UInt32 ctrl = (addr<<16)|2;
     if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;

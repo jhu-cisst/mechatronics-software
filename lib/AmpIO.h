@@ -391,6 +391,37 @@ public:
     static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata);
 
     // ********************** Dallas DS2505 (1-wire) Methods **************************
+
+    // DallasReadTool is the recommended method to obtain the tool information for the dVRK
+    // and dVRK-S.
+    //
+    // Parameters:
+    //    model              Tool model (part number)
+    //    version            Tool version
+    //    name               Tool name (currently only for dVRK)
+    //    timeoutSec         Timeout, in seconds, for obtaining data (dVRK only, default is 2)
+    //
+    // Common return values (see below for additional dVRK return values):
+    //    DALLAS_OK          On success
+    //    DALLAS_IO_ERROR    I/O error (on Firewire or Ethernet)
+    //
+    // For the dVRK (QLA-based systems), this function should be called multiple times to
+    // advance through an internal state machine. The function will return DALLAS_WAIT while
+    // progressing through the state machine and then DALLAS_OK when the result is valid.
+    // In addition to the two return values above, dVRK-specific returns are:
+    //    DALLAS_WAIT        Data read still in process (call again later)
+    //    DALLAS_NONE        Interface not supported (e.g., firmware to old)
+    //    DALLAS_TIMEOUT     Timeout waiting for data (see DallasTimeoutSec)
+    //    DALLAS_DATA_ERROR  Invalid data (i.e., did not read "997" in copyright string)
+    //
+    // For the dVRK-S (dRAC-based systems), there is no internal state machine and the
+    // function will return either DALLAS_OK or DALLAS_IO_ERROR. Note that the tool name
+    // is not supported (only model and version are set).
+
+    enum DallasStatus { DALLAS_NONE, DALLAS_IO_ERROR, DALLAS_TIMEOUT, DALLAS_DATA_ERROR, DALLAS_WAIT, DALLAS_OK};
+    DallasStatus DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &version, std::string &name,
+                                double timeoutSec = 2.0);
+
     bool DallasWriteControl(AmpIO_UInt32 ctrl);
     bool DallasReadStatus(AmpIO_UInt32 &status);
     bool DallasWaitIdle();
@@ -527,6 +558,17 @@ protected:
 
     // Counts received encoder errors
     unsigned int encErrorCount[MAX_CHANNELS];
+
+    // Dallas interface (for QLA)
+    enum DallasStateType { ST_DALLAS_START, ST_DALLAS_WAIT, ST_DALLAS_READ, ST_DALLAS_END };
+    DallasStateType dallasState;         // Current state
+    DallasStateType dallasStateNext;     // Next state (only used by ST_DALLAS_WAIT)
+    double dallasTimeoutSec;             // Timeout in seconds
+    double dallasWaitStart;              // Start time (in seconds); used to check for timeout
+    bool   dallasUseDS2480B;             // True if DS2480B driver used; false if direct 1-wire interface
+    // Offsets into Dallas memory
+    enum { DALLAS_START_READ = 0x80, DALLAS_MODEL_OFFSET = 0xa4, DALLAS_VERSION_OFFSET = 0xa8,
+           DALLAS_NAME_OFFSET = 0x160, DALLAS_NAME_END = 0x17c };
 
     // Data collection
     // The FPGA firmware contains a data collection buffer of 1024 quadlets.
