@@ -560,7 +560,7 @@ protected:
     unsigned int encErrorCount[MAX_CHANNELS];
 
     // Dallas interface (for QLA)
-    enum DallasStateType { ST_DALLAS_START, ST_DALLAS_WAIT, ST_DALLAS_READ, ST_DALLAS_END };
+    enum DallasStateType { ST_DALLAS_START, ST_DALLAS_WAIT, ST_DALLAS_READ };
     DallasStateType dallasState;         // Current state
     DallasStateType dallasStateNext;     // Next state (only used by ST_DALLAS_WAIT)
     double dallasTimeoutSec;             // Timeout in seconds

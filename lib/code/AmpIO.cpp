@@ -1153,27 +1153,24 @@ AmpIO::DallasStatus AmpIO::DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &vers
                     buffer[DALLAS_NAME_END - DALLAS_START_READ] = '\0';
                     name = buffer + (DALLAS_NAME_OFFSET - DALLAS_START_READ);
                     ret = DALLAS_OK;
+                    dallasState = ST_DALLAS_START;  // Nominal; could be updated below for DS2480B
                 }
                 else {
                     ret = DALLAS_DATA_ERROR;
                 }
-                dallasState = dallasUseDS2480B ? ST_DALLAS_END : ST_DALLAS_START;
             }
             else {
                 ret = DALLAS_IO_ERROR;
             }
-            break;
-
-        case ST_DALLAS_END:
-            // This state is only used for the DS2480B.
-            // 0x09 indicates reg_wdata[3] == 1 && reg_wdata[1:0] == 01 in firmware DS2505.v
-            if (DallasWriteControl(0x09)){
-                dallasState = ST_DALLAS_WAIT;
-                dallasStateNext = ST_DALLAS_START;
-                dallasWaitStart = Amp1394_GetTime();
-            }
-            else {
-                ret = DALLAS_IO_ERROR;
+            if (dallasUseDS2480B) {
+                // 0x09 indicates reg_wdata[3] == 1 && reg_wdata[1:0] == 01 in firmware DS2505.v
+                // If the write fails, we ignore it and return to ST_DALLAS_START, rather than
+                // return DALLAS_IO_ERROR, because this is after the read.
+                if (DallasWriteControl(0x09)){
+                    dallasState = ST_DALLAS_WAIT;
+                    dallasStateNext = ST_DALLAS_START;
+                    dallasWaitStart = Amp1394_GetTime();
+                }
             }
             break;
         }
