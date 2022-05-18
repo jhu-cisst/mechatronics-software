@@ -1086,13 +1086,16 @@ AmpIO::DallasStatus AmpIO::DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &vers
     if (GetHardwareVersion() == dRA1_String) {
         if (!port->ReadQuadlet(BoardId, 0xb012, model))
             return DALLAS_IO_ERROR;
-        bswap_32(model);
+        model = bswap_32(model);
         AmpIO_UInt32 ver;
         if (!port->ReadQuadlet(BoardId, 0xb013, ver))
             return DALLAS_IO_ERROR;
         version = ver & 0x000000ff;
         name = "";
-        return DALLAS_OK;
+        if (ver != 255) {
+            return DALLAS_OK;
+        }
+        return DALLAS_WAIT;
     }
     else if (GetHardwareVersion() == QLA1_String) {
         if (GetFirmwareVersion() < 7)
