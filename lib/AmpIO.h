@@ -399,7 +399,7 @@ public:
     //    model              Tool model (part number)
     //    version            Tool version
     //    name               Tool name (currently only for dVRK)
-    //    timeoutSec         Timeout, in seconds, for obtaining data (dVRK only, default is 2)
+    //    timeoutSec         Timeout, in seconds, for obtaining data (dVRK only, default is 10)
     //
     // Common return values (see below for additional dVRK return values):
     //    DALLAS_OK          On success
@@ -420,7 +420,7 @@ public:
 
     enum DallasStatus { DALLAS_NONE, DALLAS_IO_ERROR, DALLAS_TIMEOUT, DALLAS_DATA_ERROR, DALLAS_WAIT, DALLAS_OK};
     DallasStatus DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &version, std::string &name,
-                                double timeoutSec = 2.0);
+                                double timeoutSec = 10.0);
 
     bool DallasWriteControl(AmpIO_UInt32 ctrl);
     bool DallasReadStatus(AmpIO_UInt32 &status);
