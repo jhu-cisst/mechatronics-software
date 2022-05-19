@@ -28,6 +28,13 @@ static int RESULT_NO_BOARD = -1;
 static int RESULT_NO_PROM_FILE = -2;
 static int RESULT_PROGRAM_FAILED = -3;
 static int RESULT_VERIFY_FAILED = -4;
+static int RESULT_UNKNOWN_BOARD = -5;
+
+// Size of sector, in bytes
+const unsigned int SECTOR_SIZE = 65536;
+
+// Maximum number of bytes in one line of MCS file
+const unsigned int MAX_LINE = 16;
 
 int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 {
@@ -41,8 +48,7 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 
     AmpIO_UInt32 fver = Board.GetFirmwareVersion();
     int c = 0;
-    int maxChar = (fver >= 7) ? '8' : '7';
-    while ((c < '0') || (c > maxChar)) {
+    while ((c < '0') || (c > '9')) {
         if (c) {
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
         }
@@ -62,6 +68,9 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
                   << "7) Read QLA SN" << std::endl;
         if (fver >= 7)
             std::cout << "8) Reboot FPGA and exit" << std::endl;
+        else
+            std::cout << "8) Exit programmer" << std::endl;
+        std::cout << "9) Download PROM to MCS file" << std::endl;
         std::cout << std::endl;
 
         std::cout << "Select option: ";
@@ -168,7 +177,7 @@ bool PromProgram(AmpIO &Board, mcsFile &promFile)
 bool PromVerify(AmpIO &Board, mcsFile &promFile)
 {
     double startTime = Amp1394_GetTime();
-    unsigned char DownloadedSector[65536];
+    unsigned char DownloadedSector[SECTOR_SIZE];
     promFile.Rewind();
     while (promFile.ReadNextSector()) {
         unsigned long addr = promFile.GetSectorAddress();
@@ -194,15 +203,87 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
     return true;
 }
 
+bool PromDownload(AmpIO&Board)
+{
+    std::string mcsName;
+    unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+    if (fpgaVer == 1)
+        mcsName = std::string("FPGA1394-QLA-");
+    else if (fpgaVer == 2)
+        mcsName = std::string("FPGA1394Eth-QLA-");
+    mcsName.append("Downloaded.mcs");
+    std::ofstream file(mcsName.c_str());
+    unsigned char DownloadedSector[SECTOR_SIZE];
+    unsigned long addr = 0L;
+    bool done = false;
+    unsigned int i;
+    for (i = 0; !done; i++) {
+        if (!Board.PromReadData(addr, DownloadedSector, SECTOR_SIZE)) {
+            std::cerr << "Error reading PROM data, sector " << i << std::endl;
+            file.close();
+            return false;
+        }
+        // Check for end of data (all FF)
+        unsigned int numTrailingFF;
+        for (numTrailingFF = 0; numTrailingFF < SECTOR_SIZE; numTrailingFF++) {
+            if (DownloadedSector[SECTOR_SIZE-1-numTrailingFF] != 0xFF) break;
+        }
+        if (numTrailingFF > 0) {
+            std::cout << "Sector " << i << " ends with " << numTrailingFF << " blank (FF) entries";
+            // Following is a heuristic threshold -- we consider it to be the end of the data if
+            // there are at least 256 trailing FF in the sector. To be sure, if the trailing FF
+            // is less than this we check the next sector too. If it is all FF, then we can be
+            // reasonably confident that this is the end.
+            if (numTrailingFF < 256) {
+                unsigned char nextSector[SECTOR_SIZE];
+                if (!Board.PromReadData(addr+SECTOR_SIZE, nextSector, SECTOR_SIZE)) {
+                    std::cerr << "Error reading PROM data, sector " << i+1 << std::endl;
+                    file.close();
+                    return false;
+                }
+                unsigned int k;
+                for (k = 0; k < SECTOR_SIZE; k++) {
+                    if (nextSector[k] != 0xFF) break;
+                }
+                if (k == SECTOR_SIZE) {
+                    done = true;
+                }
+                else {
+                    std::cout << ", but following sector is not blank";
+                    numTrailingFF = 0;
+                }
+            }
+            else {
+                done = true;
+            }
+            std::cout << std::endl;
+        }
+        unsigned int lastLine = (numTrailingFF < 256) ? SECTOR_SIZE/MAX_LINE : (SECTOR_SIZE-numTrailingFF)/MAX_LINE;
+        unsigned int extraBytes = (SECTOR_SIZE-numTrailingFF)%MAX_LINE;
+        mcsFile::WriteSectorHeader(file, i);
+        for (unsigned int j = 0; j < lastLine; j++) {
+            mcsFile::WriteDataLine(file, addr, DownloadedSector+j*MAX_LINE, MAX_LINE);
+            addr += MAX_LINE;
+        }
+        mcsFile::WriteDataLine(file, addr, DownloadedSector+lastLine*MAX_LINE, extraBytes);
+        addr += extraBytes;
+    }
+    // Write EOF record
+    mcsFile::WriteEOF(file);
+    file.close();
+    std::cout << "Downloaded " << i << " sectors (" << addr << " bytes) to " << mcsName << std::endl;
+    return true;
+}
+
 bool PromDisplayPage(AmpIO &Board, unsigned long addr)
 {
     unsigned char bytes[256];
     if (!Board.PromReadData(addr, bytes, sizeof(bytes)))
         return false;
     std::cout << std::hex << std::setfill('0');
-    for (unsigned int i = 0; i < sizeof(bytes); i += 16) {
+    for (unsigned int i = 0; i < sizeof(bytes); i += MAX_LINE) {
         std::cout << std::setw(4) << addr+i << ": ";
-        for (int j = 0; j < 16; j++)
+        for (unsigned int j = 0; j < MAX_LINE; j++)
             std::cout << std::setw(2) << (unsigned int) bytes[i+j] << "  ";
         std::cout << std::endl;
     }
@@ -443,10 +524,15 @@ int main(int argc, char** argv)
     Port->AddBoard(&Board);
 
     if (mcsName.empty()) {
-        if (Board.HasEthernet())
-            mcsName = std::string("FPGA1394Eth-QLA.mcs");
-        else
+        unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+        if (fpgaVer == 1)
             mcsName = std::string("FPGA1394-QLA.mcs");
+        else if (fpgaVer == 2)
+            mcsName = std::string("FPGA1394Eth-QLA.mcs");
+        else {
+            std::cerr << "Unsupported FPGA (Version = " << fpgaVer << ")" << std::endl;
+            return RESULT_UNKNOWN_BOARD;
+        }
     }
     mcsFile promFile;
     if (!promFile.OpenFile(mcsName)) {
@@ -521,6 +607,9 @@ int main(int argc, char** argv)
             Board.WriteReboot();
             std::cout << "Rebooting FPGA ..." << std::endl;
             done = true;
+            break;
+        case 9:
+            result = PromDownload(Board);
             break;
         default:
             std::cout << "Not yet implemented" << std::endl;

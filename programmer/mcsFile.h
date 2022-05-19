@@ -53,6 +53,11 @@ public:
     // Seek back to beginning of file
     void Rewind();
     void CloseFile();
+
+    // Support for writing MCS file
+    static void WriteSectorHeader(std::ofstream &file, unsigned int i);
+    static void WriteDataLine(std::ofstream &file, unsigned long addr, unsigned char *bytes, unsigned int numBytes);
+    static void WriteEOF(std::ofstream &file);
 };
 
 #endif // _MCS_H
