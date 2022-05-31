@@ -1241,6 +1241,7 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     if (GetFirmwareVersion() < 7) return false;
     if (GetHardwareVersion() != QLA1_String) return false;
 
+    AmpIO_UInt32 status;
     AmpIO_UInt32 ctrl = (addr<<16)|2;
     if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
