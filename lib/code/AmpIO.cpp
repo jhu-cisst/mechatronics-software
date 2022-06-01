@@ -1092,7 +1092,7 @@ AmpIO::DallasStatus AmpIO::DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &vers
             return DALLAS_IO_ERROR;
         version = ver & 0x000000ff;
         name = "";
-        if (ver != 255) {
+        if (version != 255) {
             return DALLAS_OK;
         }
         return DALLAS_WAIT;
