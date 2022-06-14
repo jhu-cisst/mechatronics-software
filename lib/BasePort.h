@@ -93,10 +93,12 @@ public:
         double readFinishTime;        // When the PC finished reading the hub feedback data
         struct BroadcastBoardInfo {   // For each board:
             bool inUse;               //   Whether board is participating in broadcast read
+            unsigned int blockSize;   //   Number of quadlets from this board
             unsigned int sequence;    //   The sequence number received (should be same as readSequence)
+            bool seq_error;           //   Sequence error mismatch on FPGA
             double updateTime;        //   When the hub feedback data was updated
 
-            BroadcastBoardInfo() : inUse(false), sequence(0), updateTime(0.0) {}
+            BroadcastBoardInfo() : inUse(false), blockSize(0), sequence(0), seq_error(false), updateTime(0.0) {}
             ~BroadcastBoardInfo() {}
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];

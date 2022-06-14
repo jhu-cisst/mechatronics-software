@@ -729,13 +729,13 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     // Wait for broadcast read data
     WaitBroadcastRead();
 
-    int readSize;        // Block size per board (depends on firmware version)
+    unsigned int readSize;        // Block size per board (depends on firmware version)
     if (IsAllBoardsRev4_6_)
         readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
     else if (IsAllBoardsRev7_)
         readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
     else
-        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8) -- TODO: update for dRAC
+        readSize = 32;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8) -- TODO: fix to 33 and update for dRAC
 
     int hubReadSize;        // Actual read size (depends on firmware version)
     if (IsAllBoardsRev4_6_)
@@ -773,12 +773,30 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             }
             else {
                 bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
-                if (IsAllBoardsRev7_) {
+                if (IsAllBoardsRev8_) {
+                    // For Rev 8, only the LSB of the sequence is returned, but bit 14 also indicates
+                    // whether the 16-bit sequence number did not match on the FPGA side.
+                    bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
+                    bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 14
+                    if (bcReadInfo.boardInfo[boardNum].sequence != (bcReadInfo.readSequence & 0x00ff))
+                        bcReadInfo.boardInfo[boardNum].seq_error = true;
+                    bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
+                    if (bcReadInfo.boardInfo[boardNum].blockSize != readSize) {
+                        outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
+                               << ", blockSize = " << bcReadInfo.boardInfo[boardNum].blockSize
+                               << ", expected = " << readSize << std::endl;
+                    }
+                }
+                else {
+                    bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != bcReadInfo.readSequence);
+                    bcReadInfo.boardInfo[boardNum].blockSize = readSize;
+                }
+                if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
                     clkPeriod = board->GetFPGAClockPeriod();
                     bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
                 }
-                if (bcReadInfo.boardInfo[boardNum].sequence == bcReadInfo.readSequence) {
+                if (!bcReadInfo.boardInfo[boardNum].seq_error) {
                     thisOK = true;
                 }
                 else {
