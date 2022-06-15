@@ -204,7 +204,7 @@ unsigned int BasePort::GetBroadcastReadSize(void) const
     for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
         BoardIO *board = BoardList[boardNum];
         if (board)
-            nBytes += board->GetReadNumBytes();
+            nBytes += (board->GetReadNumBytes()+sizeof(quadlet_t));
     }
     return nBytes;
 }
@@ -841,7 +841,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     }
 
     if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
-        quadlet_t timingInfo = bswap_32(hubReadBuffer[hubReadSize-1]);
+        quadlet_t timingInfo = bswap_32(curPtr[0]);
         bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
         bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
     }
