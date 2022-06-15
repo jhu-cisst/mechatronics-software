@@ -197,6 +197,18 @@ void BasePort::SetWriteBufferBroadcast(void)
     }
 }
 
+// Return expected size for broadcast read, in bytes
+unsigned int BasePort::GetBroadcastReadSize(void) const
+{
+    unsigned int nBytes = 0;
+    for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
+        BoardIO *board = BoardList[boardNum];
+        if (board)
+            nBytes += board->GetReadNumBytes();
+    }
+    return nBytes;
+}
+
 void BasePort::SetReadInvalid(void)
 {
     for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
@@ -735,13 +747,17 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     else if (IsAllBoardsRev7_)
         readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
     else
-        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8) -- TODO: update for dRAC
+        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8, QLA)
 
-    int hubReadSize;        // Actual read size (depends on firmware version)
+    // Note that Rev 8 also supports dRAC, which has readSize = 60
+
+    unsigned int hubReadSize;        // Actual read size (depends on firmware version)
     if (IsAllBoardsRev4_6_)
         hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
+    else if (IsAllBoardsRev7_)
+        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7: NumOfBoards * readSize + 1
     else
-        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7-8: NumOfBoards * readSize + 1
+        hubReadSize = (GetBroadcastReadSize()/sizeof(quadlet_t))+1; // Rev 8 (could call this once and save result)
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
     memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
@@ -763,7 +779,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             unsigned int numAxes = (statusQuad&0xf0000000)>>28;
             unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
             bool thisOK = false;
-            if (numAxes != 4) {
+            if (!IsAllBoardsRev8_ && (numAxes != 4)) {
                 outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
                        << std::dec << std::endl;
             }
@@ -781,10 +797,11 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                     if (bcReadInfo.boardInfo[boardNum].sequence != (bcReadInfo.readSequence & 0x00ff))
                         bcReadInfo.boardInfo[boardNum].seq_error = true;
                     bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
-                    if (bcReadInfo.boardInfo[boardNum].blockSize != readSize) {
+                    unsigned int bdReadSize = board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
+                    if (bcReadInfo.boardInfo[boardNum].blockSize != bdReadSize) {
                         outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
                                << ", blockSize = " << bcReadInfo.boardInfo[boardNum].blockSize
-                               << ", expected = " << readSize << std::endl;
+                               << ", expected = " << bdReadSize << std::endl;
                     }
                 }
                 else {
@@ -815,7 +832,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             else {
                 allOK = false;
             }
-            curPtr += readSize;
+            curPtr += bcReadInfo.boardInfo[boardNum].blockSize;
         }
         else if (IsAllBoardsRev4_6_) {
             // Skip unused boards for firmware < 7

@@ -191,6 +191,9 @@ protected:
     void SetReadBufferBroadcast(void);
     void SetWriteBufferBroadcast(void);
 
+    // Return expected size for broadcast read, in bytes
+    unsigned int GetBroadcastReadSize(void) const;
+
     // Convenience function
     void SetReadInvalid(void);
 
