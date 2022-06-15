@@ -735,13 +735,13 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     else if (IsAllBoardsRev7_)
         readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
     else
-        readSize = 32;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8) -- TODO: fix to 33 and update for dRAC
+        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8) -- TODO: update for dRAC
 
     int hubReadSize;        // Actual read size (depends on firmware version)
     if (IsAllBoardsRev4_6_)
         hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
     else
-        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7: NumOfBoards * readSize + 1
+        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7-8: NumOfBoards * readSize + 1
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
     memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
