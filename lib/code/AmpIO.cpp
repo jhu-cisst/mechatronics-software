@@ -886,11 +886,9 @@ bool AmpIO::WritePowerEnable(bool state)
 
 bool AmpIO::WriteAmpEnable(AmpIO_UInt32 mask, AmpIO_UInt32 state)
 {
-    if (GetFirmwareVersion() < 8) {
-        quadlet_t write_data = (mask << 8) | state;
-        return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
-    }
-    return false;  // TODO: implement for Rev 8
+    // Following still works for Firmware Rev 8
+    quadlet_t write_data = (mask << 8) | state;
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteSafetyRelay(bool state)
@@ -1051,7 +1049,7 @@ bool AmpIO::WritePowerEnableAll(BasePort *port, bool state)
 
 bool AmpIO::WriteAmpEnableAll(BasePort *port, AmpIO_UInt32 mask, AmpIO_UInt32 state)
 {
-    // TODO: Following is not valid for Firmware Rev 8+
+    // TODO: Following should still work for Firmware Rev 8
     quadlet_t write_data = (mask << 8) | state;
     return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
