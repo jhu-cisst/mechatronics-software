@@ -886,7 +886,7 @@ bool AmpIO::WritePowerEnable(bool state)
 
 bool AmpIO::WriteAmpEnable(AmpIO_UInt32 mask, AmpIO_UInt32 state)
 {
-    // Following still works for Firmware Rev 8
+    // Following still works for Firmware Rev 8 (at least for QLA)
     quadlet_t write_data = (mask << 8) | state;
     return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }

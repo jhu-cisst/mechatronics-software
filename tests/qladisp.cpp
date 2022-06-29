@@ -508,34 +508,48 @@ int main(int argc, char** argv)
         }
         else if (c == 'p') {
             // Only power on system if completely off; otherwise, we power off.
-            bool anyBoardPowered = false;
-            for (j = startIndex; j < endIndex; j++) {
-                // Also use safety relay for power status because GetPowerStatus relies on the motor
-                // power supply being connected to the QLA. Check GetPowerEnable in addition to
-                // GetPowerStatus because GetPowerStatus returns true if the QLA is not connected.
-                if (BoardList[j]->GetSafetyRelayStatus() || (BoardList[j]->GetPowerEnable() && BoardList[j]->GetPowerStatus()))
-                    anyBoardPowered = true;
+            if (curAxis == 0) {       // All axes on all boards
+                bool anyBoardPowered = false;
+                for (j = 0; j < numDisp; j++) {
+                    // Also use safety relay for power status because GetPowerStatus relies on the motor
+                    // power supply being connected to the QLA. Check GetPowerEnable in addition to
+                    // GetPowerStatus because GetPowerStatus returns true if the QLA is not connected.
+                    if (BoardList[j]->GetSafetyRelayStatus() || (BoardList[j]->GetPowerEnable() && BoardList[j]->GetPowerStatus()))
+                        anyBoardPowered = true;
+                }
+                for (j = 0; j < numDisp; j++) {
+                    if (anyBoardPowered) {
+                        BoardList[j]->SetPowerEnable(false);
+                        BoardList[j]->SetSafetyRelay(false);
+                        for (i = 0; i < BoardList[j]->GetNumMotors(); i++)
+                            BoardList[j]->SetAmpEnable(i, false);
+                    }
+                    else {
+                        BoardList[j]->SetSafetyRelay(true);
+                        // Cannot enable Amp power unless Board power is
+                        // already enabled.
+                        BoardList[j]->WritePowerEnable(true);
+                        //BoardList[j]->SetPowerEnable(true);
+                        for (i = 0; i < BoardList[j]->GetNumMotors(); i++)
+                            BoardList[j]->SetAmpEnable(i, true);
+                    }
+                }
             }
-            for (j = startIndex; j < endIndex; j++) {
-                if (anyBoardPowered) {
+            else {
+                bool isPowered = BoardList[curBoardIndex]->GetAmpEnable(curAxisIndex);
+                if (isPowered) {
                     // Note that all axes will be disabled when board power is removed
-                    if (curAxis == 0)
-                        BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
-                    else
-                        BoardList[j]->SetAmpEnable(curAxisIndex, false);
-                    BoardList[j]->SetPowerEnable(false);
-                    BoardList[j]->SetSafetyRelay(false);
+                    BoardList[curBoardIndex]->SetAmpEnable(curAxisIndex, false);
+                    BoardList[curBoardIndex]->SetPowerEnable(false);
+                    BoardList[curBoardIndex]->SetSafetyRelay(false);
                 }
                 else {
-                    BoardList[j]->SetSafetyRelay(true);
+                    BoardList[curBoardIndex]->SetSafetyRelay(true);
                     // Cannot enable Amp power unless Board power is
                     // already enabled.
-                    BoardList[j]->WritePowerEnable(true);
-                    //BoardList[j]->SetPowerEnable(true);
-                    if (curAxis == 0)
-                        BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
-                    else
-                        BoardList[j]->SetAmpEnable(curAxisIndex, true);
+                    BoardList[curBoardIndex]->WritePowerEnable(true);
+                    //BoardList[curBoardIndex]->SetPowerEnable(true);
+                    BoardList[curBoardIndex]->SetAmpEnable(curAxisIndex, true);
                 }
             }
         }
@@ -566,13 +580,11 @@ int main(int argc, char** argv)
                     if (BoardList[j]->GetAmpEnableMask() != 0)
                         anyAxisPowered = true;
                 }
-                for (j = 0; j < numDisp; j++) {
-                    if (anyAxisPowered) {
-                        BoardList[j]->SetAmpEnableMask(0x0f, 0x00);
-                    }
-                    else {
-                        BoardList[j]->SetAmpEnableMask(0x0f, 0x0f);
-                    }
+                for (unsigned int axisNum = 1; axisNum <= numAxes; axisNum++) {
+                    j = Axis2BoardNum[axisNum];
+                    i = Axis2BoardAxis[axisNum];
+                    if (i < BoardList[j]->GetNumMotors())
+                        BoardList[j]->SetAmpEnable(i, anyAxisPowered ? 0 : 1);
                 }
             }
             else {
