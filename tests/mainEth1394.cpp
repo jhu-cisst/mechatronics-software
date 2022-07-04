@@ -235,9 +235,44 @@ bool CheckEthernetV2(AmpIO &Board)
     return ret;
 }
 
+bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan)
+{
+    // Perform walking bit test on INER (interrupt enable register, 18)
+    AmpIO_UInt16 reg_iner, mask_read;
+    if (!Board.ReadRTL8211F_Register(chan, 18, reg_iner)) {
+        std::cout << "Failed to read PHY" << chan << " Reg 18 (INER)" << std::endl;
+        return false;
+    }
+    std::cout << "Testing RTL8211F PHY" << chan << " Register I/O, initial value = " << std::hex << reg_iner << std::endl;
+    bool allOK = true;
+    for (AmpIO_UInt16 mask = 0x1; mask != 0; mask <<= 1) {
+        Board.WriteRTL8211F_Register(chan, 18, mask);
+        Board.ReadRTL8211F_Register(chan, 18, mask_read);
+        if (mask != mask_read) {
+            std::cout << "Error: wrote " << mask << ", read " << mask_read << std::endl;
+            allOK = false;
+            //break;
+        }
+    }
+    std::cout << std::dec << "Test complete" << std::endl;
+    // Restore original value
+    Board.WriteRTL8211F_Register(chan, 18, reg_iner);
+    return allOK;
+}
+
 bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
 {
-    // 0110 0000 0RRR RRXX X(16)
+#if 0
+    // Reset PHY (Write 0x8000 to Register 0)
+    if (!Board.WriteRTL8211F_Register(chan, 0, 0x8000))
+        std::cout << "Failed to write reset to PHY" << chan << " Reg 0" << std::endl;
+#endif
+
+    // Check Register I/O
+    if (!CheckRTL8211F_RegIO(Board, chan))
+        return false;
+
+    // Check PHYID1 and PHYID2
     AmpIO_UInt16 phyreg2 = 0, phyreg3 = 0;
     if (!Board.ReadRTL8211F_Register(chan, 2, phyreg2))
         std::cout << "Failed to read PHY" << chan << " Reg 2" << std::endl;
@@ -245,6 +280,21 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
         std::cout << "Failed to read PHY" << chan << " Reg 3" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Register 2: " << phyreg2 << " (should be 001c)"
               << ", 3: " << phyreg3 << " (should be c916)" << std::dec << std::endl;
+
+#if 0
+    // Now, check undocumented register 0x11 (17) on page 0xd08
+    // Bit 9 indicates state of TX_DELAY
+    if (!Board.WriteRTL8211F_Register(chan, 31, 0xd08))
+        std::cout << "Failed to write PHY" << chan << " Reg 31 (page select) to 0xd08" << std::endl;
+    AmpIO_UInt16 phyreg17;
+    if (!Board.ReadRTL8211F_Register(chan, 2, phyreg17))
+        std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
+    std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 17: " << phyreg17 << std::dec << std::endl;
+    std::cout << "Tx Delay: " << ((phyreg17 & 0x0100) ? "ON" : "OFF") << std::endl;
+    if (!Board.WriteRTL8211F_Register(chan, 31, 0))  // Back to page 0
+        std::cout << "Failed to write PHY" << chan << " Reg 31 (page select) to 0" << std::endl;
+#endif
+
     return (phyreg2 == 0x001c) && (phyreg3 == 0xc916);
 }
 
@@ -1162,6 +1212,24 @@ int main(int argc, char **argv)
 
         case 'x':
             if (curBoard) {
+                unsigned int fpgaVer = curBoard->GetFPGAVersionMajor();
+                if (fpgaVer == 3) {
+                    if (curBoard->ReadEthernetData(buffer, 0x100, 64)) {
+                        unsigned int recv_addr_start = (buffer[0]&0x00ff0000) >> 16;
+                        unsigned int recv_addr_end = (buffer[63]&0x00ff0000) >> 16;
+                        std::cout << std::hex;
+                        std::cout << "Address = " << recv_addr_start;
+                        if (recv_addr_end != recv_addr_start)
+                            std::cout << ", " << recv_addr_end;
+                        std::cout << std::endl;
+                        for (int i = 0; i < 64; i++) {
+                            std::cout << std::setw(2) << std::setfill('0') << (buffer[i]&0x000000ff);
+                            if (i%4 == 3) std::cout << " ";
+                        }
+                        std::cout << std::dec << std::endl;
+                    }
+                    break;
+                }
                 if (curBoard->ReadEthernetData(buffer, 0xc0, 16))
                     EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
                 if (curBoard->ReadEthernetData(buffer, 0, 64))

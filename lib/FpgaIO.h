@@ -198,6 +198,13 @@ public:
     // Returns true if read was successful
     bool ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 &data);
 
+    // Write PHY register
+    //    chan    1 or 2 for PHY1 or PHY2
+    //    regNum  PHY register to write
+    //    data    data to write to PHY register
+    // Returns true if write was successful
+    bool WriteRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 data);
+
     // ************************ Ethernet Methods *************************************
     // Read Ethernet data
     //    buffer  buffer for storing data

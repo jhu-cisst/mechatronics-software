@@ -601,6 +601,15 @@ bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO
     return (regNumRead == regNum);
 }
 
+bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 data)
+{
+    // Should have firmware/hardware checks
+    nodeaddr_t address = 0x4080 | (chan << 8);
+    // Format: 0101 0000 0RRR RR10 D(16), where R indicates regNum, D indicates data
+    AmpIO_UInt32 write_data = 0x50020000 | (regNum << 18) | data;
+    return port->WriteQuadlet(BoardId, address, write_data);
+}
+
 // ***************************** Methods shared by V2/V3 ****************************************
 bool FpgaIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
