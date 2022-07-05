@@ -286,23 +286,29 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
         std::cout << "Failed to read PHY" << chan << " PHYID1" << std::endl;
     if (!Board.ReadRTL8211F_Register(chan, FpgaIO::RTL8211F_PHYID2, phyid2))
         std::cout << "Failed to read PHY" << chan << " PHYID2" << std::endl;
-    std::cout << "PHY" << chan << std::hex << std::setw(4) << std::setfill('0')
-              << " PHYID1: " << phyid1 << " (should be 001c)"
-              << ", PHYID2: " << phyid2 << " (should be c916)"
+    std::cout << "PHY" << chan << std::hex
+              << " PHYID1: " << std::setw(4) << std::setfill('0') << phyid1 << " (should be 001c),"
+              << " PHYID2: " << std::setw(4) << std::setfill('0') << phyid2 << " (should be c916)"
               << std::dec << std::endl;
 
-    // Now, check undocumented register 0x11 (17) on page 0xd08
-    // Bit 9 indicates state of TX_DELAY
+    // Now, check undocumented registers 0x11 (17) and 0x15 (21) on page 0xd08
+    //   Register 17, Bit 8 (0x0100) indicates state of TX_DELAY
+    //   Register 21, Bit 3 (0x0008) indicates state of RX_DELAY
     if (!Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_PAGSR, 0xd08))
         std::cout << "Failed to set PHY" << chan << " PAGSR to 0xd08" << std::endl;
-    AmpIO_UInt16 phyreg17;
-    if (!Board.ReadRTL8211F_Register(chan, 2, phyreg17))
+    AmpIO_UInt16 phyreg17, phyreg21;
+    if (!Board.ReadRTL8211F_Register(chan, 17, phyreg17))
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 17: " << phyreg17 << std::dec << std::endl;
     std::cout << "Tx Delay: " << ((phyreg17 & 0x0100) ? "ON" : "OFF") << std::endl;
+    if (!Board.ReadRTL8211F_Register(chan, 21, phyreg21))
+        std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 21" << std::endl;
+    std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 21: " << phyreg21 << std::dec << std::endl;
+    std::cout << "Rx Delay: " << ((phyreg21 & 0x0008) ? "ON" : "OFF") << std::endl;
+
     // Restore default page
     if (!Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT))
-        std::cout << "Failed to write PHY" << chan << " Reg 31 (page select) to 0" << std::endl;
+        std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
 
     return (phyid1 == 0x001c) && (phyid2 == 0xc916);
 }
