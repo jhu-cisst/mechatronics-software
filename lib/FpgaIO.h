@@ -191,6 +191,33 @@ public:
     // The following functions enable access to both of the RTL8211F Ethernet PHYs on
     // the FPGA V3 board via FireWire. They are provided for testing/debugging.
 
+    // The RTL8211F registers are provided via multiple pages. Use the RTL8211F_PAGSR
+    // (page select register) to select the desired page. The default page is 0xa42.
+    // Version 1.4 of the datasheet specifies the page for each register, though it
+    // appears that many of the registers are accessible on multiple pages (clearly PAGSR
+    // must be accessible on all pages). The datasheet indicates that registers 0-15
+    // (IEEE Standard Registers) can be accessed from page 0 or 0xa42.
+    // It appears that in some cases, it may be possible to read a register on multiple
+    // pages, but only possible to write to the register from a specific page.
+    // The following enum defines some of the more useful registers, and indicates the
+    // corresponding page that is specified in the Version 1.4 datasheet.
+    enum RTL8211F_Pages {
+        RTL8211F_PAGE_IEEE = 0,          // IEEE Standard Registers
+        RTL8211F_PAGE_DEFAULT = 0x0a42,  // Default page (includes IEEE registers)
+        RTL8211F_PAGE_LED = 0x0d04       // Page for LED configuration
+    };
+
+    enum RTL8211F_Regs {
+        RTL8211F_BMCR = 0,               // Basic Mode Control Register, page 0
+        RTL8211F_BMSR = 1,               // Basic Mode Status Register, page 0
+        RTL8211F_PHYID1 = 2,             // PHY Identifier Register 1, page 0
+        RTL8211F_PHYID2 = 3,             // PHY Identifier Register 2, page 0
+        RTL8211F_INER = 18,              // Interrupt Enable Register, page 0xa42
+        RTL8211F_PHYSR = 26,             // PHY Specific Status Register, page 0xa43
+        RTL8211F_INSR = 29,              // Interrupt Status Register, page 0xa43
+        RTL8211F_PAGSR = 31              // Page Select Register, 0xa43
+    };
+
     // Read PHY register
     //    chan    1 or 2 for PHY1 or PHY2
     //    regNum  PHY register to read

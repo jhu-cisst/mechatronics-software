@@ -598,7 +598,8 @@ bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO
         return false;
     data = static_cast<AmpIO_UInt16>(read_data & 0x0000ffff);
     unsigned int regNumRead = (read_data & 0x001f0000)>>16;
-    return (regNumRead == regNum);
+    unsigned int curState = (read_data&0x07000000) >> 24;
+    return (regNumRead == regNum) && (curState == 0);
 }
 
 bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 data)
@@ -607,6 +608,7 @@ bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpI
     nodeaddr_t address = 0x4080 | (chan << 8);
     // Format: 0101 0000 0RRR RR10 D(16), where R indicates regNum, D indicates data
     AmpIO_UInt32 write_data = 0x50020000 | (regNum << 18) | data;
+    // Could check whether FPGA has returned to idle state
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 
