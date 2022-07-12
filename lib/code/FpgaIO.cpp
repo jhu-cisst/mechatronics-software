@@ -585,29 +585,29 @@ AmpIO_UInt16 FpgaIO::ReadKSZ8851Status()
 
 // ************************** RTL8211F Ethernet PHY Methods *************************************
 
-bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 &data)
+bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 &data)
 {
     // Should have firmware/hardware checks
     nodeaddr_t address = 0x4080 | (chan << 8);
-    // Format: 0110 0000 0RRR RRXX X(16), where R indicates regNum, X is don't care (0)
-    AmpIO_UInt32 write_data = 0x60000000 | (regNum << 18);
+    // Format: 0110 PPPP PRRR RRXX X(16), where P indicates phyAddr, R indicates regAddr, X is don't care (0)
+    AmpIO_UInt32 write_data = 0x60000000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18);
     if (!port->WriteQuadlet(BoardId, address, write_data))
         return false;
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, address, read_data))
         return false;
     data = static_cast<AmpIO_UInt16>(read_data & 0x0000ffff);
-    unsigned int regNumRead = (read_data & 0x001f0000)>>16;
+    unsigned int regAddrRead = (read_data & 0x001f0000)>>16;
     unsigned int curState = (read_data&0x07000000) >> 24;
-    return (regNumRead == regNum) && (curState == 0);
+    return (regAddrRead == regAddr) && (curState == 0);
 }
 
-bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 data)
+bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 data)
 {
     // Should have firmware/hardware checks
     nodeaddr_t address = 0x4080 | (chan << 8);
-    // Format: 0101 0000 0RRR RR10 D(16), where R indicates regNum, D indicates data
-    AmpIO_UInt32 write_data = 0x50020000 | (regNum << 18) | data;
+    // Format: 0101 PPPP PRRR RR10 D(16), where P indicates phyAddr, R indicates regAddr, D indicates data
+    AmpIO_UInt32 write_data = 0x50020000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18) | data;
     // Could check whether FPGA has returned to idle state
     return port->WriteQuadlet(BoardId, address, write_data);
 }

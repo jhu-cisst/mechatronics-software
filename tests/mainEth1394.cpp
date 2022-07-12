@@ -181,8 +181,10 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
 {
     std::cout << "PHY" << chan << ":";
     AmpIO_UInt16 reg;
+    // TODO: Figure out why PHY2 has a default address of 0
+    unsigned int phyAddr = (chan == 2) ? FpgaIO::PHY_BROADCAST : FpgaIO::PHY_RTL8211F;
     // This should be on page 0xa43, but seems to work fine on default page
-    if (!Board.ReadRTL8211F_Register(chan, FpgaIO::RTL8211F_PHYSR, reg)) {
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYSR, reg)) {
         std::cout << " failed to read PHYSR" << std::endl;
         return;
     }
@@ -236,31 +238,31 @@ bool CheckEthernetV2(AmpIO &Board)
     return ret;
 }
 
-bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan)
+bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan, unsigned int phyAddr)
 {
     AmpIO_UInt16 curPage;
-    if (!Board.ReadRTL8211F_Register(chan, FpgaIO::RTL8211F_PAGSR, curPage)) {
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, curPage)) {
         std::cout << "Failed to read PHY" << chan << " PAGSR" << std::endl;
         return false;
     }
     if (curPage != FpgaIO::RTL8211F_PAGE_DEFAULT) {
         std::cout << "Changing page to " << std::hex << FpgaIO::RTL8211F_PAGE_DEFAULT << std::endl;
-        if (!Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT)) {
+        if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT)) {
             std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
             return false;
         }
     }
     // Perform walking bit test on INER (interrupt enable register, 18)
     AmpIO_UInt16 curIner, mask_read;
-    if (!Board.ReadRTL8211F_Register(chan, FpgaIO::RTL8211F_INER, curIner)) {
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, curIner)) {
         std::cout << "Failed to read PHY" << chan << " INER" << std::endl;
         return false;
     }
     std::cout << "Testing RTL8211F PHY" << chan << " Register I/O, initial value = " << std::hex << curIner << std::endl;
     bool allOK = true;
     for (AmpIO_UInt16 mask = 0x1; mask != 0; mask <<= 1) {
-        Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_INER, mask);
-        Board.ReadRTL8211F_Register(chan, FpgaIO::RTL8211F_INER, mask_read);
+        Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, mask);
+        Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, mask_read);
         if (mask != mask_read) {
             std::cout << "Error: wrote " << mask << ", read " << mask_read << std::endl;
             allOK = false;
@@ -269,22 +271,25 @@ bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan)
     }
     std::cout << std::dec << "Test complete" << std::endl;
     // Restore original values
-    Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_INER, curIner);
-    Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_PAGSR, curPage);
+    Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, curIner);
+    Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, curPage);
     return allOK;
 }
 
 bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
 {
+    // TODO: Figure out why PHY2 has a default address of 0
+    unsigned int phyAddr = (chan == 2) ? FpgaIO::PHY_BROADCAST : FpgaIO::PHY_RTL8211F;
+
     // Check Register I/O
-    if (!CheckRTL8211F_RegIO(Board, chan))
+    if (!CheckRTL8211F_RegIO(Board, chan, phyAddr))
         return false;
 
     // Check PHYID1 and PHYID2 (assumes we are on correct page)
     AmpIO_UInt16 phyid1 = 0, phyid2 = 0;
-    if (!Board.ReadRTL8211F_Register(chan, FpgaIO::RTL8211F_PHYID1, phyid1))
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYID1, phyid1))
         std::cout << "Failed to read PHY" << chan << " PHYID1" << std::endl;
-    if (!Board.ReadRTL8211F_Register(chan, FpgaIO::RTL8211F_PHYID2, phyid2))
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYID2, phyid2))
         std::cout << "Failed to read PHY" << chan << " PHYID2" << std::endl;
     std::cout << "PHY" << chan << std::hex
               << " PHYID1: " << std::setw(4) << std::setfill('0') << phyid1 << " (should be 001c),"
@@ -294,21 +299,35 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     // Now, check undocumented registers 0x11 (17) and 0x15 (21) on page 0xd08
     //   Register 17, Bit 8 (0x0100) indicates state of TX_DELAY
     //   Register 21, Bit 3 (0x0008) indicates state of RX_DELAY
-    if (!Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_PAGSR, 0xd08))
+    if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, 0xd08))
         std::cout << "Failed to set PHY" << chan << " PAGSR to 0xd08" << std::endl;
     AmpIO_UInt16 phyreg17, phyreg21;
-    if (!Board.ReadRTL8211F_Register(chan, 17, phyreg17))
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, 17, phyreg17))
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 17: " << phyreg17 << std::dec << std::endl;
     std::cout << "Tx Delay: " << ((phyreg17 & 0x0100) ? "ON" : "OFF") << std::endl;
-    if (!Board.ReadRTL8211F_Register(chan, 21, phyreg21))
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, 21, phyreg21))
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 21" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 21: " << phyreg21 << std::dec << std::endl;
     std::cout << "Rx Delay: " << ((phyreg21 & 0x0008) ? "ON" : "OFF") << std::endl;
 
     // Restore default page
-    if (!Board.WriteRTL8211F_Register(chan, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT))
+    if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT))
         std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
+
+#if 0
+    // For channel 1, check GMII to RGMII core PHY register
+    // Based on the VHDL source code for this core, PHY Specific Control Register 1 should be at address 16
+    if (chan == 1) {
+        AmpIO_UInt16 phyCR;
+        if (!Board.ReadRTL8211F_Register(chan, 8, 16, phyCR)) {
+            std::cout << "Failed to read GMII PHY" << chan << " Reg 16" << std::endl;
+        }
+        else {
+            std::cout << std::hex << "GMII PHY Reg 16 = " << phyCR << std::dec << std::endl;
+        }
+    }
+#endif
 
     return (phyid1 == 0x001c) && (phyid2 == 0xc916);
 }
@@ -1229,20 +1248,32 @@ int main(int argc, char **argv)
             if (curBoard) {
                 unsigned int fpgaVer = curBoard->GetFPGAVersionMajor();
                 if (fpgaVer == 3) {
-                    if (curBoard->ReadEthernetData(buffer, 0x100, 64)) {
-                        unsigned int recv_addr_start = (buffer[0]&0x00ff0000) >> 16;
-                        unsigned int recv_addr_end = (buffer[63]&0x00ff0000) >> 16;
-                        std::cout << std::hex;
-                        std::cout << "Address = " << recv_addr_start;
-                        if (recv_addr_end != recv_addr_start)
-                            std::cout << ", " << recv_addr_end;
-                        std::cout << std::endl;
-                        for (int i = 0; i < 64; i++) {
-                            std::cout << std::setw(2) << std::setfill('0') << (buffer[i]&0x000000ff);
-                            if (i%4 == 3) std::cout << " ";
+                    std::cout << std::hex;
+                    quadlet_t rinfo;
+                    FwPort.ReadQuadlet(curBoardFw->GetBoardId(), 0x4181, rinfo);
+                    unsigned char firstByte = (rinfo&0x00ff0000)>>16;
+                    unsigned int numWords = ((rinfo&0x0000ffff)+1)>>1;
+                    std::cout << "Recv FIFO info = " << std::setw(8) << std::setfill('0') << rinfo;
+                    std::cout << ", numWords = " << numWords
+                              << ", firstByte = " << (unsigned int)firstByte << std::endl;
+                    int rdSize = 32;  // Minimum Ethernet frame length
+                    for (int nw = numWords; nw > 0; nw -= rdSize) {
+                        rdSize = (nw > 64) ? 64: nw;
+                        if (curBoard->ReadEthernetData(buffer, 0x100, rdSize)) {
+                            if (buffer[0]&0x08000000) std::cout << "Pr_Err ";
+                            if (buffer[0]&0x04000000) std::cout << "Reset ";
+                            if (buffer[0]&0x02000000) std::cout << "Full ";
+                            if (buffer[0]&0x01000000) std::cout << "Empty ";
+                            std::cout << "Data: " << std::endl;
+                            for (int i = 0; i < rdSize; i++) {
+                                std::cout << std::setw(4) << std::setfill('0') << (buffer[i]&0x0000ffff);
+                                if (i&1) std::cout << " ";
+                                if (i%16 == 15) std::cout << std::endl;
+                            }
+                            std::cout << std::endl;
                         }
-                        std::cout << std::dec << std::endl;
                     }
+                    std::cout << std::dec;
                     break;
                 }
                 if (curBoard->ReadEthernetData(buffer, 0xc0, 16))
@@ -1287,6 +1318,7 @@ int main(int argc, char **argv)
 #if Amp1394_HAS_RAW1394
         case 'z':
             if (curBoardFw) {
+                FwPort.WriteQuadlet(curBoardFw->GetBoardId(), 0x4181, 0);  // TEMP: reset FIFOs
                 unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
                 std::cout << "FPGA Rev " << fpgaVer << std::endl;
                 if (fpgaVer == 2) {

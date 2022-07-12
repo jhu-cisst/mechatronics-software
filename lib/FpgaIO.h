@@ -218,19 +218,27 @@ public:
         RTL8211F_PAGSR = 31              // Page Select Register, 0xa43
     };
 
+    // Some useful PHY addresses:
+    //    FPGAV3 is designed so that the RTL8211F PHY has a default address of 1.
+    //       (NOTE: verified for PHY1; it is possible that PHY2 has a default address of 0)
+    //    The GMII to RGMII core uses the default PHY address of 8.
+    enum PHY_ADDR { PHY_BROADCAST = 0, PHY_RTL8211F = 1, PHY_GMII_CORE = 8 };
+
     // Read PHY register
     //    chan    1 or 2 for PHY1 or PHY2
-    //    regNum  PHY register to read
+    //    phyAddr PHY address (see PHY_ADDR)
+    //    regAddr PHY register to read (see RTL8211F_Regs)
     //    data    data read from PHY register
     // Returns true if read was successful
-    bool ReadRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 &data);
+    bool ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 &data);
 
     // Write PHY register
     //    chan    1 or 2 for PHY1 or PHY2
-    //    regNum  PHY register to write
+    //    phyAddr PHY address (see PHY_ADDR)
+    //    regAddr PHY register to write (see RTL8211F_Regs)
     //    data    data to write to PHY register
     // Returns true if write was successful
-    bool WriteRTL8211F_Register(unsigned int chan, unsigned int regNum, AmpIO_UInt16 data);
+    bool WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 data);
 
     // ************************ Ethernet Methods *************************************
     // Read Ethernet data

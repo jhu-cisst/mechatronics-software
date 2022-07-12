@@ -785,14 +785,16 @@ bool TestEthernetV3(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
     logFile << std::endl << "=== Ethernet (RTL8211F) Test ===" << std::endl;
     bool ret = true;
     for (unsigned int i = 1; i < 2; i++) {
-        AmpIO_UInt16 phyreg2 = 0, phyreg3 = 0;
-        if (!Board.ReadRTL8211F_Register(1, 2, phyreg2))
-            logFile << "Failed to read PHY" << i << " Reg 2" << std::endl;
-        if (!Board.ReadRTL8211F_Register(1, 3, phyreg3))
-            logFile << "Failed to read PHY" << i << " Reg 3" << std::endl;
-        logFile << "PHY" << i << " reg 2,3 = " << std::hex
-                << phyreg2 << ", " << phyreg3;
-        if ((phyreg2 == 0x001c) && (phyreg3 == 0xc916)) {
+        // TODO: Figure out why PHY2 has a default address of 0
+        unsigned int phyAddr = (i == 2) ? FpgaIO::PHY_BROADCAST : FpgaIO::PHY_RTL8211F;
+        AmpIO_UInt16 phyid1 = 0, phyid2 = 0;
+        if (!Board.ReadRTL8211F_Register(i, phyAddr, FpgaIO::RTL8211F_PHYID1, phyid1))
+            logFile << "Failed to read PHY" << i << " PHYID1" << std::endl;
+        if (!Board.ReadRTL8211F_Register(i, phyAddr, FpgaIO::RTL8211F_PHYID2, phyid2))
+            logFile << "Failed to read PHY" << i << " PHYID2" << std::endl;
+        logFile << "PHY" << i << " PHYID = " << std::hex
+                << phyid1 << ", " << phyid2;
+        if ((phyid1 == 0x001c) && (phyid2 == 0xc916)) {
             logFile << " - PASS" << std::dec << std::endl;
         }
         else {
