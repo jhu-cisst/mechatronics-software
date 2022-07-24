@@ -197,6 +197,23 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
     else if (speed == 2) std::cout << " 1000 Mbps";
     if (reg & 0x0002) std::cout << " polarity-reversed";
     std::cout << std::endl;
+
+    // For PHY1, update GMII to RGMII core register 16
+    // Speed setting uses bits 6 and 13, as follows:
+    //
+    //   speed | Mbps | 6,13  | register value
+    //     0   |   10 | 0, 0  |     0x0000
+    //     1   |  100 | 0, 1  |     0x2000
+    //     2   | 1000 | 1, 0  |     0x0040
+    //     3   |   ?? | 1, 1  |     0x2040
+    unsigned short speedMap[4] = { 0x0000, 0x2000, 0x0040, 0x2040 };
+    if (chan == 1) {
+        std::cout << "Writing " << std::hex << speedMap[speed] << " to GMII core register"
+                  << std::dec << std::endl;
+        if (!Board.WriteRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, speedMap[speed])) {
+            std::cout << " failed to write to GMII core register" << std::endl;
+        }
+    }
 }
 
 // Check contents of KSZ8851 register
@@ -315,19 +332,17 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT))
         std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
 
-#if 0
     // For channel 1, check GMII to RGMII core PHY register
     // Based on the VHDL source code for this core, PHY Specific Control Register 1 should be at address 16
     if (chan == 1) {
         AmpIO_UInt16 phyCR;
-        if (!Board.ReadRTL8211F_Register(chan, 8, 16, phyCR)) {
+        if (!Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, phyCR)) {
             std::cout << "Failed to read GMII PHY" << chan << " Reg 16" << std::endl;
         }
         else {
-            std::cout << std::hex << "GMII PHY Reg 16 = " << phyCR << std::dec << std::endl;
+            std::cout << std::hex << "GMII PHY Reg 16: " << phyCR << std::dec << std::endl;
         }
     }
-#endif
 
     return (phyid1 == 0x001c) && (phyid2 == 0xc916);
 }
@@ -1273,6 +1288,10 @@ int main(int argc, char **argv)
                             std::cout << std::endl;
                         }
                     }
+                    quadlet_t crc_comp = 0, crc_frame = 0;
+                    FwPort.ReadQuadlet(curBoardFw->GetBoardId(), 0x4182, crc_comp);
+                    FwPort.ReadQuadlet(curBoardFw->GetBoardId(), 0x4183, crc_frame);
+                    std::cout << "CRC computed = " << crc_comp << ", frame = " << crc_frame << std::endl;
                     std::cout << std::dec;
                     break;
                 }
