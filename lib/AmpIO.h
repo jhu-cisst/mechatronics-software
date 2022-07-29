@@ -292,6 +292,10 @@ public:
     */
     bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
 
+    /*! \brief Read from the MAX7317 I/O Expander (QLA 1.5+)
+     */
+    bool ReadIOExpander(AmpIO_UInt32 &resp);
+
     // ********************** WRITE Methods **********************************
 
     // Enable motor power to the entire board (it is still necessary
@@ -379,6 +383,10 @@ public:
         \returns Time, in counts
     */
     AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
+
+    /*! \brief Write to the MAX7317 I/O Expander (QLA 1.5+)
+     */
+    bool WriteIOExpander(AmpIO_UInt16 cmd);
 
     // **************** Static WRITE Methods (for broadcast) ********************
 

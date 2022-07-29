@@ -1290,8 +1290,7 @@ int main(int argc, char **argv)
                     }
                     quadlet_t crc_comp = 0, crc_frame = 0;
                     FwPort.ReadQuadlet(curBoardFw->GetBoardId(), 0x4182, crc_comp);
-                    FwPort.ReadQuadlet(curBoardFw->GetBoardId(), 0x4183, crc_frame);
-                    std::cout << "CRC computed = " << crc_comp << ", frame = " << crc_frame << std::endl;
+                    std::cout << "CRC computed = " << crc_comp << " (should be c704dd7b)" << std::endl;
                     std::cout << std::dec;
                     break;
                 }

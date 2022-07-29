@@ -874,6 +874,11 @@ bool AmpIO::ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex)
     return ret;
 }
 
+bool AmpIO::ReadIOExpander(AmpIO_UInt32 &resp)
+{
+    return port->ReadQuadlet(BoardId, 14, resp);
+}
+
 /*******************************************************************************
  * Write commands
  */
@@ -1032,6 +1037,11 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
 AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
 {
     return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
+}
+
+bool AmpIO::WriteIOExpander(AmpIO_UInt16 cmd)
+{
+    return port->WriteQuadlet(BoardId, 14, static_cast<AmpIO_UInt32>(cmd));
 }
 
 /*******************************************************************************
