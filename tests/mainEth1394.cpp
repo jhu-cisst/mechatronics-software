@@ -1228,6 +1228,43 @@ int main(int argc, char **argv)
             }
             break;
 
+        case 'm':   // TEST I/O EXPANDER
+            if (curBoardFw) {
+                AmpIO_UInt32 iodata;
+                std::cout << std::hex;
+                curBoardFw->WriteIOExpander(0x1345);   // Write 0x45 to RAM
+                curBoardFw->WriteIOExpander(0x9300);   // Read from RAM
+                curBoardFw->ReadIOExpander(iodata);
+                if (iodata != 0x1345) std::cout << "Mismatch: 1345, " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x1300);   // Write 0x00 to RAM
+                curBoardFw->ReadIOExpander(iodata);
+                std::cout << "Read from RAM (45): " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x9300);   // Read from RAM
+                curBoardFw->ReadIOExpander(iodata);
+                if (iodata != 0x1300) std::cout << "Mismatch: 1300, " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x13ff);   // Write 0xff to RAM
+                curBoardFw->ReadIOExpander(iodata);
+                std::cout << "Read from RAM (00): " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x9300);   // Read from RAM
+                curBoardFw->WriteIOExpander(0x8000);   // Read Port 0 status
+                curBoardFw->ReadIOExpander(iodata);
+                std::cout << "Read from RAM (ff): " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x8100);   // Read Port 1 status
+                curBoardFw->ReadIOExpander(iodata);
+                std::cout << "Read from Port 0: " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x8e00);   // Read Ports 0-7
+                curBoardFw->ReadIOExpander(iodata);
+                std::cout << "Read from Port 1: " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x8f00);   // Read Ports 8-9
+                curBoardFw->ReadIOExpander(iodata);
+                std::cout << "Read from Ports 0-7: " << iodata << std::endl;
+                curBoardFw->WriteIOExpander(0x0200);   // NOP
+                curBoardFw->ReadIOExpander(iodata);
+                std::cout << "Read from Ports 8-9: " << iodata << std::endl;
+                std::cout << std::dec;
+            }
+            break;
+
         case 'r':
             if (EthPort->IsOK())
                 EthPort->CheckFwBusGeneration("EthPort", true);

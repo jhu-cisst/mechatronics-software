@@ -292,7 +292,10 @@ public:
     */
     bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
 
-    /*! \brief Read from the MAX7317 I/O Expander (QLA 1.5+)
+    /*! \brief Read from the MAX7317 I/O Expander register (QLA 1.5+)
+        Note that this returns the data read when the last command, Cmd(N), was written
+        via WriteIOExpander, which is actually the result of the command before that, Cmd(N-1).
+        If Cmd(N-1) was a read command, the 8 lowest bits contain the data.
      */
     bool ReadIOExpander(AmpIO_UInt32 &resp);
 
@@ -385,6 +388,9 @@ public:
     AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
 
     /*! \brief Write to the MAX7317 I/O Expander (QLA 1.5+)
+        The most significant bit determines whether this is a read (1) or a write (0).
+        The next 7 bits specify the register address.
+        The last 8 bits specify the data to write (ignored for a read).
      */
     bool WriteIOExpander(AmpIO_UInt16 cmd);
 
