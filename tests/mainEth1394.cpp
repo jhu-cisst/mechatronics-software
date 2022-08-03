@@ -900,6 +900,8 @@ int main(int argc, char **argv)
     AmpIO *curBoardEth = 0;  // Current board via Ethernet (sets boardNum)
     AmpIO *HubFw = 0;        // Ethernet Hub board via Firewire
 
+    BasePort *curPort = 0;   // Current port (Ethernet or Firewire)
+
 #if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
     if (!FwPort.IsOK()) {
@@ -974,8 +976,16 @@ int main(int argc, char **argv)
 
     while (!done) {
 
-        // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth
-        curBoard = curBoardFw ? curBoardFw : curBoardEth;
+        // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth.
+        // Also set curPort to be consistent with curBoard.
+        if (curBoardFw) {
+            curBoard = curBoardFw;
+            curPort = &FwPort;
+        }
+        else {
+            curBoard = curBoardEth;
+            curPort = EthPort;
+        }
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         if (curBoardFw)
@@ -1017,12 +1027,15 @@ int main(int argc, char **argv)
             std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
             std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
         }
+        if (curBoard)
+            std::cout << "  m) Initialize and test I/O Expander (QLA 1.5+)" << std::endl;
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (curBoardFw)
             std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
         if (curBoardEth)
             std::cout << "  t) Run Ethernet timing analysis" << std::endl;
         if (curBoard) {
+            std::cout << "  v) Measure motor power supply voltage (QLA 1.5+)" << std::endl;
             std::cout << "  w) Test waveform buffer" << std::endl;
             std::cout << "  x) Read Ethernet debug data" << std::endl;
         }
@@ -1229,39 +1242,48 @@ int main(int argc, char **argv)
             break;
 
         case 'm':   // TEST I/O EXPANDER
-            if (curBoardFw) {
+            if (curBoard) {
+                // Initialize I/O expander by setting all ports to 0x01,
+                // which means tri-state/input
+                curBoard->WriteIOExpander(0x0a01);
+                // Now, check the registers
                 AmpIO_UInt32 iodata;
                 std::cout << std::hex;
-                curBoardFw->WriteIOExpander(0x1345);   // Write 0x45 to RAM
-                curBoardFw->WriteIOExpander(0x9300);   // Read from RAM
-                curBoardFw->ReadIOExpander(iodata);
+                curBoard->WriteIOExpander(0x1345);   // Write 0x45 to RAM
+                curBoard->WriteIOExpander(0x9300);   // Read from RAM
+                curBoard->ReadIOExpander(iodata);
                 if (iodata != 0x1345) std::cout << "Mismatch: 1345, " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x1300);   // Write 0x00 to RAM
-                curBoardFw->ReadIOExpander(iodata);
+                curBoard->WriteIOExpander(0x1300);   // Write 0x00 to RAM
+                curBoard->ReadIOExpander(iodata);
                 std::cout << "Read from RAM (45): " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x9300);   // Read from RAM
-                curBoardFw->ReadIOExpander(iodata);
+                curBoard->WriteIOExpander(0x9300);   // Read from RAM
+                curBoard->ReadIOExpander(iodata);
                 if (iodata != 0x1300) std::cout << "Mismatch: 1300, " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x13ff);   // Write 0xff to RAM
-                curBoardFw->ReadIOExpander(iodata);
+                curBoard->WriteIOExpander(0x13ff);   // Write 0xff to RAM
+                curBoard->ReadIOExpander(iodata);
                 std::cout << "Read from RAM (00): " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x9300);   // Read from RAM
-                curBoardFw->WriteIOExpander(0x8000);   // Read Port 0 status
-                curBoardFw->ReadIOExpander(iodata);
+                curBoard->WriteIOExpander(0x9300);   // Read from RAM
+                curBoard->WriteIOExpander(0x8000);   // Read Port 0 status
+                curBoard->ReadIOExpander(iodata);
                 std::cout << "Read from RAM (ff): " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x8100);   // Read Port 1 status
-                curBoardFw->ReadIOExpander(iodata);
-                std::cout << "Read from Port 0: " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x8e00);   // Read Ports 0-7
-                curBoardFw->ReadIOExpander(iodata);
-                std::cout << "Read from Port 1: " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x8f00);   // Read Ports 8-9
-                curBoardFw->ReadIOExpander(iodata);
+                for (int i = 1; i < 10; i++) {
+                    AmpIO_UInt16 cmd = 0x8000 | (i << 8);
+                    curBoard->WriteIOExpander(cmd);   // Read Port i status
+                    curBoard->ReadIOExpander(iodata);
+                    std::cout << "Read from Port " << (i-1) << ": " << iodata << std::endl;
+                }
+                curBoard->WriteIOExpander(0x8e00);   // Read Ports 0-7
+                curBoard->ReadIOExpander(iodata);
+                std::cout << "Read from Port 9: " << iodata << std::endl;
+                curBoard->WriteIOExpander(0x8f00);   // Read Ports 8-9
+                curBoard->ReadIOExpander(iodata);
                 std::cout << "Read from Ports 0-7: " << iodata << std::endl;
-                curBoardFw->WriteIOExpander(0x0200);   // NOP
-                curBoardFw->ReadIOExpander(iodata);
+                curBoard->WriteIOExpander(0x0200);   // NOP
+                curBoard->ReadIOExpander(iodata);
                 std::cout << "Read from Ports 8-9: " << iodata << std::endl;
                 std::cout << std::dec;
+                // PK TEMP: Enable amplifiers (ports 4-7)
+                curBoard->WriteIOExpander(0x0c00);
             }
             break;
 
@@ -1292,6 +1314,48 @@ int main(int argc, char **argv)
                 RunTiming("Firewire", curBoardFw, 0, "quadlet write");
             break;
 
+        case 'v':
+            // Measure power supply voltage (QLA 1.5+)
+            if (curBoard) {
+                // Make sure board power is on and amplifier power is off
+                curBoard->WritePowerEnable(true);
+                curBoard->WriteAmpEnable(0x0f, 0);
+                // Set ports 8 and 9 as input
+                curBoard->WriteIOExpander(0x0d01);
+                AmpIO_UInt32 volts;
+                AmpIO_UInt32 vinc = 0x1000;
+                for (volts = 0; volts <= 0x0000ffff; volts += vinc) {
+                    // Write voltage to DAC 4
+                    curPort->WriteQuadlet(curBoard->GetBoardId(), 0x41, volts | 0x80000000);
+                    Amp1394_Sleep(0.001);
+                    // Read from port 8-9
+                    curBoard->WriteIOExpander(0x8f00);
+                    // Write NOP
+                    curBoard->WriteIOExpander(0x0200);
+                    AmpIO_UInt32 iodata;
+                    // Get result from port 8-9 read; need to mask with 0x02 for port 9
+                    curBoard->ReadIOExpander(iodata);
+                    // iodata&0x02 is false (0) when DAC voltage is greater than motor power suply.
+                    if ((iodata&0x02) == 0) {
+                        if (vinc <= 1) break;
+                        // Backup and reduce resolution
+                        volts -= vinc;
+                        vinc >>= 1;
+                    }
+                }
+                if (volts <= 0x0000ffff) {
+                    const double bits2volts = (2.5/65535)*21.0;
+                    std::cout << "Measured power supply voltage = " << volts << " (" << (volts*bits2volts)
+                              << ")" << std::endl;
+                }
+                else {
+                    std::cout << "Failed to measure motor supply voltage" << std::endl;
+                }
+                curPort->WriteQuadlet(curBoard->GetBoardId(), 0x41, 0x80008000);
+                curBoard->WritePowerEnable(false);
+            }
+            break;
+
         case 'w':
             TestWaveform(curBoard);
             break;
@@ -1302,7 +1366,7 @@ int main(int argc, char **argv)
                 if (fpgaVer == 3) {
                     std::cout << std::hex;
                     quadlet_t rinfo;
-                    FwPort.ReadQuadlet(curBoardFw->GetBoardId(), 0x4181, rinfo);
+                    curPort->ReadQuadlet(curBoardFw->GetBoardId(), 0x4181, rinfo);
                     unsigned char firstByte = (rinfo&0x00ff0000)>>16;
                     unsigned int numWords = ((rinfo&0x0000ffff)+1)>>1;
                     std::cout << "Recv FIFO info = " << std::setw(8) << std::setfill('0') << rinfo;
@@ -1325,8 +1389,8 @@ int main(int argc, char **argv)
                             std::cout << std::endl;
                         }
                     }
-                    quadlet_t crc_comp = 0, crc_frame = 0;
-                    FwPort.ReadQuadlet(curBoardFw->GetBoardId(), 0x4182, crc_comp);
+                    quadlet_t crc_comp = 0;
+                    curPort->ReadQuadlet(curBoardFw->GetBoardId(), 0x4182, crc_comp);
                     std::cout << "CRC computed = " << crc_comp << " (should be c704dd7b)" << std::endl;
                     std::cout << std::dec;
                     break;
