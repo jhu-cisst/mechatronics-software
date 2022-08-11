@@ -293,9 +293,12 @@ public:
     bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
 
     /*! \brief Read from the MAX7317 I/O Expander register (QLA 1.5+)
-        Note that this returns the data read when the last command, Cmd(N), was written
-        via WriteIOExpander, which is actually the result of the command before that, Cmd(N-1).
-        If Cmd(N-1) was a read command, the 8 lowest bits contain the data.
+        In general, the lowest 16 bits will contain the result of the last read command issued
+        via WriteIOExpander (the lowest 8 bits contain the data). The MAX7317 actually requires
+        another command to be issued in order to get the result from the last read command, but
+        that is handled by the firmware, which periodically polls the MAX7317.
+        The upper 16 bits contain various flags and error feedback (see firmware or PrintIOExp
+        function in mainEth1394.cpp).
      */
     bool ReadIOExpander(AmpIO_UInt32 &resp);
 
@@ -388,11 +391,15 @@ public:
     AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
 
     /*! \brief Write to the MAX7317 I/O Expander (QLA 1.5+)
-        The most significant bit determines whether this is a read (1) or a write (0).
-        The next 7 bits specify the register address.
-        The last 8 bits specify the data to write (ignored for a read).
+        Normally, just the lowest 16 bits are used:
+          The most significant bit [15] determines whether this is a read (1) or a write (0).
+          The next 7 bits [14:8] specify the register address.
+          The last 8 bits  [7:0] specify the data to write (ignored for a read).
+        The upper bits can be used for debug purposes. Currently:
+          Bit 31 (MSB):  Set to clear detected error
+          Bit 30:        Set to select reading of debug data
      */
-    bool WriteIOExpander(AmpIO_UInt16 cmd);
+    bool WriteIOExpander(AmpIO_UInt32 cmd);
 
     // **************** Static WRITE Methods (for broadcast) ********************
 

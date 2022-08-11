@@ -1039,9 +1039,9 @@ AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
     return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
 }
 
-bool AmpIO::WriteIOExpander(AmpIO_UInt16 cmd)
+bool AmpIO::WriteIOExpander(AmpIO_UInt32 cmd)
 {
-    return port->WriteQuadlet(BoardId, 14, static_cast<AmpIO_UInt32>(cmd));
+    return port->WriteQuadlet(BoardId, 14, cmd);
 }
 
 /*******************************************************************************

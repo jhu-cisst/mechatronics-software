@@ -839,6 +839,19 @@ void TestWaveform(AmpIO *board)
 #endif
 }
 
+void PrintIOExp(AmpIO_UInt32 iodata)
+{
+    std::cout << std::hex << (iodata&0x0000ffff) << "  :";
+    bool output_error = iodata&0x01000000;
+    if (output_error)
+        std::cout << " output_error (" << ((iodata&0x00ff0000)>>16) << ") ";
+    if (iodata&0x02000000) std::cout << " read_error";
+    if (iodata&0x04000000) std::cout << " do_reg_io";
+    if (iodata&0x08000000) std::cout << " reg_io_read";
+    if (iodata&0x10000000) std::cout << " other_busy";
+    std::cout << std::dec << std::endl;
+}
+
 static char QuadletReadCallbackBoardId = 0;
 
 bool QuadletReadCallback(EthBasePort &, unsigned char boardId, std::ostream &debugStream)
@@ -1243,47 +1256,43 @@ int main(int argc, char **argv)
 
         case 'm':   // TEST I/O EXPANDER
             if (curBoard) {
-                // Initialize I/O expander by setting all ports to 0x01,
-                // which means tri-state/input
-                curBoard->WriteIOExpander(0x0a01);
-                // Now, check the registers
                 AmpIO_UInt32 iodata;
-                std::cout << std::hex;
                 curBoard->WriteIOExpander(0x1345);   // Write 0x45 to RAM
                 curBoard->WriteIOExpander(0x9300);   // Read from RAM
                 curBoard->ReadIOExpander(iodata);
-                if (iodata != 0x1345) std::cout << "Mismatch: 1345, " << iodata << std::endl;
+                std::cout << "Read from RAM (45): ";
+                PrintIOExp(iodata);
                 curBoard->WriteIOExpander(0x1300);   // Write 0x00 to RAM
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from RAM (45): " << iodata << std::endl;
                 curBoard->WriteIOExpander(0x9300);   // Read from RAM
+                std::cout << "Read from RAM (00): ";
                 curBoard->ReadIOExpander(iodata);
-                if (iodata != 0x1300) std::cout << "Mismatch: 1300, " << iodata << std::endl;
+                PrintIOExp(iodata);
                 curBoard->WriteIOExpander(0x13ff);   // Write 0xff to RAM
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from RAM (00): " << iodata << std::endl;
                 curBoard->WriteIOExpander(0x9300);   // Read from RAM
-                curBoard->WriteIOExpander(0x8000);   // Read Port 0 status
                 curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from RAM (ff): " << iodata << std::endl;
-                for (int i = 1; i < 10; i++) {
-                    AmpIO_UInt16 cmd = 0x8000 | (i << 8);
+                std::cout << "Read from RAM (ff): ";
+                PrintIOExp(iodata);
+                for (int i = 0; i < 10; i++) {
+                    AmpIO_UInt32 cmd = 0x8000 | (i << 8);
                     curBoard->WriteIOExpander(cmd);   // Read Port i status
                     curBoard->ReadIOExpander(iodata);
-                    std::cout << "Read from Port " << (i-1) << ": " << iodata << std::endl;
+                    std::cout << "Read from Port " << i << ": ";
+                    PrintIOExp(iodata);
                 }
                 curBoard->WriteIOExpander(0x8e00);   // Read Ports 0-7
                 curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from Port 9: " << iodata << std::endl;
+                std::cout << "Read from Ports 0-7: ";
+                PrintIOExp(iodata);
                 curBoard->WriteIOExpander(0x8f00);   // Read Ports 8-9
                 curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from Ports 0-7: " << iodata << std::endl;
-                curBoard->WriteIOExpander(0x0200);   // NOP
+                std::cout << "Read from Ports 8-9: ";
+                PrintIOExp(iodata);
+                curBoard->WriteIOExpander(0x40000000);   // Select debug register
                 curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from Ports 8-9: " << iodata << std::endl;
-                std::cout << std::dec;
-                // PK TEMP: Enable amplifiers (ports 4-7)
-                curBoard->WriteIOExpander(0x0c00);
+                std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
+                curBoard->WriteIOExpander(0xc0000000);   // Clear errors, select debug register
+                curBoard->ReadIOExpander(iodata);
+                std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
             }
             break;
 
@@ -1320,23 +1329,17 @@ int main(int argc, char **argv)
                 // Make sure board power is on and amplifier power is off
                 curBoard->WritePowerEnable(true);
                 curBoard->WriteAmpEnable(0x0f, 0);
-                // Set ports 8 and 9 as input
-                curBoard->WriteIOExpander(0x0d01);
                 AmpIO_UInt32 volts;
                 AmpIO_UInt32 vinc = 0x1000;
                 for (volts = 0; volts <= 0x0000ffff; volts += vinc) {
                     // Write voltage to DAC 4
                     curPort->WriteQuadlet(curBoard->GetBoardId(), 0x41, volts | 0x80000000);
                     Amp1394_Sleep(0.001);
-                    // Read from port 8-9
-                    curBoard->WriteIOExpander(0x8f00);
-                    // Write NOP
-                    curBoard->WriteIOExpander(0x0200);
+                    // Read comparator bit (register 10, bit 28)
                     AmpIO_UInt32 iodata;
-                    // Get result from port 8-9 read; need to mask with 0x02 for port 9
-                    curBoard->ReadIOExpander(iodata);
-                    // iodata&0x02 is false (0) when DAC voltage is greater than motor power suply.
-                    if ((iodata&0x02) == 0) {
+                    curPort->ReadQuadlet(curBoard->GetBoardId(), 10, iodata);
+                    // iodata&0x10000000 is false (0) when DAC voltage is greater than motor power suply.
+                    if ((iodata&0x10000000) == 0) {
                         if (vinc <= 1) break;
                         // Backup and reduce resolution
                         volts -= vinc;
