@@ -285,6 +285,7 @@ int main(int argc, char** argv)
                   << "'p': turn power on/off (board and axis)" << std::endl
                   << "'o': turn power on/off (board only)" << std::endl
                   << "'i': turn power on/off (axis only, requires board first)" << std::endl
+                  << "'v': toggle voltage/current mode (QLA 1.5+)" << std::endl
                   << "'w': increment encoders" << std::endl
                   << "'s': decrement encoders" << std::endl
                   << "'=': increase motor current by about 50mA" << std::endl
@@ -346,8 +347,11 @@ int main(int argc, char** argv)
 
     // Initialize motor currents at mid-range
     AmpIO_UInt32 MotorCurrents[MAX_AXES];
-    for (i = 0; i < MAX_AXES; i++)
+    bool VoltageMode[MAX_AXES];
+    for (i = 0; i < MAX_AXES; i++) {
         MotorCurrents[i] = 0x8000;
+        VoltageMode[i] = false;
+    }
 
     bool someRev7plus = false;
     bool someRev8plus = false;
@@ -395,7 +399,11 @@ int main(int argc, char** argv)
     for (i = 1; i <= numAxes; i++) {
         unsigned int dx = lm+8+(i-1)*13;
         if (i >= 10) dx--;
-        console.Print(5, dx, "Axis %d", i);
+        int bd = Axis2BoardNum[i];
+        if (BoardList[bd]->ReadStatus() & 0x00001000)
+            console.Print(5, dx-2, "Axis %d I", i);
+        else
+            console.Print(5, dx, "Axis %d", i);
     }
     console.Print(6, lm, "Enc:");
     console.Print(7, lm, "Pot:");
@@ -485,6 +493,25 @@ int main(int argc, char** argv)
             dig_out = dig_out^(1<<(c-'0'));
             for (j = startIndex; j < endIndex; j++)
                 BoardList[j]->WriteDigitalOutput(0x0f, dig_out);
+        }
+        else if (c == 'v') {
+            if (curAxis == 0) {
+                for (unsigned int axis = 0; axis < numAxes; axis++) {
+                    int bd = Axis2BoardNum[axis+1];
+                    if (BoardList[bd]->IsQLAExpanded()) {
+                        VoltageMode[axis] = !VoltageMode[axis];
+                        unsigned int dx = lm+6+axis*13;
+                        if (axis >= 9) dx--;
+                        console.Print(5, dx, "Axis %d %c", axis+1, VoltageMode[axis] ? 'V' : 'I');
+                    }
+                }
+            }
+            else if (BoardList[curBoardIndex]->IsQLAExpanded()) {
+                VoltageMode[curAxis-1] = !VoltageMode[curAxis-1];
+                unsigned int dx = lm+6+(curAxis-1)*13;
+                if (curAxis >= 10) dx--;
+                console.Print(5, dx, "Axis %d %c", curAxis, VoltageMode[curAxis-1] ? 'V' : 'I');
+            }
         }
         else if (c == 'w') {
             for (j = startIndex; j < endIndex; j++)
@@ -716,7 +743,10 @@ int main(int argc, char** argv)
                 if (AxisData[axisNum].HasMotor()) {
                     console.Print(9, lm+10+dx, "%04X", BoardList[j]->GetMotorCurrent(i));
                     console.Print(10, lm+10+dx, "%04X", MotorCurrents[axisNum-1]);
-                    BoardList[j]->SetMotorCurrent(i, MotorCurrents[axisNum-1]);
+                    if (VoltageMode[axisNum-1])
+                        BoardList[j]->SetMotorVoltage(i, MotorCurrents[axisNum-1]);
+                    else
+                        BoardList[j]->SetMotorCurrent(i, MotorCurrents[axisNum-1]);
                     if (someRev8plus) {
                         if (fver >= 8)
                             console.Print(11, lm+6+dx, "%08X", BoardList[j]->GetMotorStatus(i));

@@ -668,6 +668,11 @@ AmpIO_UInt32 AmpIO::GetAmpFaultCode(unsigned int index) const
     return (ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0xf0000)) >> 16;
 }
 
+bool AmpIO::IsQLAExpanded() const
+{
+    return (GetStatus() & 0x00001000);
+}
+
 /*******************************************************************************
  * Set commands
  */
@@ -747,6 +752,22 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
         data |= COLLECT_BIT;
     if (GetFirmwareVersion() < 8)
         data |= ((BoardId & 0x0F) << 24);
+    WriteBuffer[WB_CURR_OFFSET+index] |= data;
+    return true;
+}
+
+bool AmpIO::SetMotorVoltage(unsigned int index, AmpIO_UInt32 mvolt)
+{
+    if (index >= NumMotors)
+        return false;
+    if (GetFirmwareVersion() < 8)
+        return false;
+    if (!IsQLAExpanded())  // check for QLA 1.5+
+        return false;
+
+    quadlet_t data = VALID_BIT  | (1 << 24) | (mvolt & DAC_MASK);
+    if (collect_state && (collect_chan == (index+1)))
+        data |= COLLECT_BIT;
     WriteBuffer[WB_CURR_OFFSET+index] |= data;
     return true;
 }

@@ -230,6 +230,9 @@ public:
 
     AmpIO_UInt32 GetAmpFaultCode(unsigned int index) const;
 
+    // Returns true if QLA has I/O expander (QLA 1.5+)
+    bool IsQLAExpanded() const;
+
     // *********************** SET Methods ***********************************
     // The SetXXX methods below write data to local buffers that are sent over
     // the bus via BasePort::WriteAllBoards. To immediately write to
@@ -247,6 +250,7 @@ public:
     void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
+    bool SetMotorVoltage(unsigned int index, AmpIO_UInt32 mvolt);
     bool SetMotorVoltageRatio(unsigned int index, double ratio);
 
     // ********************** READ Methods ***********************************
