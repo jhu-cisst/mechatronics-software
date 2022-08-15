@@ -624,8 +624,7 @@ bool AmpIO::GetAmpEnable(unsigned int index) const
         ret = GetStatus()&mask;
     }
     else {
-        // TODO: Should only be MOTOR_ENABLE_BIT, but may be a firmware discrepancy
-        ret = ReadBuffer[MOTOR_STATUS_OFFSET + index] & (MOTOR_ENABLE_BIT|MOTOR_ENABLE_MASK);
+        ret = ReadBuffer[MOTOR_STATUS_OFFSET + index] & MOTOR_ENABLE_BIT;
     }
     return ret;
 }
