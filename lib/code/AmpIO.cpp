@@ -749,9 +749,14 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
     quadlet_t data = VALID_BIT | (sdata & DAC_MASK);
     if (collect_state && (collect_chan == (index+1)))
         data |= COLLECT_BIT;
-    if (GetFirmwareVersion() < 8)
+    if (GetFirmwareVersion() < 8) {
         data |= ((BoardId & 0x0F) << 24);
-    WriteBuffer[WB_CURR_OFFSET+index] |= data;
+    }
+    else {
+        // Preserve any motor enable bits set by SetAmpEnable
+        data |= WriteBuffer[WB_CURR_OFFSET+index]&(MOTOR_ENABLE_MASK|MOTOR_ENABLE_BIT);
+    }
+    WriteBuffer[WB_CURR_OFFSET+index] = data;
     return true;
 }
 
@@ -767,7 +772,9 @@ bool AmpIO::SetMotorVoltage(unsigned int index, AmpIO_UInt32 mvolt)
     quadlet_t data = VALID_BIT  | (1 << 24) | (mvolt & DAC_MASK);
     if (collect_state && (collect_chan == (index+1)))
         data |= COLLECT_BIT;
-    WriteBuffer[WB_CURR_OFFSET+index] |= data;
+     // Preserve any motor enable bits set by SetAmpEnable
+    data |= WriteBuffer[WB_CURR_OFFSET+index]&(MOTOR_ENABLE_MASK|MOTOR_ENABLE_BIT);
+    WriteBuffer[WB_CURR_OFFSET+index] = data;
     return true;
 }
 
