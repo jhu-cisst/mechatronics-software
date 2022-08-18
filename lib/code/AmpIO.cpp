@@ -369,6 +369,16 @@ AmpIO_UInt32 AmpIO::GetMotorCurrent(unsigned int index) const
     return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
 }
 
+bool AmpIO::GetMotorCurrent(unsigned int index, double &amps) const
+{
+    if (index >= NumMotors)
+        return false;
+    AmpIO_UInt32 bits = GetMotorCurrent(index);
+    const double Bits2Amps = (2.5*5.0/65536);
+    amps = bits*Bits2Amps - 6.25;
+    return true;
+}
+
 AmpIO_UInt32 AmpIO::GetMotorStatus(unsigned int index) const
 {
     if (index >= NumMotors)
@@ -662,9 +672,11 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 
 AmpIO_UInt32 AmpIO::GetAmpFaultCode(unsigned int index) const
 {
-    if (GetHardwareVersion() != dRA1_String)
+    if (GetFirmwareVersion() < 8) {
+        // TODO: could pick fault bits from other registers
         return 0;
-    return (ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0xf0000)) >> 16;
+    }
+    return (ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0x000f0000)) >> 16;
 }
 
 bool AmpIO::IsQLAExpanded() const
@@ -760,7 +772,7 @@ bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
     return true;
 }
 
-bool AmpIO::SetMotorVoltage(unsigned int index, AmpIO_UInt32 mvolt)
+bool AmpIO::SetMotorVoltage(unsigned int index, AmpIO_UInt32 volts)
 {
     if (index >= NumMotors)
         return false;
@@ -769,13 +781,22 @@ bool AmpIO::SetMotorVoltage(unsigned int index, AmpIO_UInt32 mvolt)
     if (!IsQLAExpanded())  // check for QLA 1.5+
         return false;
 
-    quadlet_t data = VALID_BIT  | (1 << 24) | (mvolt & DAC_MASK);
+    quadlet_t data = VALID_BIT  | (1 << 24) | (volts & DAC_MASK);
     if (collect_state && (collect_chan == (index+1)))
         data |= COLLECT_BIT;
      // Preserve any motor enable bits set by SetAmpEnable
     data |= WriteBuffer[WB_CURR_OFFSET+index]&(MOTOR_ENABLE_MASK|MOTOR_ENABLE_BIT);
     WriteBuffer[WB_CURR_OFFSET+index] = data;
     return true;
+}
+
+bool AmpIO::SetMotorVoltage(unsigned int index, double volts)
+{
+    const double Volts2BitsQLA = 65535/91.0;   // 91.0 = 36.4*2.5
+    AmpIO_UInt32 bits = static_cast<AmpIO_UInt32>((volts+45.5)*Volts2BitsQLA+0.5);
+    if (bits&0xffff0000)
+        return false;    // volts too high or low (could instead truncate)
+    return SetMotorVoltage(index, bits);
 }
 
 bool AmpIO::SetMotorVoltageRatio(unsigned int index, double ratio)
@@ -825,7 +846,7 @@ bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
     if (port && (index < NumEncoders)) {
         AmpIO_UInt32 read_data;
         unsigned int channel = (index+1) << 4;
-        ret = port->ReadQuadlet(BoardId, channel | ENC_LOAD_OFFSET, read_data);
+        ret = port->ReadQuadlet(BoardId, channel | ENC_LOAD_REG, read_data);
         if (ret) sdata = static_cast<AmpIO_Int32>(read_data);
     }
     return ret;
@@ -877,7 +898,7 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
     AmpIO_UInt32 read_data;
     unsigned int channel = (index+1) << 4;
     if (port && (index < NumDouts)) {
-        if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, read_data)) {
+        if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_REG, read_data)) {
             // Starting with Version 1.3.0 of this library, we swap the high and low times
             // because the digital outputs are inverted in hardware.
             countsLow = static_cast<AmpIO_UInt16>(read_data >> 16);
@@ -901,9 +922,19 @@ bool AmpIO::ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex)
     return ret;
 }
 
-bool AmpIO::ReadIOExpander(AmpIO_UInt32 &resp)
+bool AmpIO::ReadIOExpander(AmpIO_UInt32 &resp) const
 {
     return port->ReadQuadlet(BoardId, 14, resp);
+}
+
+bool AmpIO::ReadMotorConfig(unsigned int index, AmpIO_UInt32 &cfg) const
+{
+    bool ret = false;
+    if (port && (index < NumMotors)) {
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
 }
 
 /*******************************************************************************
@@ -939,7 +970,7 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
     }
     bool ret = false;
     if (port && (index < NumEncoders)) {
-        ret = port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET,
+        ret = port->WriteQuadlet(BoardId, channel | ENC_LOAD_REG,
                                  static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
     }
     return ret;
@@ -1021,7 +1052,7 @@ bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_
         // Starting with Version 1.3.0 of this library, we swap the high and low times
         // because the digital outputs are inverted in hardware.
         AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsLow) << 16) | countsHigh;
-        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, counts);
+        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_REG, counts);
     } else {
         return false;
     }
@@ -1071,6 +1102,16 @@ bool AmpIO::WriteIOExpander(AmpIO_UInt32 cmd)
     return port->WriteQuadlet(BoardId, 14, cmd);
 }
 
+bool AmpIO::WriteMotorConfig(unsigned int index, AmpIO_UInt32 cfg)
+{
+    bool ret = false;
+    if (port && (index < NumMotors)) {
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
+}
+
 /*******************************************************************************
  * Static Write methods (for broadcast)
  *
@@ -1108,7 +1149,7 @@ bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int
     bool ret = false;
     // Cannot use NumEncoders below because this is a static method
     if (port && (index < MAX_CHANNELS)) {
-        ret = port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_OFFSET,
+        ret = port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_REG,
                                  static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
     }
     return ret;

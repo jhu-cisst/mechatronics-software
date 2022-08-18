@@ -93,6 +93,8 @@ public:
 
     AmpIO_UInt32 GetMotorCurrent(unsigned int index) const;
 
+    bool GetMotorCurrent(unsigned int index, double &amps) const;
+
     AmpIO_UInt32 GetMotorStatus(unsigned int index) const;
 
     double GetMotorVoltageRatio(unsigned int index) const;
@@ -250,7 +252,8 @@ public:
     void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
-    bool SetMotorVoltage(unsigned int index, AmpIO_UInt32 mvolt);
+    bool SetMotorVoltage(unsigned int index, AmpIO_UInt32 volts);
+    bool SetMotorVoltage(unsigned int index, double volts);
     bool SetMotorVoltageRatio(unsigned int index, double ratio);
 
     // ********************** READ Methods ***********************************
@@ -304,7 +307,15 @@ public:
         The upper 16 bits contain various flags and error feedback (see firmware or PrintIOExp
         function in mainEth1394.cpp).
      */
-    bool ReadIOExpander(AmpIO_UInt32 &resp);
+    bool ReadIOExpander(AmpIO_UInt32 &resp) const;
+
+    /*! \brief Read motor configuration register (Firmware Rev 8+)
+        \param index motor number, 0..NumMotors-1
+        \param cfg   value read from configuration register
+        \returns true if successful; possible failures include firmware version < 8, failure to read
+                 over FireWire/Ethernet; invalid motor index
+     */
+    bool ReadMotorConfig(unsigned int index, AmpIO_UInt32 &cfg) const;
 
     // ********************** WRITE Methods **********************************
 
@@ -404,6 +415,14 @@ public:
           Bit 30:        Set to select reading of debug data
      */
     bool WriteIOExpander(AmpIO_UInt32 cmd);
+
+    /*! \brief Write motor configuration register (Firmware Rev 8+)
+        \param index motor number, 0..NumMotors-1
+        \param cfg   value to write to configuration register
+        \returns true if successful; possible failures include firmware version < 8, failure to write
+                 over FireWire/Ethernet; invalid motor index
+     */
+    bool WriteMotorConfig(unsigned int index, AmpIO_UInt32 cfg);
 
     // **************** Static WRITE Methods (for broadcast) ********************
 
@@ -670,20 +689,24 @@ protected:
     unsigned int WB_CURR_OFFSET;   // one quadlet per channel
     unsigned int WB_CTRL_OFFSET;   // control register (power control)
 
-    // Hardware device address offsets, not to be confused with buffer offsets.
+    // Hardware device address offsets (registers); not to be confused with buffer offsets.
     // Format is [4-bit channel address (1-7) | 4-bit device offset]
     // Applies only to quadlet transactions--block transactions use fixed
     // real-time formats described above
     enum {
-        ADC_DATA_OFFSET = 0,       // adc data register
-        DAC_CTRL_OFFSET = 1,       // dac control register
-        POT_CTRL_OFFSET = 2,       // pot control register
-        POT_DATA_OFFSET = 3,       // pot data register
-        ENC_LOAD_OFFSET = 4,       // enc control register (preload)
-        POS_DATA_OFFSET = 5,       // enc data register (position)
-        VEL_DATA_OFFSET = 6,       // enc data register (velocity, 4/DT method)
-        VEL_DP_DATA_OFFSET = 7,    // enc data register (velocity, DP/1 method)
-        DOUT_CTRL_OFFSET = 8       // digital output control (PWM, one-shot)
+        ADC_DATA_REG = 0,       // adc data register
+        DAC_CTRL_REG = 1,       // dac control register
+        POT_CTRL_REG = 2,       // pot control register
+        POT_DATA_REG = 3,       // pot data register
+        ENC_LOAD_REG = 4,       // enc control register (preload)
+        POS_DATA_REG = 5,       // enc data register (position)
+        VEL_DATA_REG = 6,       // enc data register (velocity, 4/DT method)
+        VEL_QTR1_REG = 7,       // enc most recent quarter
+        DOUT_CTRL_REG = 8,      // digital output control (PWM, one-shot)
+        VEL_QTR5_REG = 9,       // enc previous quarter
+        VEL_RUN_REG = 10,       // enc running counter (time since last edge)
+        MOTOR_CONFIG_REG = 11,  // motor configuration register
+        MOTOR_STATUS_REG = 12   // motor status register
     };
 
     // Following offsets are for dRA1
