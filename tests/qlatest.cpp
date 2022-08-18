@@ -477,7 +477,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Enable motor power: " << std::hex << status;
-    if ((status&0x000cffff) != 0x000c0000) {
+    if ((status&0x000c0f0f) != 0x000c0000) {
         sprintf(buf, "FAIL (%08lx) - is motor power connected?", status);
         Amp1394Console::Print(curLine++, 30, buf);
         Amp1394Console::Print(curLine, 9, "Do you want to retry (y/n)? ");
@@ -509,7 +509,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Amplifier enable: " << std::hex << status;
-    mask = ignoreMV ? 0x0004ffff : 0x000cffff;
+    mask = ignoreMV ? 0x00040f0f : 0x000c0f0f;
     if ((status&mask) != (0x000c0f0f&mask)) {
         logFile << " - FAIL" << std::endl;
         sprintf(buf, "Enable power amplifiers - FAIL (%08lx)", status);
@@ -548,7 +548,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Disable motor power: " << std::hex << status;
-    if ((status&0x000cffff) != 0) {
+    if ((status&0x000c0f0f) != 0) {
         logFile << " - FAIL" << std::endl;
         sprintf(buf, "FAIL (%08lx)", status);
         pass = false;
@@ -622,7 +622,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
     Amp1394_Sleep(1.0);  // wait for power to stabilize
     Port->ReadAllBoards();
     status = Board.GetStatus();
-    if ((status&0x000cffff) != 0x000c0f0f) {
+    if ((status&0x000c0f0f) != 0x000c0f0f) {
         sprintf(buf,"Failed to enable power (%08lx) - is motor power connected?", status);
         Amp1394Console::Print(curLine++, 9, buf);
         Amp1394Console::Print(curLine, 9, "Temperature sensors - ");
@@ -1022,6 +1022,7 @@ int main(int argc, char** argv)
                         console.Print(9, 46, "FAIL");
                 }
                 break;
+
         }
 
         console.Refresh();
