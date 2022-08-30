@@ -443,7 +443,7 @@ void TestDacRW(BasePort *port, unsigned char boardNum)
               << write_block[1] << ", " << write_block[2] << ", "
               << write_block[3] << std::endl;
     for (i = 0; i < 4; i++) {
-        write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
+        write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+static_cast<quadlet_t>(i+1)*0x100));
     }
     write_block[4] = 0;   // power control
     std::cout << "Setting new values" << std::endl;
@@ -689,7 +689,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     quadlet_t waveform[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
     quadlet_t waveform_read[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
     const unsigned int WLEN_MAX = (wport->GetMaxWriteDataSize()/sizeof(quadlet_t));
-    size_t i;
+    unsigned int i;
     unsigned int min_left = WLEN_MAX;
     unsigned int min_wlen = WLEN_MAX;
     unsigned int max_wait = 0;
@@ -709,7 +709,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
         }
     }
 
-    for (size_t wlen = 2; wlen < WLEN_MAX; wlen++) {
+    for (unsigned int wlen = 2; wlen < WLEN_MAX; wlen++) {
         bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
         unsigned int len16 = 2*wlen;  // length in words
         unsigned int trigger_comp = 10 + len16/2+len16/8 + 2;   // computation on FPGA
@@ -991,6 +991,7 @@ int main(int argc, char **argv)
 
         // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth.
         // Also set curPort to be consistent with curBoard.
+#if Amp1394_HAS_RAW1394
         if (curBoardFw) {
             curBoard = curBoardFw;
             curPort = &FwPort;
@@ -999,6 +1000,10 @@ int main(int argc, char **argv)
             curBoard = curBoardEth;
             curPort = EthPort;
         }
+#else
+        curBoard = curBoardEth;
+        curPort = EthPort;
+#endif
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         if (curBoardFw)
