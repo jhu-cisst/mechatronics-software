@@ -374,8 +374,8 @@ bool AmpIO::GetMotorCurrent(unsigned int index, double &amps) const
     if (index >= NumMotors)
         return false;
     AmpIO_UInt32 bits = GetMotorCurrent(index);
-    const double Bits2Amps = (2.5*5.0/65536);
-    amps = bits*Bits2Amps - 6.25;
+    const double Bits2AmpsQLA = (2.5*5.0/65536);
+    amps = bits*Bits2AmpsQLA - 6.25;
     return true;
 }
 

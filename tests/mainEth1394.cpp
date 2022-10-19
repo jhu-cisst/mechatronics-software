@@ -1371,55 +1371,32 @@ int main(int argc, char **argv)
         case 'x':
             if (curBoard) {
                 unsigned int fpgaVer = curBoard->GetFPGAVersionMajor();
-                if (fpgaVer == 3) {
-                    std::cout << std::hex;
-                    quadlet_t rinfo;
-                    curPort->ReadQuadlet(curBoardFw->GetBoardId(), 0x4181, rinfo);
-                    unsigned char firstByte = (rinfo&0x00ff0000)>>16;
-                    unsigned int numWords = ((rinfo&0x0000ffff)+1)>>1;
-                    std::cout << "Recv FIFO info = " << std::setw(8) << std::setfill('0') << rinfo;
-                    std::cout << ", numWords = " << numWords
-                              << ", firstByte = " << (unsigned int)firstByte << std::endl;
-                    int rdSize = 32;  // Minimum Ethernet frame length
-                    for (int nw = numWords; nw > 0; nw -= rdSize) {
-                        rdSize = (nw > 64) ? 64: nw;
-                        if (curBoard->ReadEthernetData(buffer, 0x100, rdSize)) {
-                            if (buffer[0]&0x08000000) std::cout << "Pr_Err ";
-                            if (buffer[0]&0x04000000) std::cout << "Reset ";
-                            if (buffer[0]&0x02000000) std::cout << "Full ";
-                            if (buffer[0]&0x01000000) std::cout << "Empty ";
-                            std::cout << "Data: " << std::endl;
-                            for (int i = 0; i < rdSize; i++) {
-                                std::cout << std::setw(4) << std::setfill('0') << (buffer[i]&0x0000ffff);
-                                if (i&1) std::cout << " ";
-                                if (i%16 == 15) std::cout << std::endl;
-                            }
-                            std::cout << std::endl;
-                        }
-                    }
-                    quadlet_t crc_comp = 0;
-                    curPort->ReadQuadlet(curBoardFw->GetBoardId(), 0x4182, crc_comp);
-                    std::cout << "CRC computed = " << crc_comp << " (should be c704dd7b)" << std::endl;
-                    std::cout << std::dec;
-                    break;
-                }
-                if (curBoard->ReadEthernetData(buffer, 0xc0, 16))
+                // For now, use Port 1 for FPGA V3
+                unsigned int ethPort = (fpgaVer == 3) ? 1 : 0;
+                double clkPeriod = curBoard->GetFPGAClockPeriod();
+                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0xc0, 16))     // PacketBuffer
                     EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
-                if (curBoard->ReadEthernetData(buffer, 0, 64))
+                if (curBoard->ReadEthernetData(buffer, (ethPort << 8), 64))            // FireWire packet
                     EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-                if (curBoard->ReadEthernetData(buffer, 0x80, 16))
-                    EthBasePort::PrintDebugData(std::cout, buffer, curBoard->GetFPGAClockPeriod());
+                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0x80, 16))     // EthernetIO DebugData
+                    EthBasePort::PrintDebugData(std::cout, buffer, clkPeriod);
+                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0x90, 16)) {   // Low-level DebugData
+                    if (fpgaVer == 2)
+                        EthBasePort::PrintDebugDataKSZ(std::cout, buffer, clkPeriod);  // KSZ8851 (FPGA V2)
+                    else
+                        EthBasePort::PrintDebugDataRTL(std::cout, buffer, clkPeriod);  // RTL8211F (FPGA V3)
+                }
 #if 0
-                if (curBoard->ReadEthernetData(buffer, 0xa0, 32)) {
+                if ((fpgaVer == 2) && (curBoard->ReadEthernetData(buffer, 0xa0, 32))) {
                     std::cout << "Initialization Program:" << std::endl;
                     for (int i = 0; i < 32; i++) {
                         if (i == 16)
-                            std::cout << "Run Program:" << std::endl;
+                           std::cout << "Run Program:" << std::endl;
                         if (buffer[i] != 0) {
                            if (buffer[i]&0x02000000) std::cout << "   Write ";
                            else std::cout << "   Read  ";
                            std::cout << std::hex << std::setw(2) << std::setfill('0')
-                                     << ((buffer[i]&0x00ff0000)>>16) << " ";       // address
+                                     << ((buffer[i]&0x00ff0000)>>16) << " ";           // address
                            std::cout << std::hex << std::setw(4) << std::setfill('0')
                                      << (buffer[i]&0x0000ffff);
                            if (buffer[i]&0x01000000) std::cout << " MOD";
@@ -1427,7 +1404,7 @@ int main(int argc, char **argv)
                         }
                     }
                 }
-                if (curBoard->ReadEthernetData(buffer, 0xe0, 21)) {
+                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0xe0, 21)) {   // ReplyIndex
                     const uint16_t *packetw = reinterpret_cast<const uint16_t *>(buffer);
                     std::cout << "ReplyIndex: " << std::endl;
                     for (int i = 0; i < 41; i++)
@@ -1445,7 +1422,7 @@ int main(int argc, char **argv)
 #if Amp1394_HAS_RAW1394
         case 'z':
             if (curBoardFw) {
-                FwPort.WriteQuadlet(curBoardFw->GetBoardId(), 0x4181, 0);  // TEMP: reset FIFOs
+                FwPort.WriteQuadlet(curBoardFw->GetBoardId(), 0x41a1, 0);  // TEMP: reset FIFOs
                 unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
                 std::cout << "FPGA Rev " << fpgaVer << std::endl;
                 if (fpgaVer == 2) {
