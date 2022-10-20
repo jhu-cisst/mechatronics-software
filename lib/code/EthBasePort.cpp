@@ -277,6 +277,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  numARP;           // Quad 7
         uint8_t  fw_bus_gen;
         uint8_t  numICMP;
+        uint8_t  quad7_unused;
         uint8_t  numPacketError;   // Quad 8
         uint8_t  bwState;
         uint16_t bw_left;
