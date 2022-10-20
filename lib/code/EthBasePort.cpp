@@ -405,7 +405,7 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         char      header[4];        // Quad 0
         uint32_t  statusbits;       // Quad 1
         uint16_t  rxPktWords;       // Quad 2
-        uint16_t  quad2_high;       // unused
+        uint16_t  states;
         uint16_t  numPacketValid;   // Quad 3
         uint8_t   numPacketInvalid;
         uint8_t   numPacketSent;
@@ -426,9 +426,14 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
     if (p->statusbits & 0x10000000) debugStream << "recv_fifo_full ";
     if (p->statusbits & 0x08000000) debugStream << "recv_fifo_empty ";
     if (p->statusbits & 0x04000000) debugStream << "recv_info_fifo_empty ";
+    if (p->statusbits & 0x02000000) debugStream << "curPacketValid ";
     if (p->statusbits & 0x00800000) debugStream << "sendRequest ";
-    if (p->statusbits & 0x00800000) debugStream << "tx_underflow ";
+    if (p->statusbits & 0x00400000) debugStream << "tx_underflow ";
+    if (p->statusbits & 0x00200000) debugStream << "send_fifo_full ";
+    if (p->statusbits & 0x00100000) debugStream << "send_fifo_empty ";
     debugStream << std::endl;
+    debugStream << "rxState: " << (p->states&0x0001) << ", txState: " << ((p->states&0x0006)>>1)
+                << ", state: " << ((p->states&0x0018)>>3) << std::endl;
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
     debugStream << "numPacketInvalid: " << std::dec << static_cast<uint16_t>(p->numPacketInvalid) << std::endl;
