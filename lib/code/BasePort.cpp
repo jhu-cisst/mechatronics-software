@@ -506,14 +506,15 @@ nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
 
 std::string BasePort::GetHardwareVersionString(unsigned char boardId) const
 {
-    std::stringstream hStr;
+    std::string hStr;
     if ((boardId < BoardIO::MAX_BOARDS) && HardwareVersion[boardId]) {
         unsigned long hver = bswap_32(HardwareVersion[boardId]);
-        hStr << reinterpret_cast<char *>(&hver);
+        hStr.assign(reinterpret_cast<const char *>(&hver), sizeof(unsigned long));
+        hStr.resize(4);
     } else {
-        hStr << "Invalid";
+        hStr = "Invalid";
     }
-    return hStr.str();
+    return hStr;
 }
 
 void BasePort::AddHardwareVersion(unsigned long hver)
