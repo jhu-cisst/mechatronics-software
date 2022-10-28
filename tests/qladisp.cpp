@@ -89,9 +89,7 @@ void EncDown(AmpIO &bd)
 
 void PrintDebugStream(std::stringstream &debugStream)
 {
-    char line[80];
-    while (debugStream.getline(line, sizeof(line)))
-        std::cerr << line << std::endl;
+    std::cerr << debugStream.str() << std::endl;
     debugStream.clear();
     debugStream.str("");
 }
