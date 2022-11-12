@@ -20,7 +20,9 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394BSwap.h"
 #include <iomanip>
 
-#ifndef _MSC_VER
+#ifdef _MSC_VER
+#include <string>
+#else
 #include <string.h>  // for memset
 #endif
 

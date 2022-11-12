@@ -47,6 +47,7 @@ const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (2
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
+const double VEL_PERD_ESPM          = 1.0/40000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
 const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
 const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
 const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
@@ -448,7 +449,7 @@ double AmpIO::GetEncoderClockPeriod(void) const
         return VEL_PERD_OLD;
     else if (fver == 6)
         return VEL_PERD_REV6;
-    return VEL_PERD;
+    return (GetHardwareVersion() == dRA1_String) ? VEL_PERD_ESPM : VEL_PERD;
 }
 
 // Returns encoder velocity in counts/sec -> 4/period
@@ -542,8 +543,9 @@ bool AmpIO::SetEncoderVelocityData(unsigned int index)
         encVelData[index].SetDataRev6(ReadBuffer[ENC_VEL_OFFSET+index], ReadBuffer[ENC_QTR1_OFFSET+index]);
     }
     else {  // V7+
+        bool isESPM = (GetHardwareVersion() == dRA1_String);
         encVelData[index].SetData(ReadBuffer[ENC_VEL_OFFSET+index], ReadBuffer[ENC_QTR1_OFFSET+index],
-                                  ReadBuffer[ENC_QTR5_OFFSET+index], ReadBuffer[ENC_RUN_OFFSET+index]);
+                                  ReadBuffer[ENC_QTR5_OFFSET+index], ReadBuffer[ENC_RUN_OFFSET+index], isESPM);
     }
     // Increment error counter if necessary
     if (encVelData[index].IsEncoderError())

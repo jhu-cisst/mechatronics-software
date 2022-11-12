@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Jie Ying Wu, Zihan Chen
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -36,6 +36,7 @@ const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velo
 const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
 const AmpIO_UInt32 ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
 
+const double VEL_PERD_ESPM          = 1.0/40000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
 const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
 const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
 const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
@@ -65,10 +66,11 @@ void EncoderVelocity::Init()
 
 // SetData for Firmware V7+
 
-void EncoderVelocity::SetData(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr1, AmpIO_UInt32 rawQtr5, AmpIO_UInt32 rawRun)
+void EncoderVelocity::SetData(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr1, AmpIO_UInt32 rawQtr5, AmpIO_UInt32 rawRun,
+                              bool isESPM)
 {
     Init();
-    clkPeriod = VEL_PERD;
+    clkPeriod = isESPM ? VEL_PERD_ESPM : VEL_PERD;
     velPeriodMax = ENC_VEL_MASK_26;
     qtrPeriodMax = ENC_VEL_QTR_MASK;  // 26 bits
     velPeriod = rawPeriod & ENC_VEL_MASK_26;

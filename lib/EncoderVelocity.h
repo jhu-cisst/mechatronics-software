@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Jie Ying Wu, Zihan Chen
 
-  (C) Copyright 2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2021-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -60,7 +60,9 @@ public:
     void Init();
 
     // SetData for Firmware Rev 7+
-    void SetData(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr1, AmpIO_UInt32 rawQtr5, AmpIO_UInt32 rawRun);
+    //    Set isESPM true for dVRK-Si
+    void SetData(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr1, AmpIO_UInt32 rawQtr5, AmpIO_UInt32 rawRun,
+                 bool isESPM = false);
     // SetData for Firmware Rev 6
     void SetDataRev6(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr);
     // SetData for Firmware <= 5; useRunCounter should be true for Firmware Rev 4-5
