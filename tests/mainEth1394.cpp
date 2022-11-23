@@ -323,6 +323,12 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 17: " << phyreg17 << std::dec << std::endl;
     std::cout << "Tx Delay: " << ((phyreg17 & 0x0100) ? "ON" : "OFF") << std::endl;
+    if (!(phyreg17 & 0x0100)) {
+        std::cout << "Turning Tx Delay ON" << std::endl;
+        phyreg17 |= 0x0100;
+        if (!Board.WriteRTL8211F_Register(chan, phyAddr, 17, phyreg17))
+            std::cout << "Failed to write PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
+    }
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, 21, phyreg21))
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 21" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 21: " << phyreg21 << std::dec << std::endl;
@@ -1383,8 +1389,15 @@ int main(int argc, char **argv)
                 if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0x90, 16)) {   // Low-level DebugData
                     if (fpgaVer == 2)
                         EthBasePort::PrintDebugDataKSZ(std::cout, buffer, clkPeriod);  // KSZ8851 (FPGA V2)
-                    else
+                    else {
                         EthBasePort::PrintDebugDataRTL(std::cout, buffer, clkPeriod);  // RTL8211F (FPGA V3)
+                        AmpIO_UInt32 ethStatus;
+                        curPort->ReadQuadlet(curBoard->GetBoardId(), 12, ethStatus);
+                        if (ethStatus&0x10000000)
+                            std::cout << "200 MHz clock running" << std::endl;
+                        else
+                            std::cout << "**** 200 MHz clock not running -- initialize PS" << std::endl;
+                    }
                 }
 #if 0
                 if ((fpgaVer == 2) && (curBoard->ReadEthernetData(buffer, 0xa0, 32))) {

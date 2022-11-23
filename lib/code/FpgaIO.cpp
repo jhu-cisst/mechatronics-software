@@ -75,8 +75,7 @@ unsigned int FpgaIO::GetFPGAVersionMajor(void) const
         ver = 1;
     else if (read_data&0x80000000)
         ver = 2;
-    //else if (read_data&0x40000000)
-    else             // PK TEMP: firmware bug
+    else if ((read_data&0x40000000) == 0x40000000)
         ver = 3;
     return ver;
 }
@@ -112,12 +111,7 @@ double FpgaIO::GetFPGAClockPeriod(void) const
 
 bool FpgaIO::HasEthernet(void) const
 {
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return false;
-    // Bit 31 indicates whether Ethernet is present
-    return (read_data&0x80000000);
+    return (GetFPGAVersionMajor() > 1);
 }
 
 /*******************************************************************************

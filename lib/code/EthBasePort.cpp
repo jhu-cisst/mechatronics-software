@@ -413,7 +413,14 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         uint8_t   numPacketInvalid;
         uint8_t   numPacketSent;
         uint32_t  recv_crc_in;      // Quad 4
-        uint32_t  unused[11];
+        uint16_t  respBytes;        // Quad 5
+        uint16_t  sendCnt;
+        uint8_t   txSent;           // Quad 6
+        uint8_t   send_byte1;
+        uint8_t   recv_byte1;
+        uint8_t   quad6_msb;
+        uint32_t  send_crc_in;      // Quad 7
+        uint32_t  unused[8];
     };
     if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
         debugStream << "PrintDebugDataRTL: structure packing problem" << std::endl;
@@ -434,14 +441,23 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
     if (p->statusbits & 0x00400000) debugStream << "tx_underflow ";
     if (p->statusbits & 0x00200000) debugStream << "send_fifo_full ";
     if (p->statusbits & 0x00100000) debugStream << "send_fifo_empty ";
+    if (p->statusbits & 0x00080000) debugStream << "IRQ ";
+    if (p->statusbits & 0x00040000) debugStream << "recv_fifo_error ";
+    if (p->statusbits & 0x00020000) debugStream << "send_fifo_error ";
     debugStream << std::endl;
-    debugStream << "rxState: " << (p->states&0x0001) << ", txState: " << ((p->states&0x0006)>>1)
-                << ", state: " << ((p->states&0x0018)>>3) << std::endl;
+    debugStream << "rxState: " << (p->states&0x0001) << ", txState: " << ((p->states&0x000e)>>1)
+                << ", state: " << ((p->states&0x0070)>>4) << std::endl;
+    debugStream << "clock_speed (Rx): " << ((p->states&0x0180)>>7)
+                << ", speed_mode (Tx): " << ((p->states&0x0600)>>9) << std::endl;
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
     debugStream << "numPacketInvalid: " << std::dec << static_cast<uint16_t>(p->numPacketInvalid) << std::endl;
     debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
     debugStream << "recv_crc_in: " << std::hex << p->recv_crc_in << " (should be c704dd7b)" << std::dec << std::endl;
+    debugStream << "respBytes: " << p->respBytes << ", sendCnt: " << p->sendCnt << std::endl;
+    debugStream << "txSent: " << static_cast<uint16_t>(p->txSent) << std::hex << ", send_crc_in: " << p->send_crc_in << std::dec << std::endl;
+    debugStream << std::hex << "send_byte1: " << static_cast<uint16_t>(p->send_byte1)
+                << ", recv_byte1: " << static_cast<uint16_t>(p->recv_byte1) << std::dec << std::endl;
 }
 
 void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
