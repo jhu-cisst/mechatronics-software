@@ -444,6 +444,10 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
     if (p->statusbits & 0x00080000) debugStream << "IRQ ";
     if (p->statusbits & 0x00040000) debugStream << "recv_fifo_error ";
     if (p->statusbits & 0x00020000) debugStream << "send_fifo_error ";
+    if (p->statusbits & 0x00010000) debugStream << "recv_ipv4 ";
+    if (p->statusbits & 0x00008000) debugStream << "recv_ipv4_err ";
+    if (p->statusbits & 0x00004000) debugStream << "recv_udp ";
+    if (p->statusbits & 0x00002000) debugStream << "send_ipv4 ";
     debugStream << std::endl;
     debugStream << "rxState: " << (p->states&0x0001) << ", txState: " << ((p->states&0x000e)>>1)
                 << ", state: " << ((p->states&0x0070)>>4) << std::endl;
