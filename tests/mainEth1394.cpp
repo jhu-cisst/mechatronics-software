@@ -22,6 +22,9 @@
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
+// Default Ethernet port for FPGA V3
+unsigned int ETH_PORT = 1;
+
 const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 
@@ -181,8 +184,7 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
 {
     std::cout << "PHY" << chan << ":";
     AmpIO_UInt16 reg;
-    // TODO: Figure out why PHY2 has a default address of 0
-    unsigned int phyAddr = (chan == 2) ? FpgaIO::PHY_BROADCAST : FpgaIO::PHY_RTL8211F;
+    unsigned int phyAddr = FpgaIO::PHY_RTL8211F;
     // This should be on page 0xa43, but seems to work fine on default page
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYSR, reg)) {
         std::cout << " failed to read PHYSR" << std::endl;
@@ -207,9 +209,9 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
     //     2   | 1000 | 1, 0  |     0x0040
     //     3   |   ?? | 1, 1  |     0x2040
     unsigned short speedMap[4] = { 0x0000, 0x2000, 0x0040, 0x2040 };
-    if (chan == 1) {
-        std::cout << "Writing " << std::hex << speedMap[speed] << " to GMII core register"
-                  << std::dec << std::endl;
+    if (chan == ETH_PORT) {
+        std::cout << "Writing " << std::hex << speedMap[speed] << " to GMII core register for eth"
+                  << std::dec << ETH_PORT << std::endl;
         if (!Board.WriteRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, speedMap[speed])) {
             std::cout << " failed to write to GMII core register" << std::endl;
         }
@@ -263,7 +265,7 @@ bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan, unsigned int phyAddr)
         return false;
     }
     if (curPage != FpgaIO::RTL8211F_PAGE_DEFAULT) {
-        std::cout << "Changing page to " << std::hex << FpgaIO::RTL8211F_PAGE_DEFAULT << std::endl;
+        std::cout << std::hex << "Changing page from " << curPage << " to " << FpgaIO::RTL8211F_PAGE_DEFAULT << std::endl;
         if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT)) {
             std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
             return false;
@@ -295,8 +297,7 @@ bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan, unsigned int phyAddr)
 
 bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
 {
-    // TODO: Figure out why PHY2 has a default address of 0
-    unsigned int phyAddr = (chan == 2) ? FpgaIO::PHY_BROADCAST : FpgaIO::PHY_RTL8211F;
+    unsigned int phyAddr = FpgaIO::PHY_RTL8211F;
 
     // Check Register I/O
     if (!CheckRTL8211F_RegIO(Board, chan, phyAddr))
@@ -338,9 +339,9 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT))
         std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
 
-    // For channel 1, check GMII to RGMII core PHY register
+    // For channel ETH_PORT, check GMII to RGMII core PHY register
     // Based on the VHDL source code for this core, PHY Specific Control Register 1 should be at address 16
-    if (chan == 1) {
+    if (chan == ETH_PORT) {
         AmpIO_UInt16 phyCR;
         if (!Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, phyCR)) {
             std::cout << "Failed to read GMII PHY" << chan << " Reg 16" << std::endl;
@@ -877,7 +878,6 @@ int main(int argc, char **argv)
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
     if (argc > 1) {
-        int args_found = 0;
         for (int i = 1; i < argc; i++) {
             if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
                 if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
@@ -888,9 +888,6 @@ int main(int argc, char **argv)
                     std::cerr << "Please select Ethernet raw (-pethP) or UDP (-pudp[xx.xx.xx.xx])" << std::endl;
                     return 0;
                 }
-            }
-            else if (args_found == 0) {
-                // Could parse additional args here
             }
             else {
                     std::cerr << "Usage: eth1394test [-pP]" << std::endl
@@ -1051,8 +1048,11 @@ int main(int argc, char **argv)
             std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
             std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
         }
-        if (curBoard)
+        if (curBoard) {
             std::cout << "  m) Initialize and test I/O Expander (QLA 1.5+)" << std::endl;
+            std::cout << "  p) Change FPGA V3 Ethernet port from " << ETH_PORT << " to "
+                      << (3-ETH_PORT) << std::endl;
+        }
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (curBoardFw)
             std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
@@ -1307,6 +1307,12 @@ int main(int argc, char **argv)
             }
             break;
 
+        case 'p':
+            // Toggle Ethernet port (for FPGA V3)
+            ETH_PORT = 3-ETH_PORT;
+            std::cout << "Changing to FPGA V3 Ethernet port " << ETH_PORT << std::endl;
+            break;
+
         case 'r':
             if (EthPort->IsOK())
                 EthPort->CheckFwBusGeneration("EthPort", true);
@@ -1377,8 +1383,8 @@ int main(int argc, char **argv)
         case 'x':
             if (curBoard) {
                 unsigned int fpgaVer = curBoard->GetFPGAVersionMajor();
-                // For now, use Port 1 for FPGA V3
-                unsigned int ethPort = (fpgaVer == 3) ? 1 : 0;
+                // For now, use ETH_PORT for FPGA V3
+                unsigned int ethPort = (fpgaVer == 3) ? ETH_PORT : 0;
                 double clkPeriod = curBoard->GetFPGAClockPeriod();
                 if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0xc0, 16))     // PacketBuffer
                     EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
@@ -1435,7 +1441,6 @@ int main(int argc, char **argv)
 #if Amp1394_HAS_RAW1394
         case 'z':
             if (curBoardFw) {
-                FwPort.WriteQuadlet(curBoardFw->GetBoardId(), 0x41a1, 0);  // TEMP: reset FIFOs
                 unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
                 std::cout << "FPGA Rev " << fpgaVer << std::endl;
                 if (fpgaVer == 2) {
