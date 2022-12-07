@@ -425,7 +425,9 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         uint16_t  PhyId1;           // Quad 9
         uint16_t  PhyId2;
         uint32_t  initCount;        // Quad 10
-        uint32_t  unused[5];
+        uint16_t  timeReceive;      // Quad 11
+        uint16_t  timeSend;
+        uint32_t  unused[4];
     };
     if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
         debugStream << "PrintDebugDataRTL: structure packing problem" << std::endl;
@@ -459,6 +461,7 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
     if (p->statusbits & 0x00000200) debugStream << "isBroadcast ";
     if (p->statusbits & 0x00000100) debugStream << "initOK ";
     if (p->statusbits & 0x00000080) debugStream << "txStateError ";
+    if (p->statusbits & 0x00000040) debugStream << "send_fifo_overflow ";
     debugStream << std::endl;
     debugStream << "rxState: " << (p->states&0x0001) << ", txState: " << ((p->states&0x000e)>>1)
                 << ", state: " << ((p->states&0x00f0)>>4) << std::endl;
@@ -477,6 +480,7 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
     debugStream << "numReset: " << p->numReset << ", numIRQ: " << p->numIRQ << std::endl;
     debugStream << "PHY ID1: " << std::hex << p->PhyId1 << ", PHY ID2: " << p->PhyId2 << std::dec << std::endl;
     debugStream << "initCount: " << std::hex << p->initCount << std::dec << ", " << (p->initCount*clockPeriod) << std::endl;
+    debugStream << "timeReceive: " << (p->timeReceive*clockPeriod) << " timeSend: " << (p->timeSend*clockPeriod) << std::endl;
 }
 
 void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
