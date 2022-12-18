@@ -117,6 +117,11 @@ void AmpIO::InitBoard(void)
         NumMotors = 10;
         NumEncoders = 7;
         NumDouts = 0;
+    }
+    else if (GetHardwareVersion() == DQLA_String) {
+        NumMotors = 8;
+        NumEncoders = 8;
+        NumDouts = 8;
     } else {
         NumMotors = 4;
         NumEncoders = 4;
