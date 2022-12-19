@@ -509,7 +509,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
 
     // Enabling individual amplifiers
     Board.WriteAmpEnable(0x0f, 0x0f);
-    Amp1394_Sleep(0.001);
+    Amp1394_Sleep(0.006);       // QLA Rev 1.5+ may have delay up to 5.3 ms
     Port->ReadAllBoards();
     status = Board.GetStatus();
     logFile << "   Amplifier enable: " << std::hex << status;
