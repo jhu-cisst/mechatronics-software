@@ -467,6 +467,9 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     bool ignoreMV = false;     // ignore "motor voltage good" feedback
     unsigned long mask;
 
+    // Disable watchdog
+    Board.WriteWatchdogPeriod(0x0000);
+
     logFile << std::endl << "=== Motor Power Control ===" << std::endl;
  retry:
     // Enabling motor power supply
@@ -502,6 +505,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         Amp1394Console::Print(curLine++, 9, "Continuing test, ignoring 'motor voltage good' feedback");
         ignoreMV = true;
     }
+    Amp1394Console::Refresh();
 
     // Enabling individual amplifiers
     Board.WriteAmpEnable(0x0f, 0x0f);
@@ -594,6 +598,9 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
         sprintf(buf, "Disable safety relay - PASS (%08lx)", status);
     }
     Amp1394Console::Print(curLine++, 9, buf);
+
+    // Reenable watchdog
+    Board.WriteWatchdogPeriod(0xFFFF);
 
     return pass;
 }
