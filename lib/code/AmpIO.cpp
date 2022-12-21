@@ -45,6 +45,9 @@ const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned A
 const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
 const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
+const AmpIO_UInt32 ENC_A_MASK       = 0x10000000;  /*!< Encoder A channel mask (Rev 8+) */
+const AmpIO_UInt32 ENC_B_MASK       = 0x20000000;  /*!< Encoder B channel mask (Rev 8+) */
+const AmpIO_UInt32 ENC_I_MASK       = 0x40000000;  /*!< Encoder I channel mask (Rev 8+) */
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
 const double VEL_PERD_ESPM          = 1.0/40000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
@@ -304,53 +307,116 @@ AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
     // before being returned to the caller because they are inverted in hardware and/or firmware.
     // This way, the digital output state matches the hardware state (i.e., 0 means digital output
     // is at 0V).
-    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>12))&0x000f);
-    // Firmware versions < 5 have bits in reverse order with respect to schematic
-    if (GetFirmwareVersion() < 5)
-        dout = BitReverse4[dout];
+    AmpIO_UInt8 dout;
+    if (GetHardwareVersion() == DQLA_String) {
+        dout = static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>24))&0x000000ff);
+    }
+    else {
+        dout = static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>12))&0x000f);
+        // Firmware versions < 5 have bits in reverse order with respect to schematic
+        if (GetFirmwareVersion() < 5)
+            dout = BitReverse4[dout];
+    }
     return dout;
 }
 
 AmpIO_UInt8 AmpIO::GetNegativeLimitSwitches(void) const
 {
-    return (this->GetDigitalInput()&0x0f00)>>8;
+    AmpIO_UInt8 neglim;
+    if (GetHardwareVersion() == DQLA_String) {
+        neglim = static_cast<AmpIO_UInt8>((ReadBuffer[DIGIO_OFFSET]>>16)&0x000000ff);
+    }
+    else {
+        neglim = (this->GetDigitalInput()&0x0f00)>>8;
+    }
+    return neglim;
 }
 
 AmpIO_UInt8 AmpIO::GetPositiveLimitSwitches(void) const
 {
-    return (this->GetDigitalInput()&0x00f0)>>4;
+    AmpIO_UInt8 poslim;
+    if (GetHardwareVersion() == DQLA_String) {
+        poslim = static_cast<AmpIO_UInt8>((ReadBuffer[DIGIO_OFFSET]>>8)&0x000000ff);
+    }
+    else {
+        poslim = (this->GetDigitalInput()&0x00f0)>>4;
+    }
+    return poslim;
 }
 
 AmpIO_UInt8 AmpIO::GetHomeSwitches(void) const
 {
-    return (this->GetDigitalInput()&0x00f);
+    AmpIO_UInt8 home;
+    if (GetHardwareVersion() == DQLA_String) {
+        home = static_cast<AmpIO_UInt8>(ReadBuffer[DIGIO_OFFSET]&0x000000ff);
+    }
+    else {
+        home = this->GetDigitalInput()&0x00f;
+    }
+    return home;
 }
 
 AmpIO_UInt8 AmpIO::GetEncoderChannelA(void) const
 {
-    return (this->GetDigitalInput()&0x0f000000)>>24;
+    AmpIO_UInt8 encA;
+    if (GetHardwareVersion() == DQLA_String) {
+        // This also works for QLA with Rev 8+
+        encA = 0;
+        for (unsigned int i = 0; i < NumEncoders; i++) {
+            if (ReadBuffer[ENC_POS_OFFSET+i]&ENC_A_MASK)
+                encA |= (1 << i);
+        }
+    }
+    else {
+        encA =  static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x0f000000)>>24);
+    }
+ return encA;
 }
 
 bool AmpIO::GetEncoderChannelA(unsigned int index) const
 {
-    const AmpIO_UInt8 mask = (0x0001 << index);
+    const AmpIO_UInt8 mask = (0x01 << index);
     return GetEncoderChannelA()&mask;
 }
 
 AmpIO_UInt8 AmpIO::GetEncoderChannelB(void) const
 {
-    return (this->GetDigitalInput()&0x00f00000)>>20;
+    AmpIO_UInt8 encB;
+    if (GetHardwareVersion() == DQLA_String) {
+        // This also works for QLA with Rev 8+
+        encB = 0;
+        for (unsigned int i = 0; i < NumEncoders; i++) {
+            if (ReadBuffer[ENC_POS_OFFSET+i]&ENC_B_MASK)
+                encB |= (1 << i);
+        }
+    }
+    else {
+        encB =  static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x00f00000)>>20);
+    }
+    return encB;
 }
 
 bool AmpIO::GetEncoderChannelB(unsigned int index) const
 {
-    const AmpIO_UInt8 mask = (0x0001 << index);
+    const AmpIO_UInt8 mask = (0x01 << index);
     return GetEncoderChannelB()&mask;
 }
 
 AmpIO_UInt8 AmpIO::GetEncoderIndex(void) const
 {
-    return (this->GetDigitalInput()&0x000f0000)>>16;
+    AmpIO_UInt8 encI;
+    if (GetHardwareVersion() == DQLA_String) {
+        // This also works for QLA with Rev 8+
+        encI = 0;
+        for (unsigned int i = 0; i < NumEncoders; i++) {
+            if (ReadBuffer[ENC_POS_OFFSET+i]&ENC_I_MASK)
+                encI |= (1 << i);
+        }
+    }
+    else {
+        encI =  static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x000f0000)>>16);
+    }
+    return encI;
 }
 
 AmpIO_UInt8 AmpIO::GetAmpTemperature(unsigned int index) const
@@ -360,6 +426,12 @@ AmpIO_UInt8 AmpIO::GetAmpTemperature(unsigned int index) const
         temp = (ReadBuffer[TEMP_OFFSET]>>8) & 0x000000ff;
     else if (index == 1)
         temp = ReadBuffer[TEMP_OFFSET] & 0x000000ff;
+    else if (GetHardwareVersion() == DQLA_String) {
+        if (index == 2)
+            temp = (ReadBuffer[TEMP_OFFSET]>>24) & 0x000000ff;
+        else if (index == 3)
+            temp = (ReadBuffer[TEMP_OFFSET]>>16) & 0x000000ff;
+    }
     return temp;
 }
 

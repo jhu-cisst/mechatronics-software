@@ -799,9 +799,18 @@ int main(int argc, char** argv)
                           BoardList[j]->GetEncoderIndex());
 
                 console.Print(STATUS_LINE+4, lm+bdx, "Node: %s", nodeStr[j]);
-                console.Print(STATUS_LINE+4, lm+14+bdx, "Temp:  %02X    %02X",
-                          (unsigned int)BoardList[j]->GetAmpTemperature(0),
-                          (unsigned int)BoardList[j]->GetAmpTemperature(1));
+                if (BoardList[j]->GetHardwareVersion() == DQLA_String) {
+                    console.Print(STATUS_LINE+4, lm+14+bdx, "Temp:  %02X    %02X    %02X    %02X ",
+                              (unsigned int)BoardList[j]->GetAmpTemperature(0),
+                              (unsigned int)BoardList[j]->GetAmpTemperature(1),
+                              (unsigned int)BoardList[j]->GetAmpTemperature(2),
+                              (unsigned int)BoardList[j]->GetAmpTemperature(3));
+                }
+                else {
+                    console.Print(STATUS_LINE+4, lm+14+bdx, "Temp:  %02X    %02X",
+                              (unsigned int)BoardList[j]->GetAmpTemperature(0),
+                              (unsigned int)BoardList[j]->GetAmpTemperature(1));
+                }
                 if (loop_cnt > 500) {
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
@@ -809,7 +818,10 @@ int main(int argc, char** argv)
                     }
                 }
             }
-            console.Print(STATUS_LINE+4, lm+35+bdx, "Err(r/w): %2d %2d",
+            int err_dx = 35+bdx;
+            if (BoardList[j]->GetHardwareVersion() == DQLA_String)
+                err_dx += 12;
+            console.Print(STATUS_LINE+4, lm+err_dx, "Err(r/w): %2d %2d",
                       BoardList[j]->GetReadErrors(),
                       BoardList[j]->GetWriteErrors());
             if (showTime)
