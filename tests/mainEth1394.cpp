@@ -194,9 +194,8 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
     if (reg & 0x0008) std::cout << " full-duplex";
     else std::cout << " half-duplex";
     unsigned int speed = (reg & 0x0030)>>4;
-    if (speed == 0) std::cout << " 10Mbps";
-    else if (speed == 1) std::cout << " 100 Mbps";
-    else if (speed == 2) std::cout << " 1000 Mbps";
+    const char *speedStr[4] = { "10Mbps", "100 Mbps", "1000 Mbps", "??" };
+    std::cout << " " << speedStr[speed];
     if (reg & 0x0002) std::cout << " polarity-reversed";
     std::cout << std::endl;
 
@@ -210,10 +209,21 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
     //     3   |   ?? | 1, 1  |     0x2040
     unsigned short speedMap[4] = { 0x0000, 0x2000, 0x0040, 0x2040 };
     if (chan == ETH_PORT) {
-        std::cout << "Writing " << std::hex << speedMap[speed] << " to GMII core register for eth"
-                  << std::dec << ETH_PORT << std::endl;
-        if (!Board.WriteRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, speedMap[speed])) {
-            std::cout << " failed to write to GMII core register" << std::endl;
+        std::cout << "Reading GMII core register for eth"
+                  << std::dec << ETH_PORT << ": ";
+        AmpIO_UInt16 coreReg;
+        if (Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, coreReg)) {
+            std::cout << std::hex << coreReg << std::dec;
+            for (size_t i = 0; i < 4; i++) {
+                if ((coreReg&0x2040) == speedMap[i]) {
+                    std::cout << ", Speed: " << speedStr[i];
+                    break;
+                }
+            }
+            std::cout << std::endl;
+        }
+        else {
+            std::cout << " failed to read to GMII core register" << std::endl;
         }
     }
 }
@@ -324,12 +334,6 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 17: " << phyreg17 << std::dec << std::endl;
     std::cout << "Tx Delay: " << ((phyreg17 & 0x0100) ? "ON" : "OFF") << std::endl;
-    if (!(phyreg17 & 0x0100)) {
-        std::cout << "Turning Tx Delay ON" << std::endl;
-        phyreg17 |= 0x0100;
-        if (!Board.WriteRTL8211F_Register(chan, phyAddr, 17, phyreg17))
-            std::cout << "Failed to write PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
-    }
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, 21, phyreg21))
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 21" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 21: " << phyreg21 << std::dec << std::endl;
