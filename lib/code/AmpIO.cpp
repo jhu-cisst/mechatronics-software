@@ -678,7 +678,8 @@ bool AmpIO::GetPowerStatus(void) const
 bool AmpIO::GetPowerFault(void) const
 {
     // Bit 15: motor power fault
-    if (GetHardwareVersion() == dRA1_String)
+    AmpIO_UInt32 hwver = GetHardwareVersion();
+    if ((hwver == dRA1_String) || (hwver == DQLA_String))
         return false;
 
     return (GetStatus()&0x00008000);
@@ -692,6 +693,11 @@ bool AmpIO::GetSafetyRelay(void) const
 
 bool AmpIO::GetSafetyRelayStatus(void) const
 {
+    // DQLA does not have this feedback (uses LEDs instead),
+    // so we just return true if the relay should be on.
+    if (GetHardwareVersion() == DQLA_String)
+        return GetSafetyRelay();
+
     // Bit 17
     return (GetStatus()&0x00020000);
 }
@@ -720,6 +726,7 @@ bool AmpIO::GetAmpEnable(unsigned int index) const
 
 AmpIO_UInt8 AmpIO::GetAmpEnableMask(void) const
 {
+    // TODO: update for Rev 8
     return GetStatus()&0x0000000f;
 }
 
@@ -745,6 +752,7 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
     if (GetHardwareVersion() == dRA1_String)
         return 0;
 
+    // TODO: update for Rev 8
     AmpIO_UInt32 mask = 0x000000F0;
     return (GetStatus() & mask) >> 4;
 }
@@ -760,6 +768,12 @@ AmpIO_UInt32 AmpIO::GetAmpFaultCode(unsigned int index) const
 
 bool AmpIO::IsQLAExpanded() const
 {
+    if (GetHardwareVersion() == DQLA_String) {
+        // The DQLA has two QLAs. Here, we return true if either
+        // has an I/O expander.
+        return (GetStatus()&0x00000003);
+    }
+
     return (GetStatus() & 0x00001000);
 }
 
