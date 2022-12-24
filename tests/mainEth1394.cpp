@@ -850,6 +850,8 @@ void TestWaveform(AmpIO *board)
 #endif
 }
 
+// Following prints feedback from the MAX7317 I/O Expander on QLA Rev 1.5+
+// Feedback from the MAX7301 I/O Expander on DQLA is a little different
 void PrintIOExp(AmpIO_UInt32 iodata)
 {
     std::cout << std::hex << (iodata&0x0000ffff) << "  :";
@@ -862,6 +864,126 @@ void PrintIOExp(AmpIO_UInt32 iodata)
     if (iodata&0x10000000) std::cout << " other_busy";
     std::cout << std::dec << std::endl;
 }
+
+// Following checks the configuration of MAX7317 I/O Expander on QLA Rev 1.5+
+// (channel 0)
+bool QLA_IOExp_Check(AmpIO &Board, unsigned long chan = 0)
+{
+    // TODO: update for non-zero channels (DQLA)
+    AmpIO_UInt32 iodata;
+    Board.WriteIOExpander(0x1345);   // Write 0x45 to RAM
+    Board.WriteIOExpander(0x9300);   // Read from RAM
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from RAM (45): ";
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x1300);   // Write 0x00 to RAM
+    Board.WriteIOExpander(0x9300);   // Read from RAM
+    std::cout << "Read from RAM (00): ";
+    Board.ReadIOExpander(iodata);
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x13ff);   // Write 0xff to RAM
+    Board.WriteIOExpander(0x9300);   // Read from RAM
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from RAM (ff): ";
+    PrintIOExp(iodata);
+    for (int i = 0; i < 10; i++) {
+        AmpIO_UInt32 cmd = 0x8000 | (i << 8);
+        Board.WriteIOExpander(cmd);   // Read Port i status
+        Board.ReadIOExpander(iodata);
+        std::cout << "Read from Port " << i << ": ";
+        PrintIOExp(iodata);
+    }
+    Board.WriteIOExpander(0x8e00);   // Read Ports 0-7
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from Ports 0-7: ";
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x8f00);   // Read Ports 8-9
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from Ports 8-9: ";
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x40000000);   // Select debug register
+    Board.ReadIOExpander(iodata);
+    std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
+    Board.WriteIOExpander(0xc0000000);   // Clear errors, select debug register
+    Board.ReadIOExpander(iodata);
+    std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
+    return true;
+}
+
+// Following checks the configuration of one of MAX7301 I/O Expanders on the DQLA
+bool DQLA_IOExp_Check(AmpIO &Board, unsigned long chan)
+{
+    AmpIO_UInt32 iodata;
+    unsigned int DQLA_Num = (chan == 3) ? 1 : 2;
+    chan <<= 16;
+    Board.WriteIOExpander(chan|0x08000000);     // NOP command to set channel for reading
+    Board.ReadIOExpander(iodata);
+    std::cout << "Checking DQLA I/O Expander " << DQLA_Num << " ..." << std::endl;
+    if (iodata&0x00400000) {
+        std::cout << "Error: not configured" << std::endl;
+        return false;
+    }
+    if (iodata&0x00800000) {
+        std::cout << "Error: failed to initialize" << std::endl;
+        return false;
+    }
+    if (iodata&0x02000000) {
+        std::cout << "Warning: read error detected" << std::endl;
+    }
+    // Check config commands: IOP[7:4], IOP[11:8], IOP[15:12], ...
+    AmpIO_UInt16 configCmd[8] = {  0x09ff, 0x0aff, 0x0b55, 0x0c57, 0x0dff, 0x0eff, 0x0f55, 0x0401 };
+    for (unsigned int j = 0; j < sizeof(configCmd)/sizeof(AmpIO_UInt16); j++) {
+        AmpIO_UInt16 readCmd = (configCmd[j]&0xff00)|0x8000;
+        std::cout << "Checking config cmd " << j << ": " << std::hex << readCmd << std::dec << std::endl;
+        unsigned int cnt;
+        for (cnt = 0; cnt < 100; cnt++) {
+            Board.WriteIOExpander(chan|readCmd);            // Read config
+            Board.ReadIOExpander(iodata);
+            if (iodata&0x04000000) {
+                std::cout << "  Warning: register I/O still in process" << std::endl;
+            }
+            if (iodata&0x08000000) {
+                std::cout << "  Warning: still waiting for register read data" << std::endl;
+            }
+            if ((iodata&0x0000ff00) == (readCmd&0x0000ff00))
+                break;
+        }
+        if (cnt == 100) {
+            std::cout << "  Warning: command mismatch, received: " << std::hex << (iodata&0x0000ff00)
+                      << std::dec <<std::endl;
+            continue;
+        }
+        else if (cnt > 0) {
+            std::cout << "  Warning: took " << cnt << " attempts to obtain correct response" << std::endl;
+        }
+        if (iodata&0x01000000) {
+            std::cout << "  Warning: output error detected (" << std::hex << ((iodata&0x001f0000)>>16)
+                      << std::dec << ") " << std::endl;
+        }
+        if (iodata&0x10000000) {
+            std::cout << "  Warning:  register I/O error (command ignored because previous not finished)" << std::endl;
+        }
+        else if ((iodata&0x000000ff) != (configCmd[j]&0x00ff)) {
+            std::cout << "  Warning: configuration mismatch, received: " << std::hex << (iodata&0x000000ff)
+                      << " (should be " << (configCmd[j]&0x00ff) << ")" << std::dec << std::endl;
+        }
+        else {
+            std::cout << "  Configuration verified" << std::endl;
+        }
+    }
+    Board.WriteIOExpander(chan|0x40000000);    // Select debug register
+    Board.ReadIOExpander(iodata);
+    unsigned int num_output_errors = (iodata&0x00ff0000)>>16;
+    std::cout << "Debug register, number of output errors: " << num_output_errors << std::endl;
+    if (iodata&0x02000000) {
+        std::cout << "Warning: read_error detected" << std::endl;
+    }
+    if ((num_output_errors > 0) || (iodata&0x02000000)) {
+        std::cout << "Clearing errors" << std::endl;
+        Board.WriteIOExpander(chan|0x80000000);   // Clear errors (deselect debug)
+    }
+    return true;
+ }
 
 static char QuadletReadCallbackBoardId = 0;
 
@@ -1079,7 +1201,6 @@ int main(int argc, char **argv)
         nodeaddr_t addr;
         quadlet_t fw_block_data[28];
         quadlet_t eth_block_data[28];
-        quadlet_t write_block[5] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444, 0x55555555 };
         int i;
         char buf[5];
 
@@ -1271,43 +1392,18 @@ int main(int argc, char **argv)
 
         case 'm':   // TEST I/O EXPANDER
             if (curBoard) {
-                AmpIO_UInt32 iodata;
-                curBoard->WriteIOExpander(0x1345);   // Write 0x45 to RAM
-                curBoard->WriteIOExpander(0x9300);   // Read from RAM
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from RAM (45): ";
-                PrintIOExp(iodata);
-                curBoard->WriteIOExpander(0x1300);   // Write 0x00 to RAM
-                curBoard->WriteIOExpander(0x9300);   // Read from RAM
-                std::cout << "Read from RAM (00): ";
-                curBoard->ReadIOExpander(iodata);
-                PrintIOExp(iodata);
-                curBoard->WriteIOExpander(0x13ff);   // Write 0xff to RAM
-                curBoard->WriteIOExpander(0x9300);   // Read from RAM
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from RAM (ff): ";
-                PrintIOExp(iodata);
-                for (int i = 0; i < 10; i++) {
-                    AmpIO_UInt32 cmd = 0x8000 | (i << 8);
-                    curBoard->WriteIOExpander(cmd);   // Read Port i status
-                    curBoard->ReadIOExpander(iodata);
-                    std::cout << "Read from Port " << i << ": ";
-                    PrintIOExp(iodata);
+                if (curBoard->GetHardwareVersion() == DQLA_String) {
+                    DQLA_IOExp_Check(*curBoard, 3);
+                    DQLA_IOExp_Check(*curBoard, 4);
+                    // Could also test I/O expanders on QLA Rev 1.5+
+                    // In DQLA systems, need to use channels 1 and 2
+                    // QLA_IOExp_Check(*curBoard, 1);
+                    // QLA_IOExp_Check(*curBoard, 2);
                 }
-                curBoard->WriteIOExpander(0x8e00);   // Read Ports 0-7
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from Ports 0-7: ";
-                PrintIOExp(iodata);
-                curBoard->WriteIOExpander(0x8f00);   // Read Ports 8-9
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "Read from Ports 8-9: ";
-                PrintIOExp(iodata);
-                curBoard->WriteIOExpander(0x40000000);   // Select debug register
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
-                curBoard->WriteIOExpander(0xc0000000);   // Clear errors, select debug register
-                curBoard->ReadIOExpander(iodata);
-                std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
+                else {
+                    // Test I/O expander on QLA Rev 1.5+ (channel 0)
+                    QLA_IOExp_Check(*curBoard);
+                }
             }
             break;
 
