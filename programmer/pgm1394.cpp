@@ -47,30 +47,49 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 #endif
 
     AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    AmpIO_UInt32 hver = Board.GetHardwareVersion();
+    bool fpgaV3 = mcsName.empty();
     int c = 0;
     while ((c < '0') || (c > '9')) {
         if (c) {
             std::cout << std::endl << "Invalid option -- try again" << std::endl;
         }
         std::cout << std::endl
-                  << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
-                  << "MCS file: " << mcsName << std::endl;
-        std::cout << "PROM Id: " << std::hex << Board.PromGetId() << std::dec
-                  << std::endl << std::endl;
+                  << "Board: " << (unsigned int)Board.GetBoardId()
+                  << " (" << Board.GetHardwareVersionString() << ")" << std::endl;
+        if (!fpgaV3) {
+            std::cout << "MCS file: " << mcsName << std::endl;
+            std::cout << "PROM Id: " << std::hex << Board.PromGetId() << std::dec
+                      << std::endl << std::endl;
+        }
 
-        std::cout << "0) Exit programmer" << std::endl
-                  << "1) Program PROM" << std::endl
-                  << "2) Verify PROM" << std::endl
-                  << "3) Read PROM data" << std::endl
-                  << "4) Program FPGA SN" << std::endl
-                  << "5) Program QLA SN" << std::endl
-                  << "6) Read FPGA SN" << std::endl
-                  << "7) Read QLA SN" << std::endl;
-        if (fver >= 7)
-            std::cout << "8) Reboot FPGA and exit" << std::endl;
-        else
-            std::cout << "8) Exit programmer" << std::endl;
-        std::cout << "9) Download PROM to MCS file" << std::endl;
+        std::cout << "0) Exit programmer" << std::endl;
+        if (!fpgaV3) {
+            std::cout << "1) Program PROM" << std::endl
+                      << "2) Verify PROM" << std::endl
+                      << "3) Read PROM data" << std::endl
+                      << "4) Program FPGA SN" << std::endl
+                      << "5) Program QLA SN" << std::endl
+                      << "6) Read FPGA SN" << std::endl
+                      << "7) Read QLA SN" << std::endl;
+            if (fver >= 7)
+                std::cout << "8) Reboot FPGA and exit" << std::endl;
+            else
+                std::cout << "8) Exit programmer" << std::endl;
+            std::cout << "9) Download PROM to MCS file" << std::endl;
+        }
+        else {
+            // With FPGA V3, we can only program or read the QLA PROM
+            if (hver == DQLA_String) {
+                std::cout << "5) Program QLA 1 SN" << std::endl;
+                std::cout << "6) Program QLA 2 SN" << std::endl;
+                std::cout << "7) Read QLA 1+2 SN" << std::endl;
+            }
+            else {
+                std::cout << "5) Program QLA SN" << std::endl;
+                std::cout << "7) Read QLA SN" << std::endl;
+            }
+        }
         std::cout << std::endl;
 
         std::cout << "Select option: ";
@@ -371,9 +390,10 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
  \brief Prom QLA serial and Revision Number
 
  \param[in] Board FPGA Board
+ \param[in] chan (0 for QLA, 1 or 2 for DQLA)
  \return[out] bool true on success, false otherwise
 */
-bool PromQLASerialNumberProgram(AmpIO &Board)
+bool PromQLASerialNumberProgram(AmpIO &Board, unsigned char chan = 0)
 {
     std::stringstream ss;
     std::string BoardType;
@@ -399,7 +419,10 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
     AmpIO_UInt16 address;
 
     // get s/n from user
-    std::cout << "Please Enter QLA Serial Number: " << std::endl;
+    if (chan == 0)
+        std::cout << "Please Enter QLA Serial Number: " << std::endl;
+    else
+        std::cout << "Please Enter QLA " << static_cast<unsigned int>(chan) << " Serial Number: " << std::endl;
     std::cin >> BoardSN;
     std::cin.ignore(20,'\n');
     ss << BoardType << " " << BoardSN;
@@ -409,7 +432,7 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
     address = 0x0000;
     for (size_t i = 0; i < str.length(); i++) {
         wbyte = str.at(i);
-        if (!Board.PromWriteByte25AA128(address, wbyte)) {
+        if (!Board.PromWriteByte25AA128(address, wbyte, chan)) {
             std::cerr << "Failed to write byte " << i << std::endl;
             return false;
         }
@@ -417,14 +440,14 @@ bool PromQLASerialNumberProgram(AmpIO &Board)
     }
     // Terminating byte can be 0 or 0xff
     wbyte = 0;
-    if (!Board.PromWriteByte25AA128(address, wbyte)) {
+    if (!Board.PromWriteByte25AA128(address, wbyte, chan)) {
         std::cerr << "Failed to write terminating byte" << std::endl;
         return false;
     }
 
     // S2: read back and verify
     BoardSNRead.clear();
-    BoardSNRead = Board.GetQLASerialNumber();
+    BoardSNRead = Board.GetQLASerialNumber(chan);
 
     if (BoardSN == BoardSNRead) {
         std::cout << "Programmed QLA " << BoardSN << " Serial Number" << std::endl;
@@ -529,34 +552,43 @@ int main(int argc, char** argv)
             mcsName = std::string("FPGA1394-QLA.mcs");
         else if (fpgaVer == 2)
             mcsName = std::string("FPGA1394Eth-QLA.mcs");
-        else {
+        else if (fpgaVer != 3) {
             std::cerr << "Unsupported FPGA (Version = " << fpgaVer << ")" << std::endl;
             return RESULT_UNKNOWN_BOARD;
         }
     }
     mcsFile promFile;
-    if (!promFile.OpenFile(mcsName)) {
-        std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
-        return RESULT_NO_PROM_FILE;
+    if (!mcsName.empty()) {
+        if (!promFile.OpenFile(mcsName)) {
+            std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
+            return RESULT_NO_PROM_FILE;
+        }
     }
 
     unsigned long addr;
     bool done = false;
+    bool fpgaV3 = mcsName.empty();
+    AmpIO_UInt32 hver = Board.GetHardwareVersion();
 
     if (auto_mode) {
         std::cout << std::endl
-                  << "Board: " << (unsigned int)Board.GetBoardId() << std::endl
-                  << "MCS file: " << mcsName << std::endl;
-        // test first ...
-        if (!PromProgramTest(Board)) {
-            std::cerr << "Error: programming test failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
-            result = RESULT_PROGRAM_FAILED;
-        } else if (!PromProgram(Board, promFile)) { // ... then program
-            std::cerr << "Error: programming failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
-            result = RESULT_PROGRAM_FAILED;
-        } else if (!PromVerify(Board, promFile)) { // ... and verify
-            std::cerr << "Error: verification failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
-            result = RESULT_VERIFY_FAILED;
+                  << "Board: " << (unsigned int)Board.GetBoardId() << std::endl;
+        if (fpgaV3) {
+            std::cout << "Skipping FPGA V3" << std::endl;
+        }
+        else {
+            std::cout << "MCS file: " << mcsName << std::endl;
+            // test first ...
+            if (!PromProgramTest(Board)) {
+                std::cerr << "Error: programming test failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+                result = RESULT_PROGRAM_FAILED;
+            } else if (!PromProgram(Board, promFile)) { // ... then program
+                std::cerr << "Error: programming failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+                result = RESULT_PROGRAM_FAILED;
+            } else if (!PromVerify(Board, promFile)) { // ... and verify
+                std::cerr << "Error: verification failed for board: " << (unsigned int)Board.GetBoardId() << std::endl;
+                result = RESULT_VERIFY_FAILED;
+            }
         }
         goto cleanup;
     }
@@ -569,47 +601,75 @@ int main(int argc, char** argv)
             done = true;
             break;
         case 1:
-            if (PromProgramTest(Board)) {
-                std::cout << std::endl;
-                result = PromProgram(Board, promFile) ? RESULT_OK : RESULT_PROGRAM_FAILED;
-            }
-            else {
-                std::cout << "Programming not started. Try power-cycling the FPGA" << std::endl;
-                result = RESULT_PROGRAM_FAILED;
+            if (!fpgaV3) {
+                if (PromProgramTest(Board)) {
+                    std::cout << std::endl;
+                    result = PromProgram(Board, promFile) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+                }
+                else {
+                    std::cout << "Programming not started. Try power-cycling the FPGA" << std::endl;
+                    result = RESULT_PROGRAM_FAILED;
+                }
             }
             break;
         case 2:
-            result = PromVerify(Board, promFile) ? RESULT_OK : RESULT_VERIFY_FAILED;
+            if (!fpgaV3)
+                result = PromVerify(Board, promFile) ? RESULT_OK : RESULT_VERIFY_FAILED;
             break;
         case 3:
-            std::cout << "Enter address (hex): ";
-            std::cin >> std::hex >> addr;
-            std::cin.ignore(10,'\n');
-            PromDisplayPage(Board, addr);
+            if (!fpgaV3) {
+                std::cout << "Enter address (hex): ";
+                std::cin >> std::hex >> addr;
+                std::cin.ignore(10,'\n');
+                PromDisplayPage(Board, addr);
+            }
             break;
         case 4:
-            result = PromFPGASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+            if (!fpgaV3)
+                result = PromFPGASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 5:
-            result = PromQLASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+            if (hver == DQLA_String)
+                result = PromQLASerialNumberProgram(Board, 1) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+            else
+                result = PromQLASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 6:
-            sn = Board.GetFPGASerialNumber();
-            if (!sn.empty())
-                std::cout << "FPGA serial number: " << sn << std::endl;
+            if (!fpgaV3) {
+                sn = Board.GetFPGASerialNumber();
+                if (!sn.empty())
+                    std::cout << "FPGA serial number: " << sn << std::endl;
+            }
+            else if (hver == DQLA_String) {
+                result = PromQLASerialNumberProgram(Board, 2) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+            }
             break;
         case 7:
-            sn = Board.GetQLASerialNumber();
-            if (!sn.empty())
-                std::cout << "QLA serial number: " << sn << std::endl;
+            if (hver == DQLA_String) {
+                sn = Board.GetQLASerialNumber(1);
+                if (!sn.empty())
+                    std::cout << "QLA 1 serial number: " << sn << std::endl;
+                sn = Board.GetQLASerialNumber(2);
+                if (!sn.empty())
+                    std::cout << "QLA 2 serial number: " << sn << std::endl;
+            }
+            else {
+                sn = Board.GetQLASerialNumber();
+                if (!sn.empty())
+                    std::cout << "QLA serial number: " << sn << std::endl;
+            }
             break;
         case 8:
-            Board.WriteReboot();
-            std::cout << "Rebooting FPGA ..." << std::endl;
-            done = true;
+            if (!fpgaV3) {
+                Board.WriteReboot();
+                std::cout << "Rebooting FPGA ..." << std::endl;
+                done = true;
+            }
             break;
         case 9:
-            result = PromDownload(Board);
+            if (!fpgaV3) {
+                result = PromDownload(Board);
+            }
             break;
         default:
             std::cout << "Not yet implemented" << std::endl;
@@ -617,7 +677,8 @@ int main(int argc, char** argv)
     }
 
 cleanup:
-    promFile.CloseFile();
+    if (!mcsName.empty())
+        promFile.CloseFile();
     Port->RemoveBoard(board);
     delete Port;
     return result;

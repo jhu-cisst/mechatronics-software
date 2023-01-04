@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -216,7 +216,7 @@ bool AmpIO::WriteBufferResetsWatchdog(void) const
         | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
 }
 
-std::string AmpIO::GetQLASerialNumber(void)
+std::string AmpIO::GetQLASerialNumber(unsigned char chan)
 {
     // Format: QLA 1234-56 or QLA 1234-567.
     // String is terminated by 0 or 0xff.
@@ -227,8 +227,12 @@ std::string AmpIO::GetQLASerialNumber(void)
 
     data[QLASNSize] = 0;  // make sure null-terminated
     for (size_t i = 0; i < QLASNSize; i++) {
-        if (!PromReadByte25AA128(address, data[i])) {
-            std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+        if (!PromReadByte25AA128(address, data[i], chan)) {
+            if (chan == 0)
+                std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+            else
+                std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA " << static_cast<unsigned int>(chan)
+                          << " Serial Number" << std::endl;
             break;
         }
         if (data[i] == 0xff)
@@ -307,51 +311,41 @@ AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
     // before being returned to the caller because they are inverted in hardware and/or firmware.
     // This way, the digital output state matches the hardware state (i.e., 0 means digital output
     // is at 0V).
-    AmpIO_UInt8 dout;
+    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>12))&0x0000000f);
+
+    // Firmware versions < 5 have bits in reverse order with respect to schematic
+    if (GetFirmwareVersion() < 5)
+        dout = BitReverse4[dout];
+
     if (GetHardwareVersion() == DQLA_String) {
-        dout = static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>24))&0x000000ff);
-    }
-    else {
-        dout = static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>12))&0x000f);
-        // Firmware versions < 5 have bits in reverse order with respect to schematic
-        if (GetFirmwareVersion() < 5)
-            dout = BitReverse4[dout];
+        dout |= static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>24))&0x000000f0);
     }
     return dout;
 }
 
 AmpIO_UInt8 AmpIO::GetNegativeLimitSwitches(void) const
 {
-    AmpIO_UInt8 neglim;
+    AmpIO_UInt8 neglim = static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x00000f00)>>8);
     if (GetHardwareVersion() == DQLA_String) {
-        neglim = static_cast<AmpIO_UInt8>((ReadBuffer[DIGIO_OFFSET]>>16)&0x000000ff);
-    }
-    else {
-        neglim = (this->GetDigitalInput()&0x0f00)>>8;
+        neglim |= static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x0f000000)>>20);
     }
     return neglim;
 }
 
 AmpIO_UInt8 AmpIO::GetPositiveLimitSwitches(void) const
 {
-    AmpIO_UInt8 poslim;
+    AmpIO_UInt8 poslim = static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x000000f0)>>4);
     if (GetHardwareVersion() == DQLA_String) {
-        poslim = static_cast<AmpIO_UInt8>((ReadBuffer[DIGIO_OFFSET]>>8)&0x000000ff);
-    }
-    else {
-        poslim = (this->GetDigitalInput()&0x00f0)>>4;
+        poslim |= static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x00f000f0)>>16);
     }
     return poslim;
 }
 
 AmpIO_UInt8 AmpIO::GetHomeSwitches(void) const
 {
-    AmpIO_UInt8 home;
+    AmpIO_UInt8 home = static_cast<AmpIO_UInt8>(this->GetDigitalInput()&0x0000000f);
     if (GetHardwareVersion() == DQLA_String) {
-        home = static_cast<AmpIO_UInt8>(ReadBuffer[DIGIO_OFFSET]&0x000000ff);
-    }
-    else {
-        home = this->GetDigitalInput()&0x00f;
+        home |= static_cast<AmpIO_UInt8>((this->GetDigitalInput()&0x000f0000)>>12);
     }
     return home;
 }

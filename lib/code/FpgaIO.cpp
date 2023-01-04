@@ -377,6 +377,14 @@ nodeaddr_t FpgaIO::GetPromAddress(PromType type, bool isWrite)
         return 0x3000;
     else if (type == PROM_25AA128 && !isWrite)
         return 0x3002;
+    else if (type == PROM_25AA128_1 && isWrite)
+        return 0x3010;
+    else if (type == PROM_25AA128_1 && !isWrite)
+        return 0x3012;
+    else if (type == PROM_25AA128_2 && isWrite)
+        return 0x3020;
+    else if (type == PROM_25AA128_2 && !isWrite)
+        return 0x3022;
     else
         std::cerr << "FpgaIO::GetPromAddress: unsupported PROM type " << type << std::endl;
 
@@ -385,17 +393,18 @@ nodeaddr_t FpgaIO::GetPromAddress(PromType type, bool isWrite)
 
 
 // ********************** HW PROM ONLY Methods ***********************************
-bool FpgaIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
+bool FpgaIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data, unsigned char chan)
 {
+    PromType prom_type = (chan == 1) ? PROM_25AA128_1 : (chan == 2) ? PROM_25AA128_2 : PROM_25AA128;
+
     // 8-bit cmd + 16-bit addr (2 MSBs ignored)
     AmpIO_UInt32 result = 0x00000000;
     quadlet_t write_data = 0x03000000|(addr << 8);
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-
+    nodeaddr_t address = GetPromAddress(prom_type, true);
     if (port->WriteQuadlet(BoardId, address, write_data)) {
         port->PromDelay();
         // Should be ready by now...
-        if (!PromGetResult(result, PROM_25AA128))
+        if (!PromGetResult(result, prom_type))
             return false;
         // Get the last 8-bit of result
         data = result & 0xFF;
@@ -406,15 +415,17 @@ bool FpgaIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
     }
 }
 
-bool FpgaIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
+bool FpgaIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data, unsigned char chan)
 {
+    PromType prom_type = (chan == 1) ? PROM_25AA128_1 : (chan == 2) ? PROM_25AA128_2 : PROM_25AA128;
+
     // enable write
-    PromWriteEnable(PROM_25AA128);
+    PromWriteEnable(prom_type);
     Amp1394_Sleep(0.0001);   // 100 usec
 
     // 8-bit cmd + 16-bit addr + 8-bit data
     quadlet_t write_data = 0x02000000|(addr << 8)|data;
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+    nodeaddr_t address = GetPromAddress(prom_type, true);
     if (port->WriteQuadlet(BoardId, address, write_data)) {
         // wait 5ms for the PROM to be ready to take new commands
         Amp1394_Sleep(0.005);
@@ -426,7 +437,7 @@ bool FpgaIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
 
 
 // Read block data (quadlet)
-bool FpgaIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
+bool FpgaIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads, unsigned char chan)
 {
     // nquads sanity check
     if (nquads == 0 || nquads > 16) {
@@ -434,14 +445,16 @@ bool FpgaIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
         return false;
     }
 
+    PromType prom_type = (chan == 1) ? PROM_25AA128_1 : (chan == 2) ? PROM_25AA128_2 : PROM_25AA128;
+
     // trigger read
     quadlet_t write_data = 0xFE000000|(addr << 8)|(nquads-1);
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
+    nodeaddr_t address = GetPromAddress(prom_type, true);
     if (!port->WriteQuadlet(BoardId, address, write_data))
         return false;
 
     // get result
-    if (!port->ReadBlock(BoardId, address, data, nquads * 4))
+    if (!port->ReadBlock(BoardId, (address|0x0100), data, nquads * 4))
         return false;
     else
         return true;
@@ -449,7 +462,8 @@ bool FpgaIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
 
 
 // Write block data (quadlet)
-bool FpgaIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
+bool FpgaIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads,
+                                   unsigned char chan)
 {
     // address sanity check
     if (nquads == 0 || nquads > 16) {
@@ -457,16 +471,18 @@ bool FpgaIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned 
         return false;
     }
 
+    PromType prom_type = (chan == 1) ? PROM_25AA128_1 : (chan == 2) ? PROM_25AA128_2 : PROM_25AA128;
+    nodeaddr_t address = GetPromAddress(prom_type, true);
+
     // block write data to buffer
-    if (!port->WriteBlock(BoardId, 0x3100, data, nquads*sizeof(quadlet_t)))
+    if (!port->WriteBlock(BoardId, (address|0x0100), data, nquads*sizeof(quadlet_t)))
         return false;
 
     // enable write
-    PromWriteEnable(PROM_25AA128);
+    PromWriteEnable(prom_type);
 
     // trigger write
     quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 

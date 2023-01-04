@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -44,7 +44,8 @@ public:
     unsigned int GetNumDouts(void) const { return NumDouts; }
 
     // Return QLA serial number (empty string if not found)
-    std::string GetQLASerialNumber(void);
+    //   chan:  0 for QLA; 1 or 2 for DQLA
+    std::string GetQLASerialNumber(unsigned char chan = 0);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
     // *********************** GET Methods ***********************************

@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -21,6 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 // Base class for custom boards with IEEE-1394 (Firewire) and Ethernet interface.
 
 #include <string.h>  // for memset
+#include <string>
 #include "Amp1394Types.h"
 
 typedef uint32_t quadlet_t;
@@ -123,6 +124,7 @@ public:
 
     uint32_t GetFirmwareVersion(void) const;
     uint32_t GetHardwareVersion(void) const;
+    std::string GetHardwareVersionString(void) const;
 
     // Returns FPGA clock period in seconds
     virtual double GetFPGAClockPeriod(void) const = 0;

@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -87,15 +87,20 @@ public:
     // Methods for reading or programming
     //   1 - the FPGA configuration PROM (M25P16)
     //   2 - Hardware (QLA) PROM (25AA128)
+    //       25AA128_1 and 25AA128_2 are used to support multiple PROMs (DQLA)
     // NOTE:
     //   - M25P16 & 25AA128 Have exact same command table, except M25P16 has
     //     a few extra commands (e.g. ReadID, DeepSleep)
     //   - address length
     //     - M25P16: 24-bit
     //     - 25AA128: 16-bit (2 MSB are ignored)
+    //     - 25AA128_1: same as 25AA128
+    //     - 25AA128_2: same as 25AA128
     enum PromType{
         PROM_M25P16 = 1,
-        PROM_25AA128 = 2
+        PROM_25AA128 = 2,
+        PROM_25AA128_1 = 3,
+        PROM_25AA128_2 = 4
     };
 
     /*!
@@ -113,7 +118,7 @@ public:
     // false, the current wait operation is aborted.
     typedef bool (*ProgressCallback)(const char *msg);
 
-    // Returns the PROM ID (M25P15 ONLY)
+    // Returns the PROM ID (M25P16 ONLY)
     // should be 0x00202015 for the M25P16
     // returns 0 on error
     AmpIO_UInt32 PromGetId(void);
@@ -159,10 +164,17 @@ public:
 
 
     // ******************* Hardware (QLA) PROM ONLY Methods ***************************
-    bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data);
-    bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data);
-    bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
-    bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads);
+    // Parameter "chan" is used to distinguish between multiple PROMs. Set to 0 for QLA
+    // and set to 1 or 2 for DQLA. These get converted to PROM_25AA128, PROM_25AA128_1
+    // and PROM_25AA128_2 internally.
+    bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data,
+                             unsigned char chan = 0);
+    bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data,
+                              unsigned char chan = 0);
+    bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads,
+                              unsigned char chan = 0);
+    bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads,
+                               unsigned char chan = 0);
 
     // ********************** KSZ8851 Ethernet MAC/PHY Methods ************************
     // Following functions enable access to the KSZ8851 Ethernet controller on the

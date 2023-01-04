@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -30,6 +30,11 @@ uint32_t BoardIO::GetFirmwareVersion(void) const
 uint32_t BoardIO::GetHardwareVersion(void) const
 {
     return (port ? port->GetHardwareVersion(BoardId) : 0);
+}
+
+std::string BoardIO::GetHardwareVersionString(void) const
+{
+    return (port ? port->GetHardwareVersionString(BoardId) : "");
 }
 
 /*******************************************************************************
