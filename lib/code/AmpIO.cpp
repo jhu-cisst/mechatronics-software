@@ -1036,9 +1036,36 @@ bool AmpIO::WritePowerEnable(bool state)
 
 bool AmpIO::WriteAmpEnable(AmpIO_UInt32 mask, AmpIO_UInt32 state)
 {
+    if (GetHardwareVersion() != QLA1_String) {
+        // If needed, could support other boards by issuing multiple quadlet writes,
+        // or a single block write.
+        std::cerr << "AmpIO::WriteAmpEnable, not supported for this hardware" << std::endl;
+        return false;
+    }
+
     // Following still works for Firmware Rev 8 (at least for QLA)
     quadlet_t write_data = (mask << 8) | state;
     return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
+}
+
+bool AmpIO::WriteAmpEnableAxis(unsigned int index, bool state)
+{
+    if (index >= NumMotors)
+        return false;
+
+    if (GetFirmwareVersion() < 8) {
+        quadlet_t mask = (1 << index);
+        quadlet_t write_data = (mask << 8);
+        if (state) write_data |= mask;
+        return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
+    }
+    else {
+        quadlet_t write_data = MOTOR_ENABLE_MASK;
+        if (state)
+            write_data |=  MOTOR_ENABLE_BIT;
+        unsigned int channel = (index+1) << 4;
+        return (port ? port->WriteQuadlet(BoardId, channel | DAC_CTRL_REG, write_data) : false);
+    }
 }
 
 bool AmpIO::WriteSafetyRelay(bool state)
@@ -1071,6 +1098,7 @@ bool AmpIO::WriteDoutConfigReset(void)
 bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
 {
     // Firmware versions < 5 have bits in reverse order with respect to schematic
+    // (do not need to handle more than 4 bits in this case)
     if (GetFirmwareVersion() < 5) {
         mask = BitReverse4[mask&0x0f];
         bits = BitReverse4[bits&0x0f];
@@ -1079,13 +1107,13 @@ bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
     // before being sent because they are inverted in hardware and/or firmware.
     // This way, the digital output state matches the hardware state (i.e., 0 means digital output
     // is at 0V).
-    quadlet_t write_data = (mask << 8) | ((~bits)&0x0f);
+    quadlet_t write_data = (static_cast<quadlet_t>(mask) << 8) | (static_cast<quadlet_t>(~bits)&mask);
     return port->WriteQuadlet(BoardId, 6, write_data);
 }
 
 bool AmpIO::WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
 {
-    quadlet_t write_data = (mask << 8) | ((~bits)&0x0f);
+    quadlet_t write_data = (static_cast<quadlet_t>(mask) << 8) | (static_cast<quadlet_t>(~bits)&mask);
     if (mask != 0)
         write_data |= VALID_BIT;  // Same valid bit as motor current
     return port->WriteQuadlet(BoardId, 6, write_data);
