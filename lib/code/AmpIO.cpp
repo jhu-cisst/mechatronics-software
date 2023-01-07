@@ -760,15 +760,14 @@ AmpIO_UInt32 AmpIO::GetAmpFaultCode(unsigned int index) const
     return (ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0x000f0000)) >> 16;
 }
 
-bool AmpIO::IsQLAExpanded() const
+bool AmpIO::IsQLAExpanded(unsigned int index) const
 {
-    if (GetHardwareVersion() == DQLA_String) {
-        // The DQLA has two QLAs. Here, we return true if either
-        // has an I/O expander.
-        return (GetStatus()&0x00000003);
-    }
-
-    return (GetStatus() & 0x00001000);
+    bool ret = false;
+    if (GetHardwareVersion() == QLA1_String)
+        ret = GetStatus() & 0x00001000;
+    else if (GetHardwareVersion() == DQLA_String)
+        ret = GetStatus() & (index&0x0003);
+    return ret;
 }
 
 /*******************************************************************************
@@ -865,8 +864,9 @@ bool AmpIO::SetMotorVoltage(unsigned int index, AmpIO_UInt32 volts)
         return false;
     if (GetFirmwareVersion() < 8)
         return false;
-    if (!IsQLAExpanded())  // check for QLA 1.5+
-        return false;
+    // Could check MotorConfig to verify that voltage control is available
+    // (MCFG_VOLTAGE_CONTROL); firmware will ignore voltage command is voltage
+    // control is not available.
 
     quadlet_t data = VALID_BIT  | (1 << 24) | (volts & DAC_MASK);
     if (collect_state && (collect_chan == (index+1)))

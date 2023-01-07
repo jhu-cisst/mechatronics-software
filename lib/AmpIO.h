@@ -233,8 +233,13 @@ public:
 
     AmpIO_UInt32 GetAmpFaultCode(unsigned int index) const;
 
-    // Returns true if QLA has I/O expander (QLA 1.5+)
-    bool IsQLAExpanded() const;
+    // Returns true if QLA has Max7317 I/O expander (QLA 1.5+)
+    // The index parameter is ignored for the QLA, but used for the DQLA,
+    // which interfaces to 2 QLAs; in that case, index=1 returns the status
+    // of QLA 1 and index=2 returns the status of QLA 2. The index is used
+    // as a bitmask, so index=3 will return true if either (or both) QLAs
+    // have an I/O expander
+    bool IsQLAExpanded(unsigned int index = 0) const;
 
     // *********************** SET Methods ***********************************
     // The SetXXX methods below write data to local buffers that are sent over
@@ -316,6 +321,11 @@ public:
         \returns true if successful; possible failures include firmware version < 8, failure to read
                  over FireWire/Ethernet; invalid motor index
      */
+    enum MotorConfigBitMask {
+        MCFG_VOLTAGE_CONTROL = 0x02000000,           // 1 -> voltage control available (QLA 1.5+)
+        MCFG_CURRENT_CONTROL = 0x01000000,           // 1 -> current control available (QLA)
+        MCFG_AMP_ENABLE_DELAY_MASK  = 0x000000ff };  // mask for setting amplifier delay (20.83 us resolution)
+
     bool ReadMotorConfig(unsigned int index, AmpIO_UInt32 &cfg) const;
 
     // ********************** WRITE Methods **********************************

@@ -345,9 +345,12 @@ int main(int argc, char** argv)
 
     // Initialize motor currents at mid-range
     AmpIO_UInt32 MotorCurrents[MAX_AXES];
-    bool VoltageMode[MAX_AXES];
+
+    bool VoltageModeAvail[MAX_AXES];    // Whether voltage control available (QLA 1.5+)
+    bool VoltageMode[MAX_AXES];         // Whether voltage control active
     for (i = 0; i < MAX_AXES; i++) {
         MotorCurrents[i] = 0x8000;
+        VoltageModeAvail[i] = false;
         VoltageMode[i] = false;
     }
 
@@ -397,8 +400,12 @@ int main(int argc, char** argv)
     for (i = 1; i <= numAxes; i++) {
         unsigned int dx = lm+8+(i-1)*13;
         if (i >= 10) dx--;
-        int bd = Axis2BoardNum[i];
-        if (BoardList[bd]->ReadStatus() & 0x00001000)
+        unsigned int bd = Axis2BoardNum[i];
+        unsigned int ax = Axis2BoardAxis[i];
+        AmpIO_UInt32 mconfig;
+        if (BoardList[bd]->ReadMotorConfig(ax, mconfig))
+            VoltageModeAvail[i-1] = mconfig & AmpIO::MCFG_VOLTAGE_CONTROL;
+        if (VoltageModeAvail[i-1])
             console.Print(5, dx-2, "Axis %d I", i);
         else
             console.Print(5, dx, "Axis %d", i);
@@ -495,8 +502,7 @@ int main(int argc, char** argv)
         else if (c == 'v') {
             if (curAxis == 0) {
                 for (unsigned int axis = 0; axis < numAxes; axis++) {
-                    int bd = Axis2BoardNum[axis+1];
-                    if (BoardList[bd]->IsQLAExpanded()) {
+                    if (VoltageModeAvail[axis]) {
                         VoltageMode[axis] = !VoltageMode[axis];
                         unsigned int dx = lm+6+axis*13;
                         if (axis >= 9) dx--;
@@ -504,7 +510,7 @@ int main(int argc, char** argv)
                     }
                 }
             }
-            else if (BoardList[curBoardIndex]->IsQLAExpanded()) {
+            else if (VoltageModeAvail[curAxis-1]) {
                 VoltageMode[curAxis-1] = !VoltageMode[curAxis-1];
                 unsigned int dx = lm+6+(curAxis-1)*13;
                 if (curAxis >= 10) dx--;
