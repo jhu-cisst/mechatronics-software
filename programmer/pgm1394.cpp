@@ -6,7 +6,9 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
-#ifndef _MSC_VER
+#ifdef _MSC_VER
+#include <conio.h>
+#else
 #include <unistd.h>
 #include <termios.h>
 #endif
@@ -93,7 +95,11 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
         std::cout << std::endl;
 
         std::cout << "Select option: ";
+#ifdef _MSC_VER
+        c = _getche();
+#else
         c = getchar();
+#endif
         std::cout << std::endl;
     }
 
