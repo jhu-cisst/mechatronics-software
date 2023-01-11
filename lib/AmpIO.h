@@ -450,8 +450,6 @@ public:
 
     static bool WritePowerEnableAll(BasePort *port, bool state);
 
-    static bool WriteAmpEnableAll(BasePort *port, AmpIO_UInt32 mask, AmpIO_UInt32 state);
-
     static bool WriteSafetyRelayAll(BasePort *port, bool state);
 
     static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata);

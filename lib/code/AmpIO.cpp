@@ -38,8 +38,8 @@ const AmpIO_UInt32 MOTOR_ENABLE_BIT  = 0x10000000;  /*!< Enable amplifier for mo
 //                        1 --> fault (probably thermal shutdown)
 //                        0 --> no fault
 //   MSTAT_SAFETY_DIS is set when the motor current safety check trips
-const AmpIO_UInt32 MSTAT_AMP_REQ     = 0x20000000;  /*!< Motor status bit for amplifier enable request (Rev 8+) */
-const AmpIO_UInt32 MSTAT_AMP_REQ_MV  = 0x10000000;  /*!< Motor status bit for amplifier enable request (Rev 8+) */
+const AmpIO_UInt32 MSTAT_AMP_STATUS  = 0x20000000;  /*!< Motor status bit for amplifier (1=on, 0=off) (Rev 8+) */
+const AmpIO_UInt32 MSTAT_AMP_REQ     = 0x10000000;  /*!< Motor status bit for amplifier enable request (Rev 8+) */
 const AmpIO_UInt32 MSTAT_SAFETY_DIS  = 0x00020000;  /*!< Motor status bit for safety amp disable (Rev 8+) */
 const AmpIO_UInt32 MSTAT_AMP_FAULT   = 0x00010000;  /*!< Motor status bit for amplifier fault (Rev 8+) */
 
@@ -234,7 +234,7 @@ bool AmpIO::GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQu
 
 bool AmpIO::WriteBufferResetsWatchdog(void) const
 {
-    // TODO: Update this
+    // TODO: Update this -- check if still needed with Rev 8; if not, make this firmware version dependent.
     return
         (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
         | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
@@ -505,7 +505,9 @@ double AmpIO::GetMotorVoltageRatio(unsigned int index) const
 
 AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
 {
-    // TODO: Should this be NumEncoders or maybe NumAnalogIn?
+    // Checking against NumMotors is correct because the analog input (e.g., pot) is in the same
+    // quadlet as the motor current feedback. Logically, it would have made more sense to use
+    // NumEncoders, since the number of pots would likely match the number of encoders.
     if (index >= NumMotors)
         return 0L;
 
@@ -771,11 +773,8 @@ bool AmpIO::GetAmpStatus(unsigned int index) const
         AmpIO_UInt32 mask = (0x00000100 << index);
         ret = GetStatus()&mask;
     }
-    else if (GetHardwareVersion() == DQLA_String) {
-        ret = GetAmpEnable(index) && !(ReadBuffer[MOTOR_STATUS_OFFSET + index] & MSTAT_AMP_FAULT);
-    }
-    else if (GetHardwareVersion() == dRA1_String) {
-        ret = GetAmpEnable(index) && (GetAmpFaultCode(index) == 0);
+    else {
+        ret = ReadBuffer[MOTOR_STATUS_OFFSET + index] & MSTAT_AMP_STATUS;
     }
     return ret;
 }
@@ -1092,10 +1091,14 @@ bool AmpIO::ReadIOExpander(AmpIO_UInt32 &resp) const
 bool AmpIO::ReadMotorConfig(unsigned int index, AmpIO_UInt32 &cfg) const
 {
     bool ret = false;
-    if (GetFirmwareVersion() < 7) return ret;
-    // TODO: handle dRA1 case
+    if (GetFirmwareVersion() < 8) return ret;
 
-    if (port && (index < NumMotors)) {
+    if (GetHardwareVersion() == dRA1_String) {
+        // dRAC supports either voltage or current control
+        cfg = MCFG_VOLTAGE_CONTROL | MCFG_CURRENT_CONTROL;
+        ret = true;
+    }
+    else if (port && (index < NumMotors)) {
         unsigned int channel = (index+1) << 4;
         ret = port->ReadQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
     }
@@ -1310,7 +1313,7 @@ bool AmpIO::WriteMotorConfig(unsigned int index, AmpIO_UInt32 cfg)
     bool ret = false;
     if (GetFirmwareVersion() < 8) return ret;
 
-    if (port && (index < NumMotors)) {
+    if ((GetHardwareVersion() != dRA1_String) && port && (index < NumMotors)) {
         unsigned int channel = (index+1) << 4;
         ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
     }
@@ -1320,21 +1323,13 @@ bool AmpIO::WriteMotorConfig(unsigned int index, AmpIO_UInt32 cfg)
 /*******************************************************************************
  * Static Write methods (for broadcast)
  *
- * These methods duplicate the board-specific methods (WriteReboot, WritePowerEnable,
- * WriteAmpEnable, ...), but are sent to the broadcast address (FW_NODE_BROADCAST).
+ * These methods duplicate the board-specific methods (WritePowerEnable,
+ * WriteSafetyRelay, ...), but are sent to the broadcast address (FW_NODE_BROADCAST).
  */
 
 bool AmpIO::WritePowerEnableAll(BasePort *port, bool state)
 {
     AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
-}
-
-bool AmpIO::WriteAmpEnableAll(BasePort *port, AmpIO_UInt32 mask, AmpIO_UInt32 state)
-{
-    // TODO: Following will only work for QLA, but since this is a static method, we cannot check
-    //       hardware version. Can we eliminate this method?
-    quadlet_t write_data = (mask << 8) | state;
     return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
