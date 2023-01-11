@@ -228,9 +228,15 @@ public:
     // amplifier is in fault state.
     bool GetAmpStatus(unsigned int index) const;
 
-    // GetSafetyAmpDisable: returns true if current safety module in FPGA trip
+    // GetSafetyAmpDisable
+    // Returns true if current safety module in FPGA tripped for specified axis
+    bool GetSafetyAmpDisable(unsigned int index) const;
+    // Returns bit-mask indicating which motors have tripped
     AmpIO_UInt32 GetSafetyAmpDisable(void) const;
 
+    // GetAmpFaultCode (Firmware Rev 8+)
+    // Returns a 4-bit bitmask for the QLA/DQLA (0 for Rev < 8)
+    // Returns a 4-bit fault code for the dRAC (0 if no fault)
     AmpIO_UInt32 GetAmpFaultCode(unsigned int index) const;
 
     // Returns true if QLA has Max7317 I/O expander (QLA 1.5+)
@@ -258,8 +264,10 @@ public:
     void SetSafetyRelay(bool state);
 
     bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
+    // SetMotorVoltage is for QLA/DQLA (linear amplifiers)
     bool SetMotorVoltage(unsigned int index, AmpIO_UInt32 volts);
     bool SetMotorVoltage(unsigned int index, double volts);
+    // SetMotorVoltageRatio is for dRAC (PWM amplifiers)
     bool SetMotorVoltageRatio(unsigned int index, double ratio);
 
     // ********************** READ Methods ***********************************
