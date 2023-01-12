@@ -661,9 +661,9 @@ protected:
     bool GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap = true) const;
     void InitWriteBuffer(void);
 
-    // Test if the current write buffer contains commands that will
-    // reset the watchdog on the board.  In practice, checks if
-    // there's any valid bit on the 4 requested currents.
+    // Test if the current write buffer contains commands that will reset the watchdog on the board.
+    // For older versions of firmware, checks if there's any valid bit on the 4 requested currents.
+    // For newer versions of firmware, returns true because the power control quadlet is always written.
     bool WriteBufferResetsWatchdog(void) const;
 
     /*! Extract the data used for velocity estimation */

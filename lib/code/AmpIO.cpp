@@ -32,8 +32,9 @@ const AmpIO_UInt32 MOTOR_ENABLE_BIT  = 0x10000000;  /*!< Enable amplifier for mo
 
 // Offsets into Motor Status (offset 12)
 // For the QLA:
-//   MSTAT_AMP_REQ is set when amplifier enable is requested
-//   MSTAT_AMP_REQ_MV is set about 40 ms after MSTAT_AMP_REQ, if motor supply voltage is good
+//   MSTAT_AMP_REQ is set when amplifier enable is requested by the host; note that host enable requests could
+//                 be ignored due to interlocks (e.g., when board power is not enabled)
+//   MSTAT_AMP_STATUS is set to indicate that the amplifier is enabled
 //   MSTAT_AMP_FAULT is based on the FAULT feedback from the amplifier
 //                        1 --> fault (probably thermal shutdown)
 //                        0 --> no fault
@@ -234,12 +235,18 @@ bool AmpIO::GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQu
 
 bool AmpIO::WriteBufferResetsWatchdog(void) const
 {
-    // TODO: Update this -- check if still needed with Rev 8; if not, make this firmware version dependent.
-    return
-        (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 2] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
+    bool ret = true;
+    if (GetFirmwareVersion() < 8) {
+        // For Firmware versions prior to Rev 7, we must check whether any DAC valid bit
+        // is set. For now, we also perform this check for Firmware Rev 7, but it could
+        // be removed. Starting with Firmware Rev 7, the power control quadlet is always
+        // written, so the watchdog is always reset.
+        ret = (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 2] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
+    }
+    return ret;
 }
 
 std::string AmpIO::GetQLASerialNumber(unsigned char chan)
