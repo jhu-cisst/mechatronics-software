@@ -17,24 +17,24 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "EncoderVelocity.h"
 
-const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <= 5 (16 bits) */
-const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version == 6 (22 bits) */
-const AmpIO_UInt32 ENC_VEL_MASK_26  = 0x03ffffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >= 7 (26 bits) */
+const uint32_t ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <= 5 (16 bits) */
+const uint32_t ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version == 6 (22 bits) */
+const uint32_t ENC_VEL_MASK_26  = 0x03ffffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >= 7 (26 bits) */
 
 // The following masks read the most recent quarter-cycle period and the previous one of the same type, which are used
 // for estimating acceleration in Firmware Rev 6+.
 // Following are for Firmware Rev 6, which split the bits among different fields due to packet size limitations.
-const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder freq/acc) for upper 12 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */
+const uint32_t ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder freq/acc) for upper 12 bits of most recent quarter-cycle period */
+const uint32_t ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
+const uint32_t ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */
 // Following are for Firmware Rev 7+, which increased the block read packet size, allowing all bits to be grouped together
-const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x03ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 26 bits of quarter cycle period */
+const uint32_t ENC_VEL_QTR_MASK   = 0x03ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 26 bits of quarter cycle period */
 
 // Following offsets are for FPGA Firmware Version 6 (22 bits) and 7+ (26 bits)
 // (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
-const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
-const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
-const AmpIO_UInt32 ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
+const uint32_t ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
+const uint32_t ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
+const uint32_t ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
 
 const double VEL_PERD_ESPM          = 1.0/40000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
 const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
@@ -66,7 +66,7 @@ void EncoderVelocity::Init()
 
 // SetData for Firmware V7+
 
-void EncoderVelocity::SetData(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr1, AmpIO_UInt32 rawQtr5, AmpIO_UInt32 rawRun,
+void EncoderVelocity::SetData(uint32_t rawPeriod, uint32_t rawQtr1, uint32_t rawQtr5, uint32_t rawRun,
                               bool isESPM)
 {
     Init();
@@ -93,7 +93,7 @@ void EncoderVelocity::SetData(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr1, AmpI
 
 // SetData for Firmware Rev 6
 
-void EncoderVelocity::SetDataRev6(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr)
+void EncoderVelocity::SetDataRev6(uint32_t rawPeriod, uint32_t rawQtr)
 {
     Init();
     clkPeriod = VEL_PERD_REV6;
@@ -121,7 +121,7 @@ void EncoderVelocity::SetDataRev6(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr)
 
 // SetData for older firmware (Rev 1-5)
 
-void EncoderVelocity::SetDataOld(AmpIO_UInt32 rawPeriod, bool useRunCounter)
+void EncoderVelocity::SetDataOld(uint32_t rawPeriod, bool useRunCounter)
 {
     Init();
     // Prior to Firmware Version 6, the latched counter value is returned
@@ -131,7 +131,7 @@ void EncoderVelocity::SetDataOld(AmpIO_UInt32 rawPeriod, bool useRunCounter)
     // to be consistent with later versions of firmware.
     clkPeriod = VEL_PERD_OLD;
     velPeriodMax = ENC_VEL_MASK_16;
-    velPeriod = static_cast<AmpIO_UInt16>(rawPeriod & ENC_VEL_MASK_16);
+    velPeriod = static_cast<uint16_t>(rawPeriod & ENC_VEL_MASK_16);
     // Convert from signed count to unsigned count and direction
     if (velPeriod == 0x8000) { // if overflow
         velPeriod = 0x00007fff;
@@ -149,7 +149,7 @@ void EncoderVelocity::SetDataOld(AmpIO_UInt32 rawPeriod, bool useRunCounter)
         velDir = true;
     }
     if (useRunCounter) {
-        AmpIO_UInt16 runCtr = static_cast<AmpIO_UInt16>((rawPeriod>>16) & ENC_VEL_MASK_16);
+        uint16_t runCtr = static_cast<uint16_t>((rawPeriod>>16) & ENC_VEL_MASK_16);
         // Convert from signed count to unsigned count and direction
         if (runCtr == 0x8000) {  // if overflow
             runOverflow = true;
@@ -159,14 +159,14 @@ void EncoderVelocity::SetDataOld(AmpIO_UInt32 rawPeriod, bool useRunCounter)
             runCtr = ~runCtr;        // ones complement (16-bits)
             runCtr += 1;             // twos complement (16-bits)
         }
-        runPeriod = static_cast<AmpIO_UInt32>(runCtr);
+        runPeriod = static_cast<uint32_t>(runCtr);
     }
 }
 
 // Returns encoder velocity in counts/sec -> 4/period
 double EncoderVelocity::GetEncoderVelocity() const
 {
-    AmpIO_UInt32 delta = 0;
+    uint32_t delta = 0;
     // Avoid divide by 0 (should never happen)
     if (velPeriod == 0) delta = 1;
 
@@ -224,7 +224,7 @@ double EncoderVelocity::GetEncoderAcceleration(double percent_threshold) const
     if (velOverflow)
         return 0.0;
 
-    AmpIO_UInt32 velPeriodPrev = velPeriod - qtr1Period + qtr5Period;     // Previous full-cycle period
+    uint32_t velPeriodPrev = velPeriod - qtr1Period + qtr5Period;     // Previous full-cycle period
     if (qtr5Overflow)
         velPeriodPrev = velPeriodMax;
 

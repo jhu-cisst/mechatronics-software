@@ -46,6 +46,7 @@ http://www.cisst.org/cisst/license.txt.
 
 // Maximum number of axes (channels) to display
 const unsigned int MAX_AXES = 11;
+const uint32_t current_incr = 0x100;   // 0x100 is about 50 mA
 
 class AxisInfo {
 public:
@@ -134,7 +135,7 @@ bool CollectFileConvert(const char *inFilename, const char *outFilename)
     return true;
 }
 
-void UpdateStatusStrings(char *statusStr1, char *statusStr2, AmpIO_UInt32 statusChanged, AmpIO_UInt32 status)
+void UpdateStatusStrings(char *statusStr1, char *statusStr2, uint32_t statusChanged, uint32_t status)
 {
     if (statusChanged&0x00080000) {  // power (mv-good)
         if (status&0x00080000) {
@@ -168,7 +169,7 @@ void UpdateStatusStrings(char *statusStr1, char *statusStr2, AmpIO_UInt32 status
     }
     // NOTE: hard-coded for 4 amplifiers
     for (unsigned int i = 0; i < 4; i++) {  // amplifier status
-        AmpIO_UInt32 mask = (0x00000100 << i);
+        uint32_t mask = (0x00000100 << i);
         if (statusChanged&mask) {
             if (status&mask) {
                 statusStr2[0] = 'A';
@@ -192,11 +193,11 @@ int main(int argc, char** argv)
     bool useMaxAxis = false; // true --> use max(NumEncoders, NumMotors); false --> NumEncoders
 
     std::vector<AmpIO*> BoardList;
-    std::vector<AmpIO_UInt32> BoardStatusList;
+    std::vector<uint32_t> BoardStatusList;
 
     // measure time between reads
-    AmpIO_UInt32 maxTime = 0;
-    AmpIO_UInt32 lastTime = 0;
+    uint32_t maxTime = 0;
+    uint32_t lastTime = 0;
 
     unsigned int curAxis = 0;                 // Current axis (0=all, 1-MAX_AXES)
     unsigned int Axis2BoardNum[MAX_AXES+1];   // Maps curAxis (1-MAX_AXES) to board number (0 or 1)
@@ -344,7 +345,7 @@ int main(int argc, char** argv)
         protocol = Port->GetProtocol();  // on failure, get current protocol
 
     // Initialize motor currents at mid-range
-    AmpIO_UInt32 MotorCurrents[MAX_AXES];
+    uint32_t MotorCurrents[MAX_AXES];
 
     bool VoltageModeAvail[MAX_AXES];    // Whether voltage control available (QLA 1.5+)
     bool VoltageMode[MAX_AXES];         // Whether voltage control active
@@ -358,7 +359,7 @@ int main(int argc, char** argv)
     bool someRev8plus = false;
     BoardStatusList.clear();
     for (j = 0; j < BoardList.size(); j++) {
-        AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
+        uint32_t fver = BoardList[j]->GetFirmwareVersion();
         if (fver >= 7) someRev7plus = true;
         if (fver >= 8) someRev8plus = true;
     }
@@ -371,7 +372,7 @@ int main(int argc, char** argv)
         BoardList[j]->WriteSafetyRelay(false);
         BoardList[j]->WritePowerEnable(false);
         BoardList[j]->WriteAmpEnable(0x0f, 0);
-        AmpIO_UInt32 bstat = BoardList[j]->ReadStatus();
+        uint32_t bstat = BoardList[j]->ReadStatus();
         BoardStatusList.push_back(bstat);
     }
 
@@ -402,7 +403,7 @@ int main(int argc, char** argv)
         if (i >= 10) dx--;
         unsigned int bd = Axis2BoardNum[i];
         unsigned int ax = Axis2BoardAxis[i];
-        AmpIO_UInt32 mconfig;
+        uint32_t mconfig;
         if (BoardList[bd]->ReadMotorConfig(ax, mconfig))
             VoltageModeAvail[i-1] = mconfig & AmpIO::MCFG_VOLTAGE_CONTROL;
         if (VoltageModeAvail[i-1])
@@ -433,8 +434,8 @@ int main(int argc, char** argv)
 
     unsigned char dig_out = 0x0f;
     unsigned char collect_axis = 1;
-    AmpIO_UInt32 status;
-    AmpIO_UInt32 statusChanged = 0;
+    uint32_t status;
+    uint32_t statusChanged = 0;
     const unsigned int STATUS_STR_LENGTH = 18;
     char statusStr1[2][STATUS_STR_LENGTH];
     memset(statusStr1[0], ' ', STATUS_STR_LENGTH-1);
@@ -626,19 +627,19 @@ int main(int argc, char** argv)
         else if (c == '=') {
             if (curAxis == 0) {
                 for (unsigned int axis = 0; axis < numAxes; axis++)
-                    MotorCurrents[axis] += 0x100;   // 0x100 is about 50 mA
+                    MotorCurrents[axis] += current_incr;
             }
             else {
-                MotorCurrents[curAxis-1] += 0x100;
+                MotorCurrents[curAxis-1] += current_incr;
             }
         }
         else if (c == '-') {
             if (curAxis == 0) {
                 for (unsigned int axis = 0; axis < numAxes; axis++)
-                    MotorCurrents[axis] -= 0x100;   // 0x100 is about 50 mA
+                    MotorCurrents[axis] -= current_incr;
             }
             else {
-                MotorCurrents[curAxis-1] -= 0x100;
+                MotorCurrents[curAxis-1] -= current_incr;
             }
         }
         else if (c == 'c') {
@@ -732,7 +733,7 @@ int main(int argc, char** argv)
             unsigned int dx = (axisNum-1)*13;   // offset between columns
             if (BoardList[j]->ValidRead()) {
                 i = Axis2BoardAxis[axisNum];
-                AmpIO_UInt32 fver = BoardList[j]->GetFirmwareVersion();
+                uint32_t fver = BoardList[j]->GetFirmwareVersion();
                 if (AxisData[axisNum].HasEncoder()) {
                     console.Print(6, lm+7+dx, "%07X",
                               BoardList[j]->GetEncoderPosition(i)+BoardList[j]->GetEncoderMidRange());

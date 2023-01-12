@@ -38,7 +38,7 @@
 */
 void EncUp(AmpIO &bd, unsigned int qlaNum)
 {
-    AmpIO_UInt8 dout_mask = (qlaNum == 2) ? 0x30 : 0x03;
+    uint8_t dout_mask = (qlaNum == 2) ? 0x30 : 0x03;
     bd.WriteDigitalOutput(dout_mask, 0x33);
     bd.WriteDigitalOutput(dout_mask, 0x22);
     bd.WriteDigitalOutput(dout_mask, 0x00);
@@ -52,7 +52,7 @@ void EncUp(AmpIO &bd, unsigned int qlaNum)
 */
 void EncDown(AmpIO &bd, unsigned int qlaNum)
 {
-    AmpIO_UInt8 dout_mask = (qlaNum == 2) ? 0x30 : 0x03;
+    uint8_t dout_mask = (qlaNum == 2) ? 0x30 : 0x03;
     bd.WriteDigitalOutput(dout_mask, 0x33);
     bd.WriteDigitalOutput(dout_mask, 0x11);
     bd.WriteDigitalOutput(dout_mask, 0x00);
@@ -79,8 +79,8 @@ bool TestDigitalInputs(int curLine, AmpIO &Board, BasePort *Port, std::ofstream 
     Amp1394Console::Print(curLine++, 9, "This tests the loopback on the test board"
                            " between DOUT4 and all digital inputs");
 
-    AmpIO_UInt8 dout4_mask = (qlaNum == 2) ? 0x80 : 0x08;
-    AmpIO_UInt32 data_mask = (qlaNum == 2) ? 0x0fff0000 : 0x00000fff;
+    uint8_t dout4_mask = (qlaNum == 2) ? 0x80 : 0x08;
+    uint32_t data_mask = (qlaNum == 2) ? 0x0fff0000 : 0x00000fff;
     int data_shift = (qlaNum == 2) ? 16 : 0;
 
     logFile << "   All inputs low: ";
@@ -158,7 +158,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     bool tmpFix;
 
     int encStart = (qlaNum == 2) ? 4 : 0;
-    AmpIO_UInt8 enc_mask = (qlaNum == 2) ? 0xf0 : 0x0f;
+    uint8_t enc_mask = (qlaNum == 2) ? 0xf0 : 0x0f;
 
     logFile << std::endl << "=== ENCODER INPUTS ===" << std::endl;
     Amp1394Console::Print(curLine++, 9, "This test uses the DOUT signals to"
@@ -330,8 +330,8 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     bool directPass = true;
 
     // Test A channel directly
-    AmpIO_UInt8 chanA;
-    AmpIO_UInt8 dout_mask = (qlaNum == 2) ? 0x10 : 0x01;
+    uint8_t chanA;
+    uint8_t dout_mask = (qlaNum == 2) ? 0x10 : 0x01;
     // Channel A low
     Board.WriteDigitalOutput(dout_mask, 0x00);
     Amp1394_Sleep(0.0001);
@@ -354,7 +354,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
     }
 
     // Test B channel directly
-    AmpIO_UInt8 chanB;
+    uint8_t chanB;
     dout_mask = (qlaNum == 2) ? 0x20 : 0x02;
     // Channel B low
     Board.WriteDigitalOutput(dout_mask, 0x00);
@@ -379,7 +379,7 @@ bool TestEncoders(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logF
 
     // Test index
     // Index low
-    AmpIO_UInt8 index;
+    uint8_t index;
     dout_mask = (qlaNum == 2) ? 0x40 : 0x04;
     Board.WriteDigitalOutput(dout_mask, 0x00);
     Amp1394_Sleep(0.0001);
@@ -495,8 +495,8 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     status = Board.GetStatus();
     logFile << "   Enable motor power: " << std::hex << status;
     // Note: QLA implementation also verifies that amp enable is off
-    AmpIO_UInt32 status_mask = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0f0f;
-    AmpIO_UInt32 status_goal = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0000;
+    uint32_t status_mask = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0f0f;
+    uint32_t status_goal = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0000;
     if ((status & status_mask) != status_goal) {
         sprintf(buf, "FAIL (%08lx) - is motor power connected?", status);
         Amp1394Console::Print(curLine++, 30, buf);
@@ -517,7 +517,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     }
     Amp1394Console::Print(curLine++, 30, buf);
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
 
     status_mask = (qlaNum == 1) ? 0x00004000 : (qlaNum == 2) ? 0x00008000 : 0x0004ffff;
     status_goal = (qlaNum == 1) ? 0x00004000 : (qlaNum == 2) ? 0x00008000 : 0x00040000;
@@ -708,7 +708,7 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
     // Disable watchdog
     Board.WriteWatchdogPeriod(0x0000);
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
 
     logFile << std::endl << "=== Power Amplifier Test ===" << std::endl;
     Amp1394Console::Print(curLine, 9, "Temperature sensors - ");
@@ -851,7 +851,7 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
         logFile << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
         return false;
     }
-    AmpIO_UInt16 status = Board.ReadKSZ8851Status();
+    uint16_t status = Board.ReadKSZ8851Status();
     if (!(status&0x8000)) {
         logFile << "   No Ethernet controller, status = " << std::hex << status << std::endl;
         return false;
@@ -865,14 +865,14 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
     status = Board.ReadKSZ8851Status();
     logFile << "   After reset, status = " << std::hex << status << std::endl;
     // Read the Chip ID (16-bit read)
-    AmpIO_UInt16 chipID = Board.ReadKSZ8851ChipID();
+    uint16_t chipID = Board.ReadKSZ8851ChipID();
     logFile << "   Chip ID = " << std::hex << chipID << std::endl;
     if ((chipID&0xfff0) != 0x8870)
         return false;
 #if 0
     // Read Chip ID using 8-bit read
     // TODO: Reading from 0xC0 works (get 0x72), but not from 0xC1 (get 0xC1 instead of 0x88)
-    AmpIO_UInt8 chipIDHigh;
+    uint8_t chipIDHigh;
     Board.ReadKSZ8851Reg(0xC1, chipIDHigh);
     logFile << "   Chip ID high (8-bit read) = " << std::hex << static_cast<int>(chipIDHigh) << std::endl;
     if (chipIDHigh != 0x88)
@@ -881,7 +881,7 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
     // Walking bit pattern on MAC address registers (R/W)
     // 0x10 is MARL (MAC Address Register Low)
     // 0x12 is MARM (MAC Address Register Middle)
-    AmpIO_UInt16 MacAddrOutLow, MacAddrOutMid, MacAddrIn;
+    uint16_t MacAddrOutLow, MacAddrOutMid, MacAddrIn;
     bool ret = true;
     for (MacAddrOutLow = 0x0001, MacAddrOutMid = 0x8000;
          (MacAddrOutLow != 0) && (MacAddrOutMid != 0);
@@ -917,7 +917,7 @@ bool TestEthernetV3(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
     for (unsigned int i = 1; i < 2; i++) {
         // TODO: Figure out why PHY2 has a default address of 0
         unsigned int phyAddr = (i == 2) ? FpgaIO::PHY_BROADCAST : FpgaIO::PHY_RTL8211F;
-        AmpIO_UInt16 phyid1 = 0, phyid2 = 0;
+        uint16_t phyid1 = 0, phyid2 = 0;
         if (!Board.ReadRTL8211F_Register(i, phyAddr, FpgaIO::RTL8211F_PHYID1, phyid1))
             logFile << "Failed to read PHY" << i << " PHYID1" << std::endl;
         if (!Board.ReadRTL8211F_Register(i, phyAddr, FpgaIO::RTL8211F_PHYID2, phyid2))

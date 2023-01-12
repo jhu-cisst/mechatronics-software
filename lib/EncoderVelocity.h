@@ -34,23 +34,23 @@ http://www.cisst.org/cisst/license.txt.
 class EncoderVelocity {
 protected:
     double clkPeriod;            // Clock period, in seconds
-    AmpIO_UInt32 velPeriod;      // Encoder full-cycle period (for velocity)
+    uint32_t velPeriod;      // Encoder full-cycle period (for velocity)
     bool velOverflow;            // Velocity (period) overflow
-    AmpIO_UInt32 velPeriodMax;   // Maximum possible velocity period
+    uint32_t velPeriodMax;   // Maximum possible velocity period
     bool velDir;                 // Velocity direction (true -> positive direction)
     bool dirChange;              // Direction change during last velocity period, V7+
     bool encError;               // Encoder error detected, V7+
     bool partialCycle;           // No full cycle yet, V7+
-    AmpIO_UInt32 qtr1Period;     // Encoder quarter-cycle period 1 (for accel), V6+
+    uint32_t qtr1Period;     // Encoder quarter-cycle period 1 (for accel), V6+
     bool qtr1Overflow;           // Qtr1 overflow, V7+
     bool qtr1Dir;                // Qtr1 direction (true -> positive direction), V7+
     unsigned char qtr1Edges;     // Qtr1 edge mask (A-up, B-up, A-down, B-down), V7+
-    AmpIO_UInt32 qtr5Period;     // Encoder quarter-cycle period 5 (for accel), V6+
+    uint32_t qtr5Period;     // Encoder quarter-cycle period 5 (for accel), V6+
     bool qtr5Overflow;           // Qtr5 overflow, V7+
     bool qtr5Dir;                // Qtr5 direction (true -> positive direction), V7+
     unsigned char qtr5Edges;     // Qtr5 edge mask (A-up, B-up, A-down, B-down), V7+
-    AmpIO_UInt32 qtrPeriodMax;   // Maximum Qtr1 or Qtr5 period
-    AmpIO_UInt32 runPeriod;      // Time since last encoder edge, Firmware V4,5,7+
+    uint32_t qtrPeriodMax;   // Maximum Qtr1 or Qtr5 period
+    uint32_t runPeriod;      // Time since last encoder edge, Firmware V4,5,7+
     bool runOverflow;            // Running counter overflow, V7+
 
 public:
@@ -61,12 +61,12 @@ public:
 
     // SetData for Firmware Rev 7+
     //    Set isESPM true for dVRK-Si
-    void SetData(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr1, AmpIO_UInt32 rawQtr5, AmpIO_UInt32 rawRun,
+    void SetData(uint32_t rawPeriod, uint32_t rawQtr1, uint32_t rawQtr5, uint32_t rawRun,
                  bool isESPM = false);
     // SetData for Firmware Rev 6
-    void SetDataRev6(AmpIO_UInt32 rawPeriod, AmpIO_UInt32 rawQtr);
+    void SetDataRev6(uint32_t rawPeriod, uint32_t rawQtr);
     // SetData for Firmware <= 5; useRunCounter should be true for Firmware Rev 4-5
-    void SetDataOld(AmpIO_UInt32 rawPeriod, bool useRunCounter);
+    void SetDataOld(uint32_t rawPeriod, bool useRunCounter);
 
     /*! Returns the encoder velocity, in counts per second, based on the FPGA measurement
         of the encoder period (i.e., time between two consecutive edges). Specifically, the
@@ -111,15 +111,15 @@ public:
     //*********** Following methods used by qladisp and enctest ************/
 
     // Returns the raw encoder velocity period
-    AmpIO_UInt32 GetEncoderVelocityPeriod() const
+    uint32_t GetEncoderVelocityPeriod() const
     { return velPeriod; }
 
     // Returns the raw encoder quarter1 period
-    AmpIO_UInt32 GetEncoderQuarter1Period() const
+    uint32_t GetEncoderQuarter1Period() const
     { return qtr1Period; }
 
     // Returns the raw encoder quarter5 period
-    AmpIO_UInt32 GetEncoderQuarter5Period() const
+    uint32_t GetEncoderQuarter5Period() const
     { return qtr5Period; }
 
     // Indicates whether running counter has overflowed

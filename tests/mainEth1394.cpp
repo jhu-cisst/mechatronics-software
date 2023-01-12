@@ -25,11 +25,11 @@
 // Default Ethernet port for FPGA V3
 unsigned int ETH_PORT = 1;
 
-const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
-const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
+const uint32_t VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
+const uint32_t DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 
 // CRC16-CCIT (also called CRC-ITU)
-const AmpIO_UInt16 crc16_table[256] = {
+const uint16_t crc16_table[256] = {
 	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
 	0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
 	0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
@@ -64,9 +64,9 @@ const AmpIO_UInt16 crc16_table[256] = {
 	0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
 };
 
-AmpIO_UInt16 ComputeCRC16(unsigned char *data, size_t len)
+uint16_t ComputeCRC16(unsigned char *data, size_t len)
 {
-    AmpIO_UInt16 crc16 = 0;
+    uint16_t crc16 = 0;
     for (size_t i = 0; i < len; i++)
         crc16 = (crc16 << 8) ^ crc16_table[((crc16 >> 8) ^ data[i]) & 0x00ff];
     return  crc16;
@@ -74,7 +74,7 @@ AmpIO_UInt16 ComputeCRC16(unsigned char *data, size_t len)
 
 void ComputeConfigCRC()
 {
-    AmpIO_UInt16 crc16, crc16Eth;
+    uint16_t crc16, crc16Eth;
     quadlet_t bus_info[4];
     bus_info[0] = bswap_32(0x31333934);  // "1394"
     bus_info[1] = bswap_32(0x00ffa000);
@@ -128,9 +128,9 @@ void ComputeConfigCRC()
     std::cout << std::dec;
 }
 
-AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
+uint32_t KSZ8851CRC(const unsigned char *data, size_t len)
 {
-    AmpIO_UInt32 crc = 0xffffffff;
+    uint32_t crc = 0xffffffff;
     for (size_t i = 0; i < len; i++) {
         for (size_t j = 0; j < 8; j++) {
             if (((crc >> 31) ^ (data[i] >> j)) & 0x01)
@@ -143,9 +143,9 @@ AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
 }
 
 // Compute parameters to initialize multicast hash table
-void ComputeMulticastHash(unsigned char *MulticastMAC, AmpIO_UInt8 &regAddr, AmpIO_UInt16 &regData)
+void ComputeMulticastHash(unsigned char *MulticastMAC, uint8_t &regAddr, uint16_t &regData)
 {
-    AmpIO_UInt32 crc = KSZ8851CRC(MulticastMAC, 6);
+    uint32_t crc = KSZ8851CRC(MulticastMAC, 6);
     int regOffset = (crc >> 29) & 0x0006;  // first 2 bits of CRC (x2)
     int regBit = (crc >> 26) & 0x00F;      // next 4 bits of CRC
     regAddr = 0xA0 + regOffset;            // 0xA0 --> MAHTR0 (MAC Address Hash Table Register 0)
@@ -155,7 +155,7 @@ void ComputeMulticastHash(unsigned char *MulticastMAC, AmpIO_UInt8 &regAddr, Amp
 // Ethernet debug
 void PrintEthernetDebug(AmpIO &Board)
 {
-    AmpIO_UInt16 status = Board.ReadKSZ8851Status();
+    uint16_t status = Board.ReadKSZ8851Status();
     if (!(status&0x8000)) {
         std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
         return;
@@ -167,7 +167,7 @@ void PrintEthernetDebug(AmpIO &Board)
 // Ethernet status, as reported by KSZ8851 on FPGA board
 void PrintEthernetStatusV2(AmpIO &Board)
 {
-    AmpIO_UInt16 reg;
+    uint16_t reg;
     Board.ReadKSZ8851Reg(0xF8, reg);
     std::cout << "Port 1 status:";
     if (reg & 0x0020) std::cout << " link-good";
@@ -183,7 +183,7 @@ void PrintEthernetStatusV2(AmpIO &Board)
 void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
 {
     std::cout << "PHY" << chan << ":";
-    AmpIO_UInt16 reg;
+    uint16_t reg;
     unsigned int phyAddr = FpgaIO::PHY_RTL8211F;
     // This should be on page 0xa43, but seems to work fine on default page
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYSR, reg)) {
@@ -211,7 +211,7 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
     if (chan == ETH_PORT) {
         std::cout << "Reading GMII core register for eth"
                   << std::dec << ETH_PORT << ": ";
-        AmpIO_UInt16 coreReg;
+        uint16_t coreReg;
         if (Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, coreReg)) {
             std::cout << std::hex << coreReg << std::dec;
             for (size_t i = 0; i < 4; i++) {
@@ -229,9 +229,9 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
 }
 
 // Check contents of KSZ8851 register
-bool CheckRegister(AmpIO &Board, AmpIO_UInt8 regNum, AmpIO_UInt16 mask, AmpIO_UInt16 value)
+bool CheckRegister(AmpIO &Board, uint8_t regNum, uint16_t mask, uint16_t value)
 {
-    AmpIO_UInt16 reg;
+    uint16_t reg;
     Board.ReadKSZ8851Reg(regNum, reg);
     if ((reg&mask) != value) {
         std::cout << "Register " << std::hex << (int)regNum << ": read = " << reg
@@ -257,8 +257,8 @@ bool CheckEthernetV2(AmpIO &Board)
     // Check multicast hash table
     unsigned char MulticastMAC[6];
     EthBasePort::GetDestMulticastMacAddr(MulticastMAC);
-    AmpIO_UInt8 HashReg;
-    AmpIO_UInt16 HashValue;
+    uint8_t HashReg;
+    uint16_t HashValue;
     ComputeMulticastHash(MulticastMAC, HashReg, HashValue);
     ret &= CheckRegister(Board, HashReg, 0xffff, HashValue);
     ret &= CheckRegister(Board, 0x82, 0x03f7, 0x0020);  // Enable QMU frame count threshold (1), no auto-dequeue
@@ -269,7 +269,7 @@ bool CheckEthernetV2(AmpIO &Board)
 
 bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan, unsigned int phyAddr)
 {
-    AmpIO_UInt16 curPage;
+    uint16_t curPage;
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, curPage)) {
         std::cout << "Failed to read PHY" << chan << " PAGSR" << std::endl;
         return false;
@@ -282,14 +282,14 @@ bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan, unsigned int phyAddr)
         }
     }
     // Perform walking bit test on INER (interrupt enable register, 18)
-    AmpIO_UInt16 curIner, mask_read;
+    uint16_t curIner, mask_read;
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, curIner)) {
         std::cout << "Failed to read PHY" << chan << " INER" << std::endl;
         return false;
     }
     std::cout << "Testing RTL8211F PHY" << chan << " Register I/O, initial value = " << std::hex << curIner << std::endl;
     bool allOK = true;
-    for (AmpIO_UInt16 mask = 0x1; mask != 0; mask <<= 1) {
+    for (uint16_t mask = 0x1; mask != 0; mask <<= 1) {
         Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, mask);
         Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, mask_read);
         if (mask != mask_read) {
@@ -314,7 +314,7 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
         return false;
 
     // Check PHYID1 and PHYID2 (assumes we are on correct page)
-    AmpIO_UInt16 phyid1 = 0, phyid2 = 0;
+    uint16_t phyid1 = 0, phyid2 = 0;
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYID1, phyid1))
         std::cout << "Failed to read PHY" << chan << " PHYID1" << std::endl;
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYID2, phyid2))
@@ -329,7 +329,7 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     //   Register 21, Bit 3 (0x0008) indicates state of RX_DELAY
     if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, 0xd08))
         std::cout << "Failed to set PHY" << chan << " PAGSR to 0xd08" << std::endl;
-    AmpIO_UInt16 phyreg17, phyreg21;
+    uint16_t phyreg17, phyreg21;
     if (!Board.ReadRTL8211F_Register(chan, phyAddr, 17, phyreg17))
         std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
     std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 17: " << phyreg17 << std::dec << std::endl;
@@ -346,7 +346,7 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     // For channel ETH_PORT, check GMII to RGMII core PHY register
     // Based on the VHDL source code for this core, PHY Specific Control Register 1 should be at address 16
     if (chan == ETH_PORT) {
-        AmpIO_UInt16 phyCR;
+        uint16_t phyCR;
         if (!Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, phyCR)) {
             std::cout << "Failed to read GMII PHY" << chan << " Reg 16" << std::endl;
         }
@@ -365,7 +365,7 @@ bool InitEthernet(AmpIO &Board)
         return false;
     }
 
-    AmpIO_UInt16 status = Board.ReadKSZ8851Status();
+    uint16_t status = Board.ReadKSZ8851Status();
     if (!(status&0x8000)) {
         std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
         return false;
@@ -390,7 +390,7 @@ bool InitEthernet(AmpIO &Board)
     }
 
     // Read the Chip ID (16-bit read)
-    AmpIO_UInt16 chipID = Board.ReadKSZ8851ChipID();
+    uint16_t chipID = Board.ReadKSZ8851ChipID();
     std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
     if ((chipID&0xfff0) != 0x8870)
         return false;
@@ -403,7 +403,7 @@ bool InitEthernet(AmpIO &Board)
     }
 
     // Display the MAC address
-    AmpIO_UInt16 regLow, regMid, regHigh;
+    uint16_t regLow, regMid, regHigh;
     Board.ReadKSZ8851Reg(0x10, regLow);   // MAC address low = 0x94nn (nn = board id)
     Board.ReadKSZ8851Reg(0x12, regMid);   // MAC address middle = 0xOE13
     Board.ReadKSZ8851Reg(0x14, regHigh);  // MAC address high = 0xFA61
@@ -601,7 +601,7 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
     std::cout << "Bus_Info length = " << bus_info_len << std::endl;
     if (bus_info_len > 1) {
         unsigned int bus_info_crc = bswap_32(block_data[0])&0x0000ffff;
-        AmpIO_UInt16 crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[1]), bus_info_len*sizeof(quadlet_t));
+        uint16_t crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[1]), bus_info_len*sizeof(quadlet_t));
         std::cout << "Bus_Info CRC: ROM = " << std::hex << bus_info_crc << ", Computed = " << crc16 << std::dec << std::endl;
         unsigned int root_len = (bswap_32(block_data[bus_info_len+1])&0xffff0000) >> 16;
         unsigned int root_dir_crc = bswap_32(block_data[bus_info_len+1])&0x0000ffff;
@@ -642,7 +642,7 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     double clockPeriod_us = 1.0e6*boardTest->GetFPGAClockPeriod();  // clock period in microseconds
     for (i = 0; i < numIter; i++) {
         double startTime, deltaTime = 0;
-        AmpIO_UInt32 status;
+        uint32_t status;
         if (msgCode == EthBasePort::QREAD) {
             startTime = Amp1394_GetTime();
             status = boardTest->ReadStatus();
@@ -804,7 +804,7 @@ void TestWaveform(AmpIO *board)
     size_t i;
     // Set up square waves that change every 1 msec
     double clkPer = board->GetFPGAClockPeriod();
-    AmpIO_UInt32 numTicks = static_cast<AmpIO_UInt32>(0.001/clkPer);
+    uint32_t numTicks = static_cast<uint32_t>(0.001/clkPer);
     std::cout << "Setting waveform with " << numTicks << " counts (1 msec edges)" << std::endl;
     if ((numTicks&0x7fffff) != numTicks)
         std::cout << "Warning: numTicks does not fit in 23 bits" << std::endl;
@@ -852,7 +852,7 @@ void TestWaveform(AmpIO *board)
 
 // Following prints feedback from the MAX7317 I/O Expander on QLA Rev 1.5+
 // Feedback from the MAX7301 I/O Expander on DQLA is a little different
-void PrintIOExp(AmpIO_UInt32 iodata)
+void PrintIOExp(uint32_t iodata)
 {
     std::cout << std::hex << (iodata&0x0000ffff) << "  :";
     bool output_error = iodata&0x01000000;
@@ -870,7 +870,7 @@ void PrintIOExp(AmpIO_UInt32 iodata)
 bool QLA_IOExp_Check(AmpIO &Board, unsigned long chan = 0)
 {
     // TODO: update for non-zero channels (DQLA)
-    AmpIO_UInt32 iodata;
+    uint32_t iodata;
     Board.WriteIOExpander(0x1345);   // Write 0x45 to RAM
     Board.WriteIOExpander(0x9300);   // Read from RAM
     Board.ReadIOExpander(iodata);
@@ -887,7 +887,7 @@ bool QLA_IOExp_Check(AmpIO &Board, unsigned long chan = 0)
     std::cout << "Read from RAM (ff): ";
     PrintIOExp(iodata);
     for (int i = 0; i < 10; i++) {
-        AmpIO_UInt32 cmd = 0x8000 | (i << 8);
+        uint32_t cmd = 0x8000 | (i << 8);
         Board.WriteIOExpander(cmd);   // Read Port i status
         Board.ReadIOExpander(iodata);
         std::cout << "Read from Port " << i << ": ";
@@ -913,7 +913,7 @@ bool QLA_IOExp_Check(AmpIO &Board, unsigned long chan = 0)
 // Following checks the configuration of one of MAX7301 I/O Expanders on the DQLA
 bool DQLA_IOExp_Check(AmpIO &Board, unsigned long chan)
 {
-    AmpIO_UInt32 iodata;
+    uint32_t iodata;
     unsigned int DQLA_Num = (chan == 3) ? 1 : 2;
     chan <<= 16;
     Board.WriteIOExpander(chan|0x08000000);     // NOP command to set channel for reading
@@ -931,9 +931,9 @@ bool DQLA_IOExp_Check(AmpIO &Board, unsigned long chan)
         std::cout << "Warning: read error detected" << std::endl;
     }
     // Check config commands: IOP[7:4], IOP[11:8], IOP[15:12], ...
-    AmpIO_UInt16 configCmd[8] = {  0x09ff, 0x0aff, 0x0b55, 0x0c57, 0x0dff, 0x0eff, 0x0f55, 0x0401 };
-    for (unsigned int j = 0; j < sizeof(configCmd)/sizeof(AmpIO_UInt16); j++) {
-        AmpIO_UInt16 readCmd = (configCmd[j]&0xff00)|0x8000;
+    uint16_t configCmd[8] = {  0x09ff, 0x0aff, 0x0b55, 0x0c57, 0x0dff, 0x0eff, 0x0f55, 0x0401 };
+    for (unsigned int j = 0; j < sizeof(configCmd)/sizeof(uint16_t); j++) {
+        uint16_t readCmd = (configCmd[j]&0xff00)|0x8000;
         std::cout << "Checking config cmd " << j << ": " << std::hex << readCmd << std::dec << std::endl;
         unsigned int cnt;
         for (cnt = 0; cnt < 100; cnt++) {
@@ -1029,8 +1029,8 @@ int main(int argc, char **argv)
     // The results (RegAddr and RegData) are hard-coded in the FPGA code (EthernetIO.v).
     unsigned char MulticastMAC[6];
     EthBasePort::GetDestMulticastMacAddr(MulticastMAC);
-    AmpIO_UInt8 RegAddr;
-    AmpIO_UInt16 RegData;
+    uint8_t RegAddr;
+    uint16_t RegData;
     ComputeMulticastHash(MulticastMAC, RegAddr, RegData);
     std::cout << "Multicast hash table: register " << std::hex << (int)RegAddr << ", data = " << RegData << std::endl;
 
@@ -1348,7 +1348,7 @@ int main(int argc, char **argv)
 
         case 'e':
             if (curBoardFw) {
-                AmpIO_UInt16 reg;
+                uint16_t reg;
                 if (curBoardFw->ReadKSZ8851Reg(0x90, reg))
                     std::cout << "IER    = 0x" << std::hex << reg << "  ";
                 if (curBoardFw->ReadKSZ8851Reg(0x92, reg))
@@ -1446,14 +1446,14 @@ int main(int argc, char **argv)
                 // Make sure board power is on and amplifier power is off
                 curBoard->WritePowerEnable(true);
                 curBoard->WriteAmpEnable(0x0f, 0);
-                AmpIO_UInt32 volts;
-                AmpIO_UInt32 vinc = 0x1000;
+                uint32_t volts;
+                uint32_t vinc = 0x1000;
                 for (volts = 0; volts <= 0x0000ffff; volts += vinc) {
                     // Write voltage to DAC 4
                     curPort->WriteQuadlet(curBoard->GetBoardId(), 0x41, volts | 0x80000000);
                     Amp1394_Sleep(0.001);
                     // Read comparator bit (register 10, bit 28)
-                    AmpIO_UInt32 iodata;
+                    uint32_t iodata;
                     curPort->ReadQuadlet(curBoard->GetBoardId(), 10, iodata);
                     // iodata&0x10000000 is false (0) when DAC voltage is greater than motor power suply.
                     if ((iodata&0x10000000) == 0) {
@@ -1497,7 +1497,7 @@ int main(int argc, char **argv)
                         EthBasePort::PrintDebugDataKSZ(std::cout, buffer, clkPeriod);  // KSZ8851 (FPGA V2)
                     else {
                         EthBasePort::PrintDebugDataRTL(std::cout, buffer, clkPeriod);  // RTL8211F (FPGA V3)
-                        AmpIO_UInt32 ethStatus;
+                        uint32_t ethStatus;
                         curPort->ReadQuadlet(curBoard->GetBoardId(), 12, ethStatus);
                         if (ethStatus&0x10000000)
                             std::cout << "200 MHz clock running" << std::endl;

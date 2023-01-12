@@ -30,10 +30,4 @@ typedef __int32          int32_t;
 #include <stdint.h>
 #endif
 
-typedef uint8_t  AmpIO_UInt8;
-typedef uint16_t AmpIO_UInt16;
-typedef uint32_t AmpIO_UInt32;
-typedef int16_t  AmpIO_Int16;
-typedef int32_t  AmpIO_Int32;
-
 #endif // __AMP1394_TYPES_H__

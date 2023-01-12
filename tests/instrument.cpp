@@ -108,14 +108,14 @@ int main(int argc, char** argv)
     AmpIO Board(board);
     Port->AddBoard(&Board);
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
     if (fver < 7) {
         std::cerr << "Instrument read requires firmware version 7+ (detected version " << fver << ")" << std::endl;
         Port->RemoveBoard(board);
         delete Port;
         return -1;
     }
-    AmpIO_UInt32 status = Board.ReadStatus();
+    uint32_t status = Board.ReadStatus();
 
     // Now, we try to read the Dallas chip. This will also populate the status field.
     unsigned char buffer[2048];  // Buffer for entire contents of DS2505 memory (2 Kbytes)

@@ -48,8 +48,8 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
     tcsetattr(STDIN_FILENO, TCSANOW, &newTerm);  // change terminal settings
 #endif
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
-    AmpIO_UInt32 hver = Board.GetHardwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
+    uint32_t hver = Board.GetHardwareVersion();
     bool fpgaV3 = mcsName.empty();
     int c = 0;
     while ((c < '0') || (c > '9')) {
@@ -138,7 +138,7 @@ bool PromProgramTest(AmpIO &Board)
     std::cout << "  Erasing sector 1E0000 " << std::flush;
     Board.PromSectorErase(0x1E0000, PromProgramCallback);
     std::cout << std::endl << "  Programming first page " << std::flush;
-    int ret = Board.PromProgramPage(0x1EFF00, (AmpIO_UInt8*)testBuffer, sizeof(testBuffer), PromProgramCallback);
+    int ret = Board.PromProgramPage(0x1EFF00, (uint8_t*)testBuffer, sizeof(testBuffer), PromProgramCallback);
     if (ret != sizeof(testBuffer)) {
         std::cout << std::endl << "  Cannot program test pattern, ret = " << ret << std::endl;
         return false;
@@ -331,7 +331,7 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     std::string BoardSNRead;
     bool success = true;
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
     if (fver < 4) {
         std::cout << "Firmware not supported, current version = " << fver << "\n"
                   << "Please upgrade your firmware" << std::endl;
@@ -370,7 +370,7 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     Callback_StartTime = Amp1394_GetTime();
     Board.PromSectorErase(0x1F0000, PromProgramCallback);
     std::cout << std::endl;
-    ret = Board.PromProgramPage(0x1FFF00, (AmpIO_UInt8*)buffer, bytesToWrite, PromProgramCallback);
+    ret = Board.PromProgramPage(0x1FFF00, (uint8_t*)buffer, bytesToWrite, PromProgramCallback);
     if (ret < 0) {
         std::cerr << "Can't program FPGA Serial Number";
         return false;
@@ -407,7 +407,7 @@ bool PromQLASerialNumberProgram(AmpIO &Board, unsigned char chan = 0)
     std::string BoardSNRead;
     bool success = true;
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
     if (fver < 4) {
         std::cout << "Firmware not supported, current version = " << fver << "\n"
                   << "Please upgrade your firmware" << std::endl;
@@ -421,8 +421,8 @@ bool PromQLASerialNumberProgram(AmpIO &Board, unsigned char chan = 0)
     BoardType = "QLA";
     std::string BoardSN;
     BoardSN.reserve(8);  // reserve at least 8 characters
-    AmpIO_UInt8 wbyte;
-    AmpIO_UInt16 address;
+    uint8_t wbyte;
+    uint16_t address;
 
     // get s/n from user
     if (chan == 0)
@@ -574,7 +574,7 @@ int main(int argc, char** argv)
     unsigned long addr;
     bool done = false;
     bool fpgaV3 = mcsName.empty();
-    AmpIO_UInt32 hver = Board.GetHardwareVersion();
+    uint32_t hver = Board.GetHardwareVersion();
 
     if (auto_mode) {
         std::cout << std::endl

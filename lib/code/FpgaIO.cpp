@@ -23,10 +23,10 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
-const AmpIO_UInt32 REBOOT_FPGA      = 0x00300000;  /*!< Reboot FPGA (Rev 7+)       */
-const AmpIO_UInt32 LED_ON           = 0x000c0000;  /*!< Turn LED on                */
-const AmpIO_UInt32 LED_OFF          = 0x00080000;  /*!< Turn LED off               */
-const AmpIO_UInt32 RESET_KSZ8851    = 0x04000000;  /*!< Mask to reset KSZ8851 Ethernet chip */
+const uint32_t REBOOT_FPGA      = 0x00300000;  /*!< Reboot FPGA (Rev 7+)       */
+const uint32_t LED_ON           = 0x000c0000;  /*!< Turn LED on                */
+const uint32_t LED_OFF          = 0x00080000;  /*!< Turn LED off               */
+const uint32_t RESET_KSZ8851    = 0x04000000;  /*!< Mask to reset KSZ8851 Ethernet chip */
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
 
@@ -45,7 +45,7 @@ const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (fro
     else { std::cerr << MSG.str() << std::endl; }
 
 
-FpgaIO::FpgaIO(AmpIO_UInt8 board_id) : BoardIO(board_id), firmwareTime(0.0)
+FpgaIO::FpgaIO(uint8_t board_id) : BoardIO(board_id), firmwareTime(0.0)
 {
 }
 
@@ -85,14 +85,14 @@ std::string FpgaIO::GetFPGASerialNumber(void)
     // Format: FPGA 1234-56 (12 bytes) or FPGA 1234-567 (13 bytes).
     // Note that on PROM, the string is terminated by 0xff because the sector
     // is first erased (all bytes set to 0xff) before the string is written.
-    AmpIO_UInt32 address = 0x001FFF00;
+    uint32_t address = 0x001FFF00;
     char data[20];
     std::string sn;
     const size_t FPGASNSize = 13;
     const size_t bytesToRead = (FPGASNSize+3)&0xFC;  // must be multiple of 4
 
     data[FPGASNSize] = 0;    // Make sure null-terminated
-    if (PromReadData(address, (AmpIO_UInt8 *)data, bytesToRead)) {
+    if (PromReadData(address, (uint8_t *)data, bytesToRead)) {
         if (strncmp(data, "FPGA ", 5) == 0) {
             char *p = strchr(data+5, 0xff);
             if (p) *p = 0;      // Null terminate at first 0xff
@@ -126,14 +126,14 @@ bool FpgaIO::WriteReboot(void)
         std::cerr << "FpgaIO::WriteReboot: requires firmware 7 or above" << std::endl;
         return false;
     }
-    AmpIO_UInt32 write_data = REBOOT_FPGA;
+    uint32_t write_data = REBOOT_FPGA;
     return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 // Note that with the QLA, this also enables board power
 bool FpgaIO::WriteLED(bool status)
 {
-    AmpIO_UInt32 write_data = status ? LED_ON : LED_OFF;
+    uint32_t write_data = status ? LED_ON : LED_OFF;
     return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
@@ -148,7 +148,7 @@ bool FpgaIO::WriteRebootAll(BasePort *port)
 {
     // Note that Firmware V7+ supports the reboot command; earlier versions of
     // firmware will instead perform a limited reset.
-    AmpIO_UInt32 write_data = REBOOT_FPGA;
+    uint32_t write_data = REBOOT_FPGA;
     return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
@@ -163,9 +163,9 @@ bool FpgaIO::ResetKSZ8851All(BasePort *port) {
  *    see DataSheet Table 5: Command Set Codes
  */
 
-AmpIO_UInt32 FpgaIO::PromGetId(void)
+uint32_t FpgaIO::PromGetId(void)
 {
-    AmpIO_UInt32 id = 0;
+    uint32_t id = 0;
     quadlet_t data = 0x9f000000;
     if (port->WriteQuadlet(BoardId, 0x08, data)) {
         port->PromDelay();
@@ -175,7 +175,7 @@ AmpIO_UInt32 FpgaIO::PromGetId(void)
     return id;
 }
 
-bool FpgaIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
+bool FpgaIO::PromGetStatus(uint32_t &status, PromType type)
 {
     quadlet_t data = 0x05000000;
     nodeaddr_t address = GetPromAddress(type, true);
@@ -189,25 +189,25 @@ bool FpgaIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
     return ret;
 }
 
-bool FpgaIO::PromGetResult(AmpIO_UInt32 &result, PromType type)
+bool FpgaIO::PromGetResult(uint32_t &result, PromType type)
 {
     quadlet_t read_data;
     nodeaddr_t address = GetPromAddress(type, false);
 
     bool ret = port->ReadQuadlet(BoardId, address, read_data);
     if (ret)
-        result = static_cast<AmpIO_UInt32>(read_data);
+        result = static_cast<uint32_t>(read_data);
     return ret;
 }
 
-bool FpgaIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
+bool FpgaIO::PromReadData(uint32_t addr, uint8_t *data,
                          unsigned int nbytes)
 {
-    AmpIO_UInt32 addr24 = addr&0x00ffffff;
+    uint32_t addr24 = addr&0x00ffffff;
     if (addr24+nbytes > 0x00ffffff)
         return false;
     quadlet_t write_data = 0x03000000|addr24;  // 03h = Read Data Bytes
-    AmpIO_UInt32 page = 0;
+    uint32_t page = 0;
     while (page < nbytes) {
         const unsigned int maxReadSize = 64u;
         unsigned int bytesToRead = ((nbytes-page)<maxReadSize) ? (nbytes-page) : maxReadSize;
@@ -232,7 +232,7 @@ bool FpgaIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
             return false;
         }
         // Now, read result. This should be the number of quadlets written.
-        AmpIO_UInt32 nRead;
+        uint32_t nRead;
         if (!PromGetResult(nRead)) {
             std::cout << "PromReadData: failed to get PROM result" << std::endl;
             return false;
@@ -246,7 +246,7 @@ bool FpgaIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
             return false;
         }
 
-        AmpIO_UInt32 fver = GetFirmwareVersion();
+        uint32_t fver = GetFirmwareVersion();
         nodeaddr_t address;
         if (fver >= 4) {address = 0x2000;}
         else {address = 0xc0;}
@@ -272,14 +272,14 @@ bool FpgaIO::PromWriteDisable(PromType type)
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 
-bool FpgaIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
+bool FpgaIO::PromSectorErase(uint32_t addr, const ProgressCallback cb)
 {
     PromWriteEnable();
     quadlet_t write_data = 0xd8000000 | (addr&0x00ffffff);
     if (!port->WriteQuadlet(BoardId, 0x08, write_data))
         return false;
     // Wait for erase to finish
-    AmpIO_UInt32 status;
+    uint32_t status;
     if (!PromGetStatus(status))
         return false;
     while (status) {
@@ -290,7 +290,7 @@ bool FpgaIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
     return true;
 }
 
-int FpgaIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
+int FpgaIO::PromProgramPage(uint32_t addr, const uint8_t *bytes,
                            unsigned int nbytes, const ProgressCallback cb)
 {
     const unsigned int MAX_PAGE = 256;  // 64 quadlets
@@ -303,7 +303,7 @@ int FpgaIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     }
     PromWriteEnable();
     // Block write of the data (+1 quad for command)
-    AmpIO_UInt8 page_data[MAX_PAGE+sizeof(quadlet_t)];
+    uint8_t page_data[MAX_PAGE+sizeof(quadlet_t)];
     quadlet_t *data_ptr = reinterpret_cast<quadlet_t *>(page_data);
     // First quadlet is the "page program" instruction (0x02)
     data_ptr[0] = bswap_32(0x02000000 | (addr & 0x00ffffff));
@@ -312,7 +312,7 @@ int FpgaIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
     memcpy(page_data+sizeof(quadlet_t), bytes, nbytes);
 
     // select address based on firmware version number
-    AmpIO_UInt32 fver = GetFirmwareVersion();
+    uint32_t fver = GetFirmwareVersion();
     nodeaddr_t address;
     if (fver >= 4) {address = 0x2000;}
     else {address = 0xc0;}
@@ -335,7 +335,7 @@ int FpgaIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         ERROR_CALLBACK(cb, msg);
     }
     // Now, read result. This should be the number of quadlets written.
-    AmpIO_UInt32 nWritten;
+    uint32_t nWritten;
     if (!PromGetResult(nWritten)) {
         std::ostringstream msg;
         msg << "FpgaIO::PromProgramPage: could not get PROM result";
@@ -350,7 +350,7 @@ int FpgaIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
         ERROR_CALLBACK(cb, msg);
     }
     // Wait for "Write in Progress" bit to be cleared
-    AmpIO_UInt32 status;
+    uint32_t status;
     bool ret = PromGetStatus(status);
     while (status&MASK_WIP) {
         if (ret) {
@@ -393,12 +393,12 @@ nodeaddr_t FpgaIO::GetPromAddress(PromType type, bool isWrite)
 
 
 // ********************** HW PROM ONLY Methods ***********************************
-bool FpgaIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data, unsigned char chan)
+bool FpgaIO::PromReadByte25AA128(uint16_t addr, uint8_t &data, unsigned char chan)
 {
     PromType prom_type = (chan == 1) ? PROM_25AA128_1 : (chan == 2) ? PROM_25AA128_2 : PROM_25AA128;
 
     // 8-bit cmd + 16-bit addr (2 MSBs ignored)
-    AmpIO_UInt32 result = 0x00000000;
+    uint32_t result = 0x00000000;
     quadlet_t write_data = 0x03000000|(addr << 8);
     nodeaddr_t address = GetPromAddress(prom_type, true);
     if (port->WriteQuadlet(BoardId, address, write_data)) {
@@ -415,7 +415,7 @@ bool FpgaIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data, unsigned 
     }
 }
 
-bool FpgaIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data, unsigned char chan)
+bool FpgaIO::PromWriteByte25AA128(uint16_t addr, const uint8_t &data, unsigned char chan)
 {
     PromType prom_type = (chan == 1) ? PROM_25AA128_1 : (chan == 2) ? PROM_25AA128_2 : PROM_25AA128;
 
@@ -437,7 +437,7 @@ bool FpgaIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data, un
 
 
 // Read block data (quadlet)
-bool FpgaIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads, unsigned char chan)
+bool FpgaIO::PromReadBlock25AA128(uint16_t addr, quadlet_t *data, unsigned int nquads, unsigned char chan)
 {
     // nquads sanity check
     if (nquads == 0 || nquads > 16) {
@@ -462,7 +462,7 @@ bool FpgaIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned i
 
 
 // Write block data (quadlet)
-bool FpgaIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads,
+bool FpgaIO::PromWriteBlock25AA128(uint16_t addr, quadlet_t *data, unsigned int nquads,
                                    unsigned char chan)
 {
     // address sanity check
@@ -495,21 +495,21 @@ bool FpgaIO::ResetKSZ8851()
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool FpgaIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data)
+bool FpgaIO::WriteKSZ8851Reg(uint8_t addr, const uint8_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool FpgaIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
+bool FpgaIO::WriteKSZ8851Reg(uint8_t addr, const uint16_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata)
+bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | rdata;
@@ -522,11 +522,11 @@ bool FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata)
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
     if (read_data&0x40000000) return false;
-    rdata = static_cast<AmpIO_UInt8>(read_data);
+    rdata = static_cast<uint8_t>(read_data);
     return true;
 }
 
-bool FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
+bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint16_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | rdata;
@@ -543,7 +543,7 @@ bool FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
     if (read_data&0x40000000) return false;
-    rdata = static_cast<AmpIO_UInt16>(read_data);
+    rdata = static_cast<uint16_t>(read_data);
     return true;
 }
 
@@ -551,14 +551,14 @@ bool FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
 // This assumes that the chip has already been placed in DMA mode
 // (e.g., by writing to register 0x82).
 
-bool FpgaIO::WriteKSZ8851DMA(const AmpIO_UInt16 &data)
+bool FpgaIO::WriteKSZ8851DMA(const uint16_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x0B000000 | data;
     return port->WriteQuadlet(BoardId, 12, write_data);
 }
 
-bool FpgaIO::ReadKSZ8851DMA(AmpIO_UInt16 &rdata)
+bool FpgaIO::ReadKSZ8851DMA(uint16_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x09000000 | rdata;
@@ -571,53 +571,53 @@ bool FpgaIO::ReadKSZ8851DMA(AmpIO_UInt16 &rdata)
     if (!(read_data&0x80000000)) return false;
     // Bit 30 indicates whether last command had an error
     if (read_data&0x40000000) return false;
-    rdata = static_cast<AmpIO_UInt16>(read_data);
+    rdata = static_cast<uint16_t>(read_data);
     return true;
 }
 
-AmpIO_UInt16 FpgaIO::ReadKSZ8851ChipID()
+uint16_t FpgaIO::ReadKSZ8851ChipID()
 {
-    AmpIO_UInt16 data;
+    uint16_t data;
     if (ReadKSZ8851Reg(0xC0, data))
         return data;
     else
         return 0;
 }
 
-AmpIO_UInt16 FpgaIO::ReadKSZ8851Status()
+uint16_t FpgaIO::ReadKSZ8851Status()
 {
     if (GetFirmwareVersion() < 5) return 0;
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, 12, read_data))
         return 0;
-    return static_cast<AmpIO_UInt16>(read_data>>16);
+    return static_cast<uint16_t>(read_data>>16);
 }
 
 // ************************** RTL8211F Ethernet PHY Methods *************************************
 
-bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 &data)
+bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, uint16_t &data)
 {
     // Should have firmware/hardware checks
     nodeaddr_t address = 0x40a0 | (chan << 8);
     // Format: 0110 PPPP PRRR RRXX X(16), where P indicates phyAddr, R indicates regAddr, X is don't care (0)
-    AmpIO_UInt32 write_data = 0x60000000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18);
+    uint32_t write_data = 0x60000000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18);
     if (!port->WriteQuadlet(BoardId, address, write_data))
         return false;
     quadlet_t read_data;
     if (!port->ReadQuadlet(BoardId, address, read_data))
         return false;
-    data = static_cast<AmpIO_UInt16>(read_data & 0x0000ffff);
+    data = static_cast<uint16_t>(read_data & 0x0000ffff);
     unsigned int regAddrRead = (read_data & 0x001f0000)>>16;
     unsigned int curState = (read_data&0x07000000) >> 24;
     return (regAddrRead == regAddr) && (curState == 0);
 }
 
-bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 data)
+bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, uint16_t data)
 {
     // Should have firmware/hardware checks
     nodeaddr_t address = 0x40a0 | (chan << 8);
     // Format: 0101 PPPP PRRR RR10 D(16), where P indicates phyAddr, R indicates regAddr, D indicates data
-    AmpIO_UInt32 write_data = 0x50020000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18) | data;
+    uint32_t write_data = 0x50020000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18) | data;
     // Could check whether FPGA has returned to idle state
     return port->WriteQuadlet(BoardId, address, write_data);
 }

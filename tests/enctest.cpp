@@ -528,9 +528,9 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
     int lastDir = 0;
     double t = 0.0;
     double lastT = 0.0;
-    const AmpIO_UInt32 max_ticks = 0x007fffff;   // 23 bits
-    AmpIO_UInt32 minTicks = max_ticks;
-    AmpIO_UInt32 maxTicks = 0;
+    const uint32_t max_ticks = 0x007fffff;   // 23 bits
+    uint32_t minTicks = max_ticks;
+    uint32_t maxTicks = 0;
     unsigned int i;
     encList.clear();
     encList.push_back(EncTime(0.0, 0));
@@ -542,7 +542,7 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
             std::cout << "CreateWaveform: i = " << i << ", invalid direction" << std::endl;
             break;
         }
-        AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt + 0.5);
+        uint32_t ticks = static_cast<uint32_t>((t-lastT)/dt + 0.5);
         lastT = t;
         while (ticks > max_ticks) {
             // If we exceed max_ticks (23 bits) add waveform table entries that maintain

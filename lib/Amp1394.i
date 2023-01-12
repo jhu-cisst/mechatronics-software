@@ -140,15 +140,15 @@ uint32_t bswap32(uint32_t in);
 
 
 // AmpIO class
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &rdata};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &rdata};
 // ReadDoutControl
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsHigh};
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsLow};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &countsHigh};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &countsLow};
 // ReadEncoderPreload
-%apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata};
+%apply int32_t& ARGOUT_INT32_T {int32_t &sdata};
 
-%ignore FpgaIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
-%ignore FpgaIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
+%ignore FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata);
+%ignore FpgaIO::WriteKSZ8851Reg(uint8_t, uint8_t const &);
 
 %import "AmpIORevision.h"
 

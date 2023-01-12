@@ -44,7 +44,7 @@ class FpgaIO : public BoardIO
 {
 public:
 
-    FpgaIO(AmpIO_UInt8 board_id);
+    FpgaIO(uint8_t board_id);
     ~FpgaIO();
 
     // Return FPGA major version number (1, 2, 3)
@@ -121,21 +121,21 @@ public:
     // Returns the PROM ID (M25P16 ONLY)
     // should be 0x00202015 for the M25P16
     // returns 0 on error
-    AmpIO_UInt32 PromGetId(void);
+    uint32_t PromGetId(void);
 
     // PromGetStatus (General)
     // returns the status register from the M25P16 PROM
     // (this is different than the interface status read from address offset 8)
     // The following masks are for the useful status register bits.
     enum { MASK_WIP = 1, MASK_WEL = 2 };   // status register bit masks
-    bool PromGetStatus(AmpIO_UInt32 &status, PromType type = PROM_M25P16);
+    bool PromGetStatus(uint32_t &status, PromType type = PROM_M25P16);
 
     // PromGetResult (General)
     // returns the result (if any) from the last command sent
-    bool PromGetResult(AmpIO_UInt32 &result, PromType type = PROM_M25P16);
+    bool PromGetResult(uint32_t &result, PromType type = PROM_M25P16);
 
     // Returns nbytes data read from the specified address
-    bool PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
+    bool PromReadData(uint32_t addr, uint8_t *data,
                       unsigned int nbytes);
 
     // Enable programming commands (erase and program page) (General)
@@ -151,7 +151,7 @@ public:
     // This command calls PromWriteEnable.
     // If non-zero, the callback (cb) is called while the software is waiting
     // for the PROM to be erased, or if there is an error.
-    bool PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb = 0);
+    bool PromSectorErase(uint32_t addr, const ProgressCallback cb = 0);
 
     // Program a page (up to 256 bytes) at the specified address.
     // This command calls PromWriteEnable.
@@ -159,7 +159,7 @@ public:
     // If non-zero, the callback (cb) is called while the software is waiting
     // for the PROM to be programmed, or if there is an error.
     // Returns the number of bytes programmed (-1 if error).
-    int PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
+    int PromProgramPage(uint32_t addr, const uint8_t *bytes,
                         unsigned int nbytes, const ProgressCallback cb = 0);
 
 
@@ -167,13 +167,13 @@ public:
     // Parameter "chan" is used to distinguish between multiple PROMs. Set to 0 for QLA
     // and set to 1 or 2 for DQLA. These get converted to PROM_25AA128, PROM_25AA128_1
     // and PROM_25AA128_2 internally.
-    bool PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data,
+    bool PromReadByte25AA128(uint16_t addr, uint8_t &data,
                              unsigned char chan = 0);
-    bool PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data,
+    bool PromWriteByte25AA128(uint16_t addr, const uint8_t &data,
                               unsigned char chan = 0);
-    bool PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads,
+    bool PromReadBlock25AA128(uint16_t addr, quadlet_t* data, unsigned int nquads,
                               unsigned char chan = 0);
-    bool PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t* data, unsigned int nquads,
+    bool PromWriteBlock25AA128(uint16_t addr, quadlet_t* data, unsigned int nquads,
                                unsigned char chan = 0);
 
     // ********************** KSZ8851 Ethernet MAC/PHY Methods ************************
@@ -181,15 +181,15 @@ public:
     // FPGA V2 board via FireWire. They are provided for testing/debugging.
     // Note that both 8-bit and 16-bit transactions are supported.
     bool ResetKSZ8851();   // Reset the chip (requires ~60 msec)
-    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data);
-    bool WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data);
-    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
-    bool ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata);
+    bool WriteKSZ8851Reg(uint8_t addr, const uint8_t &data);
+    bool WriteKSZ8851Reg(uint8_t addr, const uint16_t &data);
+    bool ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata);
+    bool ReadKSZ8851Reg(uint8_t addr, uint16_t &rdata);
     // Following are for DMA access (assumes chip has been placed in DMA mode)
-    bool WriteKSZ8851DMA(const AmpIO_UInt16 &data);
-    bool ReadKSZ8851DMA(AmpIO_UInt16 &rdata);
+    bool WriteKSZ8851DMA(const uint16_t &data);
+    bool ReadKSZ8851DMA(uint16_t &rdata);
     // Read Chip ID from register 0xC0
-    AmpIO_UInt16 ReadKSZ8851ChipID();
+    uint16_t ReadKSZ8851ChipID();
     // Get KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
     //    VALID=1 indicates that Ethernet is present
     //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
@@ -197,7 +197,7 @@ public:
     //    IRQ is the state of the Interrupt Request pin (active low)
     //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
     // Returns 0 on error (i.e., if Ethernet not present, or read fails)
-    AmpIO_UInt16 ReadKSZ8851Status();
+    uint16_t ReadKSZ8851Status();
 
     // *********************** RTL8211F Ethernet PHY Methods **************************
     // The following functions enable access to both of the RTL8211F Ethernet PHYs on
@@ -242,7 +242,7 @@ public:
     //    regAddr PHY register to read (see RTL8211F_Regs)
     //    data    data read from PHY register
     // Returns true if read was successful
-    bool ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 &data);
+    bool ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, uint16_t &data);
 
     // Write PHY register
     //    chan    1 or 2 for PHY1 or PHY2
@@ -250,7 +250,7 @@ public:
     //    regAddr PHY register to write (see RTL8211F_Regs)
     //    data    data to write to PHY register
     // Returns true if write was successful
-    bool WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, AmpIO_UInt16 data);
+    bool WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, uint16_t data);
 
     // ************************ Ethernet Methods *************************************
     // Read Ethernet data

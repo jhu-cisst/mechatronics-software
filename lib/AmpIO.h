@@ -31,7 +31,7 @@ class ostream;
 class AmpIO : public FpgaIO
 {
 public:
-    AmpIO(AmpIO_UInt8 board_id);
+    AmpIO(uint8_t board_id);
     ~AmpIO();
 
     // Return number of motors (4 for QLA, 10 for dRAC)
@@ -54,58 +54,58 @@ public:
     // use the ReadXXX methods, but note that individual reads are less
     // efficient than block transfers.
 
-    AmpIO_UInt32 GetStatus(void) const;
+    uint32_t GetStatus(void) const;
 
-    AmpIO_UInt32 GetTimestamp(void) const;
+    uint32_t GetTimestamp(void) const;
 
     // Get timestamp in seconds (time between two consecutive reads)
     double GetTimestampSeconds(void) const;
 
     // Return digital output state
-    AmpIO_UInt8 GetDigitalOutput(void) const;
+    uint8_t GetDigitalOutput(void) const;
 
     /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
-    AmpIO_UInt8 GetNegativeLimitSwitches(void) const;
+    uint8_t GetNegativeLimitSwitches(void) const;
 
     /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
-    AmpIO_UInt8 GetPositiveLimitSwitches(void) const;
+    uint8_t GetPositiveLimitSwitches(void) const;
 
     /*! Utility method, uses result of GetDigitalInput but performs
       required shift and mask. */
-    AmpIO_UInt8 GetHomeSwitches(void) const;
+    uint8_t GetHomeSwitches(void) const;
 
     /*! Utility methods, use result of GetDigitalInput but perform
       required shift and mask. */
     //@{
-    AmpIO_UInt8 GetEncoderChannelA(void) const;
+    uint8_t GetEncoderChannelA(void) const;
     bool GetEncoderChannelA(unsigned int index) const;
 
-    AmpIO_UInt8 GetEncoderChannelB(void) const;
+    uint8_t GetEncoderChannelB(void) const;
     bool GetEncoderChannelB(unsigned int index) const;
 
-    AmpIO_UInt8 GetEncoderIndex(void) const;
+    uint8_t GetEncoderIndex(void) const;
     //@}
 
-    AmpIO_UInt32 GetDigitalInput(void) const;
+    uint32_t GetDigitalInput(void) const;
 
-    AmpIO_UInt8 GetAmpTemperature(unsigned int index) const;
+    uint8_t GetAmpTemperature(unsigned int index) const;
 
-    AmpIO_UInt32 GetMotorCurrent(unsigned int index) const;
+    uint32_t GetMotorCurrent(unsigned int index) const;
 
     bool GetMotorCurrent(unsigned int index, double &amps) const;
 
-    AmpIO_UInt32 GetMotorStatus(unsigned int index) const;
+    uint32_t GetMotorStatus(unsigned int index) const;
 
     double GetMotorVoltageRatio(unsigned int index) const;
 
-    AmpIO_UInt32 GetAnalogInput(unsigned int index) const;
+    uint32_t GetAnalogInput(unsigned int index) const;
 
     //********************** Encoder position/velocity/acceleration *****************************
 
     /*! Returns the encoder position in counts. */
-    AmpIO_Int32 GetEncoderPosition(unsigned int index) const;
+    int32_t GetEncoderPosition(unsigned int index) const;
 
     /*! Returns true if encoder position has overflowed. */
     bool GetEncoderOverflow(unsigned int index) const;
@@ -123,7 +123,7 @@ public:
         GetEncoderVelocityPredicted method.
 
         This method was previously called GetEncoderVelocityCountsPerSecond to distinguish it from an obsolete
-        GetEncoderVelocity that actually returned the encoder period as an integer (AmpIO_Int32). The velocity
+        GetEncoderVelocity that actually returned the encoder period as an integer (int32_t). The velocity
         period (velPeriod) and other information can now be obtained via the GetEncoderVelocityData method.
     */
     double GetEncoderVelocity(unsigned int index) const;
@@ -142,10 +142,10 @@ public:
 
     /*! Returns the raw encoder period (velocity) value.
         This method is provided for internal use and testing. */
-    AmpIO_UInt32 GetEncoderVelocityRaw(unsigned int index) const;
+    uint32_t GetEncoderVelocityRaw(unsigned int index) const;
 
     /*! Returns midrange value of encoder position. */
-    static AmpIO_Int32 GetEncoderMidRange(void);
+    static int32_t GetEncoderMidRange(void);
 
     /*! Returns the encoder acceleration in counts per second**2, based on the scaled difference
         between the most recent full cycle and the previous full cycle. If the encoder counter overflowed
@@ -161,18 +161,18 @@ public:
     /*! Returns the raw encoder acceleration value. For firmware prior to Version 6, this was actually the
         encoder "frequency" (i.e., number of pulses in specified time period, which can be used to estimate velocity).
         This method is provided for internal use and testing in firmware Rev 6 and deprecated in >6. */
-    AmpIO_UInt32 GetEncoderAccelerationRaw(unsigned int index) const;
+    uint32_t GetEncoderAccelerationRaw(unsigned int index) const;
 
     /*! Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+). */
-    AmpIO_UInt32 GetEncoderQtr1Raw(unsigned int index) const;
+    uint32_t GetEncoderQtr1Raw(unsigned int index) const;
 
     /*! Get the encoder quarter cycle period from 5 cycles ago (i.e., 4 cycles prior to the one returned
         by GetEncoderQtr1) for internal use and testing (Rev 7+). */
-    AmpIO_UInt32 GetEncoderQtr5Raw(unsigned int index) const;
+    uint32_t GetEncoderQtr5Raw(unsigned int index) const;
 
     /*! Get the encoder running counter, which measures the elasped time since the last encoder edge;
         for internal use and testing (Rev 7+). */
-    AmpIO_UInt32 GetEncoderRunningCounterRaw(unsigned int index) const;
+    uint32_t GetEncoderRunningCounterRaw(unsigned int index) const;
 
     /*! Get the encoder running counter, in seconds. This is primarily used for Firmware Rev 7+, but
         also supports the running counter in Firmware Rev 4-5.
@@ -222,7 +222,7 @@ public:
 
     // GetAmpEnableMask: returns mask where each set bit indicates that
     // the corresponding amplifier is requested to be enabled
-    AmpIO_UInt8 GetAmpEnableMask(void) const;
+    uint8_t GetAmpEnableMask(void) const;
 
     // GetAmpStatus: returns true if amplifier is enabled; false if
     // amplifier is in fault state.
@@ -232,12 +232,12 @@ public:
     // Returns true if current safety module in FPGA tripped for specified axis
     bool GetSafetyAmpDisable(unsigned int index) const;
     // Returns bit-mask indicating which motors have tripped
-    AmpIO_UInt32 GetSafetyAmpDisable(void) const;
+    uint32_t GetSafetyAmpDisable(void) const;
 
     // GetAmpFaultCode (Firmware Rev 8+)
     // Returns a 4-bit bitmask for the QLA/DQLA (0 for Rev < 8)
     // Returns a 4-bit fault code for the dRAC (0 if no fault)
-    AmpIO_UInt32 GetAmpFaultCode(unsigned int index) const;
+    uint32_t GetAmpFaultCode(unsigned int index) const;
 
     // Returns true if QLA has Max7317 I/O expander (QLA 1.5+)
     // The index parameter is ignored for the QLA, but used for the DQLA,
@@ -260,12 +260,12 @@ public:
 
     void SetPowerEnable(bool state);
     bool SetAmpEnable(unsigned int index, bool state);
-    bool SetAmpEnableMask(AmpIO_UInt32 mask, AmpIO_UInt32 state);
+    bool SetAmpEnableMask(uint32_t mask, uint32_t state);
     void SetSafetyRelay(bool state);
 
-    bool SetMotorCurrent(unsigned int index, AmpIO_UInt32 mcur);
+    bool SetMotorCurrent(unsigned int index, uint32_t mcur);
     // SetMotorVoltage is for QLA/DQLA (linear amplifiers)
-    bool SetMotorVoltage(unsigned int index, AmpIO_UInt32 volts);
+    bool SetMotorVoltage(unsigned int index, uint32_t volts);
     bool SetMotorVoltage(unsigned int index, double volts);
     // SetMotorVoltageRatio is for dRAC (PWM amplifiers)
     bool SetMotorVoltageRatio(unsigned int index, double ratio);
@@ -278,9 +278,9 @@ public:
 
     bool ReadPowerStatus(void) const;
     bool ReadSafetyRelayStatus(void) const;
-    AmpIO_UInt32 ReadSafetyAmpDisable(void) const;
+    uint32_t ReadSafetyAmpDisable(void) const;
 
-    bool ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const;
+    bool ReadEncoderPreload(unsigned int index, int32_t &sdata) const;
     bool IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const;
 
     // Read the watchdog period (16 bit number).
@@ -288,10 +288,10 @@ public:
     // behavior for backward compatibility.
     // Starting with Firmware Rev 8, the upper bit (bit 31) indicates whether
     // LED1 on the QLA displays the watchdog period status.
-    AmpIO_Int32 ReadWatchdogPeriod(bool applyMask = true) const;
+    int32_t ReadWatchdogPeriod(bool applyMask = true) const;
     double ReadWatchdogPeriodInSeconds(void) const;
 
-    AmpIO_UInt32 ReadDigitalIO(void) const;
+    uint32_t ReadDigitalIO(void) const;
 
     /*! \brief Read DOUT control register (e.g., for PWM, one-shot modes).
 
@@ -303,7 +303,7 @@ public:
         \sa WriteDoutControl
         \note Firmware Version 5+
      */
-    bool ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow);
+    bool ReadDoutControl(unsigned int index, uint16_t &countsHigh, uint16_t &countsLow);
 
     /*! \brief Read the status of the waveform output (i.e., whether waveform table is driving any
                digital outputs and, if so, the current table index).
@@ -311,7 +311,7 @@ public:
         \param tableIndex index into waveform table (see WriteWaveformTable)
         \returns true if successful (results in active and tableIndex)
     */
-    bool ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex);
+    bool ReadWaveformStatus(bool &active, uint32_t &tableIndex);
 
     /*! \brief Read from the MAX7317 I/O Expander register (QLA 1.5+)
         In general, the lowest 16 bits will contain the result of the last read command issued
@@ -321,7 +321,7 @@ public:
         The upper 16 bits contain various flags and error feedback (see firmware or PrintIOExp
         function in mainEth1394.cpp).
      */
-    bool ReadIOExpander(AmpIO_UInt32 &resp) const;
+    bool ReadIOExpander(uint32_t &resp) const;
 
     /*! \brief Read motor configuration register (Firmware Rev 8+)
         \param index motor number, 0..NumMotors-1
@@ -334,7 +334,7 @@ public:
         MCFG_CURRENT_CONTROL = 0x01000000,           // 1 -> current control available (QLA)
         MCFG_AMP_ENABLE_DELAY_MASK  = 0x000000ff };  // mask for setting amplifier delay (20.83 us resolution)
 
-    bool ReadMotorConfig(unsigned int index, AmpIO_UInt32 &cfg) const;
+    bool ReadMotorConfig(unsigned int index, uint32_t &cfg) const;
 
     // ********************** WRITE Methods **********************************
 
@@ -344,27 +344,27 @@ public:
 
     // Enable individual amplifiers
     //    Enable/disable up to 4 amplifiers based on mask (QLA only)
-    bool WriteAmpEnable(AmpIO_UInt32 mask, AmpIO_UInt32 state);
+    bool WriteAmpEnable(uint32_t mask, uint32_t state);
     //    Enable/disable the amplifier specified by index
     bool WriteAmpEnableAxis(unsigned int index, bool state);
 
     bool WriteSafetyRelay(bool state);
 
-    bool WriteEncoderPreload(unsigned int index, AmpIO_Int32 enc);
+    bool WriteEncoderPreload(unsigned int index, int32_t enc);
 
     // Reset DOUT configuration bit, which causes firmware to repeat DOUT configuration check
     // (i.e., to detect QLA Rev 1.4+ with bidirectional DOUT).
     bool WriteDoutConfigReset(void);
 
     // Set digital output state
-    bool WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
+    bool WriteDigitalOutput(uint8_t mask, uint8_t bits);
 
     // Start/stop driving waveform for specified digital outputs (mask)
-    bool WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits);
+    bool WriteWaveformControl(uint8_t mask, uint8_t bits);
 
     // Write the watchdog period in counts. Starting with Firmware Rev 8, setting the upper
     // bit (bit 31) will cause LED1 on the QLA to display the watchdog period status.
-    bool WriteWatchdogPeriod(AmpIO_UInt32 counts);
+    bool WriteWatchdogPeriod(uint32_t counts);
     // Write the watchdog period in seconds. Starting with Firmware Rev 8, setting ledDisplay
     // true will cause LED1 on the QLA to display the watchdog period status.
     bool WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay = false);
@@ -406,7 +406,7 @@ public:
 
         \note Firmware Version 5+
     */
-    bool WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow);
+    bool WriteDoutControl(unsigned int index, uint16_t countsHigh, uint16_t countsLow);
 
     /*! \brief Write PWM parameters. This is a convenience function that calls WriteDoutControl.
                Note that the function can fail (and return false) if the input parameters are
@@ -425,7 +425,7 @@ public:
         \param time Time, in seconds
         \returns Time, in counts
     */
-    AmpIO_UInt32 GetDoutCounts(double timeInSec) const;
+    uint32_t GetDoutCounts(double timeInSec) const;
 
     /*! \brief Write to the MAX7317 I/O Expander (QLA 1.5+)
         Normally, just the lowest 16 bits are used:
@@ -436,7 +436,7 @@ public:
           Bit 31 (MSB):  Set to clear detected error
           Bit 30:        Set to select reading of debug data
      */
-    bool WriteIOExpander(AmpIO_UInt32 cmd);
+    bool WriteIOExpander(uint32_t cmd);
 
     /*! \brief Write motor configuration register (Firmware Rev 8+)
         \param index motor number, 0..NumMotors-1
@@ -444,7 +444,7 @@ public:
         \returns true if successful; possible failures include firmware version < 8, failure to write
                  over FireWire/Ethernet; invalid motor index
      */
-    bool WriteMotorConfig(unsigned int index, AmpIO_UInt32 cfg);
+    bool WriteMotorConfig(unsigned int index, uint32_t cfg);
 
     // **************** Static WRITE Methods (for broadcast) ********************
 
@@ -452,7 +452,7 @@ public:
 
     static bool WriteSafetyRelayAll(BasePort *port, bool state);
 
-    static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata);
+    static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, int32_t sdata);
 
     // ********************** Dallas DS2505 (1-wire) Methods **************************
 
@@ -483,11 +483,11 @@ public:
     // is not supported (only model and version are set).
 
     enum DallasStatus { DALLAS_NONE, DALLAS_IO_ERROR, DALLAS_TIMEOUT, DALLAS_DATA_ERROR, DALLAS_WAIT, DALLAS_OK};
-    DallasStatus DallasReadTool(AmpIO_UInt32 &model, AmpIO_UInt8 &version, std::string &name,
+    DallasStatus DallasReadTool(uint32_t &model, uint8_t &version, std::string &name,
                                 double timeoutSec = 10.0);
 
-    bool DallasWriteControl(AmpIO_UInt32 ctrl);
-    bool DallasReadStatus(AmpIO_UInt32 &status);
+    bool DallasWriteControl(uint32_t ctrl);
+    bool DallasReadStatus(uint32_t &status);
     bool DallasWaitIdle();
     bool DallasReadBlock(unsigned char *data, unsigned int nbytes) const;
     bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
@@ -495,12 +495,12 @@ public:
     /*! \brief Reads model number of the tool on an S PSM
         \returns Model number. 0xffffffff when no tool is present.
     */
-    AmpIO_UInt32 SPSMReadToolModel(void) const;
+    uint32_t SPSMReadToolModel(void) const;
 
     /*! \brief Reads version of the tool on an S PSM
         \returns Version. 0xff when no tool is present.
     */
-    AmpIO_UInt8 SPSMReadToolVersion(void) const;
+    uint8_t SPSMReadToolVersion(void) const;
 
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
@@ -572,21 +572,21 @@ public:
         CURRENT = 0
     };
 
-    bool WriteMotorControlMode(unsigned int index, AmpIO_UInt16 val);
-    bool WriteCurrentKpRaw(unsigned int index, AmpIO_UInt32 val);
-    bool WriteCurrentKiRaw(unsigned int index, AmpIO_UInt32 val);
-    bool WriteCurrentITermLimitRaw(unsigned int index, AmpIO_UInt16 val);
-    bool WriteDutyCycleLimit(unsigned int index, AmpIO_UInt16 val);
+    bool WriteMotorControlMode(unsigned int index, uint16_t val);
+    bool WriteCurrentKpRaw(unsigned int index, uint32_t val);
+    bool WriteCurrentKiRaw(unsigned int index, uint32_t val);
+    bool WriteCurrentITermLimitRaw(unsigned int index, uint16_t val);
+    bool WriteDutyCycleLimit(unsigned int index, uint16_t val);
 
-    AmpIO_UInt16 ReadMotorControlMode(unsigned int index) const;
-    AmpIO_UInt32 ReadCurrentKpRaw(unsigned int index) const;
-    AmpIO_UInt32 ReadCurrentKiRaw(unsigned int index) const;
-    AmpIO_UInt16 ReadCurrentITermLimitRaw(unsigned int index) const;
-    AmpIO_UInt16 ReadDutyCycleLimit(unsigned int index) const;
+    uint16_t ReadMotorControlMode(unsigned int index) const;
+    uint32_t ReadCurrentKpRaw(unsigned int index) const;
+    uint32_t ReadCurrentKiRaw(unsigned int index) const;
+    uint16_t ReadCurrentITermLimitRaw(unsigned int index) const;
+    uint16_t ReadDutyCycleLimit(unsigned int index) const;
 
-    AmpIO_Int16 ReadDutyCycle(unsigned int index) const;
-    AmpIO_Int16 ReadCurrentITerm(unsigned int index) const;
-    AmpIO_Int16 ReadFault(unsigned int index) const;
+    int16_t ReadDutyCycle(unsigned int index) const;
+    int16_t ReadCurrentITerm(unsigned int index) const;
+    int16_t ReadFault(unsigned int index) const;
 
 protected:
     // NumMotors specifies the number of motors/brakes and NumEncoders specifies the
