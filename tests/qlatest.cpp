@@ -569,7 +569,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
                 pass = false;
             }
         }
-        if (!pass) {
+        if (status != 0x000f) {
             logFile << " - FAIL" << std::endl;
             sprintf(buf, "Enable power amplifiers - FAIL (%04lx)", status);
         }
@@ -620,7 +620,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
                 logFile << "0 ";
             }
         }
-        if (!pass) {
+        if (status != 0) {
             logFile << " - FAIL" << std::endl;
             sprintf(buf, "Disable power amplifiers - FAIL (%04lx)", status);
         }

@@ -343,7 +343,7 @@ public:
     bool WritePowerEnable(bool state);
 
     // Enable individual amplifiers
-    //    Enable/disable up to 4 amplifiers based on mask (QLA only)
+    //    Enable/disable amplifiers based on mask
     bool WriteAmpEnable(uint32_t mask, uint32_t state);
     //    Enable/disable the amplifier specified by index
     bool WriteAmpEnableAxis(unsigned int index, bool state);

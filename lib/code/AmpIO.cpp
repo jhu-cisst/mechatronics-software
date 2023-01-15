@@ -1124,16 +1124,33 @@ bool AmpIO::WritePowerEnable(bool state)
 
 bool AmpIO::WriteAmpEnable(uint32_t mask, uint32_t state)
 {
-    if (GetHardwareVersion() != QLA1_String) {
-        // If needed, could support other boards by issuing multiple quadlet writes,
-        // or a single block write.
-        std::cerr << "AmpIO::WriteAmpEnable not supported for this hardware" << std::endl;
+    if (!port)
         return false;
-    }
 
-    // Following still works for Firmware Rev 8 (at least for QLA)
-    quadlet_t write_data = (mask << 8) | state;
-    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
+    bool ret;
+    if (GetHardwareVersion() == QLA1_String) {
+        // Following still works for Firmware Rev 8 (at least for QLA)
+        quadlet_t write_data = (mask << 8) | state;
+        ret = port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data);
+    }
+    else {
+        // For other boards, it is necessary to do a block write
+        quadlet_t localBuffer[MAX_CHANNELS+2];
+        localBuffer[WB_HEADER_OFFSET] = bswap_32((BoardId & 0x0F) << 8 | ((NumMotors+2) & 0xFF));
+        for (uint32_t i = 0; i < NumMotors; i++) {
+            uint32_t iMask = (1 << i);
+            localBuffer[WB_CURR_OFFSET+i] = 0;
+            if (mask & iMask) {
+                localBuffer[WB_CURR_OFFSET+i] |= bswap_32(MOTOR_ENABLE_MASK);
+                if (state & iMask) {
+                    localBuffer[WB_CURR_OFFSET+i] |=  bswap_32(MOTOR_ENABLE_BIT);
+                }
+            }
+        }
+        localBuffer[WB_CTRL_OFFSET] = 0;
+        ret = port->WriteBlock(BoardId, 0, localBuffer, GetWriteNumBytes());
+    }
+    return ret;
 }
 
 bool AmpIO::WriteAmpEnableAxis(unsigned int index, bool state)
