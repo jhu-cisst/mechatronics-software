@@ -1575,28 +1575,7 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     return true;
 }
 
-uint32_t AmpIO::SPSMReadToolModel(void) const
-{
-    uint32_t instrument_id = 0;
-    if (GetHardwareVersion() == dRA1_String) {
-        port->ReadQuadlet(BoardId, 0xb012, instrument_id);
-        instrument_id = bswap_32(instrument_id);
-    }
-    return instrument_id;
-}
-
-uint8_t AmpIO::SPSMReadToolVersion(void) const
-{
-    uint32_t q = 0;
-    if (GetHardwareVersion() == dRA1_String) {
-        port->ReadQuadlet(BoardId, 0xb013, q);
-        q &= 0xFF;
-    }
-    return q;
-}
-
-
-bool AmpIO::SPSMWriteLED(uint32_t rgb1, uint32_t rgb2, bool blink1, bool blink2) const
+bool AmpIO::WriteRobotLED(uint32_t rgb1, uint32_t rgb2, bool blink1, bool blink2) const
 {
     if (GetHardwareVersion() == dRA1_String) {
         uint8_t r1 = (rgb1 >> 20) & 0xF;
@@ -1611,13 +1590,15 @@ bool AmpIO::SPSMWriteLED(uint32_t rgb1, uint32_t rgb2, bool blink1, bool blink2)
     return false;
 }
 
-bool AmpIO::SPSMReadSerialNumber(char* buf) const
+std::string AmpIO::ReadRobotSerialNumber() const
 {
+    // Experimental: implementation will likely change
+    const size_t read_length = 16; // 16 words, 32 bytes.
+    char buf[read_length * 2 + 1] = {'\0'};
     if (GetHardwareVersion() == dRA1_String) {
         uint16_t* buf16 = reinterpret_cast<uint16_t*>(buf);
         uint32_t base_flash_addr = 0x8001c >> 1;
-        uint32_t read_length = 16; // 16 words, 32 bytes.
-        for (uint32_t i = 0; i < read_length; i++) {
+        for (auto i = 0; i < read_length; i++) {
             uint32_t flash_command = (1 << 24) | (base_flash_addr + i) ;
             port->WriteQuadlet(BoardId, 0xa002, flash_command);
             Amp1394_Sleep(0.01);
@@ -1625,10 +1606,10 @@ bool AmpIO::SPSMReadSerialNumber(char* buf) const
             port->ReadQuadlet(BoardId, 0xa031, q);
             buf16[i] = q & 0xFFFF;
         }
-        buf[32] = '\0';
-        return true;
+        port->WriteQuadlet(BoardId, 0xa002, 0);
     }
-    return false;
+    std::string serial_number(buf);
+    return serial_number;
 }
 
 // ************************************* Waveform methods ****************************************
