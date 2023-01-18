@@ -502,6 +502,23 @@ public:
     */
     uint8_t SPSMReadToolVersion(void) const;
 
+    /* \brief Writes the LED color on an Si PSM or ECM
+       \param rgb1 24-bit RGB value for LED 1🔵. The value will be internally truncated to 4 bits per
+                    color component. E.g. 0x00ff00 is green, 0xff0000 is red, 0x0000ff is blue.
+       \param rgb2 24-bit RGB value for LED 2🟠
+       \param blink1 use blink pattern 🔵🟠 🟠🔵 🔵🟠 🟠🔵
+       \param blink2 use blink pattern 🔵🔵 🟠🟠 🔵🔵 🟠🟠
+       \returns true if successful
+    */
+    bool SPSMWriteLED(uint32_t rgb1, uint32_t rgb2, bool blink1 = 0, bool blink2 = 0) const;
+
+    /*! \brief Reads the serial number of an Si PSM or ECM. Currently, it reads the cal file filename.
+        \param buf Buffer for storing serial number. Must be length 33, and index 32 will be set to 0.
+                   The caller is responsible for trimming and parsing the string.
+        \returns true if successful
+    */
+    bool SPSMReadSerialNumber(char* buf) const;
+
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
     // any combination of the 4 digital outputs. The waveform table length is 1024,

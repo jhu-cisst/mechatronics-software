@@ -1595,6 +1595,42 @@ uint8_t AmpIO::SPSMReadToolVersion(void) const
     return q;
 }
 
+
+bool AmpIO::SPSMWriteLED(uint32_t rgb1, uint32_t rgb2, bool blink1, bool blink2) const
+{
+    if (GetHardwareVersion() == dRA1_String) {
+        uint8_t r1 = (rgb1 >> 20) & 0xF;
+        uint8_t g1 = (rgb1 >> 12) & 0xF;
+        uint8_t b1 = (rgb1 >> 4) & 0xF;
+        uint8_t r2 = (rgb2 >> 20) & 0xF;
+        uint8_t g2 = (rgb2 >> 12) & 0xF;
+        uint8_t b2 = (rgb2 >> 4) & 0xF;        
+        uint32_t command = (r1 << 10) | (g1 << 5) | (b1 << 0) | (blink1 << 15) | (r2 << 26) | (g2 << 21) | (b2 << 16) | (blink2 << 31) ;
+        return (port ? port->WriteQuadlet(BoardId, 0xa001, command) : false);
+    }
+    return false;
+}
+
+bool AmpIO::SPSMReadSerialNumber(char* buf) const
+{
+    if (GetHardwareVersion() == dRA1_String) {
+        uint16_t* buf16 = reinterpret_cast<uint16_t*>(buf);
+        uint32_t base_flash_addr = 0x8001c >> 1;
+        uint32_t read_length = 16; // 16 words, 32 bytes.
+        for (uint32_t i = 0; i < read_length; i++) {
+            uint32_t flash_command = (1 << 24) | (base_flash_addr + i) ;
+            port->WriteQuadlet(BoardId, 0xa002, flash_command);
+            Amp1394_Sleep(0.01);
+            uint32_t q;
+            port->ReadQuadlet(BoardId, 0xa031, q);
+            buf16[i] = q & 0xFFFF;
+        }
+        buf[32] = '\0';
+        return true;
+    }
+    return false;
+}
+
 // ************************************* Waveform methods ****************************************
 
 bool AmpIO::ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
