@@ -272,7 +272,7 @@ std::string AmpIO::GetQLASerialNumber(unsigned char chan)
             data[i] = 0;
         address += 1;
     }
-    if (strncmp((char *)data, "QLA ", 4) == 0)
+    if (strncmp((char *)data, "QLA ", 4) == 0 || strncmp((char *)data, "dRA ", 4) == 0)
         sn.assign((char *)data+4);
     return sn;
 }
