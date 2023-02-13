@@ -1112,6 +1112,15 @@ bool AmpIO::ReadMotorConfig(unsigned int index, uint32_t &cfg) const
     return ret;
 }
 
+bool AmpIO::ReadMotorCurrentLimit(unsigned int index, uint16_t &mcurlim) const
+{
+    uint32_t cfg;
+    bool ret = ReadMotorConfig(index, cfg);
+    if (ret)
+        mcurlim = static_cast<uint16_t>(cfg&MCFG_CURRENT_LIMIT_MASK);
+    return ret;
+}
+
 /*******************************************************************************
  * Write commands
  */
@@ -1342,6 +1351,13 @@ bool AmpIO::WriteMotorConfig(unsigned int index, uint32_t cfg)
         ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
     }
     return ret;
+}
+
+bool AmpIO::WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim)
+{
+    // TODO: change firmware to use one of the upper bits as a mask, so that we can
+    // write a new motor current limit without affecting other bits.
+    return false;
 }
 
 /*******************************************************************************
