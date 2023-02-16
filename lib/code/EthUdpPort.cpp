@@ -470,6 +470,7 @@ nodeid_t EthUdpPort::InitNodes(void)
         outStr << "InitNodes: failed to write IP address" << std::endl;
         return 0;
     }
+    Amp1394_Sleep(0.2);
 
     quadlet_t data = 0x0;   // initialize data to 0
 
@@ -495,6 +496,7 @@ nodeid_t EthUdpPort::InitNodes(void)
         outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
         return 0;
     }
+    Amp1394_Sleep(0.01);
 
     // Find board id for first board (i.e., one connected by Ethernet) by FireWire broadcast
     if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data, FW_NODE_NOFORWARD_MASK)) {
