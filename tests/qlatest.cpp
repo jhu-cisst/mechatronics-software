@@ -941,6 +941,82 @@ void PrintDebugStream(std::stringstream &debugStream)
     debugStream.str("");
 }
 
+//*********** Following copied from pgm1394.cpp **************
+/*!
+ \brief Prom QLA serial and Revision Number
+
+ \param[in] Board FPGA Board
+ \param[in] chan (0 for QLA, 1 or 2 for DQLA)
+ \return[out] bool true on success, false otherwise
+*/
+bool PromQLASerialNumberProgram(AmpIO &Board, unsigned char chan = 0)
+{
+    std::stringstream ss;
+    std::string BoardType;
+    std::string str;
+    std::string BoardSNRead;
+    bool success = true;
+
+    uint32_t fver = Board.GetFirmwareVersion();
+    if (fver < 4) {
+        std::cout << "Firmware not supported, current version = " << fver << "\n"
+                  << "Please upgrade your firmware" << std::endl;
+        return false;
+    }
+
+    // ==== QLA Serial ===
+    // QLA 9876-54 or 9876-543
+    // - QLA: board type
+    // - 9876-54 or 9876-543: serial number
+    BoardType = "QLA";
+    std::string BoardSN;
+    BoardSN.reserve(8);  // reserve at least 8 characters
+    uint8_t wbyte;
+    uint16_t address;
+
+    // get s/n from user
+    if (chan == 0)
+        std::cout << "Please Enter QLA Serial Number: " << std::endl;
+    else
+        std::cout << "Please Enter QLA " << static_cast<unsigned int>(chan) << " Serial Number: " << std::endl;
+    std::cin >> BoardSN;
+    std::cin.ignore(20,'\n');
+    ss << BoardType << " " << BoardSN;
+    str = ss.str();
+
+    // S1: program to QLA PROM
+    address = 0x0000;
+    for (size_t i = 0; i < str.length(); i++) {
+        wbyte = str.at(i);
+        if (!Board.PromWriteByte25AA128(address, wbyte, chan)) {
+            std::cerr << "Failed to write byte " << i << std::endl;
+            return false;
+        }
+        address += 1;  // inc to next byte
+    }
+    // Terminating byte can be 0 or 0xff
+    wbyte = 0;
+    if (!Board.PromWriteByte25AA128(address, wbyte, chan)) {
+        std::cerr << "Failed to write terminating byte" << std::endl;
+        return false;
+    }
+
+    // S2: read back and verify
+    BoardSNRead.clear();
+    BoardSNRead = Board.GetQLASerialNumber(chan);
+
+    if (BoardSN == BoardSNRead) {
+        std::cout << "Programmed QLA " << BoardSN << " Serial Number" << std::endl;
+    } else {
+        std::cerr << "Failed to program" << std::endl;
+        std::cerr << "Board SN = " << BoardSN << "\n"
+                  << "Read  SN = " << BoardSNRead << std::endl;
+        success = false;
+    }
+
+    return success;
+}
+
 int main(int argc, char** argv)
 {
     int i;
@@ -952,7 +1028,6 @@ int main(int argc, char** argv)
     int port = 0;
     int board = 0;
     unsigned int qlaNum = 0;    // QLA number (1 or 2 for DQLA)
-    bool requireQLA_SN = true;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
     if (argc > 1) {
@@ -969,16 +1044,12 @@ int main(int argc, char** argv)
                 else if (argv[i][1] == 'q') {
                     qlaNum = argv[i][2]-'0';
                 }
-                else if (argv[i][1] == 'k')  {
-                    requireQLA_SN = false;
-                }
                 else {
-                    std::cerr << "Usage: qlatest [<board-num>] [-pP] [-qN] [-k]" << std::endl
+                    std::cerr << "Usage: qlatest [<board-num>] [-pP] [-qN]" << std::endl
                     << "       where <board-num> = rotary switch setting (0-15, default 0)" << std::endl
                     << "             P = port number (default 0)" << std::endl
                     << "                 can also specify -pfwP, -pethP or -pudp" << std::endl
-                    << "             N = QLA number (1 or 2) on DQLA" << std::endl
-                    << "            -k option means to continue test even if QLA serial number not found" << std::endl;
+                    << "             N = QLA number (1 or 2) on DQLA" << std::endl;
                     return 0;
                 }
             }
@@ -1038,13 +1109,22 @@ int main(int argc, char** argv)
     std::string logFilename("QLA_");
     std::string QLA_SN = Board.GetQLASerialNumber(qlaNum);
     if (QLA_SN.empty()) {
-        if (requireQLA_SN) {
-            std::cerr << "Failed to get QLA serial number (specify -k command line option to continue test)" << std::endl;
-            Port->RemoveBoard(board);
-            delete Port;
-            return 0;
+        std::cerr << "QLA serial number not found. Program now (y/n)? ";
+#ifdef _MSC_VER
+        char resp = _getch();
+#else
+        char resp = getchar();
+#endif
+        std::cerr << std::endl;
+        if ((resp == 'y') || (resp == 'Y')) {
+            if (PromQLASerialNumberProgram(Board, qlaNum))
+                QLA_SN = Board.GetQLASerialNumber(qlaNum);
+            else
+                std::cerr << "Failed to program QLA serial number" << std::endl;
         }
-        QLA_SN.assign("Unknown");
+        if (QLA_SN.empty()) {
+            QLA_SN.assign("Unknown");
+        }
     }
     logFilename.append(QLA_SN);
     logFilename.append(".log");
