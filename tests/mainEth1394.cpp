@@ -619,7 +619,7 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
     }
 }
 
-bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, const std::string &msgType, size_t numIter = 1000)
+bool RunTiming(const std::string &portName, AmpIO *boardTest, EthBasePort *ethPort, const std::string &msgType, size_t numIter = 1000)
 {
     size_t i;
     EthBasePort::TCODE msgCode;
@@ -635,11 +635,10 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     double timeSum = 0.0;
     double minTime = 1.0;   // one second should be much higher than expected readings
     double maxTime = 0.0;
-    unsigned short minTimeReceive = 65535;
-    unsigned short maxTimeReceive = 0;
-    unsigned short minTimeSend = 65535;
-    unsigned short maxTimeSend = 0;
-    double clockPeriod_us = 1.0e6*boardTest->GetFPGAClockPeriod();  // clock period in microseconds
+    double minTimeReceive = 1.0;
+    double maxTimeReceive = 0.0;
+    double minTimeSend = 1.0;
+    double maxTimeSend = 0.0;
     for (i = 0; i < numIter; i++) {
         double startTime, deltaTime = 0;
         uint32_t status;
@@ -664,31 +663,29 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
             minTime = deltaTime;
         if (deltaTime > maxTime)
             maxTime = deltaTime;
-        if (hubFw) {
-            // Read Ethernet timing from FPGA
-            // TODO: formalize this, rather than hard-coding buffer[8] below
-            quadlet_t buffer[16];
-            if (hubFw->ReadEthernetData(buffer, 0x80, 16)) {
-                unsigned short timeReceive = (buffer[8]&0x0000ffff);
-                unsigned short timeSend = (buffer[8]>>16) - timeReceive;
-                if (timeReceive < minTimeReceive)
-                    minTimeReceive = timeReceive;
-                if (timeReceive > maxTimeReceive)
-                    maxTimeReceive = timeReceive;
-                if (timeSend < minTimeSend)
-                    minTimeSend = timeSend;
-                if (timeSend > maxTimeSend)
-                    maxTimeSend = timeSend;
-            }
+        if (ethPort) {
+            // Get Ethernet timing (from FPGA)
+            // Note that timeSend is a little short because it does not include the time
+            // to send the last few bytes of the packet.
+            double timeReceive = ethPort->GetFpgaReceiveTime();
+            double timeSend = ethPort->GetFpgaTotalTime() - timeReceive;
+            if (timeReceive < minTimeReceive)
+                minTimeReceive = timeReceive;
+            if (timeReceive > maxTimeReceive)
+                maxTimeReceive = timeReceive;
+            if (timeSend < minTimeSend)
+                minTimeSend = timeSend;
+            if (timeSend > maxTimeSend)
+                maxTimeSend = timeSend;
         }
     }
     if (i > 0) {
         std::cout << "   Times (us), " << i << " iterations: mean = " << std::fixed << std::setprecision(2)
                   << (1.0e6*timeSum/i) << ", min = " << (1.0e6*minTime) << ", max = " << (1.0e6*maxTime) << std::endl;
-        if (hubFw) {
-            std::cout << "      FPGA receive min/max (us) = " << (clockPeriod_us*minTimeReceive) << "/" << (clockPeriod_us*maxTimeReceive);
+        if (ethPort) {
+            std::cout << "      FPGA receive min/max (us) = " << (1.0e6*minTimeReceive) << "/" << (1.0e6*maxTimeReceive);
             if (msgType == "quadlet read")
-                std::cout << ", send min/max (us) = " << (clockPeriod_us*minTimeSend) << "/" << (clockPeriod_us*maxTimeSend);
+                std::cout << ", send min/max (us) = " << (1.0e6*minTimeSend) << "/" << (1.0e6*maxTimeSend);
             std::cout << std::endl;
         }
     }
@@ -1431,11 +1428,11 @@ int main(int argc, char **argv)
 
         case 't':
             if (curBoardEth)
-                RunTiming("Ethernet", curBoardEth, HubFw, "quadlet read");
+                RunTiming("Ethernet", curBoardEth, EthPort, "quadlet read");
             if (curBoardFw)
                 RunTiming("Firewire", curBoardFw, 0, "quadlet read");
             if (curBoardEth)
-                RunTiming("Ethernet", curBoardEth, HubFw, "quadlet write");
+                RunTiming("Ethernet", curBoardEth, EthPort, "quadlet write");
             if (curBoardFw)
                 RunTiming("Firewire", curBoardFw, 0, "quadlet write");
             break;
