@@ -189,12 +189,11 @@ public:
     bool ReadKSZ8851DMA(uint16_t &rdata);
     // Read Chip ID from register 0xC0
     uint16_t ReadKSZ8851ChipID();
-    // Read KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
+    // Read KSZ8851 status; format is:  VALID(1) ERROR(1) initOK(1) ...
     //    VALID=1 indicates that Ethernet is present
     //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
-    //    PME is the state of the Power Management Event pin
-    //    IRQ is the state of the Interrupt Request pin (active low)
-    //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
+    //    InitOK=1 indicates that the KSZ8851 has been initialized
+    //    For other bits, see EthBasePort::PrintStatus
     // Returns 0 on error (i.e., if Ethernet not present, or read fails)
     uint16_t ReadKSZ8851Status();
 
@@ -231,7 +230,6 @@ public:
 
     // Some useful PHY addresses:
     //    FPGAV3 is designed so that the RTL8211F PHY has a default address of 1.
-    //       (NOTE: verified for PHY1; it is possible that PHY2 has a default address of 0)
     //    The GMII to RGMII core uses the default PHY address of 8.
     enum PHY_ADDR { PHY_BROADCAST = 0, PHY_RTL8211F = 1, PHY_GMII_CORE = 8 };
 
@@ -254,12 +252,12 @@ public:
     // ************************ Ethernet Methods *************************************
 
     // Read Ethernet status
-    //    VALID=1 indicates that Ethernet is present
-    //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
-    //    PME is the state of the Power Management Event pin
-    //    IRQ is the state of the Interrupt Request pin (active low)
-    //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
-    // Returns 0 on error (i.e., if Ethernet not present, or read fails)
+    // Returns the version-specific Ethernet status register. The first two most significant
+    // bits indicate the FPGA version:
+    //    00  FPGA V1 (no Ethernet)
+    //    1x  FPGA V2 (one Ethernet port, with KSZ8851 PHY)
+    //    01  FPGA V3 (two Ethernet ports, with RTL8211F PHYs)
+    // For definition of the other bits, see EthBasePort::PrintStatus
     uint32_t ReadEthernetStatus();
 
     // Read Ethernet data

@@ -214,7 +214,7 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     }
 }
 
-void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status, uint32_t fver)
+void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
 {
     debugStream << "Status: ";
     if (status == 0) {
@@ -225,37 +225,19 @@ void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status, uint32
         // FPGA V2
         if (status&0x40000000) debugStream << "error ";
         if (status&0x20000000) debugStream << "initOK ";
-        int waitInfo;
-        if (fver < 8) {
-            if (status&0x10000000) debugStream << "FrameErr ";
-            if (status&0x08000000) debugStream << "IPv4Err ";
-            if (status&0x04000000) debugStream << "UDPErr ";
-            if (status&0x02000000) debugStream << "DestErr ";
-            if (status&0x01000000) debugStream << "AccessErr ";
-            if (status&0x00800000) debugStream << "StateErr ";
-            if (status&0x00400000) debugStream << "SendStateErr ";
-            if (status&0x00200000) debugStream << "Unused ";
-            if (status&0x00100000) debugStream << "UDP ";
-            if (status&0x00080000) debugStream << "Link-On ";
-            else                   debugStream << "Link-Off ";
-            if (status&0x00040000) debugStream << "ETH-idle ";
-            waitInfo = (status&0x00030000)>>16;
-        }
-        else {
-            if (status&0x00800000) debugStream << "FrameErr ";
-            if (status&0x00400000) debugStream << "IPv4Err ";
-            if (status&0x00200000) debugStream << "UDPErr ";
-            if (status&0x00100000) debugStream << "DestErr ";
-            if (status&0x00080000) debugStream << "AccessErr ";
-            if (status&0x10000000) debugStream << "StateErr ";
-            if (status&0x00040000) debugStream << "SendStateErr ";
-            if (status&0x00020000) debugStream << "Unused ";
-            if (status&0x00010000) debugStream << "UDP ";
-            if (status&0x08000000) debugStream << "Link-On ";
-            else                   debugStream << "Link-Off ";
-            if (status&0x04000000) debugStream << "ETH-idle ";
-            waitInfo = (status&0x03000000)>>24;
-        }
+        if (status&0x10000000) debugStream << "FrameErr ";
+        if (status&0x08000000) debugStream << "IPv4Err ";
+        if (status&0x04000000) debugStream << "UDPErr ";
+        if (status&0x02000000) debugStream << "DestErr ";
+        if (status&0x01000000) debugStream << "AccessErr ";
+        if (status&0x00800000) debugStream << "StateErr ";
+        if (status&0x00400000) debugStream << "SendStateErr ";
+        if (status&0x00200000) debugStream << "Unused ";
+        if (status&0x00100000) debugStream << "UDP ";
+        if (status&0x00080000) debugStream << "Link-On ";
+        else                   debugStream << "Link-Off ";
+        if (status&0x00040000) debugStream << "ETH-idle ";
+        int waitInfo = (status&0x00030000)>>16;
         if (waitInfo == 0) debugStream << "wait-none";
         else if (waitInfo == 1) debugStream << "wait-recv";
         else if (waitInfo == 2) debugStream << "wait-send";
@@ -407,7 +389,7 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     // Following structure must match DebugData in EthernetIO.v
     struct DebugData {
         char     header[4];        // Quad 0
-        uint16_t eth_status;       // Quad 1
+        uint16_t quad1_low;        // Quad 1
         uint16_t statusbits;
         uint8_t  runPC;            // Quad 2
         uint8_t  nextState;
@@ -441,8 +423,6 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     if (p->statusbits & 0x1000) debugStream << "isInIRQ ";
     if (p->statusbits & 0x0800) debugStream << "link-on ";
     debugStream << std::endl;
-    // NOTE: Following line has firmware status hard-coded to 8
-    EthBasePort::PrintStatus(debugStream, p->eth_status, 8);
     debugStream << "State: " << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t>(p->nextState)
                 << ", retState: " << static_cast<uint16_t> (p->retState)

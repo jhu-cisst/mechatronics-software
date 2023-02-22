@@ -223,7 +223,7 @@ public:
 
     static void PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads);
 
-    static void PrintStatus(std::ostream &debugStream, uint32_t status, uint32_t fver);
+    static void PrintStatus(std::ostream &debugStream, uint32_t status);
 
     // Print Ethernet debug data; clockPeriod is in seconds
     //   CheckDebugHeader   looks for debug header string ("DBG2")

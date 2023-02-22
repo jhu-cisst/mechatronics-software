@@ -156,7 +156,7 @@ void ComputeMulticastHash(unsigned char *MulticastMAC, uint8_t &regAddr, uint16_
 void PrintEthernetStatus(AmpIO &Board)
 {
     uint32_t status = Board.ReadEthernetStatus();
-    EthBasePort::PrintStatus(std::cout, status, Board.GetFirmwareVersion());
+    EthBasePort::PrintStatus(std::cout, status);
 }
 
 #if Amp1394_HAS_RAW1394
