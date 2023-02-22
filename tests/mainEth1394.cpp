@@ -152,20 +152,16 @@ void ComputeMulticastHash(unsigned char *MulticastMAC, uint8_t &regAddr, uint16_
     regData = (1 << regBit);
 }
 
-// Ethernet debug
-void PrintEthernetDebug(AmpIO &Board)
+// Ethernet status from FPGA register 12
+void PrintEthernetStatus(AmpIO &Board)
 {
-    uint16_t status = Board.ReadKSZ8851Status();
-    if (!(status&0x8000)) {
-        std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
-        return;
-    }
-    EthBasePort::PrintDebug(std::cout, status);
+    uint32_t status = Board.ReadEthernetStatus();
+    EthBasePort::PrintStatus(std::cout, status, Board.GetFirmwareVersion());
 }
 
 #if Amp1394_HAS_RAW1394
 // Ethernet status, as reported by KSZ8851 on FPGA board
-void PrintEthernetStatusV2(AmpIO &Board)
+void PrintEthernetPhyStatusV2(AmpIO &Board)
 {
     uint16_t reg;
     Board.ReadKSZ8851Reg(0xF8, reg);
@@ -180,7 +176,7 @@ void PrintEthernetStatusV2(AmpIO &Board)
     std::cout << std::endl;
 }
 
-void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
+void PrintEthernetPhyStatusV3(AmpIO &Board, unsigned int chan)
 {
     std::cout << "PHY" << chan << ":";
     uint16_t reg;
@@ -199,7 +195,6 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
     if (reg & 0x0002) std::cout << " polarity-reversed";
     std::cout << std::endl;
 
-    // For PHY1, update GMII to RGMII core register 16
     // Speed setting uses bits 6 and 13, as follows:
     //
     //   speed | Mbps | 6,13  | register value
@@ -208,23 +203,20 @@ void PrintEthernetStatusV3(AmpIO &Board, unsigned int chan)
     //     2   | 1000 | 1, 0  |     0x0040
     //     3   |   ?? | 1, 1  |     0x2040
     unsigned short speedMap[4] = { 0x0000, 0x2000, 0x0040, 0x2040 };
-    if (chan == ETH_PORT) {
-        std::cout << "Reading GMII core register for eth"
-                  << std::dec << ETH_PORT << ": ";
-        uint16_t coreReg;
-        if (Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, coreReg)) {
-            std::cout << std::hex << coreReg << std::dec;
-            for (size_t i = 0; i < 4; i++) {
-                if ((coreReg&0x2040) == speedMap[i]) {
-                    std::cout << ", Speed: " << speedStr[i];
-                    break;
-                }
+    std::cout << "Reading GMII core register: ";
+    uint16_t coreReg;
+    if (Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, coreReg)) {
+        std::cout << std::hex << coreReg << std::dec;
+        for (size_t i = 0; i < 4; i++) {
+            if ((coreReg&0x2040) == speedMap[i]) {
+                std::cout << ", Speed: " << speedStr[i];
+                break;
             }
-            std::cout << std::endl;
         }
-        else {
-            std::cout << " failed to read to GMII core register" << std::endl;
-        }
+        std::cout << std::endl;
+    }
+    else {
+        std::cout << " failed to read to GMII core register" << std::endl;
     }
 }
 
@@ -343,16 +335,14 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT))
         std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
 
-    // For channel ETH_PORT, check GMII to RGMII core PHY register
+    // Check GMII to RGMII core PHY register
     // Based on the VHDL source code for this core, PHY Specific Control Register 1 should be at address 16
-    if (chan == ETH_PORT) {
-        uint16_t phyCR;
-        if (!Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, phyCR)) {
-            std::cout << "Failed to read GMII PHY" << chan << " Reg 16" << std::endl;
-        }
-        else {
-            std::cout << std::hex << "GMII PHY Reg 16: " << phyCR << std::dec << std::endl;
-        }
+    uint16_t phyCR;
+    if (!Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, phyCR)) {
+        std::cout << "Failed to read GMII PHY" << chan << " Reg 16" << std::endl;
+    }
+    else {
+        std::cout << std::hex << "GMII PHY Reg 16: " << phyCR << std::dec << std::endl;
     }
 
     return (phyid1 == 0x001c) && (phyid2 == 0xc916);
@@ -371,7 +361,7 @@ bool InitEthernet(AmpIO &Board)
         return false;
     }
     std::cout << "   Ethernet controller status = " << std::hex << status << std::endl;
-    PrintEthernetDebug(Board);
+    PrintEthernetStatus(Board);
 
     // Reset the board
     Board.ResetKSZ8851();
@@ -385,7 +375,7 @@ bool InitEthernet(AmpIO &Board)
 
     if (!(status&0x2000)) {
         std::cout << "   Ethernet failed initialization" << std::endl;
-        PrintEthernetDebug(Board);
+        PrintEthernetStatus(Board);
         return false;
     }
 
@@ -398,7 +388,7 @@ bool InitEthernet(AmpIO &Board)
 
     // Check that KSZ8851 registers are as expected
     if (!CheckEthernetV2(Board)) {
-        PrintEthernetDebug(Board);
+        PrintEthernetStatus(Board);
         return false;
     }
 
@@ -1150,7 +1140,7 @@ int main(int argc, char **argv)
             std::cout << "  6) Initialize Ethernet port" << std::endl;
         }
         if (curBoard)
-            std::cout << "  7) Ethernet debug info" << std::endl;
+            std::cout << "  7) Ethernet status info" << std::endl;
         std::cout << "  8) Multicast quadlet read via Ethernet" << std::endl;
         if (curBoardEth) {
             std::cout << "  a) WriteAllBoards test" << std::endl;
@@ -1285,11 +1275,11 @@ int main(int argc, char **argv)
             if (curBoardFw) {
                 unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
                 if (fpgaVer == 2) {
-                    PrintEthernetStatusV2(*curBoardFw);
+                    PrintEthernetPhyStatusV2(*curBoardFw);
                 }
                 else if (fpgaVer == 3) {
-                    PrintEthernetStatusV3(*curBoardFw, 1);
-                    PrintEthernetStatusV3(*curBoardFw, 2);
+                    PrintEthernetPhyStatusV3(*curBoardFw, 1);
+                    PrintEthernetPhyStatusV3(*curBoardFw, 2);
                 }
             }
             break;
@@ -1302,7 +1292,7 @@ int main(int argc, char **argv)
 
         case '7':
             if (curBoard)
-                PrintEthernetDebug(*curBoard);
+                PrintEthernetStatus(*curBoard);
             break;
 
         case '8':   // Read request via Ethernet multicast
@@ -1543,7 +1533,7 @@ int main(int argc, char **argv)
                 if (fpgaVer == 2) {
                     // Check that KSZ8851 registers are as expected
                     if (!CheckEthernetV2(*curBoardFw))
-                        PrintEthernetDebug(*curBoardFw);
+                        PrintEthernetStatus(*curBoardFw);
                 }
                 else if (fpgaVer == 3) {
                     CheckEthernetV3(*curBoardFw, 1);

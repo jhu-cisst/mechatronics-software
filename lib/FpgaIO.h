@@ -58,7 +58,6 @@ public:
     double GetFPGAClockPeriod(void) const;
 
     // Returns true if FPGA has Ethernet (Rev 2.0+)
-    // NOTE: FPGA V3 Ethernet not yet working, so returns false in that case.
     bool HasEthernet(void) const;
 
     // Get elapsed time, in seconds, based on FPGA clock. This is computed by accumulating
@@ -190,7 +189,7 @@ public:
     bool ReadKSZ8851DMA(uint16_t &rdata);
     // Read Chip ID from register 0xC0
     uint16_t ReadKSZ8851ChipID();
-    // Get KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
+    // Read KSZ8851 status; format is:  VALID(1) 0(6) ERROR(1) PME(1) IRQ(1) STATE(4)
     //    VALID=1 indicates that Ethernet is present
     //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
     //    PME is the state of the Power Management Event pin
@@ -253,6 +252,16 @@ public:
     bool WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, uint16_t data);
 
     // ************************ Ethernet Methods *************************************
+
+    // Read Ethernet status
+    //    VALID=1 indicates that Ethernet is present
+    //    ERROR=1 indicates that last command had an error (i.e., state machine was not idle)
+    //    PME is the state of the Power Management Event pin
+    //    IRQ is the state of the Interrupt Request pin (active low)
+    //    STATE is a 4-bit value that encodes the FPGA state machine (0=IDLE)
+    // Returns 0 on error (i.e., if Ethernet not present, or read fails)
+    uint32_t ReadEthernetStatus();
+
     // Read Ethernet data
     //    buffer  buffer for storing data
     //    offset  address offset (in quadlets)

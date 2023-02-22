@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -65,7 +65,7 @@ unsigned int FpgaIO::GetFPGAVersionMajor(void) const
 {
     if (GetFirmwareVersion() < 5) return 1;
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
+    if (!port->ReadQuadlet(BoardId, BoardIO::ETH_STATUS, read_data))
         return 0;
     unsigned int ver = 0;   // unknown version
     // Version 1:  all bits are 0
@@ -154,7 +154,7 @@ bool FpgaIO::WriteRebootAll(BasePort *port)
 
 bool FpgaIO::ResetKSZ8851All(BasePort *port) {
     quadlet_t write_data = RESET_KSZ8851;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 12, write_data) : false);
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::ETH_STATUS, write_data) : false);
 }
 
 /*******************************************************************************
@@ -492,31 +492,31 @@ bool FpgaIO::ResetKSZ8851()
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = RESET_KSZ8851;
-    return port->WriteQuadlet(BoardId, 12, write_data);
+    return port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data);
 }
 
 bool FpgaIO::WriteKSZ8851Reg(uint8_t addr, const uint8_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
+    return port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data);
 }
 
 bool FpgaIO::WriteKSZ8851Reg(uint8_t addr, const uint16_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
+    return port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data);
 }
 
 bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data))
+    if (!port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data))
         return false;
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
+    if (!port->ReadQuadlet(BoardId, BoardIO::ETH_STATUS, read_data))
         return false;
     // Bit 31 indicates whether Ethernet is present
     if (!(read_data&0x80000000)) return false;
@@ -530,12 +530,12 @@ bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint16_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data)) {
+    if (!port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data)) {
         std::cout << "WriteQuadlet failed" << std::endl;
         return false;
     }
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data)) {
+    if (!port->ReadQuadlet(BoardId, BoardIO::ETH_STATUS, read_data)) {
         std::cout << "ReadQuadlet failed" << std::endl;
         return false;
     }
@@ -555,17 +555,17 @@ bool FpgaIO::WriteKSZ8851DMA(const uint16_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x0B000000 | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
+    return port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data);
 }
 
 bool FpgaIO::ReadKSZ8851DMA(uint16_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = 0x09000000 | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data))
+    if (!port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data))
         return false;
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
+    if (!port->ReadQuadlet(BoardId, BoardIO::ETH_STATUS, read_data))
         return false;
     // Bit 31 indicates whether Ethernet is present
     if (!(read_data&0x80000000)) return false;
@@ -586,11 +586,7 @@ uint16_t FpgaIO::ReadKSZ8851ChipID()
 
 uint16_t FpgaIO::ReadKSZ8851Status()
 {
-    if (GetFirmwareVersion() < 5) return 0;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return 0;
-    return static_cast<uint16_t>(read_data>>16);
+    return static_cast<uint16_t>(ReadEthernetStatus()>>16);
 }
 
 // ************************** RTL8211F Ethernet PHY Methods *************************************
@@ -623,6 +619,16 @@ bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, uns
 }
 
 // ***************************** Methods shared by V2/V3 ****************************************
+
+uint32_t FpgaIO::ReadEthernetStatus()
+{
+    if (GetFirmwareVersion() < 5) return 0;
+    quadlet_t read_data;
+    if (!port->ReadQuadlet(BoardId, BoardIO::ETH_STATUS, read_data))
+        return 0;
+    return read_data;
+}
+
 bool FpgaIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
     if (GetFirmwareVersion() < 5) return false;

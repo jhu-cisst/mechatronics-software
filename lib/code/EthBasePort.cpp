@@ -214,29 +214,88 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     }
 }
 
-void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)
+void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status, uint32_t fver)
 {
     debugStream << "Status: ";
-    if (status&0x4000) debugStream << "error ";
-    if (status&0x2000) debugStream << "initOK ";
-    if (status&0x1000) debugStream << "FrameErr ";
-    if (status&0x0800) debugStream << "IPv4Err ";
-    if (status&0x0400) debugStream << "UDPErr ";
-    if (status&0x0200) debugStream << "DestErr ";
-    if (status&0x0100) debugStream << "AccessErr ";
-    if (status&0x0080) debugStream << "StateErr ";
-    if (status&0x0040) debugStream << "SendStateErr ";
-    if (status&0x0020) debugStream << "Unused ";
-    if (status&0x0010) debugStream << "UDP ";
-    if (status&0x0008) debugStream << "Link-On ";
-    else               debugStream << "Link-Off ";
-    if (status&0x0004) debugStream << "ETH-idle ";
-    int waitInfo = status&0x0003;
-    if (waitInfo == 0) debugStream << "wait-none";
-    else if (waitInfo == 1) debugStream << "wait-recv";
-    else if (waitInfo == 2) debugStream << "wait-send";
-    else debugStream << "wait-flush";
-    debugStream << std::endl;
+    if (status == 0) {
+        // FPGA V1
+        debugStream << "No Ethernet present" << std::endl;
+    }
+    else if (status&0x80000000) {
+        // FPGA V2
+        if (status&0x40000000) debugStream << "error ";
+        if (status&0x20000000) debugStream << "initOK ";
+        int waitInfo;
+        if (fver < 8) {
+            if (status&0x10000000) debugStream << "FrameErr ";
+            if (status&0x08000000) debugStream << "IPv4Err ";
+            if (status&0x04000000) debugStream << "UDPErr ";
+            if (status&0x02000000) debugStream << "DestErr ";
+            if (status&0x01000000) debugStream << "AccessErr ";
+            if (status&0x00800000) debugStream << "StateErr ";
+            if (status&0x00400000) debugStream << "SendStateErr ";
+            if (status&0x00200000) debugStream << "Unused ";
+            if (status&0x00100000) debugStream << "UDP ";
+            if (status&0x00080000) debugStream << "Link-On ";
+            else                   debugStream << "Link-Off ";
+            if (status&0x00040000) debugStream << "ETH-idle ";
+            waitInfo = (status&0x00030000)>>16;
+        }
+        else {
+            if (status&0x00800000) debugStream << "FrameErr ";
+            if (status&0x00400000) debugStream << "IPv4Err ";
+            if (status&0x00200000) debugStream << "UDPErr ";
+            if (status&0x00100000) debugStream << "DestErr ";
+            if (status&0x00080000) debugStream << "AccessErr ";
+            if (status&0x10000000) debugStream << "StateErr ";
+            if (status&0x00040000) debugStream << "SendStateErr ";
+            if (status&0x00020000) debugStream << "Unused ";
+            if (status&0x00010000) debugStream << "UDP ";
+            if (status&0x08000000) debugStream << "Link-On ";
+            else                   debugStream << "Link-Off ";
+            if (status&0x04000000) debugStream << "ETH-idle ";
+            waitInfo = (status&0x03000000)>>24;
+        }
+        if (waitInfo == 0) debugStream << "wait-none";
+        else if (waitInfo == 1) debugStream << "wait-recv";
+        else if (waitInfo == 2) debugStream << "wait-send";
+        else debugStream << "wait-flush";
+        debugStream << std::endl;
+    }
+    else if ((status&0x40000000) == 0x40000000) {
+        // FPGA V3
+        if (status&0x20000000) debugStream << "Eth2 ";
+        else                   debugStream << "Eth1 ";
+        if (status&0x10000000) debugStream << "ClkOK ";
+        if (status&0x0f000000) debugStream << "Unused4 ";
+        // Following same as Rev 2
+        if (status&0x00800000) debugStream << "FrameErr ";
+        if (status&0x00400000) debugStream << "IPv4Err ";
+        if (status&0x00200000) debugStream << "UDPErr ";
+        if (status&0x00100000) debugStream << "DestErr ";
+        if (status&0x00080000) debugStream << "AccessErr ";
+        if (status&0x00040000) debugStream << "SendStateErr ";
+        if (status&0x00020000) debugStream << "Unused ";
+        if (status&0x00010000) debugStream << "UDP ";
+        // Above same as Rev 2
+        debugStream << std::endl;
+        for (unsigned int port = 1; port <= 2; port++) {
+            debugStream << "Port " << port << ": ";
+            uint8_t portStatus = (port==1) ? static_cast<uint8_t>(status) :
+                                             static_cast<uint8_t>(status>>8);
+            if (portStatus&0x80) debugStream << "initOK ";
+            if (portStatus&0x40) debugStream << "hasIRQ ";
+            if (portStatus&0x20) debugStream << "Link-On ";
+            else                 debugStream << "Link-Off ";
+            uint8_t linkSpeed = (portStatus&0x18)>>3;
+            if (linkSpeed == 0)  debugStream << "10 Mbps ";
+            else if (linkSpeed == 1) debugStream << "100 Mbps ";
+            else if (linkSpeed == 2) debugStream << "1000 Mbps ";
+            if (portStatus&0x04) debugStream << "RecvErr ";
+            if (portStatus&0x02) debugStream << "SendOvf ";
+            debugStream << std::endl;
+        }
+    }
 }
 
 bool EthBasePort::CheckDebugHeader(std::ostream &debugStream, const std::string &caller, const char *header)
@@ -382,7 +441,8 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     if (p->statusbits & 0x1000) debugStream << "isInIRQ ";
     if (p->statusbits & 0x0800) debugStream << "link-on ";
     debugStream << std::endl;
-    EthBasePort::PrintDebug(debugStream, p->eth_status);
+    // NOTE: Following line has firmware status hard-coded to 8
+    EthBasePort::PrintStatus(debugStream, p->eth_status, 8);
     debugStream << "State: " << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t>(p->nextState)
                 << ", retState: " << static_cast<uint16_t> (p->retState)
@@ -426,7 +486,7 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         uint32_t  statusbits;       // Quad 1
         uint16_t  rxPktWords;       // Quad 2
         uint8_t   recv_byte1;
-        uint8_t   unused2;
+        uint8_t   recv_byte1_packet;
         uint16_t  numPacketValid;   // Quad 3
         uint8_t   numPacketFlushed;
         uint8_t   numPacketSent;
@@ -471,7 +531,7 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         debugStream << "numReset: " << static_cast<uint16_t>(pRTL->numReset)
                     << ", numIRQ: " << static_cast<uint16_t>(pRTL->numIRQ) << std::endl;
         debugStream << "rxState: " << (pRTL->states&0x0001) << ", txState: " << ((pRTL->states&0x000e)>>1)
-                    << ", state: " << ((pRTL->states&0x0070)>>4) << std::endl;
+                    << ", state: " << ((pRTL->states&0x00f0)>>4) << std::endl;
         debugStream << "clock_speed (Rx): " << ((pRTL->states&0x0300)>>8)
                     << ", speed_mode (Tx): " << ((pRTL->states&0x0c00)>>10) << std::endl;
         debugStream << "recv_crc_in: " << std::hex << pRTL->recv_crc_in << " (should be c704dd7b)" << std::dec << std::endl;
@@ -484,16 +544,24 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
     }
     const DebugDataESW *pESW = &(p->dataESW);
     if (CheckDebugHeader(debugStream, "PrintDebugDataRTL (ESW)", pESW->header)) {
-        debugStream << "curPortRecv: " << ((pESW->statusbits & 0x80000000) ? "2" : "1")
-                    << ", curPortSend: " << ((pESW->statusbits & 0x40000000) ? "2" : "1") << std::endl;
-        if (pESW->statusbits & 0x20000000) debugStream << "curPacketValid ";
-        if (pESW->statusbits & 0x10000000) debugStream << "sendRequest ";
-        if (pESW->statusbits & 0x08000000) debugStream << "send_ipv4 ";
-        if (pESW->statusbits & 0x04000000) debugStream << "send_fifo_overflow ";
-        if (pESW->statusbits & 0x02000000) debugStream << "recv_fifo_error ";
+        debugStream << "curPort: " << ((pESW->statusbits & 0x80000000) ? "2" : "1") << std::endl;
+        if (pESW->statusbits & 0x40000000) debugStream << "curPacketValid ";
+        if (pESW->statusbits & 0x20000000) debugStream << "sendRequest ";
+        if (pESW->statusbits & 0x10000000) debugStream << "send_ipv4 ";
+        if (pESW->statusbits & 0x0c000000) {
+            debugStream << "send_fifo_overflow ";
+            if (pESW->statusbits & 0x08000000) debugStream << "2 ";
+            if (pESW->statusbits & 0x04000000) debugStream << "1 ";
+        }
+        if (pESW->statusbits & 0x03000000) {
+            debugStream << "recv_fifo_error ";
+            if (pESW->statusbits & 0x02000000) debugStream << "2 ";
+            if (pESW->statusbits & 0x01000000) debugStream << "1 ";
+        }
         debugStream << std::endl;
         debugStream << "rxPktWords: " << std::dec << pESW->rxPktWords << std::endl;
-        debugStream << "recv_byte1: " << std::hex << static_cast<uint16_t>(pESW->recv_byte1) << std::dec << std::endl;
+        debugStream << "recv_byte1: " << std::hex << static_cast<uint16_t>(pESW->recv_byte1)
+                    << ", " << static_cast<uint16_t>(pESW->recv_byte1_packet) << std::dec << std::endl;
         debugStream << "numPacketValid: " << std::dec << pESW->numPacketValid << std::endl;
         debugStream << "numPacketFlushed: " << std::dec << static_cast<uint16_t>(pESW->numPacketFlushed) << std::endl;
         debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(pESW->numPacketSent) << std::endl;
