@@ -82,6 +82,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     BasePort::AddHardwareVersion(QLA1_String);
     BasePort::AddHardwareVersion(dRA1_String);
     BasePort::AddHardwareVersion(DQLA_String);
+    BasePort::AddHardwareVersion(BCFG_String);
     BasePort::AddHardwareVersion(0x54455354); // "TEST"
 }
 

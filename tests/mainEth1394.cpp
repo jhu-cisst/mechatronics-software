@@ -1120,20 +1120,25 @@ int main(int argc, char **argv)
 #endif
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
-        if (curBoardFw)
-            std::cout << "  Firewire board: " << static_cast<unsigned int>(curBoardFw->GetBoardId()) << std::endl;
-        if (curBoardEth) {
-            std::cout << "  Ethernet board: " << static_cast<unsigned int>(curBoardEth->GetBoardId());
-            uint32_t status = curBoardEth->ReadEthernetStatus();
+        if (curBoard) {
+            uint32_t status = curBoard->ReadEthernetStatus();
             if ((status&0x40000000) == 0x40000000) {
                 // FPGA V3
                 eth_port = (status&0x20000000) ? 2 : 1;
-                std::cout << ", Eth" << eth_port << std::endl;
             }
             else {
+                // FPGA V1 or V2
                 eth_port = 0;
-                std::cout << std::endl;
             }
+        }
+        if (curBoardFw) {
+            std::cout << "  Firewire board: " << static_cast<unsigned int>(curBoardFw->GetBoardId()) << std::endl;
+        }
+        if (curBoardEth) {
+            std::cout << "  Ethernet board: " << static_cast<unsigned int>(curBoardEth->GetBoardId());
+            if (eth_port != 0)
+                std::cout << ", Eth" << eth_port << std::endl;
+            std::cout << std::endl;
         }
         std::cout << "  0) Quit" << std::endl;
         if (curBoardEth) {
