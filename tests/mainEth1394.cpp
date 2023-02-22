@@ -22,9 +22,6 @@
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
-// Default Ethernet port for FPGA V3
-unsigned int ETH_PORT = 1;
-
 const uint32_t VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const uint32_t DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 
@@ -1102,6 +1099,7 @@ int main(int argc, char **argv)
     quadlet_t read_data;
     quadlet_t write_data = 0L;
     quadlet_t buffer[128];
+    unsigned int eth_port = 0;
 
     while (!done) {
 
@@ -1124,8 +1122,19 @@ int main(int argc, char **argv)
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         if (curBoardFw)
             std::cout << "  Firewire board: " << static_cast<unsigned int>(curBoardFw->GetBoardId()) << std::endl;
-        if (curBoardEth)
-            std::cout << "  Ethernet board: " << static_cast<unsigned int>(curBoardEth->GetBoardId()) << std::endl;
+        if (curBoardEth) {
+            std::cout << "  Ethernet board: " << static_cast<unsigned int>(curBoardEth->GetBoardId());
+            uint32_t status = curBoardEth->ReadEthernetStatus();
+            if ((status&0x40000000) == 0x40000000) {
+                // FPGA V3
+                eth_port = (status&0x20000000) ? 2 : 1;
+                std::cout << ", Eth" << eth_port << std::endl;
+            }
+            else {
+                eth_port = 0;
+                std::cout << std::endl;
+            }
+        }
         std::cout << "  0) Quit" << std::endl;
         if (curBoardEth) {
             std::cout << "  1) Quadlet write (power/relay toggle) to board via Ethernet" << std::endl;
@@ -1163,8 +1172,6 @@ int main(int argc, char **argv)
         }
         if (curBoard) {
             std::cout << "  m) Initialize and test I/O Expander (QLA 1.5+)" << std::endl;
-            std::cout << "  p) Change FPGA V3 Ethernet port from " << ETH_PORT << " to "
-                      << (3-ETH_PORT) << std::endl;
         }
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (curBoardFw)
@@ -1394,12 +1401,6 @@ int main(int argc, char **argv)
             }
             break;
 
-        case 'p':
-            // Toggle Ethernet port (for FPGA V3)
-            ETH_PORT = 3-ETH_PORT;
-            std::cout << "Changing to FPGA V3 Ethernet port " << ETH_PORT << std::endl;
-            break;
-
         case 'r':
             if (EthPort->IsOK())
                 EthPort->CheckFwBusGeneration("EthPort", true);
@@ -1470,16 +1471,14 @@ int main(int argc, char **argv)
         case 'x':
             if (curBoard) {
                 unsigned int fpgaVer = curBoard->GetFPGAVersionMajor();
-                // For now, use ETH_PORT for FPGA V3
-                unsigned int ethPort = (fpgaVer == 3) ? ETH_PORT : 0;
                 double clkPeriod = curBoard->GetFPGAClockPeriod();
-                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0xc0, 16))     // PacketBuffer
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0xc0, 16))     // PacketBuffer
                     EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
-                if (curBoard->ReadEthernetData(buffer, (ethPort << 8), 64))            // FireWire packet
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8), 64))            // FireWire packet
                     EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0x80, 16))     // EthernetIO DebugData
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0x80, 16))     // EthernetIO DebugData
                     EthBasePort::PrintDebugData(std::cout, buffer, clkPeriod);
-                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0x90, 16)) {   // Low-level DebugData
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0x90, 16)) {   // Low-level DebugData
                     if (fpgaVer == 2)
                         EthBasePort::PrintDebugDataKSZ(std::cout, buffer, clkPeriod);  // KSZ8851 (FPGA V2)
                     else {
@@ -1510,7 +1509,7 @@ int main(int argc, char **argv)
                         }
                     }
                 }
-                if (curBoard->ReadEthernetData(buffer, (ethPort << 8) | 0xe0, 21)) {   // ReplyIndex
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0xe0, 21)) {   // ReplyIndex
                     const uint16_t *packetw = reinterpret_cast<const uint16_t *>(buffer);
                     std::cout << "ReplyIndex: " << std::endl;
                     for (int i = 0; i < 41; i++)

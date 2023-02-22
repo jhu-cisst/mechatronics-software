@@ -914,7 +914,7 @@ bool TestEthernetV3(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
 {
     logFile << std::endl << "=== Ethernet (RTL8211F) Test ===" << std::endl;
     bool ret = true;
-    for (unsigned int i = 1; i < 2; i++) {
+    for (unsigned int i = 1; i <= 2; i++) {
         unsigned int phyAddr = FpgaIO::PHY_RTL8211F;
         uint16_t phyid1 = 0, phyid2 = 0;
         if (!Board.ReadRTL8211F_Register(i, phyAddr, FpgaIO::RTL8211F_PHYID1, phyid1))
