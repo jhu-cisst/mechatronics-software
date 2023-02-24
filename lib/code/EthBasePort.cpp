@@ -16,6 +16,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "EthBasePort.h"
+#include "FpgaIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 #include <iomanip>
@@ -216,66 +217,62 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
 
 void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
 {
+    unsigned int ver = BoardIO::GetFpgaVersionMajorFromStatus(status);
     debugStream << "Status: ";
-    if (status == 0) {
+    if (ver == 0) {
+        debugStream << "Unknown FPGA, status = " << std::hex << status << std::dec << std::endl;
+    }
+    else if (ver == 1) {
         // FPGA V1
         debugStream << "No Ethernet present" << std::endl;
     }
-    else if (status&0x80000000) {
-        // FPGA V2
-        if (status&0x40000000) debugStream << "error ";
-        if (status&0x20000000) debugStream << "initOK ";
-        if (status&0x10000000) debugStream << "FrameErr ";
-        if (status&0x08000000) debugStream << "IPv4Err ";
-        if (status&0x04000000) debugStream << "UDPErr ";
-        if (status&0x02000000) debugStream << "DestErr ";
-        if (status&0x01000000) debugStream << "AccessErr ";
-        if (status&0x00800000) debugStream << "StateErr ";
-        if (status&0x00400000) debugStream << "SendStateErr ";
-        if (status&0x00200000) debugStream << "Unused ";
-        if (status&0x00100000) debugStream << "UDP ";
-        if (status&0x00080000) debugStream << "Link-On ";
-        else                   debugStream << "Link-Off ";
-        if (status&0x00040000) debugStream << "ETH-idle ";
-        int waitInfo = (status&0x00030000)>>16;
-        if (waitInfo == 0) debugStream << "wait-none";
-        else if (waitInfo == 1) debugStream << "wait-recv";
-        else if (waitInfo == 2) debugStream << "wait-send";
-        else debugStream << "wait-flush";
-        debugStream << std::endl;
-    }
-    else if ((status&0x40000000) == 0x40000000) {
-        // FPGA V3
-        if (status&0x20000000) debugStream << "Eth2 ";
-        else                   debugStream << "Eth1 ";
-        if (status&0x10000000) debugStream << "ClkOK ";
-        if (status&0x0f000000) debugStream << "Unused4 ";
-        // Following same as Rev 2
-        if (status&0x00800000) debugStream << "FrameErr ";
-        if (status&0x00400000) debugStream << "IPv4Err ";
-        if (status&0x00200000) debugStream << "UDPErr ";
-        if (status&0x00100000) debugStream << "DestErr ";
-        if (status&0x00080000) debugStream << "AccessErr ";
-        if (status&0x00040000) debugStream << "SendStateErr ";
-        if (status&0x00020000) debugStream << "Unused ";
-        if (status&0x00010000) debugStream << "UDP ";
-        // Above same as Rev 2
-        debugStream << std::endl;
-        for (unsigned int port = 1; port <= 2; port++) {
-            debugStream << "Port " << port << ": ";
-            uint8_t portStatus = (port==1) ? static_cast<uint8_t>(status) :
-                                             static_cast<uint8_t>(status>>8);
-            if (portStatus&0x80) debugStream << "initOK ";
-            if (portStatus&0x40) debugStream << "hasIRQ ";
-            if (portStatus&0x20) debugStream << "Link-On ";
-            else                 debugStream << "Link-Off ";
-            uint8_t linkSpeed = (portStatus&0x18)>>3;
-            if (linkSpeed == 0)  debugStream << "10 Mbps ";
-            else if (linkSpeed == 1) debugStream << "100 Mbps ";
-            else if (linkSpeed == 2) debugStream << "1000 Mbps ";
-            if (portStatus&0x04) debugStream << "RecvErr ";
-            if (portStatus&0x02) debugStream << "SendOvf ";
+    else {
+        // FPGA V2 or V3
+        if (ver == 2) {
+            if (status&FpgaIO::ETH_STAT_REQ_ERR_V2) debugStream << "error ";
+            if (status&FpgaIO::ETH_STAT_INIT_OK_V2) debugStream << "initOK ";
+        }
+        else {   // ver == 3
+            debugStream << "Eth" << FpgaIO::GetEthernetPortCurrent(status) << " ";
+        }
+        if (status & FpgaIO::ETH_STAT_FRAME_ERR)    debugStream << "FrameErr ";
+        if (status & FpgaIO::ETH_STAT_IPV4_ERR)     debugStream << "IPv4Err ";
+        if (status & FpgaIO::ETH_STAT_UDP_ERR)      debugStream << "UDPErr ";
+        if (status & FpgaIO::ETH_STAT_DEST_ERR)     debugStream << "DestErr ";
+        if (status & FpgaIO::ETH_STAT_ACCESS_ERR)   debugStream << "AccessErr ";
+        if (status & FpgaIO::ETH_STAT_STATE_ERR_V2) debugStream << ((ver == 2) ? "StateErr " : "Unused ");
+        if (status & FpgaIO::ETH_STAT_SENDST_ERR)   debugStream << "SendStateErr ";
+        if (status & FpgaIO::ETH_STAT_CLK_OK_V3)    debugStream << ((ver == 3) ? "ClkOK " : "Unused ");
+        if (status & FpgaIO::ETH_STAT_UDP)          debugStream << "UDP ";
+        if (ver == 2) {
+            if (status & FpgaIO::ETH_STAT_LINK_STAT_V2) debugStream << "Link-On ";
+            else                                        debugStream << "Link-Off ";
+            if (status & FpgaIO::ETH_STAT_IDLE_V2)  debugStream << "ETH-idle ";
+            int waitInfo = (status & FpgaIO::ETH_STAT_WAIT_MASK_V2)>>16;
+            if (waitInfo == 0) debugStream << "wait-none";
+            else if (waitInfo == 1) debugStream << "wait-recv";
+            else if (waitInfo == 2) debugStream << "wait-send";
+            else debugStream << "wait-flush";
             debugStream << std::endl;
+        }
+        else {   // ver == 3
+            if (status & 0x000f0000) debugStream << "Unused4 ";
+            debugStream << std::endl;
+            for (unsigned int port = 1; port <= 2; port++) {
+                debugStream << "Port " << port << ": ";
+                uint8_t portStatus = FpgaIO::GetEthernetPortStatusV3(status, port);
+                if (portStatus & FpgaIO::ETH_PORT_STAT_INIT_OK)   debugStream << "initOK ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_HAS_IRQ)   debugStream << "hasIRQ ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_LINK_STAT) debugStream << "Link-On ";
+                else                                              debugStream << "Link-Off ";
+                uint8_t linkSpeed = (portStatus & FpgaIO::ETH_PORT_STAT_SPEED_MASK)>>3;
+                if (linkSpeed == 0)                               debugStream << "10 Mbps ";
+                else if (linkSpeed == 1)                          debugStream << "100 Mbps ";
+                else if (linkSpeed == 2)                          debugStream << "1000 Mbps ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_RECV_ERR)  debugStream << "RecvErr ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_SEND_OVF)  debugStream << "SendOvf ";
+                debugStream << std::endl;
+            }
         }
     }
 }

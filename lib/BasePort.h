@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -157,6 +157,9 @@ protected:
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
+    // FPGA versions
+    unsigned int FpgaVersion[BoardIO::MAX_BOARDS];
+
     // Hardware versions (e.g., QLA1)
     unsigned long HardwareVersion[BoardIO::MAX_BOARDS];
 
@@ -304,6 +307,24 @@ public:
     inline unsigned long GetFirmwareVersion(unsigned char boardId) const {
         return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0;
     }
+
+    /*!
+     \brief Get FPGA major version
+
+     \param boardId: board ID (rotary switch value)
+     \return unsigned int: FPGA major version (1, 2 or 3)
+    */
+    inline unsigned int GetFpgaVersionMajor(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? FpgaVersion[boardId] : 0;
+    }
+
+    /*!
+     \brief Get FPGA major version as a string
+     \param boardId: board ID
+     \return A string that identifies the FPGA major version, "FPGA_V1", "FPGA_V2", or "FPGA_V3".
+             If version could not be identified, returns "FPGA_V?".
+    */
+    std::string GetFpgaVersionMajorString(unsigned char boardId) const;
 
     /*!
      \brief Get hardware version

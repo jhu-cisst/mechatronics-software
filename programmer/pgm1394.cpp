@@ -231,7 +231,7 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
 bool PromDownload(AmpIO&Board)
 {
     std::string mcsName;
-    unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+    unsigned int fpgaVer = Board.GetFpgaVersionMajor();
     if (fpgaVer == 1)
         mcsName = std::string("FPGA1394-QLA-");
     else if (fpgaVer == 2)
@@ -553,7 +553,7 @@ int main(int argc, char** argv)
     Port->AddBoard(&Board);
 
     if (mcsName.empty()) {
-        unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+        unsigned int fpgaVer = Board.GetFpgaVersionMajor();
         if (fpgaVer == 1)
             mcsName = std::string("FPGA1394-QLA.mcs");
         else if (fpgaVer == 2)

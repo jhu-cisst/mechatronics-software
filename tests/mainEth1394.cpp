@@ -152,8 +152,9 @@ void ComputeMulticastHash(unsigned char *MulticastMAC, uint8_t &regAddr, uint16_
 // Ethernet status from FPGA register 12
 void PrintEthernetStatus(AmpIO &Board)
 {
-    uint32_t status = Board.ReadEthernetStatus();
-    EthBasePort::PrintStatus(std::cout, status);
+    uint32_t status;
+    if (Board.ReadEthernetStatus(status))
+        EthBasePort::PrintStatus(std::cout, status);
 }
 
 #if Amp1394_HAS_RAW1394
@@ -345,32 +346,32 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     return (phyid1 == 0x001c) && (phyid2 == 0xc916);
 }
 
-bool InitEthernet(AmpIO &Board)
+bool InitEthernetV2(AmpIO &Board)
 {
     if (Board.GetFirmwareVersion() < 5) {
         std::cout << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
         return false;
     }
 
-    uint16_t status = Board.ReadKSZ8851Status();
-    if (!(status&0x8000)) {
-        std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
+    unsigned int fpga_ver = Board.GetFpgaVersionMajor();
+    if (fpga_ver != 2) {
+        std::cout << "   Not FPGA V2, version = " << fpga_ver << std::endl;
         return false;
     }
-    std::cout << "   Ethernet controller status = " << std::hex << status << std::endl;
     PrintEthernetStatus(Board);
 
     // Reset the board
-    Board.ResetKSZ8851();
+    Board.WriteEthernetPhyReset();
     // Wait 100 msec
     Amp1394_Sleep(0.1);
     // Scan Nodes
 
     // Read the status
-    status = Board.ReadKSZ8851Status();
-    std::cout << "   After reset, status = " << std::hex << status << std::endl;
+    uint32_t status;
+    Board.ReadEthernetStatus(status);
+    std::cout << "   After reset, status = " << std::hex << (status>>16) << std::endl;
 
-    if (!(status&0x2000)) {
+    if (!(status & FpgaIO::ETH_STAT_INIT_OK_V2)) {
         std::cout << "   Ethernet failed initialization" << std::endl;
         PrintEthernetStatus(Board);
         return false;
@@ -1121,15 +1122,9 @@ int main(int argc, char **argv)
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
         if (curBoard) {
-            uint32_t status = curBoard->ReadEthernetStatus();
-            if ((status&0x40000000) == 0x40000000) {
-                // FPGA V3
-                eth_port = (status&0x20000000) ? 2 : 1;
-            }
-            else {
-                // FPGA V1 or V2
-                eth_port = 0;
-            }
+            uint32_t status;
+            curBoard->ReadEthernetStatus(status);
+            eth_port = FpgaIO::GetEthernetPortCurrent(status);
         }
         if (curBoardFw) {
             std::cout << "  Firewire board: " << static_cast<unsigned int>(curBoardFw->GetBoardId()) << std::endl;
@@ -1285,7 +1280,7 @@ int main(int argc, char **argv)
 #if Amp1394_HAS_RAW1394
         case '5':
             if (curBoardFw) {
-                unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
+                unsigned int fpgaVer = curBoardFw->GetFpgaVersionMajor();
                 if (fpgaVer == 2) {
                     PrintEthernetPhyStatusV2(*curBoardFw);
                 }
@@ -1298,7 +1293,7 @@ int main(int argc, char **argv)
 
         case '6':
             if (curBoardFw)
-                InitEthernet(*curBoardFw);
+                InitEthernetV2(*curBoardFw);
             break;
 #endif
 
@@ -1475,7 +1470,7 @@ int main(int argc, char **argv)
 
         case 'x':
             if (curBoard) {
-                unsigned int fpgaVer = curBoard->GetFPGAVersionMajor();
+                unsigned int fpgaVer = curBoard->GetFpgaVersionMajor();
                 double clkPeriod = curBoard->GetFPGAClockPeriod();
                 if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0xc0, 16))     // PacketBuffer
                     EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
@@ -1489,8 +1484,8 @@ int main(int argc, char **argv)
                     else {
                         EthBasePort::PrintDebugDataRTL(std::cout, buffer, clkPeriod);  // RTL8211F (FPGA V3)
                         uint32_t ethStatus;
-                        curPort->ReadQuadlet(curBoard->GetBoardId(), 12, ethStatus);
-                        if (ethStatus&0x10000000)
+                        curBoard->ReadEthernetStatus(ethStatus);
+                        if (ethStatus & FpgaIO::ETH_STAT_CLK_OK_V3)
                             std::cout << "200 MHz clock running" << std::endl;
                         else
                             std::cout << "**** 200 MHz clock not running -- initialize PS" << std::endl;
@@ -1532,7 +1527,7 @@ int main(int argc, char **argv)
 #if Amp1394_HAS_RAW1394
         case 'z':
             if (curBoardFw) {
-                unsigned int fpgaVer = curBoardFw->GetFPGAVersionMajor();
+                unsigned int fpgaVer = curBoardFw->GetFpgaVersionMajor();
                 std::cout << "FPGA Rev " << fpgaVer << std::endl;
                 if (fpgaVer == 2) {
                     // Check that KSZ8851 registers are as expected

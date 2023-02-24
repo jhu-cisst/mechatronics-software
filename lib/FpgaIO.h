@@ -47,11 +47,8 @@ public:
     FpgaIO(uint8_t board_id);
     ~FpgaIO();
 
-    // Return FPGA major version number (1, 2, 3)
-    // Returns 0 if unknown (e.g., could not read from FPGA)
-    unsigned int GetFPGAVersionMajor(void) const;
-
     // Return FPGA serial number (empty string if not found)
+    // This method actually performs a read (should have been called ReadFPGASerialNumber)
     std::string GetFPGASerialNumber(void);
 
     // Returns FPGA clock period in seconds
@@ -80,7 +77,7 @@ public:
 
     static bool WriteRebootAll(BasePort *port);
 
-    static bool ResetKSZ8851All(BasePort *port);
+    static bool ResetEthernetAll(BasePort *port);
 
     // ********************** PROM Methods ***********************************
     // Methods for reading or programming
@@ -179,7 +176,6 @@ public:
     // Following functions enable access to the KSZ8851 Ethernet controller on the
     // FPGA V2 board via FireWire. They are provided for testing/debugging.
     // Note that both 8-bit and 16-bit transactions are supported.
-    bool ResetKSZ8851();   // Reset the chip (requires ~60 msec)
     bool WriteKSZ8851Reg(uint8_t addr, const uint8_t &data);
     bool WriteKSZ8851Reg(uint8_t addr, const uint16_t &data);
     bool ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata);
@@ -252,13 +248,87 @@ public:
     // ************************ Ethernet Methods *************************************
 
     // Read Ethernet status
-    // Returns the version-specific Ethernet status register. The first two most significant
+    // Reads the version-specific Ethernet status register. The first two most significant
     // bits indicate the FPGA version:
     //    00  FPGA V1 (no Ethernet)
     //    1x  FPGA V2 (one Ethernet port, with KSZ8851 PHY)
     //    01  FPGA V3 (two Ethernet ports, with RTL8211F PHYs)
-    // For definition of the other bits, see EthBasePort::PrintStatus
-    uint32_t ReadEthernetStatus();
+    // The following enums define the bits (see also EthBasePort::PrintStatus)
+    enum EthStatus {
+        ETH_STAT_PRESENT_V2    = 0x80000000,   // Indicates FPGA V2
+        ETH_STAT_REQ_ERR_V2    = 0x40000000,   // V2: Request error (V3: 1)
+        ETH_STAT_INIT_OK_V2    = 0x20000000,   // V2: Init OK (V3: current port)
+        ETH_STAT_FRAME_ERR     = 0x10000000,
+        ETH_STAT_IPV4_ERR      = 0x08000000,
+        ETH_STAT_UDP_ERR       = 0x04000000,
+        ETH_STAT_DEST_ERR      = 0x02000000,
+        ETH_STAT_ACCESS_ERR    = 0x01000000,
+        ETH_STAT_STATE_ERR_V2  = 0x00800000,
+        ETH_STAT_SENDST_ERR    = 0x00400000,
+        ETH_STAT_CLK_OK_V3     = 0x00200000,
+        ETH_STAT_UDP           = 0x00100000,   // 1 -> UDP mode, 0 -> Raw Ethernet
+        ETH_STAT_LINK_STAT_V2  = 0x00080000,   // V2: link status (1 -> On)
+        ETH_STAT_IDLE_V2       = 0x00040000,
+        ETH_STAT_WAIT_MASK_V2  = 0x00030000,   // V2: Mask for waitInfo
+        ETH_STAT_DATA_MASK_V2  = 0x0000ffff,   // V2: Mask for register read result
+        ETH_STAT_PORT2_MASK_V3 = 0x0000ff00,   // V3: Mask for Eth2 status (see EthPortV3Status)
+        ETH_STAT_PORT1_MASK_V3 = 0x000000ff    // V3: Mask for Eth1 status (see EthPortV3Status)
+    };
+    bool ReadEthernetStatus(uint32_t &status);
+
+    // Get Ethernet port currently in use by FPGA V3 from specified status value
+    //    status  Status value from ReadEthernetStatus
+    // Returns the current port (1 or 2) if FPGA V3; otherwise, returns 0
+    static unsigned int GetEthernetPortCurrent(uint32_t status);
+
+    // Get Ethernet port status (for FPGA V3) from specified status value
+    //    status  Status value from ReadEthernetStatus
+    //    chan    Ethernet port number (1 or 2)
+    // Returns the 8-bit port status
+    enum EthPortV3Status {
+        ETH_PORT_STAT_INIT_OK    = 0x80,
+        ETH_PORT_STAT_HAS_IRQ    = 0x40,
+        ETH_PORT_STAT_LINK_STAT  = 0x20,
+        ETH_PORT_STAT_SPEED_MASK = 0x18,
+        ETH_PORT_STAT_RECV_ERR   = 0x04,
+        ETH_PORT_STAT_SEND_OVF   = 0x02
+    };
+    static uint8_t GetEthernetPortStatusV3(uint32_t status, unsigned int chan);
+
+    // Write Ethernet control register
+    enum EthControl {
+        ETH_CTRL_CLR_ERR_NET  = 0x20000000,     // Clear network layer errors
+        ETH_CTRL_CLR_ERR_LINK = 0x10000000,     // Clear link layer errors
+        ETH_CTRL_CLR_ERR      = 0x30000000,     // Clear all errors
+        ETH_CTRL_DMA_V2       = 0x08000000,     // V2: DMA register access
+        ETH_CTRL_RESET_PHY    = 0x04000000,     // Reset PHY
+        ETH_CTRL_WR_V2        = 0x02000000,     // V2: Register read(0) or write(1)
+        ETH_CTRL_WB_V2        = 0x01000000,     // V2: Byte(0) or word(1) access
+        ETH_CTRL_ADDR_MASK_V2 = 0x00ff0000,     // V2: Register address (8 bits)
+        ETH_CTRL_DATA_MASK_V2 = 0x0000ffff      // V2: Register data (16 bits)
+    };
+    // Offsets for Ethernet port control (FPGA V3)
+    //   For Eth1, use these bit masks
+    //   For Eth2, shift left by 8
+    enum EthPortV3Control {
+        ETH_PORT_CTRL_RESET_PHY = 0x80,     // Reset RTL8211F PHY (if ETH_CTRL_RESET_PHY)
+        ETH_PORT_CTRL_IRQ_DIS   = 0x40,     // Disable interrupts
+        ETH_PORT_CTRL_IRQ_GEN   = 0x20,     // Generate interrupt (from software)
+        ETH_PORT_CTRL_CLR_ERR   = 0x10,     // Clear link layer errors (if ETH_CTRL_CLR_ERR_LINK)
+        ETH_PORT_CTRL_RESET_RF  = 0x04,     // Reset receive FIFO
+        ETH_PORT_CTRL_RESET_SF  = 0x02      // Reset send FIFO
+    };
+    bool WriteEthernetControl(uint32_t write_data);
+
+    // Reset the Ethernet PHY chip (KSZ8851 for FPGA V2, RTL8211F for FPGA V3)
+    //    chan    FPGA V2: 0 (requires ~60 msec)
+    //            FPGA V3: 1 -> PHY1, 2 -> PHY2, 3-> both
+    bool WriteEthernetPhyReset(unsigned int chan = 0);
+
+    // Clear Ethernet errors
+    //    chan    FPGA V2: 0
+    //            FPGA V3: 1 -> PHY1, 2 -> PHY2, 3-> both
+    bool WriteEthernetClearErrors(unsigned int chan = 0);
 
     // Read Ethernet data
     //    buffer  buffer for storing data

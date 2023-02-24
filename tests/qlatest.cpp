@@ -851,19 +851,20 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
         logFile << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
         return false;
     }
-    uint16_t status = Board.ReadKSZ8851Status();
-    if (!(status&0x8000)) {
-        logFile << "   No Ethernet controller, status = " << std::hex << status << std::endl;
+    uint32_t status;
+    Board.ReadEthernetStatus(status);
+    if (!(status & FpgaIO::ETH_STAT_PRESENT_V2)) {
+        logFile << "   No Ethernet controller, status = " << std::hex << (status>>16) << std::endl;
         return false;
     }
-    logFile << "   Ethernet controller status = " << std::hex << status << std::endl;
+    logFile << "   Ethernet controller status = " << std::hex << (status>>16) << std::endl;
     // Reset the board
-    Board.ResetKSZ8851();
+    Board.WriteEthernetPhyReset();
     // Wait 100 msec
     Amp1394_Sleep(0.1);
     // Read the status
-    status = Board.ReadKSZ8851Status();
-    logFile << "   After reset, status = " << std::hex << status << std::endl;
+    Board.ReadEthernetStatus(status);
+    logFile << "   After reset, status = " << std::hex << (status>>16) << std::endl;
     // Read the Chip ID (16-bit read)
     uint16_t chipID = Board.ReadKSZ8851ChipID();
     logFile << "   Chip ID = " << std::hex << chipID << std::endl;
@@ -906,7 +907,7 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
         logFile << std::endl;
     }
     // Reset the board again (to restore MAC address)
-    Board.ResetKSZ8851();
+    Board.WriteEthernetPhyReset();
     return ret;
 }
 
@@ -1141,7 +1142,7 @@ int main(int argc, char** argv)
         logFile << " (QLA " << qlaNum << " of DQLA)";
     logFile << std::endl;
 
-    unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+    unsigned int fpgaVer = Board.GetFpgaVersionMajor();
     if (fpgaVer == 3) {
         logFile << "FPGA V3" << std::endl;
     }
