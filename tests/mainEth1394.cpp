@@ -346,7 +346,7 @@ bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
     return (phyid1 == 0x001c) && (phyid2 == 0xc916);
 }
 
-bool InitEthernetV2(AmpIO &Board)
+bool InitEthernet(AmpIO &Board, unsigned int eth_port)
 {
     if (Board.GetFirmwareVersion() < 5) {
         std::cout << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
@@ -354,48 +354,69 @@ bool InitEthernetV2(AmpIO &Board)
     }
 
     unsigned int fpga_ver = Board.GetFpgaVersionMajor();
-    if (fpga_ver != 2) {
-        std::cout << "   Not FPGA V2, version = " << fpga_ver << std::endl;
+    if (fpga_ver < 2) {
+        std::cout << "   No Ethernet in FPGA V" << fpga_ver << std::endl;
         return false;
     }
     PrintEthernetStatus(Board);
 
     // Reset the board
-    Board.WriteEthernetPhyReset();
-    // Wait 100 msec
-    Amp1394_Sleep(0.1);
-    // Scan Nodes
+    Board.WriteEthernetPhyReset(eth_port);
+    if (fpga_ver == 2) {
+        // Wait 100 msec
+        Amp1394_Sleep(0.1);
+    }
+    else {
+        // Wait 500 msec
+        Amp1394_Sleep(0.5);
+    }
 
     // Read the status
     uint32_t status;
     Board.ReadEthernetStatus(status);
-    std::cout << "   After reset, status = " << std::hex << (status>>16) << std::endl;
+    std::cout << "   After reset, status = " << std::hex << ((fpga_ver == 2) ? (status>>16) : status) << std::endl;
 
-    if (!(status & FpgaIO::ETH_STAT_INIT_OK_V2)) {
-        std::cout << "   Ethernet failed initialization" << std::endl;
-        PrintEthernetStatus(Board);
-        return false;
+    if (fpga_ver == 2) {
+        if (!(status & FpgaIO::ETH_STAT_INIT_OK_V2)) {
+            std::cout << "   Ethernet V2 failed initialization" << std::endl;
+            EthBasePort::PrintStatus(std::cout, status);
+            return false;
+        }
+
+        // Read the Chip ID (16-bit read)
+        uint16_t chipID = Board.ReadKSZ8851ChipID();
+        std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
+        if ((chipID&0xfff0) != 0x8870)
+            return false;
+
+
+        // Check that KSZ8851 registers are as expected
+        if (!CheckEthernetV2(Board)) {
+            PrintEthernetStatus(Board);
+            return false;
+        }
+
+        // Display the MAC address
+        uint16_t regLow, regMid, regHigh;
+        Board.ReadKSZ8851Reg(0x10, regLow);   // MAC address low = 0x94nn (nn = board id)
+        Board.ReadKSZ8851Reg(0x12, regMid);   // MAC address middle = 0xOE13
+        Board.ReadKSZ8851Reg(0x14, regHigh);  // MAC address high = 0xFA61
+        std::cout << "   MAC address = " << std::hex << regHigh << ":" << regMid << ":" << regLow << std::endl;
     }
+    else if (fpga_ver == 3) {
+        uint8_t portStatus = FpgaIO::GetEthernetPortStatusV3(status, eth_port);
+        if (!(portStatus & FpgaIO::ETH_PORT_STAT_INIT_OK)) {
+            std::cout << "   Ethernet V3 failed initialization" << std::endl;
+            EthBasePort::PrintStatus(std::cout, status);
+            return false;
+        }
 
-    // Read the Chip ID (16-bit read)
-    uint16_t chipID = Board.ReadKSZ8851ChipID();
-    std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
-    if ((chipID&0xfff0) != 0x8870)
-        return false;
-
-
-    // Check that KSZ8851 registers are as expected
-    if (!CheckEthernetV2(Board)) {
-        PrintEthernetStatus(Board);
-        return false;
+        // Check that RTL8211F registers are as expected
+        if (!CheckEthernetV3(Board, eth_port)) {
+            PrintEthernetStatus(Board);
+            return false;
+        }
     }
-
-    // Display the MAC address
-    uint16_t regLow, regMid, regHigh;
-    Board.ReadKSZ8851Reg(0x10, regLow);   // MAC address low = 0x94nn (nn = board id)
-    Board.ReadKSZ8851Reg(0x12, regMid);   // MAC address middle = 0xOE13
-    Board.ReadKSZ8851Reg(0x14, regHigh);  // MAC address high = 0xFA61
-    std::cout << "   MAC address = " << std::hex << regHigh << ":" << regMid << ":" << regLow << std::endl;
 
     // Wait 2.5 sec
     Amp1394_Sleep(2.5);
@@ -1293,7 +1314,7 @@ int main(int argc, char **argv)
 
         case '6':
             if (curBoardFw)
-                InitEthernetV2(*curBoardFw);
+                InitEthernet(*curBoardFw, eth_port);
             break;
 #endif
 
