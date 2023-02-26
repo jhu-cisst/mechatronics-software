@@ -1203,6 +1203,7 @@ int main(int argc, char **argv)
             std::cout << "  v) Measure motor power supply voltage (QLA 1.5+)" << std::endl;
             std::cout << "  w) Test waveform buffer" << std::endl;
             std::cout << "  x) Read Ethernet debug data" << std::endl;
+            std::cout << "  X) Clear Ethernet errors" << std::endl;
         }
         if (curBoardEth)
             std::cout << "  y) Read Firewire data via Ethernet" << std::endl;
@@ -1537,6 +1538,12 @@ int main(int argc, char **argv)
                         std::cout << std::dec << i << ":  " << packetw[i] << std::endl;
                 }
 #endif
+            }
+            break;
+
+        case 'X':
+            if (curBoard) {
+                curBoard->WriteEthernetClearErrors(eth_port);
             }
             break;
 
