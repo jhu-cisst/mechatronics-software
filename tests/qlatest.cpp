@@ -31,6 +31,9 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394Console.h"
+#ifdef _MSC_VER
+#include <conio.h>
+#endif
 
 /*!
  \brief Increment encoder counts
@@ -495,8 +498,8 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     status = Board.GetStatus();
     logFile << "   Enable motor power: " << std::hex << status;
     // Note: QLA implementation also verifies that amp enable is off
-    uint32_t status_mask = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0f0f;
-    uint32_t status_goal = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0000;
+    uint32_t status_mask = (qlaNum == 1) ? 0x00044000 : (qlaNum == 2) ? 0x00048000 : 0x000c0f0f;
+    uint32_t status_goal = (qlaNum == 1) ? 0x00044000 : (qlaNum == 2) ? 0x00048000 : 0x000c0000;
     if ((status & status_mask) != status_goal) {
         sprintf(buf, "FAIL (%08lx) - is motor power connected?", status);
         Amp1394Console::Print(curLine++, 30, buf);
@@ -506,6 +509,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
             Amp1394Console::Print(curLine, 9, "                               ");
             curLine -= 1;
             Amp1394Console::Print(curLine, 30, "                                           ");
+            logFile << " - Retrying" << std::endl;
             goto retry;
         }
         logFile << " - FAIL" << std::endl;
