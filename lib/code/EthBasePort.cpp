@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -16,6 +16,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "EthBasePort.h"
+#include "FpgaIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 #include <iomanip>
@@ -214,29 +215,66 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     }
 }
 
-void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)
+void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
 {
+    unsigned int ver = BoardIO::GetFpgaVersionMajorFromStatus(status);
     debugStream << "Status: ";
-    if (status&0x4000) debugStream << "error ";
-    if (status&0x2000) debugStream << "initOK ";
-    if (status&0x1000) debugStream << "FrameErr ";
-    if (status&0x0800) debugStream << "IPv4Err ";
-    if (status&0x0400) debugStream << "UDPErr ";
-    if (status&0x0200) debugStream << "DestErr ";
-    if (status&0x0100) debugStream << "AccessErr ";
-    if (status&0x0080) debugStream << "StateErr ";
-    if (status&0x0040) debugStream << "SendStateErr ";
-    if (status&0x0020) debugStream << "Unused ";
-    if (status&0x0010) debugStream << "UDP ";
-    if (status&0x0008) debugStream << "Link-On ";
-    else               debugStream << "Link-Off ";
-    if (status&0x0004) debugStream << "ETH-idle ";
-    int waitInfo = status&0x0003;
-    if (waitInfo == 0) debugStream << "wait-none";
-    else if (waitInfo == 1) debugStream << "wait-recv";
-    else if (waitInfo == 2) debugStream << "wait-send";
-    else debugStream << "wait-flush";
-    debugStream << std::endl;
+    if (ver == 0) {
+        debugStream << "Unknown FPGA, status = " << std::hex << status << std::dec << std::endl;
+    }
+    else if (ver == 1) {
+        // FPGA V1
+        debugStream << "No Ethernet present" << std::endl;
+    }
+    else {
+        // FPGA V2 or V3
+        if (ver == 2) {
+            if (status&FpgaIO::ETH_STAT_REQ_ERR_V2) debugStream << "error ";
+            if (status&FpgaIO::ETH_STAT_INIT_OK_V2) debugStream << "initOK ";
+        }
+        else {   // ver == 3
+            debugStream << "Eth" << FpgaIO::GetEthernetPortCurrent(status) << " ";
+        }
+        if (status & FpgaIO::ETH_STAT_FRAME_ERR)    debugStream << "FrameErr ";
+        if (status & FpgaIO::ETH_STAT_IPV4_ERR)     debugStream << "IPv4Err ";
+        if (status & FpgaIO::ETH_STAT_UDP_ERR)      debugStream << "UDPErr ";
+        if (status & FpgaIO::ETH_STAT_DEST_ERR)     debugStream << "DestErr ";
+        if (status & FpgaIO::ETH_STAT_ACCESS_ERR)   debugStream << "AccessErr ";
+        if (status & FpgaIO::ETH_STAT_STATE_ERR_V2) debugStream << ((ver == 2) ? "StateErr " : "Unused ");
+        if (status & FpgaIO::ETH_STAT_SENDST_ERR)   debugStream << "SendStateErr ";
+        if (status & FpgaIO::ETH_STAT_CLK_OK_V3)    debugStream << ((ver == 3) ? "ClkOK " : "Unused ");
+        if (status & FpgaIO::ETH_STAT_UDP)          debugStream << "UDP ";
+        if (ver == 2) {
+            if (status & FpgaIO::ETH_STAT_LINK_STAT_V2) debugStream << "Link-On ";
+            else                                        debugStream << "Link-Off ";
+            if (status & FpgaIO::ETH_STAT_IDLE_V2)  debugStream << "ETH-idle ";
+            int waitInfo = (status & FpgaIO::ETH_STAT_WAIT_MASK_V2)>>16;
+            if (waitInfo == 0) debugStream << "wait-none";
+            else if (waitInfo == 1) debugStream << "wait-recv";
+            else if (waitInfo == 2) debugStream << "wait-send";
+            else debugStream << "wait-flush";
+            debugStream << std::endl;
+        }
+        else {   // ver == 3
+            if (status & 0x000f0000) debugStream << "Unused4 ";
+            debugStream << std::endl;
+            for (unsigned int port = 1; port <= 2; port++) {
+                debugStream << "Port " << port << ": ";
+                uint8_t portStatus = FpgaIO::GetEthernetPortStatusV3(status, port);
+                if (portStatus & FpgaIO::ETH_PORT_STAT_INIT_OK)   debugStream << "initOK ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_HAS_IRQ)   debugStream << "hasIRQ ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_LINK_STAT) debugStream << "Link-On ";
+                else                                              debugStream << "Link-Off ";
+                uint8_t linkSpeed = (portStatus & FpgaIO::ETH_PORT_STAT_SPEED_MASK)>>3;
+                if (linkSpeed == 0)                               debugStream << "10 Mbps ";
+                else if (linkSpeed == 1)                          debugStream << "100 Mbps ";
+                else if (linkSpeed == 2)                          debugStream << "1000 Mbps ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_RECV_ERR)  debugStream << "RecvErr ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_SEND_OVF)  debugStream << "SendOvf ";
+                debugStream << std::endl;
+            }
+        }
+    }
 }
 
 bool EthBasePort::CheckDebugHeader(std::ostream &debugStream, const std::string &caller, const char *header)
@@ -348,7 +386,7 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     // Following structure must match DebugData in EthernetIO.v
     struct DebugData {
         char     header[4];        // Quad 0
-        uint16_t eth_status;       // Quad 1
+        uint16_t quad1_low;        // Quad 1
         uint16_t statusbits;
         uint8_t  runPC;            // Quad 2
         uint8_t  nextState;
@@ -382,7 +420,6 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     if (p->statusbits & 0x1000) debugStream << "isInIRQ ";
     if (p->statusbits & 0x0800) debugStream << "link-on ";
     debugStream << std::endl;
-    EthBasePort::PrintDebug(debugStream, p->eth_status);
     debugStream << "State: " << static_cast<uint16_t>(p->state)
                 << ", nextState: " << static_cast<uint16_t>(p->nextState)
                 << ", retState: " << static_cast<uint16_t> (p->retState)
@@ -400,87 +437,114 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     debugStream << "bw_wait: " << std::dec << p->bw_wait << " (" << p->bw_wait*bits2uS << " us)" << std::endl;
 }
 
-// Prints the debug data from the lower-level Ethernet module (RTL8211F for Ethernet V3)
+// Prints the debug data from the lower-level Ethernet module (RTL8211F and EthSwitchRt for Ethernet V3)
 void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
 {
-    // Following structure must match DebugData in EthernetIO.v
-    struct DebugData {
+    // Following structure must match DebugData in RTL8211F.v
+    struct DebugDataRTL {
+        char      header[4];        // Quad 0
+        uint32_t  statusbits;       // Quad 1
+        uint8_t   numReset;         // Quad 2
+        uint8_t   numIRQ;
+        uint16_t  states;
+        uint32_t  recv_crc_in;      // Quad 3
+        uint8_t   txSent;           // Quad 4
+        uint8_t   send_byte1;
+        uint8_t   unused4;
+        uint8_t   numRxDropped;
+        uint32_t  send_crc_in;      // Quad 5
+        uint16_t  PhyId1;           // Quad 6
+        uint16_t  PhyId2;
+        uint32_t  initCount;        // Quad 7
+    };
+    // Following structure must match DebugData in EthSwitchRt.v
+    struct DebugDataESW {
         char      header[4];        // Quad 0
         uint32_t  statusbits;       // Quad 1
         uint16_t  rxPktWords;       // Quad 2
-        uint16_t  states;
+        uint8_t   recv_byte1;
+        uint8_t   recv_byte1_packet;
         uint16_t  numPacketValid;   // Quad 3
         uint8_t   numPacketFlushed;
         uint8_t   numPacketSent;
-        uint32_t  recv_crc_in;      // Quad 4
-        uint16_t  respBytes;        // Quad 5
+        uint16_t  respBytes;        // Quad 4
         uint16_t  sendCnt;
-        uint8_t   txSent;           // Quad 6
-        uint8_t   send_byte1;
-        uint8_t   recv_byte1;
-        uint8_t   numRxDropped;
-        uint32_t  send_crc_in;      // Quad 7
-        uint16_t  numReset;         // Quad 8
-        uint16_t  numIRQ;
-        uint16_t  PhyId1;           // Quad 9
-        uint16_t  PhyId2;
-        uint32_t  initCount;        // Quad 10
-        uint16_t  timeReceive;      // Quad 11
+        uint16_t  timeReceive;      // Quad 5
         uint16_t  timeSend;
-        uint32_t  unused[4];
+        uint32_t  unused[2];
+    };
+    struct DebugData {
+        DebugDataRTL dataRTL;
+        DebugDataESW dataESW;
     };
     if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
         debugStream << "PrintDebugDataRTL: structure packing problem" << std::endl;
         return;
     }
     const DebugData *p = reinterpret_cast<const DebugData *>(data);
-    if (!CheckDebugHeader(debugStream, "PrintDebugDataRTL", p->header))
-        return;
-
-    if (p->statusbits & 0x80000000) debugStream << "RxErr ";
-    if (p->statusbits & 0x40000000) debugStream << "recv_pr_err ";
-    if (p->statusbits & 0x20000000) debugStream << "recv_fifo_reset ";
-    if (p->statusbits & 0x10000000) debugStream << "recv_fifo_full ";
-    if (p->statusbits & 0x08000000) debugStream << "recv_fifo_empty ";
-    if (p->statusbits & 0x04000000) debugStream << "recv_info_fifo_empty ";
-    if (p->statusbits & 0x02000000) debugStream << "curPacketValid ";
-    if (p->statusbits & 0x00800000) debugStream << "sendRequest ";
-    if (p->statusbits & 0x00400000) debugStream << "tx_underflow ";
-    if (p->statusbits & 0x00200000) debugStream << "send_fifo_full ";
-    if (p->statusbits & 0x00100000) debugStream << "send_fifo_empty ";
-    if (p->statusbits & 0x00080000) debugStream << "IRQ ";
-    if (p->statusbits & 0x00040000) debugStream << "recv_fifo_error ";
-    if (p->statusbits & 0x00020000) debugStream << "send_fifo_error ";
-    if (p->statusbits & 0x00010000) debugStream << "recv_ipv4 ";
-    if (p->statusbits & 0x00008000) debugStream << "recv_ipv4_err ";
-    if (p->statusbits & 0x00004000) debugStream << "recv_udp ";
-    if (p->statusbits & 0x00002000) debugStream << "send_ipv4 ";
-    if (p->statusbits & 0x00001000) debugStream << "hasIRQ ";
-    if (p->statusbits & 0x00000800) debugStream << "isUnicast ";
-    if (p->statusbits & 0x00000400) debugStream << "isMulticast ";
-    if (p->statusbits & 0x00000200) debugStream << "isBroadcast ";
-    if (p->statusbits & 0x00000100) debugStream << "initOK ";
-    if (p->statusbits & 0x00000080) debugStream << "txStateError ";
-    if (p->statusbits & 0x00000040) debugStream << "send_fifo_overflow ";
-    debugStream << std::endl;
-    debugStream << "rxState: " << (p->states&0x0001) << ", txState: " << ((p->states&0x000e)>>1)
-                << ", state: " << ((p->states&0x00f0)>>4) << std::endl;
-    debugStream << "clock_speed (Rx): " << ((p->states&0x0300)>>8)
-                << ", speed_mode (Tx): " << ((p->states&0x0c00)>>10) << std::endl;
-    debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
-    debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
-    debugStream << "numRxDropped: " << std::dec << static_cast<uint16_t>(p->numRxDropped) << std::endl;
-    debugStream << "numPacketFlushed: " << std::dec << static_cast<uint16_t>(p->numPacketFlushed) << std::endl;
-    debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
-    debugStream << "recv_crc_in: " << std::hex << p->recv_crc_in << " (should be c704dd7b)" << std::dec << std::endl;
-    debugStream << "respBytes: " << p->respBytes << ", sendCnt: " << p->sendCnt << std::endl;
-    debugStream << "txSent: " << static_cast<uint16_t>(p->txSent) << std::hex << ", send_crc_in: " << p->send_crc_in << std::dec << std::endl;
-    debugStream << std::hex << "send_byte1: " << static_cast<uint16_t>(p->send_byte1)
-                << ", recv_byte1: " << static_cast<uint16_t>(p->recv_byte1) << std::dec << std::endl;
-    debugStream << "numReset: " << p->numReset << ", numIRQ: " << p->numIRQ << std::endl;
-    debugStream << "PHY ID1: " << std::hex << p->PhyId1 << ", PHY ID2: " << p->PhyId2 << std::dec << std::endl;
-    debugStream << "initCount: " << std::hex << p->initCount << std::dec << ", " << (p->initCount*clockPeriod) << std::endl;
-    debugStream << "timeReceive: " << (p->timeReceive*clockPeriod) << " timeSend: " << (p->timeSend*clockPeriod) << std::endl;
+    const DebugDataRTL *pRTL = &(p->dataRTL);
+    if (CheckDebugHeader(debugStream, "PrintDebugDataRTL", pRTL->header)) {
+        if (pRTL->statusbits & 0x80000000) debugStream << "RxErr ";
+        if (pRTL->statusbits & 0x40000000) debugStream << "recv_pr_err ";
+        if (pRTL->statusbits & 0x20000000) debugStream << "recv_fifo_reset ";
+        if (pRTL->statusbits & 0x10000000) debugStream << "recv_fifo_full ";
+        if (pRTL->statusbits & 0x08000000) debugStream << "recv_fifo_empty ";
+        if (pRTL->statusbits & 0x04000000) debugStream << "recv_info_fifo_empty ";
+        if (pRTL->statusbits & 0x00400000) debugStream << "tx_underflow ";
+        if (pRTL->statusbits & 0x00200000) debugStream << "send_fifo_full ";
+        if (pRTL->statusbits & 0x00100000) debugStream << "send_fifo_empty ";
+        if (pRTL->statusbits & 0x00080000) debugStream << "IRQ ";
+        if (pRTL->statusbits & 0x00020000) debugStream << "send_fifo_error ";
+        if (pRTL->statusbits & 0x00010000) debugStream << "recv_ipv4 ";
+        if (pRTL->statusbits & 0x00008000) debugStream << "recv_ipv4_err ";
+        if (pRTL->statusbits & 0x00004000) debugStream << "recv_udp ";
+        if (pRTL->statusbits & 0x00001000) debugStream << "hasIRQ ";
+        if (pRTL->statusbits & 0x00000800) debugStream << "isUnicast ";
+        if (pRTL->statusbits & 0x00000400) debugStream << "isMulticast ";
+        if (pRTL->statusbits & 0x00000200) debugStream << "isBroadcast ";
+        if (pRTL->statusbits & 0x00000100) debugStream << "initOK ";
+        if (pRTL->statusbits & 0x00000080) debugStream << "txStateError ";
+        debugStream << std::endl;
+        debugStream << "numReset: " << static_cast<uint16_t>(pRTL->numReset)
+                    << ", numIRQ: " << static_cast<uint16_t>(pRTL->numIRQ) << std::endl;
+        debugStream << "rxState: " << (pRTL->states&0x0001) << ", txState: " << ((pRTL->states&0x000e)>>1)
+                    << ", state: " << ((pRTL->states&0x00f0)>>4) << std::endl;
+        debugStream << "clock_speed (Rx): " << ((pRTL->states&0x0300)>>8)
+                    << ", speed_mode (Tx): " << ((pRTL->states&0x0c00)>>10) << std::endl;
+        debugStream << "recv_crc_in: " << std::hex << pRTL->recv_crc_in << " (should be c704dd7b)" << std::dec << std::endl;
+        debugStream << "numRxDropped: " << std::dec << static_cast<uint16_t>(pRTL->numRxDropped) << std::endl;
+        debugStream << "txSent: " << static_cast<uint16_t>(pRTL->txSent) << std::hex
+                    << ", send_crc_in: " << pRTL->send_crc_in << std::dec << std::endl;
+        debugStream << std::hex << "send_byte1: " << static_cast<uint16_t>(pRTL->send_byte1) << std::endl;
+        debugStream << "PHY ID1: " << std::hex << pRTL->PhyId1 << ", PHY ID2: " << pRTL->PhyId2 << std::dec << std::endl;
+        debugStream << "initCount: " << std::hex << pRTL->initCount << std::dec << ", " << (pRTL->initCount*clockPeriod) << std::endl;
+    }
+    const DebugDataESW *pESW = &(p->dataESW);
+    if (CheckDebugHeader(debugStream, "PrintDebugDataRTL (ESW)", pESW->header)) {
+        debugStream << "curPort: " << ((pESW->statusbits & 0x80000000) ? "2" : "1") << std::endl;
+        if (pESW->statusbits & 0x40000000) debugStream << "curPacketValid ";
+        if (pESW->statusbits & 0x20000000) debugStream << "sendRequest ";
+        if (pESW->statusbits & 0x10000000) debugStream << "send_ipv4 ";
+        if (pESW->statusbits & 0x0c000000) {
+            debugStream << "send_fifo_overflow ";
+            if (pESW->statusbits & 0x08000000) debugStream << "2 ";
+            if (pESW->statusbits & 0x04000000) debugStream << "1 ";
+        }
+        if (pESW->statusbits & 0x03000000) {
+            debugStream << "recv_fifo_error ";
+            if (pESW->statusbits & 0x02000000) debugStream << "2 ";
+            if (pESW->statusbits & 0x01000000) debugStream << "1 ";
+        }
+        debugStream << std::endl;
+        debugStream << "rxPktWords: " << std::dec << pESW->rxPktWords << std::endl;
+        debugStream << "recv_byte1: " << std::hex << static_cast<uint16_t>(pESW->recv_byte1)
+                    << ", " << static_cast<uint16_t>(pESW->recv_byte1_packet) << std::dec << std::endl;
+        debugStream << "numPacketValid: " << std::dec << pESW->numPacketValid << std::endl;
+        debugStream << "numPacketFlushed: " << std::dec << static_cast<uint16_t>(pESW->numPacketFlushed) << std::endl;
+        debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(pESW->numPacketSent) << std::endl;
+        debugStream << "respBytes: " << pESW->respBytes << ", sendCnt: " << pESW->sendCnt << std::endl;
+        debugStream << "timeReceive: " << (pESW->timeReceive*clockPeriod) << " timeSend: " << (pESW->timeSend*clockPeriod) << std::endl;
+    }
 }
 
 void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)

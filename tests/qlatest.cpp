@@ -31,6 +31,9 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394Console.h"
+#ifdef _MSC_VER
+#include <conio.h>
+#endif
 
 /*!
  \brief Increment encoder counts
@@ -495,8 +498,8 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
     status = Board.GetStatus();
     logFile << "   Enable motor power: " << std::hex << status;
     // Note: QLA implementation also verifies that amp enable is off
-    uint32_t status_mask = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0f0f;
-    uint32_t status_goal = (qlaNum == 1) ? 0x0004400 : (qlaNum == 2) ? 0x00048000 : 0x000c0000;
+    uint32_t status_mask = (qlaNum == 1) ? 0x00044000 : (qlaNum == 2) ? 0x00048000 : 0x000c0f0f;
+    uint32_t status_goal = (qlaNum == 1) ? 0x00044000 : (qlaNum == 2) ? 0x00048000 : 0x000c0000;
     if ((status & status_mask) != status_goal) {
         sprintf(buf, "FAIL (%08lx) - is motor power connected?", status);
         Amp1394Console::Print(curLine++, 30, buf);
@@ -506,6 +509,7 @@ bool TestMotorPowerControl(int curLine, AmpIO &Board, BasePort *Port, std::ofstr
             Amp1394Console::Print(curLine, 9, "                               ");
             curLine -= 1;
             Amp1394Console::Print(curLine, 30, "                                           ");
+            logFile << " - Retrying" << std::endl;
             goto retry;
         }
         logFile << " - FAIL" << std::endl;
@@ -851,19 +855,20 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
         logFile << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
         return false;
     }
-    uint16_t status = Board.ReadKSZ8851Status();
-    if (!(status&0x8000)) {
-        logFile << "   No Ethernet controller, status = " << std::hex << status << std::endl;
+    uint32_t status;
+    Board.ReadEthernetStatus(status);
+    if (!(status & FpgaIO::ETH_STAT_PRESENT_V2)) {
+        logFile << "   No Ethernet controller, status = " << std::hex << (status>>16) << std::endl;
         return false;
     }
-    logFile << "   Ethernet controller status = " << std::hex << status << std::endl;
+    logFile << "   Ethernet controller status = " << std::hex << (status>>16) << std::endl;
     // Reset the board
-    Board.ResetKSZ8851();
+    Board.WriteEthernetPhyReset();
     // Wait 100 msec
     Amp1394_Sleep(0.1);
     // Read the status
-    status = Board.ReadKSZ8851Status();
-    logFile << "   After reset, status = " << std::hex << status << std::endl;
+    Board.ReadEthernetStatus(status);
+    logFile << "   After reset, status = " << std::hex << (status>>16) << std::endl;
     // Read the Chip ID (16-bit read)
     uint16_t chipID = Board.ReadKSZ8851ChipID();
     logFile << "   Chip ID = " << std::hex << chipID << std::endl;
@@ -906,7 +911,7 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
         logFile << std::endl;
     }
     // Reset the board again (to restore MAC address)
-    Board.ResetKSZ8851();
+    Board.WriteEthernetPhyReset();
     return ret;
 }
 
@@ -914,7 +919,7 @@ bool TestEthernetV3(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
 {
     logFile << std::endl << "=== Ethernet (RTL8211F) Test ===" << std::endl;
     bool ret = true;
-    for (unsigned int i = 1; i < 2; i++) {
+    for (unsigned int i = 1; i <= 2; i++) {
         unsigned int phyAddr = FpgaIO::PHY_RTL8211F;
         uint16_t phyid1 = 0, phyid2 = 0;
         if (!Board.ReadRTL8211F_Register(i, phyAddr, FpgaIO::RTL8211F_PHYID1, phyid1))
@@ -941,6 +946,82 @@ void PrintDebugStream(std::stringstream &debugStream)
     debugStream.str("");
 }
 
+//*********** Following copied from pgm1394.cpp **************
+/*!
+ \brief Prom QLA serial and Revision Number
+
+ \param[in] Board FPGA Board
+ \param[in] chan (0 for QLA, 1 or 2 for DQLA)
+ \return[out] bool true on success, false otherwise
+*/
+bool PromQLASerialNumberProgram(AmpIO &Board, unsigned char chan = 0)
+{
+    std::stringstream ss;
+    std::string BoardType;
+    std::string str;
+    std::string BoardSNRead;
+    bool success = true;
+
+    uint32_t fver = Board.GetFirmwareVersion();
+    if (fver < 4) {
+        std::cout << "Firmware not supported, current version = " << fver << "\n"
+                  << "Please upgrade your firmware" << std::endl;
+        return false;
+    }
+
+    // ==== QLA Serial ===
+    // QLA 9876-54 or 9876-543
+    // - QLA: board type
+    // - 9876-54 or 9876-543: serial number
+    BoardType = "QLA";
+    std::string BoardSN;
+    BoardSN.reserve(8);  // reserve at least 8 characters
+    uint8_t wbyte;
+    uint16_t address;
+
+    // get s/n from user
+    if (chan == 0)
+        std::cout << "Please Enter QLA Serial Number: " << std::endl;
+    else
+        std::cout << "Please Enter QLA " << static_cast<unsigned int>(chan) << " Serial Number: " << std::endl;
+    std::cin >> BoardSN;
+    std::cin.ignore(20,'\n');
+    ss << BoardType << " " << BoardSN;
+    str = ss.str();
+
+    // S1: program to QLA PROM
+    address = 0x0000;
+    for (size_t i = 0; i < str.length(); i++) {
+        wbyte = str.at(i);
+        if (!Board.PromWriteByte25AA128(address, wbyte, chan)) {
+            std::cerr << "Failed to write byte " << i << std::endl;
+            return false;
+        }
+        address += 1;  // inc to next byte
+    }
+    // Terminating byte can be 0 or 0xff
+    wbyte = 0;
+    if (!Board.PromWriteByte25AA128(address, wbyte, chan)) {
+        std::cerr << "Failed to write terminating byte" << std::endl;
+        return false;
+    }
+
+    // S2: read back and verify
+    BoardSNRead.clear();
+    BoardSNRead = Board.GetQLASerialNumber(chan);
+
+    if (BoardSN == BoardSNRead) {
+        std::cout << "Programmed QLA " << BoardSN << " Serial Number" << std::endl;
+    } else {
+        std::cerr << "Failed to program" << std::endl;
+        std::cerr << "Board SN = " << BoardSN << "\n"
+                  << "Read  SN = " << BoardSNRead << std::endl;
+        success = false;
+    }
+
+    return success;
+}
+
 int main(int argc, char** argv)
 {
     int i;
@@ -952,7 +1033,6 @@ int main(int argc, char** argv)
     int port = 0;
     int board = 0;
     unsigned int qlaNum = 0;    // QLA number (1 or 2 for DQLA)
-    bool requireQLA_SN = true;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
     if (argc > 1) {
@@ -969,16 +1049,12 @@ int main(int argc, char** argv)
                 else if (argv[i][1] == 'q') {
                     qlaNum = argv[i][2]-'0';
                 }
-                else if (argv[i][1] == 'k')  {
-                    requireQLA_SN = false;
-                }
                 else {
-                    std::cerr << "Usage: qlatest [<board-num>] [-pP] [-qN] [-k]" << std::endl
+                    std::cerr << "Usage: qlatest [<board-num>] [-pP] [-qN]" << std::endl
                     << "       where <board-num> = rotary switch setting (0-15, default 0)" << std::endl
                     << "             P = port number (default 0)" << std::endl
                     << "                 can also specify -pfwP, -pethP or -pudp" << std::endl
-                    << "             N = QLA number (1 or 2) on DQLA" << std::endl
-                    << "            -k option means to continue test even if QLA serial number not found" << std::endl;
+                    << "             N = QLA number (1 or 2) on DQLA" << std::endl;
                     return 0;
                 }
             }
@@ -1038,13 +1114,22 @@ int main(int argc, char** argv)
     std::string logFilename("QLA_");
     std::string QLA_SN = Board.GetQLASerialNumber(qlaNum);
     if (QLA_SN.empty()) {
-        if (requireQLA_SN) {
-            std::cerr << "Failed to get QLA serial number (specify -k command line option to continue test)" << std::endl;
-            Port->RemoveBoard(board);
-            delete Port;
-            return 0;
+        std::cerr << "QLA serial number not found. Program now (y/n)? ";
+#ifdef _MSC_VER
+        char resp = _getch();
+#else
+        char resp = getchar();
+#endif
+        std::cerr << std::endl;
+        if ((resp == 'y') || (resp == 'Y')) {
+            if (PromQLASerialNumberProgram(Board, qlaNum))
+                QLA_SN = Board.GetQLASerialNumber(qlaNum);
+            else
+                std::cerr << "Failed to program QLA serial number" << std::endl;
         }
-        QLA_SN.assign("Unknown");
+        if (QLA_SN.empty()) {
+            QLA_SN.assign("Unknown");
+        }
     }
     logFilename.append(QLA_SN);
     logFilename.append(".log");
@@ -1061,7 +1146,7 @@ int main(int argc, char** argv)
         logFile << " (QLA " << qlaNum << " of DQLA)";
     logFile << std::endl;
 
-    unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+    unsigned int fpgaVer = Board.GetFpgaVersionMajor();
     if (fpgaVer == 3) {
         logFile << "FPGA V3" << std::endl;
     }

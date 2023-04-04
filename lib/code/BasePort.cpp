@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2014-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -70,6 +70,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     for (i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardList[i] = 0;
         FirmwareVersion[i] = 0;
+        FpgaVersion[i] = 0;
         HardwareVersion[i] = 0;
         Board2Node[i] = MAX_NODES;
     }
@@ -82,6 +83,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     BasePort::AddHardwareVersion(QLA1_String);
     BasePort::AddHardwareVersion(dRA1_String);
     BasePort::AddHardwareVersion(DQLA_String);
+    BasePort::AddHardwareVersion(BCFG_String);
     BasePort::AddHardwareVersion(0x54455354); // "TEST"
 }
 
@@ -271,6 +273,17 @@ bool BasePort::ScanNodes(void)
         }
         fver = data;
 
+        // read FPGA version (for Firmware Rev 5+)
+        unsigned long fpga_ver = 1;
+        if (fver >= 5) {
+            if (!ReadQuadletNode(node, BoardIO::ETH_STATUS, data)) {
+                outStr << "BasePort::ScanNodes: unable to read FPGA version (ETH_STATUS) from node "
+                       << node << std::endl;
+                continue;
+            }
+            fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+        }
+
         // read board id
         if (!ReadQuadletNode(node, BoardIO::BOARD_STATUS, data)) {
             outStr << "BasePort::ScanNodes: unable to read status from node " << node << std::endl;
@@ -278,9 +291,11 @@ bool BasePort::ScanNodes(void)
         }
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
         board = (data & BOARD_ID_MASK) >> 24;
+        FpgaVersion[board] = fpga_ver;
         HardwareVersion[board] = hver;
         FirmwareVersion[board] = fver;
         outStr << "  Node " << node << ", BoardId = " << board
+               << ", " << GetFpgaVersionMajorString(board)
                << ", Hardware = " << GetHardwareVersionString(board)
                << ", Firmware Version = " << GetFirmwareVersion(board) << std::endl;
 
@@ -503,6 +518,17 @@ nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
     else if (boardId == FW_NODE_BROADCAST)
         node = FW_NODE_BROADCAST;
     return node;
+}
+
+std::string BasePort::GetFpgaVersionMajorString(unsigned char boardId) const
+{
+    unsigned int fpga_ver = GetFpgaVersionMajor(boardId);
+    std::string fStr("FPGA_V");
+    if (fpga_ver == 0)
+        fStr.push_back('?');
+    else
+        fStr.push_back('0'+fpga_ver);
+    return fStr;
 }
 
 std::string BasePort::GetHardwareVersionString(unsigned char boardId) const

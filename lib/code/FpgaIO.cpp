@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -26,7 +26,6 @@ http://www.cisst.org/cisst/license.txt.
 const uint32_t REBOOT_FPGA      = 0x00300000;  /*!< Reboot FPGA (Rev 7+)       */
 const uint32_t LED_ON           = 0x000c0000;  /*!< Turn LED on                */
 const uint32_t LED_OFF          = 0x00080000;  /*!< Turn LED off               */
-const uint32_t RESET_KSZ8851    = 0x04000000;  /*!< Mask to reset KSZ8851 Ethernet chip */
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
 
@@ -61,25 +60,6 @@ FpgaIO::~FpgaIO()
 #endif
 }
 
-unsigned int FpgaIO::GetFPGAVersionMajor(void) const
-{
-    if (GetFirmwareVersion() < 5) return 1;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return 0;
-    unsigned int ver = 0;   // unknown version
-    // Version 1:  all bits are 0
-    // Version 2:  bit 31 is 1
-    // Version 3:  bits[31:30] are 01
-    if (read_data == 0)
-        ver = 1;
-    else if (read_data&0x80000000)
-        ver = 2;
-    else if ((read_data&0x40000000) == 0x40000000)
-        ver = 3;
-    return ver;
-}
-
 std::string FpgaIO::GetFPGASerialNumber(void)
 {
     // Format: FPGA 1234-56 (12 bytes) or FPGA 1234-567 (13 bytes).
@@ -111,7 +91,7 @@ double FpgaIO::GetFPGAClockPeriod(void) const
 
 bool FpgaIO::HasEthernet(void) const
 {
-    return (GetFPGAVersionMajor() > 1);
+    return (GetFpgaVersionMajor() > 1);
 }
 
 /*******************************************************************************
@@ -152,9 +132,11 @@ bool FpgaIO::WriteRebootAll(BasePort *port)
     return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
-bool FpgaIO::ResetKSZ8851All(BasePort *port) {
-    quadlet_t write_data = RESET_KSZ8851;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 12, write_data) : false);
+bool FpgaIO::ResetEthernetAll(BasePort *port) {
+    // For FPGA V2, it is enough to specify ETH_CTRL_RESET_PHY
+    // For FPGA V3, we specify two additional bits to indicate which PHYs are being reset
+    quadlet_t write_data = ETH_CTRL_RESET_PHY | ETH_PORT_CTRL_RESET_PHY | (ETH_PORT_CTRL_RESET_PHY << 8);
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::ETH_STATUS, write_data) : false);
 }
 
 /*******************************************************************************
@@ -488,40 +470,33 @@ bool FpgaIO::PromWriteBlock25AA128(uint16_t addr, quadlet_t *data, unsigned int 
 
 // ********************** KSZ8851 Ethernet Controller Methods ***********************************
 
-bool FpgaIO::ResetKSZ8851()
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = RESET_KSZ8851;
-    return port->WriteQuadlet(BoardId, 12, write_data);
-}
-
 bool FpgaIO::WriteKSZ8851Reg(uint8_t addr, const uint8_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
+    quadlet_t write_data = ETH_CTRL_WR_V2 | (static_cast<quadlet_t>(addr) << 16) | data;
+    return WriteEthernetControl(write_data);
 }
 
 bool FpgaIO::WriteKSZ8851Reg(uint8_t addr, const uint16_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
+    quadlet_t write_data = ETH_CTRL_WR_V2 | ETH_CTRL_WB_V2 | (static_cast<quadlet_t>(addr) << 16) | data;
+    return WriteEthernetControl(write_data);
 }
 
 bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
     quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data))
+    if (!WriteEthernetControl(write_data))
         return false;
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
+    if (!ReadEthernetStatus(read_data))
         return false;
-    // Bit 31 indicates whether Ethernet is present
-    if (!(read_data&0x80000000)) return false;
-    // Bit 30 indicates whether last command had an error
-    if (read_data&0x40000000) return false;
+    // Check if Ethernet is present
+    if (!(read_data&ETH_STAT_PRESENT_V2)) return false;
+    // Check if last command had an error
+    if (read_data&ETH_STAT_REQ_ERR_V2) return false;
     rdata = static_cast<uint8_t>(read_data);
     return true;
 }
@@ -529,20 +504,18 @@ bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata)
 bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint16_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data)) {
+    quadlet_t write_data = ETH_CTRL_WB_V2 | (static_cast<quadlet_t>(addr) << 16) | rdata;
+    if (!WriteEthernetControl(write_data)) {
         std::cout << "WriteQuadlet failed" << std::endl;
         return false;
     }
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data)) {
-        std::cout << "ReadQuadlet failed" << std::endl;
+    if (!ReadEthernetStatus(read_data))
         return false;
-    }
-    // Bit 31 indicates whether Ethernet is present
-    if (!(read_data&0x80000000)) return false;
-    // Bit 30 indicates whether last command had an error
-    if (read_data&0x40000000) return false;
+    // Check if Ethernet is present
+    if (!(read_data&ETH_STAT_PRESENT_V2)) return false;
+    // Check if last command had an error
+    if (read_data&ETH_STAT_REQ_ERR_V2) return false;
     rdata = static_cast<uint16_t>(read_data);
     return true;
 }
@@ -554,23 +527,23 @@ bool FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint16_t &rdata)
 bool FpgaIO::WriteKSZ8851DMA(const uint16_t &data)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x0B000000 | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
+    quadlet_t write_data = ETH_CTRL_DMA_V2 | ETH_CTRL_WR_V2 | ETH_CTRL_WB_V2 | data;
+    return WriteEthernetControl(write_data);
 }
 
 bool FpgaIO::ReadKSZ8851DMA(uint16_t &rdata)
 {
     if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x09000000 | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data))
+    quadlet_t write_data = ETH_CTRL_DMA_V2 | ETH_CTRL_WB_V2 | rdata;
+    if (!WriteEthernetControl(write_data))
         return false;
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
+    if (!ReadEthernetStatus(read_data))
         return false;
-    // Bit 31 indicates whether Ethernet is present
-    if (!(read_data&0x80000000)) return false;
-    // Bit 30 indicates whether last command had an error
-    if (read_data&0x40000000) return false;
+    // Check if Ethernet is present
+    if (!(read_data&ETH_STAT_PRESENT_V2)) return false;
+    // Check if last command had an error
+    if (read_data&ETH_STAT_REQ_ERR_V2) return false;
     rdata = static_cast<uint16_t>(read_data);
     return true;
 }
@@ -586,11 +559,11 @@ uint16_t FpgaIO::ReadKSZ8851ChipID()
 
 uint16_t FpgaIO::ReadKSZ8851Status()
 {
-    if (GetFirmwareVersion() < 5) return 0;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return 0;
-    return static_cast<uint16_t>(read_data>>16);
+    uint16_t status = 0;
+    quadlet_t status32;
+    if (ReadEthernetStatus(status32))
+        status = static_cast<uint16_t>(status32>>16);
+    return status;
 }
 
 // ************************** RTL8211F Ethernet PHY Methods *************************************
@@ -623,6 +596,60 @@ bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, uns
 }
 
 // ***************************** Methods shared by V2/V3 ****************************************
+
+bool FpgaIO::ReadEthernetStatus(uint32_t &status)
+{
+    status = 0;
+    if (GetFirmwareVersion() < 5) return false;
+    return port->ReadQuadlet(BoardId, BoardIO::ETH_STATUS, status);
+}
+
+unsigned int FpgaIO::GetEthernetPortCurrent(uint32_t status)
+{
+    unsigned int curPort = 0;
+    if (GetFpgaVersionMajorFromStatus(status) == 3)
+        curPort = (status&0x20000000) ? 2 : 1;
+    return curPort;
+}
+
+uint8_t FpgaIO::GetEthernetPortStatusV3(uint32_t status, unsigned int chan)
+{
+    uint8_t pstat = 0;
+    if (GetFpgaVersionMajorFromStatus(status) == 3) {
+        if (chan == 1)
+            pstat = static_cast<uint8_t>(status&ETH_STAT_PORT1_MASK_V3);
+        else if (chan == 2)
+            pstat = static_cast<uint8_t>((status&ETH_STAT_PORT2_MASK_V3)>>8);
+    }
+    return pstat;
+}
+
+bool FpgaIO::WriteEthernetControl(uint32_t write_data)
+{
+    if (GetFirmwareVersion() < 5) return false;
+    return port->WriteQuadlet(BoardId, BoardIO::ETH_STATUS, write_data);
+}
+
+bool FpgaIO::WriteEthernetPhyReset(unsigned int chan)
+{
+    quadlet_t write_data = ETH_CTRL_RESET_PHY;
+    if (chan&1)
+        write_data |= ETH_PORT_CTRL_RESET_PHY;
+    if (chan&2)
+        write_data |= (ETH_PORT_CTRL_RESET_PHY<<8);
+    return WriteEthernetControl(write_data);
+}
+
+bool FpgaIO::WriteEthernetClearErrors(unsigned int chan)
+{
+    quadlet_t write_data = ETH_CTRL_CLR_ERR;
+    if (chan&1)
+        write_data |= ETH_PORT_CTRL_CLR_ERR;
+    if (chan&2)
+        write_data |= (ETH_PORT_CTRL_CLR_ERR<<8);
+    return WriteEthernetControl(write_data);
+}
+
 bool FpgaIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
     if (GetFirmwareVersion() < 5) return false;

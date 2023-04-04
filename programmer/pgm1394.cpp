@@ -231,7 +231,7 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
 bool PromDownload(AmpIO&Board)
 {
     std::string mcsName;
-    unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+    unsigned int fpgaVer = Board.GetFpgaVersionMajor();
     if (fpgaVer == 1)
         mcsName = std::string("FPGA1394-QLA-");
     else if (fpgaVer == 2)
@@ -479,6 +479,7 @@ int main(int argc, char** argv)
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
     std::string mcsName;
+    std::string mcsNameAlt;
     std::string sn;
     bool auto_mode = false;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
@@ -553,11 +554,15 @@ int main(int argc, char** argv)
     Port->AddBoard(&Board);
 
     if (mcsName.empty()) {
-        unsigned int fpgaVer = Board.GetFPGAVersionMajor();
-        if (fpgaVer == 1)
-            mcsName = std::string("FPGA1394-QLA.mcs");
-        else if (fpgaVer == 2)
-            mcsName = std::string("FPGA1394Eth-QLA.mcs");
+        unsigned int fpgaVer = Board.GetFpgaVersionMajor();
+        if (fpgaVer == 1) {
+            mcsName = std::string("FPGA1394V1-QLA.mcs");
+            mcsNameAlt = std::string("FPGA1394-QLA.mcs");
+        }
+        else if (fpgaVer == 2) {
+            mcsName = std::string("FPGA1394V2-QLA.mcs");
+            mcsNameAlt = std::string("FPGA1394Eth-QLA.mcs");
+        }
         else if (fpgaVer != 3) {
             std::cerr << "Unsupported FPGA (Version = " << fpgaVer << ")" << std::endl;
             return RESULT_UNKNOWN_BOARD;
@@ -565,8 +570,19 @@ int main(int argc, char** argv)
     }
     mcsFile promFile;
     if (!mcsName.empty()) {
-        if (!promFile.OpenFile(mcsName)) {
-            std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
+        bool fileOk = promFile.OpenFile(mcsName);
+        if ((!fileOk) && (!mcsNameAlt.empty())) {
+            fileOk = promFile.OpenFile(mcsNameAlt);
+            if (fileOk) {
+                mcsName = mcsNameAlt;
+                std::cerr << "Switched to alternate filename " << mcsNameAlt << std::endl;
+            }
+        }
+        if (!fileOk) {
+            std::cerr << "Failed to open PROM file: " << mcsName;
+            if (!mcsNameAlt.empty())
+                std::cerr << " or " << mcsNameAlt;
+            std::cout << std::endl;
             return RESULT_NO_PROM_FILE;
         }
     }

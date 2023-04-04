@@ -152,7 +152,13 @@ void AmpIO::InitBoard(void)
         NumMotors = 8;
         NumEncoders = 8;
         NumDouts = 8;
-    } else {
+    }
+    else if (GetHardwareVersion() == BCFG_String) {
+        NumMotors = 0;
+        NumEncoders = 0;
+        NumDouts = 0;
+    }
+    else {
         NumMotors = 4;
         NumEncoders = 4;
         NumDouts = 4;

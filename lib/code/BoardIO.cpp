@@ -27,6 +27,27 @@ uint32_t BoardIO::GetFirmwareVersion(void) const
     return (port ? port->GetFirmwareVersion(BoardId) : 0);
 }
 
+unsigned int BoardIO::GetFpgaVersionMajor(void) const
+{
+    return (port ? port->GetFpgaVersionMajor(BoardId) : 0);
+}
+
+unsigned int BoardIO::GetFpgaVersionMajorFromStatus(uint32_t status)
+{
+    // FPGA V1:  all bits are 0
+    // FPGA V2:  bit 31 is 1
+    // FPGA V3:  bits[31:30] are 01
+    unsigned int fpga_ver = 0;
+    if (status == 0)
+        fpga_ver = 1;
+    else if (status&0x80000000)
+        fpga_ver = 2;
+    else if ((status&0x40000000) == 0x40000000)
+        fpga_ver = 3;
+
+    return fpga_ver;
+}
+
 uint32_t BoardIO::GetHardwareVersion(void) const
 {
     return (port ? port->GetHardwareVersion(BoardId) : 0);
