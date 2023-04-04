@@ -501,15 +501,23 @@ public:
     bool DallasReadBlock(unsigned char *data, unsigned int nbytes) const;
     bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
 
-    /*! \brief Reads model number of the tool on an S PSM
-        \returns Model number. 0xffffffff when no tool is present.
-    */
-    uint32_t SPSMReadToolModel(void) const;
+    // ********************** Si PSM/ECM Methods **************************
 
-    /*! \brief Reads version of the tool on an S PSM
-        \returns Version. 0xff when no tool is present.
+    /* \brief Writes the LED color on an Si PSM or ECM
+       \param rgb1 24-bit RGB value for LED 1🔵. The value will be internally truncated to 4 bits per
+                    color component. E.g. 0x00ff00 is green, 0xff0000 is red, 0x0000ff is blue.
+       \param rgb2 24-bit RGB value for LED 2🟠
+       \param blink1 use blink pattern 🔵🟠 🟠🔵 🔵🟠 🟠🔵
+       \param blink2 use blink pattern 🔵🔵 🟠🟠 🔵🔵 🟠🟠
+       \returns true if successful
     */
-    uint8_t SPSMReadToolVersion(void) const;
+    bool WriteRobotLED(uint32_t rgb1, uint32_t rgb2, bool blink1 = 0, bool blink2 = 0) const;
+
+    /*! \brief Reads the serial number of an Si PSM or ECM. Currently, it reads the cal file filename.
+        \returns a string containing the calibration file name. The caller may have to parse the string
+                 to obtain the serial number.
+    */
+    std::string ReadRobotSerialNumber() const;
 
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive

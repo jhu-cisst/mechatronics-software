@@ -1,6 +1,17 @@
 Change log
 ==========
 
+1.7.0 (2021-08-11)
+==================
+* API changes:
+  * None
+* New features:
+  * Added `GetPowerFault`
+  * Added methods to set FireWire protocol using strings (e.g: `broadcast-query-read-write`)
+* Bug fixes:
+  * None
+
+
 1.6.0 (2021-04-08)
 ==================
 * API changes:
