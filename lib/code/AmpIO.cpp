@@ -1620,7 +1620,7 @@ std::string AmpIO::ReadRobotSerialNumber() const
     if (GetHardwareVersion() == dRA1_String) {
         uint16_t* buf16 = reinterpret_cast<uint16_t*>(buf);
         uint32_t base_flash_addr = 0x8001c >> 1;
-        for (auto i = 0; i < read_length; i++) {
+        for (size_t i = 0; i < read_length; i++) {
             uint32_t flash_command = (1 << 24) | (base_flash_addr + i) ;
             port->WriteQuadlet(BoardId, 0xa002, flash_command);
             Amp1394_Sleep(0.01);
