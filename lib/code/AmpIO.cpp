@@ -1610,11 +1610,13 @@ std::string AmpIO::ReadRobotSerialNumber() const
     char buf[read_length * 2 + 1] = {'\0'};
     if (GetHardwareVersion() == dRA1_String) {
         uint16_t* buf16 = reinterpret_cast<uint16_t*>(buf);
-        uint32_t base_flash_addr = 0x8001c >> 1;
+        uint32_t base_flash_addr = 0;
         for (auto i = 0; i < read_length; i++) {
-            uint32_t flash_command = (1 << 24) | (base_flash_addr + i) ;
-            port->WriteQuadlet(BoardId, 0xa002, flash_command);
-            Amp1394_Sleep(0.01);
+            for (auto flash_en = 0; flash_en < 2; flash_en++) {
+                uint32_t flash_command = (flash_en << 28) | (1 << 24) | (base_flash_addr + i) ;
+                port->WriteQuadlet(BoardId, 0xa002, flash_command);
+                Amp1394_Sleep(0.01);
+            }
             uint32_t q;
             port->ReadQuadlet(BoardId, 0xa031, q);
             buf16[i] = q & 0xFFFF;
