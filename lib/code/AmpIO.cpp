@@ -1241,15 +1241,6 @@ bool AmpIO::WriteWaveformControl(uint8_t mask, uint8_t bits)
 
 bool AmpIO::WriteWatchdogPeriod(uint32_t counts)
 {
-    //TODO: hack
-    if (GetHardwareVersion() == dRA1_String) {
-        for (int axis = 1; axis < 11; axis ++) {
-            WriteCurrentKpRaw(axis - 1, 2000);
-            WriteCurrentKiRaw(axis - 1, 200);
-            WriteCurrentITermLimitRaw(axis - 1, 1000);
-            WriteDutyCycleLimit(axis - 1, 1000);
-        }
-    }
     // period = counts(16 bits) * 5.208333 us (0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, counts);
 }
@@ -1605,7 +1596,7 @@ bool AmpIO::WriteRobotLED(uint32_t rgb1, uint32_t rgb2, bool blink1, bool blink2
         uint8_t b1 = (rgb1 >> 4) & 0xF;
         uint8_t r2 = (rgb2 >> 20) & 0xF;
         uint8_t g2 = (rgb2 >> 12) & 0xF;
-        uint8_t b2 = (rgb2 >> 4) & 0xF;        
+        uint8_t b2 = (rgb2 >> 4) & 0xF;
         uint32_t command = (r1 << 10) | (g1 << 5) | (b1 << 0) | (blink1 << 15) | (r2 << 26) | (g2 << 21) | (b2 << 16) | (blink2 << 31) ;
         return (port ? port->WriteQuadlet(BoardId, 0xa001, command) : false);
     }
@@ -1784,6 +1775,82 @@ void AmpIO::CheckCollectCallback()
 }
 
 //******* Following methods are for dRA1 ********
+
+std::string AmpIO::ExplainSiFault() const
+{
+    std::stringstream ss;
+    const char* amp_fault_text[16] = {"-", "ADC saturated", "Current deviation", "HW overcurrent", "HW overtemp", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined"};
+    auto status = GetStatus();
+    ss << "Explaining faults in the Si controller:" << std::endl;
+    ss << std::endl;
+    ss << "1. Interlocks that are preventing the axis from turning on:" << std::endl;
+    if (!(status & (1 << 0))) ss << "ESPM->dVRK communication failed. Robot not programmed? Cables?" << std::endl;
+    if ((status & (1 << 0)) && !(status & (1 << 1))) ss << "ESII/CC->ESPM communication failed. The problem is inside the robot." << std::endl;
+    if (!(status & (1 << 3))) ss << "Encoder preload is out of sync. You must preload encoder at least once." << std::endl;
+    if (!GetPowerStatus()) ss << "48V bad. E-stop pressed?" << std::endl;
+    if (GetWatchdogTimeoutStatus()) ss << "Watchdog timeout." << std::endl;
+    ss << "(end)" << std::endl;
+    ss << std::endl;
+    ss << "2. Amps that are in fault state:" << std::endl;
+    for (int i = 0; i < NumMotors; i++) {
+        // std::cout << NumMotors << std::endl;
+        auto amp_fault = GetAmpFaultCode(i);
+        // std::cout << amp_fault << std::endl;
+        if (amp_fault) {
+            ss << "Amp " << i << ": " << amp_fault_text[amp_fault] << std::endl;
+        }
+    }
+    ss << "(end)" << std::endl;
+    ss << std::endl;
+    ss << std::endl;
+    return ss.str();
+}
+
+bool AmpIO::WriteSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams params)
+{
+    if (!port) return false;
+    if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() != dRA1_String) {
+        std::cerr << "AmpIO::WriteSiCurrentLoopParams not implemented for " << GetHardwareVersion() << std::endl;
+        return false;
+    }
+    if ((index < 0) || (index >= NumMotors)) return false;
+    if (params.kp >= 1 << 18) return false;
+    if (params.ki >= 1 << 18) return false;
+    if (params.iTermLimit > 1023) return false;
+    if (params.dutyCycleLimit > 1023) return false;
+
+    bool success = true;
+    success &= port->WriteQuadlet(BoardId,
+    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+    OFF_CURRENT_KP, params.kp);
+    success &= port->WriteQuadlet(BoardId,
+    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+    OFF_CURRENT_KI, params.ki);
+    success &= port->WriteQuadlet(BoardId,
+    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+    OFF_CURRENT_I_TERM_LIMIT, params.iTermLimit);
+    success &= port->WriteQuadlet(BoardId,
+    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+    OFF_DUTY_CYCLE_LIMIT, params.dutyCycleLimit);
+    return success;
+}
+
+SiCurrentLoopParams AmpIO::ReadSiCurrentLoopParams(unsigned int index) const
+{
+    SiCurrentLoopParams params;
+    if (!port) return params;
+    uint32_t read_data = 0;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, read_data);
+    params.kp = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, read_data);
+    params.ki = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, read_data);
+    params.iTermLimit = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, read_data);
+    params.dutyCycleLimit = read_data;
+    return params;
+}
 
 bool AmpIO::WriteMotorControlMode(unsigned int index, uint16_t mode) {
     return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_MOTOR_CONTROL_MODE, mode) : false);
