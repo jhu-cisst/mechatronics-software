@@ -27,6 +27,15 @@ http://www.cisst.org/cisst/license.txt.
 
 class ostream;
 
+struct SiCurrentLoopParams {
+    uint32_t kp; // uint18 Q0.18
+    uint32_t ki; // uint18 Q0.18
+    uint32_t kd; // uint18 Q0.18
+    uint32_t ff_resistive; // uint18 Q0.18
+    uint16_t iTermLimit; // uint 0-1023
+    uint16_t dutyCycleLimit; // uint 0-1023
+};
+
 /*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/Interface-Specification */
 class AmpIO : public FpgaIO
 {
@@ -589,6 +598,11 @@ public:
         CURRENT = 0
     };
 
+    std::string ExplainSiFault() const;
+
+    bool WriteSiCurrentLoopParams(unsigned int index, const SiCurrentLoopParams& params) const;
+    bool ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& params) const;
+
     bool WriteMotorControlMode(unsigned int index, uint16_t val);
     bool WriteCurrentKpRaw(unsigned int index, uint32_t val);
     bool WriteCurrentKiRaw(unsigned int index, uint32_t val);
@@ -753,6 +767,8 @@ protected:
         OFF_CURRENT_KI = 2,
         OFF_CURRENT_I_TERM_LIMIT = 3,
         OFF_DUTY_CYCLE_LIMIT = 4,
+        OFF_CURRENT_KD = 5,
+        OFF_CURRENT_FF_RESISTIVE = 6,
         OFF_DUTY_CYCLE = 10,
         OFF_FAULT = 11,
         OFF_CURRENT_I_TERM = 12 // awaiting new assignment
