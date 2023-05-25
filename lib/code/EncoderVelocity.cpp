@@ -36,7 +36,7 @@ const uint32_t ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity
 const uint32_t ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
 const uint32_t ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
 
-const double VEL_PERD_ESPM          = 1.0/40000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
+const double VEL_PERD_ESPM          = 1.0/80000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
 const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
 const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
 const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
