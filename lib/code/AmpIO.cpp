@@ -1780,6 +1780,9 @@ void AmpIO::CheckCollectCallback()
 
 std::string AmpIO::ExplainSiFault() const
 {
+    if (GetHardwareVersion() != dRA1_String) {
+        return "Not a Si controller";
+    }
     std::stringstream ss;
     const char* amp_fault_text[16] = {"-", "ADC saturated", "Current deviation", "HW overcurrent", "HW overtemp", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined"};
     auto status = GetStatus();
@@ -1808,7 +1811,7 @@ std::string AmpIO::ExplainSiFault() const
     return ss.str();
 }
 
-bool AmpIO::WriteSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams params)
+bool AmpIO::WriteSiCurrentLoopParams(unsigned int index, const SiCurrentLoopParams& params) const
 {
     if (!port) return false;
     if (GetFirmwareVersion() < 7) return false;
@@ -1819,39 +1822,49 @@ bool AmpIO::WriteSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams par
     if ((index < 0) || (index >= NumMotors)) return false;
     if (params.kp >= 1 << 18) return false;
     if (params.ki >= 1 << 18) return false;
+    if (params.kd >= 1 << 18) return false;
     if (params.iTermLimit > 1023) return false;
     if (params.dutyCycleLimit > 1023) return false;
 
     bool success = true;
     success &= port->WriteQuadlet(BoardId,
-    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
-    OFF_CURRENT_KP, params.kp);
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KP, params.kp);
     success &= port->WriteQuadlet(BoardId,
-    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
-    OFF_CURRENT_KI, params.ki);
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KI, params.ki);
     success &= port->WriteQuadlet(BoardId,
-    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
-    OFF_CURRENT_I_TERM_LIMIT, params.iTermLimit);
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KD, params.kd);
     success &= port->WriteQuadlet(BoardId,
-    ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
-    OFF_DUTY_CYCLE_LIMIT, params.dutyCycleLimit);
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_FF_RESISTIVE, params.ff_resistive);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_I_TERM_LIMIT, params.iTermLimit);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_DUTY_CYCLE_LIMIT, params.dutyCycleLimit);
     return success;
 }
 
-SiCurrentLoopParams AmpIO::ReadSiCurrentLoopParams(unsigned int index) const
+bool AmpIO::ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& params) const
 {
-    SiCurrentLoopParams params;
-    if (!port) return params;
+    if (!port) return false;
     uint32_t read_data = 0;
     port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, read_data);
     params.kp = read_data;
     port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, read_data);
     params.ki = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KD, read_data);
+    params.kd = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_FF_RESISTIVE, read_data);
+    params.ff_resistive = read_data;
     port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, read_data);
     params.iTermLimit = read_data;
     port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, read_data);
     params.dutyCycleLimit = read_data;
-    return params;
+    return true;
 }
 
 bool AmpIO::WriteMotorControlMode(unsigned int index, uint16_t mode) {
