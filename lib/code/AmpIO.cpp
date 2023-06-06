@@ -1611,8 +1611,8 @@ std::string AmpIO::ReadRobotSerialNumber() const
     if (GetHardwareVersion() == dRA1_String) {
         uint16_t* buf16 = reinterpret_cast<uint16_t*>(buf);
         uint32_t base_flash_addr = 0;
-        for (auto i = 0; i < read_length; i++) {
-            for (auto flash_en = 0; flash_en < 2; flash_en++) {
+        for (size_t i = 0; i < read_length; i++) {
+            for (uint32_t flash_en = 0; flash_en < 2; flash_en++) {
                 uint32_t flash_command = (flash_en << 28) | (1 << 24) | (base_flash_addr + i) ;
                 port->WriteQuadlet(BoardId, 0xa002, flash_command);
                 Amp1394_Sleep(0.01);
@@ -1785,7 +1785,7 @@ std::string AmpIO::ExplainSiFault() const
     }
     std::stringstream ss;
     const char* amp_fault_text[16] = {"-", "ADC saturated", "Current deviation", "HW overcurrent", "HW overtemp", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined"};
-    auto status = GetStatus();
+    uint32_t status = GetStatus();
     ss << "Explaining faults in the Si controller:" << std::endl;
     ss << std::endl;
     ss << "1. Interlocks that are preventing the axis from turning on:" << std::endl;
@@ -1797,9 +1797,9 @@ std::string AmpIO::ExplainSiFault() const
     ss << "(end)" << std::endl;
     ss << std::endl;
     ss << "2. Amps that are in fault state:" << std::endl;
-    for (int i = 0; i < NumMotors; i++) {
+    for (unsigned int i = 0; i < NumMotors; i++) {
         // std::cout << NumMotors << std::endl;
-        auto amp_fault = GetAmpFaultCode(i);
+        uint32_t amp_fault = GetAmpFaultCode(i);
         // std::cout << amp_fault << std::endl;
         if (amp_fault) {
             ss << "Amp " << i << ": " << amp_fault_text[amp_fault] << std::endl;
@@ -1819,7 +1819,7 @@ bool AmpIO::WriteSiCurrentLoopParams(unsigned int index, const SiCurrentLoopPara
         std::cerr << "AmpIO::WriteSiCurrentLoopParams not implemented for " << GetHardwareVersion() << std::endl;
         return false;
     }
-    if ((index < 0) || (index >= NumMotors)) return false;
+    if (index >= NumMotors) return false;
     if (params.kp >= 1 << 18) return false;
     if (params.ki >= 1 << 18) return false;
     if (params.kd >= 1 << 18) return false;
