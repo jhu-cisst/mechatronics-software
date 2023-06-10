@@ -324,6 +324,12 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
     out << std::dec;
 }
 
+bool AmpIO::HasQLA() const
+{
+    return (GetHardwareVersion() == QLA1_String) ||
+           (GetHardwareVersion() == DQLA_String);
+}
+
 uint32_t AmpIO::GetStatus(void) const
 {
     return ReadBuffer[STATUS_OFFSET];
@@ -1123,7 +1129,16 @@ bool AmpIO::ReadMotorCurrentLimit(unsigned int index, uint16_t &mcurlim) const
     uint32_t cfg;
     bool ret = ReadMotorConfig(index, cfg);
     if (ret)
-        mcurlim = static_cast<uint16_t>(cfg&MCFG_CURRENT_LIMIT_MASK);
+        mcurlim = static_cast<uint16_t>(cfg & MCFG_CURRENT_LIMIT_MASK);
+    return ret;
+}
+
+bool AmpIO::ReadAmpEnableDelay(unsigned int index, uint8_t &ampdelay) const
+{
+    uint32_t cfg;
+    bool ret = ReadMotorConfig(index, cfg);
+    if (ret)
+        ampdelay = static_cast<uint8_t>((cfg & MCFG_AMP_ENABLE_DELAY_MASK)>>16);
     return ret;
 }
 
@@ -1343,7 +1358,7 @@ bool AmpIO::WriteMotorConfig(unsigned int index, uint32_t cfg)
     bool ret = false;
     if (GetFirmwareVersion() < 8) return ret;
 
-    if ((GetHardwareVersion() != dRA1_String) && port && (index < NumMotors)) {
+    if (HasQLA() && port && (index < NumMotors)) {
         unsigned int channel = (index+1) << 4;
         ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
     }
@@ -1352,9 +1367,28 @@ bool AmpIO::WriteMotorConfig(unsigned int index, uint32_t cfg)
 
 bool AmpIO::WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim)
 {
-    // TODO: change firmware to use one of the upper bits as a mask, so that we can
-    // write a new motor current limit without affecting other bits.
-    return false;
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (HasQLA() && port && (index < NumMotors)) {
+        uint32_t cfg = MCFG_SET_CUR_LIMIT | mcurlim;
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
+}
+
+bool AmpIO::WriteAmpEnableDelay(unsigned int index, uint8_t ampdelay)
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (HasQLA() && port && (index < NumMotors)) {
+        uint32_t cfg = MCFG_SET_AMP_DELAY | (ampdelay<<16);
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
 }
 
 /*******************************************************************************

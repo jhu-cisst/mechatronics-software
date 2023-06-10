@@ -57,6 +57,9 @@ public:
     std::string GetQLASerialNumber(unsigned char chan = 0);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
 
+    // Return true if QLA or DQLA
+    bool HasQLA() const;
+
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
     // by BasePort::ReadAllBoards. To read data immediately from the boards,
@@ -341,13 +344,18 @@ public:
     enum MotorConfigBitMask {
         MCFG_VOLTAGE_CONTROL = 0x02000000,           // 1 -> voltage control available (QLA 1.5+)
         MCFG_CURRENT_CONTROL = 0x01000000,           // 1 -> current control available (QLA)
-        MCFG_AMP_ENABLE_DELAY_MASK  = 0x00ff0000,    // mask for setting amplifier delay (20.83 us resolution)
-        MCFG_CURRENT_LIMIT_MASK = 0x0000ffff };      // mask for setting motor current limit
+        MCFG_SET_AMP_DELAY   = 0x02000000,           // 1 -> write new value of amplifier delay (QLA 1.5+)
+        MCFG_SET_CUR_LIMIT   = 0x01000000,           // 1 -> write new value for current limit (QLA)
+        MCFG_AMP_ENABLE_DELAY_MASK = 0x00ff0000,     // mask for amplifier delay (20.83 us resolution, QLA 1.5+)
+        MCFG_CURRENT_LIMIT_MASK = 0x0000ffff };      // mask for motor current limit
 
     bool ReadMotorConfig(unsigned int index, uint32_t &cfg) const;
 
     // ReadMotorCurrentLimit (calls ReadMotorConfig)
     bool ReadMotorCurrentLimit(unsigned int index, uint16_t &mcurlim) const;
+
+    // ReadAmpEnableDelay (calls ReadMotorConfig)
+    bool ReadAmpEnableDelay(unsigned int index, uint8_t &ampdelay) const;
 
     // ********************** WRITE Methods **********************************
 
@@ -463,6 +471,9 @@ public:
     // in voltage control mode (QLA V1.5+).
     // This method calls WriteMotorConfig.
     bool WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim);
+
+    // WriteAmpEnableDelay is for QLA 1.5+. This method calls WriteMotorConfig.
+    bool WriteAmpEnableDelay(unsigned int index, uint8_t ampdelay);
 
     // **************** Static WRITE Methods (for broadcast) ********************
 
