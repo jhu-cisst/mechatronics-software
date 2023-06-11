@@ -1107,6 +1107,27 @@ bool AmpIO::ReadIOExpander(uint32_t &resp) const
     return port->ReadQuadlet(BoardId, 14, resp);
 }
 
+bool AmpIO::ReadMotorSupplyVoltageBit(unsigned int index) const
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (GetHardwareVersion() == QLA1_String) {
+        // Bit 28 in digital I/O register
+        uint32_t dig_in;
+        if (port && port->ReadQuadlet(BoardId, 0x0a, dig_in))
+            ret = (dig_in&0x10000000);
+
+    }
+    else if ((GetHardwareVersion() == DQLA_String) && ((index == 1) || (index == 2))) {
+        // Bits 5 (QLA2) and 4 (QLA1) in status register
+        uint32_t status;
+        if (port && port->ReadQuadlet(BoardId, BoardIO::BOARD_STATUS, status))
+            ret = (status & (index << 4) );
+    }
+    return ret;
+}
+
 bool AmpIO::ReadMotorConfig(unsigned int index, uint32_t &cfg) const
 {
     bool ret = false;
@@ -1369,6 +1390,9 @@ bool AmpIO::WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim)
 {
     bool ret = false;
     if (GetFirmwareVersion() < 8) return ret;
+    // Return false if motor current limit exceeds maximum range (rather
+    // than allowing firmware to set msb to 0).
+    if (mcurlim > 0x7fff) return ret;
 
     if (HasQLA() && port && (index < NumMotors)) {
         uint32_t cfg = MCFG_SET_CUR_LIMIT | mcurlim;

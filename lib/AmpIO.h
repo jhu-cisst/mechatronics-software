@@ -335,6 +335,16 @@ public:
      */
     bool ReadIOExpander(uint32_t &resp) const;
 
+    /*! \brief Read motor supply voltage feedback bit, available in QLA 1.5+, that compares
+               channel 4 DAC output to motor supply voltage.
+               The index parameter is ignored for the QLA, but used for the DQLA,
+               where index=1 returns the result for QLA 1 and index=2 returns the
+               result for QLA 2.
+        \returns false if DAC voltage is greater than motor supply voltage (or QLA < 1.5)
+                 true if DAC voltage is less than motor supply voltage
+    */
+    bool ReadMotorSupplyVoltageBit(unsigned int index = 0) const;
+
     /*! \brief Read motor configuration register (Firmware Rev 8+)
         \param index motor number, 0..NumMotors-1
         \param cfg   value read from configuration register
@@ -468,8 +478,10 @@ public:
     bool WriteMotorConfig(unsigned int index, uint32_t cfg);
 
     // WriteMotorCurrentLimit is for QLA/DQLA and used when motor is
-    // in voltage control mode (QLA V1.5+).
-    // This method calls WriteMotorConfig.
+    // in voltage control mode (QLA V1.5+). Note that mcurlim is limited
+    // to 15 bits (0x0 - 0x7fff) and the method returns false if a value
+    // greater than 0x7fff is specified. One bit is approximately equal
+    // to 0.19 mA. This method calls WriteMotorConfig.
     bool WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim);
 
     // WriteAmpEnableDelay is for QLA 1.5+. This method calls WriteMotorConfig.

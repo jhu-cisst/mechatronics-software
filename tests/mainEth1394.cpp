@@ -1453,36 +1453,52 @@ int main(int argc, char **argv)
         case 'v':
             // Measure power supply voltage (QLA 1.5+)
             if (curBoard) {
-                // Make sure board power is on and amplifier power is off
-                curBoard->WritePowerEnable(true);
-                curBoard->WriteAmpEnable(0x0f, 0);
-                uint32_t volts;
-                uint32_t vinc = 0x1000;
-                for (volts = 0; volts <= 0x0000ffff; volts += vinc) {
-                    // Write voltage to DAC 4
-                    curPort->WriteQuadlet(curBoard->GetBoardId(), 0x41, volts | 0x80000000);
-                    Amp1394_Sleep(0.001);
-                    // Read comparator bit (register 10, bit 28)
-                    uint32_t iodata;
-                    curPort->ReadQuadlet(curBoard->GetBoardId(), 10, iodata);
-                    // iodata&0x10000000 is false (0) when DAC voltage is greater than motor power suply.
-                    if ((iodata&0x10000000) == 0) {
-                        if (vinc <= 1) break;
-                        // Backup and reduce resolution
-                        volts -= vinc;
-                        vinc >>= 1;
+                unsigned int numQla = 0;
+                if (curBoard->GetHardwareVersion() == QLA1_String)
+                    numQla = 1;
+                else if (curBoard->GetHardwareVersion() == DQLA_String)
+                    numQla = 2;
+                if (numQla > 0) {
+                    // Make sure board power is on and amplifier power is off
+                    curBoard->WritePowerEnable(true);
+                    if (numQla == 1)
+                        curBoard->WriteAmpEnable(0x0f, 0);
+                    else
+                        curBoard->WriteAmpEnable(0xff, 0);
+                }
+                for (unsigned int idx = 0; idx < numQla; idx++) {
+                    uint32_t volts;
+                    uint32_t vinc = 0x1000;
+                    nodeaddr_t dac_addr = (idx == 0) ? 0x41 : 0x81;
+                    for (volts = 0; volts <= 0x0000ffff; volts += vinc) {
+                        // Write voltage to DAC 4 or 8 (for DQLA)
+                        curPort->WriteQuadlet(curBoard->GetBoardId(), dac_addr, volts | 0x80000000);
+                        Amp1394_Sleep(0.001);
+                        bool dac_lt_supply = curBoard->ReadMotorSupplyVoltageBit(idx+1);
+                        if (!dac_lt_supply) {
+                            // if DAC voltage greater than supply,
+                            // backup and reduce resolution
+                            if (vinc <= 1) break;
+                            volts -= vinc;
+                            vinc >>= 1;
+                        }
                     }
+                    if (volts <= 0x0000ffff) {
+                        const double bits2volts = (2.5/65535)*21.0;
+                        if (numQla == 2)
+                            std::cout << "QLA " << (idx+1) << ": ";
+                        std::cout << "Measured power supply voltage = " << volts << " (" << (volts*bits2volts)
+                                  << ")" << std::endl;
+                    }
+                    else {
+                        if (numQla == 2)
+                            std::cout << "QLA " << (idx+1) << ": ";
+                        std::cout << "Failed to measure motor supply voltage" << std::endl;
+                    }
+                    curPort->WriteQuadlet(curBoard->GetBoardId(), dac_addr, 0x80008000);
                 }
-                if (volts <= 0x0000ffff) {
-                    const double bits2volts = (2.5/65535)*21.0;
-                    std::cout << "Measured power supply voltage = " << volts << " (" << (volts*bits2volts)
-                              << ")" << std::endl;
-                }
-                else {
-                    std::cout << "Failed to measure motor supply voltage" << std::endl;
-                }
-                curPort->WriteQuadlet(curBoard->GetBoardId(), 0x41, 0x80008000);
-                curBoard->WritePowerEnable(false);
+                if (numQla > 0)
+                    curBoard->WritePowerEnable(false);
             }
             break;
 
