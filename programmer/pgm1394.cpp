@@ -132,7 +132,7 @@ bool PromProgramTest(AmpIO &Board)
     unsigned char readBuffer[256];
     size_t i;
     for (i = 0; i < sizeof(testBuffer); i++)
-        testBuffer[i] = i;
+        testBuffer[i] = static_cast<unsigned char>(i);
 
     std::cout << "Testing PROM programming" << std::endl;
     std::cout << "  Erasing sector 1E0000 " << std::flush;
@@ -350,7 +350,7 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     std::cin.ignore(20,'\n');
     ss << BoardType << " " << FPGASN;
     str = ss.str();
-    char buffer[20];
+    unsigned char buffer[20];
     size_t len = str.length();
     if (len > 20) {
         std::cerr << "FPGA Serial Number too long" << std::endl;

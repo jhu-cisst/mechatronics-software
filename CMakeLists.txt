@@ -55,6 +55,9 @@ if (WIN32)
     set (PCAP_LIBRARIES "wpcap" "Packet")
   endif (Amp1394_HAS_PCAP)
 
+  # Disable annoying warnings
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+
 else (WIN32)
 
   # On other platforms (mostly Linux), can build with pcap and/or libraw1394
