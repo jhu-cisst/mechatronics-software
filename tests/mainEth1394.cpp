@@ -529,16 +529,17 @@ void  ContinuousWriteTest(BasePort *ethPort, unsigned char boardNum)
     size_t compareFailures = 0;
     quadlet_t write_data = 0x0;
     int count = 0;
+    nodeaddr_t regnum = 0x14;  // Channel 1 preload (was 0x0F for REG_DEBUG)
 
     while (!done) {
         read_data = -1;
         write_data++;
         count++;
-        if (!ethPort->WriteQuadlet(boardNum, 0x0F, write_data))   // 0x0F is REG_DEBUG
+        if (!ethPort->WriteQuadlet(boardNum, regnum, write_data))
             writeFailures++;
         else {
             Amp1394_Sleep(50*1e-6);  // sleep 50 us
-            ethPort->ReadQuadlet(boardNum, 0x0F, read_data);
+            ethPort->ReadQuadlet(boardNum, regnum, read_data);
             if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
                 success++;
             else {
@@ -701,7 +702,7 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, EthBasePort *ethPo
     return true;
 }
 
-void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
+void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard, unsigned int eth_port)
 {
     quadlet_t waveform[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
     quadlet_t waveform_read[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
@@ -711,14 +712,18 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     unsigned int min_wlen = WLEN_MAX;
     unsigned int max_wait = 0;
     unsigned int max_wlen = WLEN_MAX;
+    unsigned int bw_err_cnt = 0;
     unsigned int numSilentMismatch = 0;
 
     // Check if debug data available, in which case we can query bw_left
-    bool debugValid = false;
-    if (rboard->ReadEthernetData(waveform_read, 0x80, 16)) {
+    unsigned int debugVersion = 0;
+    if (rboard->ReadEthernetData(waveform_read, (eth_port << 8) | 0x80, 16)) {
         char *cptr = reinterpret_cast<char *>(waveform_read);
         if (strncmp(cptr, "DBG1", 4) == 0) {
-            debugValid = true;
+            debugVersion = 1;
+        }
+        if (strncmp(cptr, "DBG2", 4) == 0) {
+            debugVersion = 2;
         }
         else {
             std::cout << "Debug data not available" << std::endl;
@@ -729,11 +734,20 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     for (unsigned int wlen = 2; wlen < WLEN_MAX; wlen++) {
         bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
         unsigned int len16 = 2*wlen;  // length in words
-        unsigned int trigger_comp = 10 + len16/2+len16/8 + 2;   // computation on FPGA
+        double trigger;               // actual trigger value
+        unsigned int trigger_comp;    // trigger computation on FPGA
+        if (eth_port == 0) {
+            trigger_comp = 10 + len16/2+len16/8-len16/64 + 2; // FPGA V2 (KSZ8851)
+            trigger = (3*wlen-2)/5.0;
+        }
+        else {
+            trigger_comp = 10 + len16/2 + 2;   // FPGA V3 (RTL8211F)
+            trigger = (wlen-1)/2.0;
+        }
         if (doOut) {
             std::cout << "Len=" << std::dec << wlen << ": ";
-            if (debugValid) {
-                std::cout << "trigger = " << (3*wlen-2)/5.0
+            if (debugVersion) {
+                std::cout << "trigger = " << trigger
                           << ", trigger_fpga = " << (trigger_comp-10)/2 << ", ";
             }
         }
@@ -747,22 +761,37 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             return;
         }
         Amp1394_Sleep(0.05);
-        if (debugValid) {
-            if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
+        if (debugVersion) {
+            if (!rboard->ReadEthernetData(waveform_read, (eth_port << 8) | 0x80, 16))
                 break;
-            unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
-            unsigned short bw_left = ptr[0];
+            unsigned short bw_left = 0;
+            unsigned short bw_wait = 0;
+            if (debugVersion == 1) {
+                unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
+                bw_left = ptr[0];
+                bw_wait = ptr[1];
+                if (bw_wait > max_wait) {
+                    max_wait = bw_wait;
+                    max_wlen = wlen;
+                }
+            }
+            else if (debugVersion == 2) {
+                bw_left = static_cast<unsigned short>(waveform_read[8]>>16);
+                bool bw_err = (waveform_read[8] & 0x00008000);
+                if (bw_err) {
+                    bw_err_cnt++;
+                }
+            }
             if (bw_left < min_left) {
                 min_left = bw_left;
                 min_wlen = wlen;
             }
-            unsigned short bw_wait = ptr[1];
-            if (bw_wait > max_wait) {
-                max_wait = bw_wait;
-                max_wlen = wlen;
-            }
             if (doOut) {
-                std::cout << "bw_left = " << bw_left << ", bw_wait = " << bw_wait;
+                std::cout << "bw_left = " << bw_left;
+                if (debugVersion == 1)
+                    std::cout << ", bw_wait = " << bw_wait;
+                else if (debugVersion == 2)
+                    std::cout << ", bw_err_cnt = " << bw_err_cnt;
             }
         }
         if (!rboard->ReadWaveformTable(waveform_read, 0, wlen)) {
@@ -789,17 +818,17 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             }
         }
         if (doOut) {
-            if (!debugValid && allOK) std::cout << " Pass";
+            if (!debugVersion && allOK) std::cout << " Pass";
             std::cout << std::endl;
         }
     }
     if (numSilentMismatch > 0) {
         std::cout << "There were " << numSilentMismatch << " additional lengths with mismatches" << std::endl;
     }
-    if (debugValid) {
+    if (debugVersion)
         std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
+    if (debugVersion == 1)
         std::cout << "Maximum bw_wait = " << std::dec << max_wait << " at wlen = " << max_wlen << std::endl;
-    }
 }
 
 void TestWaveform(AmpIO *board)
@@ -1067,8 +1096,8 @@ int main(int argc, char **argv)
     if (FwBoardList.size() > 0) {
         curBoardFw = FwBoardList[0];
     }
-
 #endif
+
     EthBasePort *EthPort = 0;
     if (desiredPort == BasePort::PORT_ETH_UDP) {
         std::cout << "Creating Ethernet UDP port, IP address = " << IPaddr << std::endl;
@@ -1340,7 +1369,7 @@ int main(int argc, char **argv)
 
         case 'B':
             if (curBoardEth)
-                TestBlockWrite(EthPort, curBoardEth, curBoard);
+                TestBlockWrite(EthPort, curBoardEth, curBoard, eth_port);
             break;
 
         case 'b':
