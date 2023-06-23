@@ -376,14 +376,15 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numARP: " << std::dec << static_cast<uint16_t>(p->numARP) << std::endl;
     debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
     debugStream << "numPacketError: " << std::dec << static_cast<uint16_t>(p->numPacketError) << std::endl;
-    debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState) << std::endl;
-    debugStream << "bw_left: " << std::dec << p->bw_left << std::endl;
+    debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState & 0x07);
+    if (p->bwState & 0x80) debugStream << ", bw_err";
+    debugStream << std::endl << "bw_left: " << std::dec << p->bw_left << std::endl;
 }
 
 // Prints the debug data from the lower-level Ethernet module (KSZ8851 for Ethernet V2)
 void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
 {
-    // Following structure must match DebugData in EthernetIO.v
+    // Following structure must match DebugData in KSZ8851.v
     struct DebugData {
         char     header[4];        // Quad 0
         uint16_t quad1_low;        // Quad 1
@@ -468,10 +469,12 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         uint8_t   numPacketFlushed;
         uint8_t   numPacketSent;
         uint16_t  respBytes;        // Quad 4
-        uint16_t  sendCnt;
+        uint16_t  bw_wait;
         uint16_t  timeReceive;      // Quad 5
         uint16_t  timeSend;
-        uint32_t  unused[2];
+        uint16_t  sendCnt;          // Quad 6
+        uint16_t  recvFlushCnt;
+        uint32_t  unused;
     };
     struct DebugData {
         DebugDataRTL dataRTL;
@@ -543,6 +546,7 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         debugStream << "numPacketFlushed: " << std::dec << static_cast<uint16_t>(pESW->numPacketFlushed) << std::endl;
         debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(pESW->numPacketSent) << std::endl;
         debugStream << "respBytes: " << pESW->respBytes << ", sendCnt: " << pESW->sendCnt << std::endl;
+        debugStream << "recvFlushCnt: " << pESW->recvFlushCnt << ", bw_wait: " << pESW->bw_wait << std::endl;
         debugStream << "timeReceive: " << (pESW->timeReceive*clockPeriod) << " timeSend: " << (pESW->timeSend*clockPeriod) << std::endl;
     }
 }
