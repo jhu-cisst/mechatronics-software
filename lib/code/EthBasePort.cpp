@@ -520,7 +520,7 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
                     << ", send_crc_in: " << pRTL->send_crc_in << std::dec << std::endl;
         debugStream << std::hex << "send_byte1: " << static_cast<uint16_t>(pRTL->send_byte1) << std::endl;
         debugStream << "PHY ID1: " << std::hex << pRTL->PhyId1 << ", PHY ID2: " << pRTL->PhyId2 << std::dec << std::endl;
-        debugStream << "initCount: " << std::hex << pRTL->initCount << std::dec << ", " << (pRTL->initCount*clockPeriod) << std::endl;
+        debugStream << "initCount: " << std::hex << (pRTL->initCount&0x00ffffff) << std::dec << ", " << ((pRTL->initCount&0x00ffffff)*clockPeriod) << std::endl;
     }
     const DebugDataESW *pESW = &(p->dataESW);
     if (CheckDebugHeader(debugStream, "PrintDebugDataRTL (ESW)", pESW->header)) {

@@ -526,6 +526,7 @@ void  ContinuousWriteTest(BasePort *ethPort, unsigned char boardNum)
     quadlet_t read_data;
     size_t success = 0;
     size_t writeFailures = 0;
+    size_t readFailures = 0;
     size_t compareFailures = 0;
     quadlet_t write_data = 0x0;
     int count = 0;
@@ -539,19 +540,24 @@ void  ContinuousWriteTest(BasePort *ethPort, unsigned char boardNum)
             writeFailures++;
         else {
             Amp1394_Sleep(50*1e-6);  // sleep 50 us
-            ethPort->ReadQuadlet(boardNum, regnum, read_data);
-            if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
-                success++;
+            if (ethPort->ReadQuadlet(boardNum, regnum, read_data)) {
+                if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
+                    success++;
+                else {
+                    compareFailures++;
+                    std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
+                }
+            }
             else {
-                compareFailures++;
-                std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
+                readFailures++;
             }
         }
-        if (writeFailures + compareFailures > 200) done = true;
+        if (writeFailures + readFailures + compareFailures > 200) done = true;
 
         if (count % 1000 == 0) {
-            std::cout << "Success = " << std::dec << success << ", write failures = " << writeFailures << ", compare failures = "
-                      << compareFailures << std::endl;
+            std::cout << "Success = " << std::dec << success << ", write failures = " << writeFailures
+                      << ", read failures = " << readFailures
+                      << ", compare failures = " << compareFailures << std::endl;
         }
 
         if (count >= 10000) {
