@@ -473,7 +473,8 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         uint16_t  timeReceive;      // Quad 5
         uint16_t  timeSend;
         uint16_t  sendCnt;          // Quad 6
-        uint16_t  recvFlushCnt;
+        uint8_t   recvFlushCnt;
+        uint8_t   recv_fifo_error_cnt;
         uint32_t  unused;
     };
     struct DebugData {
@@ -507,13 +508,14 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         if (pRTL->statusbits & 0x00000200) debugStream << "isBroadcast ";
         if (pRTL->statusbits & 0x00000100) debugStream << "initOK ";
         if (pRTL->statusbits & 0x00000080) debugStream << "txStateError ";
+        if (pRTL->statusbits & 0x00000040) debugStream << "rxStateError ";
         debugStream << std::endl;
         debugStream << "numReset: " << static_cast<uint16_t>(pRTL->numReset)
                     << ", numIRQ: " << static_cast<uint16_t>(pRTL->numIRQ) << std::endl;
-        debugStream << "rxState: " << (pRTL->states&0x0001) << ", txState: " << ((pRTL->states&0x000e)>>1)
-                    << ", state: " << ((pRTL->states&0x00f0)>>4) << std::endl;
-        debugStream << "clock_speed (Rx): " << ((pRTL->states&0x0300)>>8)
-                    << ", speed_mode (Tx): " << ((pRTL->states&0x0c00)>>10) << std::endl;
+        debugStream << "rxState: " << (pRTL->states&0x000f) << ", txState: " << ((pRTL->states&0x00f0)>>4)
+                    << ", state: " << ((pRTL->states&0x0f00)>>8) << std::endl;
+        debugStream << "clock_speed (Rx): " << ((pRTL->states&0x3000)>>12)
+                    << ", speed_mode (Tx): " << ((pRTL->states&0xc000)>>14) << std::endl;
         debugStream << "recv_crc_in: " << std::hex << pRTL->recv_crc_in << " (should be c704dd7b)" << std::dec << std::endl;
         debugStream << "numRxDropped: " << std::dec << static_cast<uint16_t>(pRTL->numRxDropped) << std::endl;
         debugStream << "txSent: " << static_cast<uint16_t>(pRTL->txSent) << std::hex
@@ -546,7 +548,8 @@ void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *
         debugStream << "numPacketFlushed: " << std::dec << static_cast<uint16_t>(pESW->numPacketFlushed) << std::endl;
         debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(pESW->numPacketSent) << std::endl;
         debugStream << "respBytes: " << pESW->respBytes << ", sendCnt: " << pESW->sendCnt << std::endl;
-        debugStream << "recvFlushCnt: " << pESW->recvFlushCnt << ", bw_wait: " << pESW->bw_wait << std::endl;
+        debugStream << "recvFlushCnt: " << static_cast<uint16_t>(pESW->recvFlushCnt) << ", bw_wait: " << pESW->bw_wait << std::endl;
+        debugStream << "recv_fifo_error_cnt: " << static_cast<uint16_t>(pESW->recv_fifo_error_cnt) << std::endl;
         debugStream << "timeReceive: " << (pESW->timeReceive*clockPeriod) << " timeSend: " << (pESW->timeSend*clockPeriod) << std::endl;
     }
 }
