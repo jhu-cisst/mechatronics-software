@@ -291,7 +291,8 @@ public:
         ETH_PORT_STAT_LINK_STAT  = 0x20,
         ETH_PORT_STAT_SPEED_MASK = 0x18,
         ETH_PORT_STAT_RECV_ERR   = 0x04,
-        ETH_PORT_STAT_SEND_OVF   = 0x02
+        ETH_PORT_STAT_SEND_OVF   = 0x02,
+        ETH_PORT_STAT_PS_ETH     = 0x01
     };
     static uint8_t GetEthernetPortStatusV3(uint32_t status, unsigned int chan);
 
@@ -301,8 +302,10 @@ public:
         ETH_CTRL_CLR_ERR_LINK = 0x10000000,     // Clear link layer errors
         ETH_CTRL_CLR_ERR      = 0x30000000,     // Clear all errors
         ETH_CTRL_DMA_V2       = 0x08000000,     // V2: DMA register access
+        ETH_CTRL_IRQ_DIS_V3   = 0x08000000,     // V3: Mask for disabling interrupts
         ETH_CTRL_RESET_PHY    = 0x04000000,     // Reset PHY
         ETH_CTRL_WR_V2        = 0x02000000,     // V2: Register read(0) or write(1)
+        ETH_CTRL_EN_PS_ETH_V3 = 0x02000000,     // V3: Mask for enabling PS ethernet
         ETH_CTRL_WB_V2        = 0x01000000,     // V2: Byte(0) or word(1) access
         ETH_CTRL_ADDR_MASK_V2 = 0x00ff0000,     // V2: Register address (8 bits)
         ETH_CTRL_DATA_MASK_V2 = 0x0000ffff      // V2: Register data (16 bits)
@@ -316,7 +319,8 @@ public:
         ETH_PORT_CTRL_IRQ_GEN   = 0x20,     // Generate interrupt (from software)
         ETH_PORT_CTRL_CLR_ERR   = 0x10,     // Clear link layer errors (if ETH_CTRL_CLR_ERR_LINK)
         ETH_PORT_CTRL_RESET_RF  = 0x04,     // Reset receive FIFO
-        ETH_PORT_CTRL_RESET_SF  = 0x02      // Reset send FIFO
+        ETH_PORT_CTRL_RESET_SF  = 0x02,     // Reset send FIFO
+        ETH_PORT_CTRL_EN_PS_ETH = 0x01      // Enable PS ethernet access to PHY
     };
     bool WriteEthernetControl(uint32_t write_data);
 
@@ -329,6 +333,11 @@ public:
     //    chan    FPGA V2: 0
     //            FPGA V3: 1 -> PHY1, 2 -> PHY2, 3-> both
     bool WriteEthernetClearErrors(unsigned int chan = 0);
+
+    // Enable/Disable PS Ethernet (FPGA V3)
+    //    chan    1 -> PHY1, 2 -> PHY2, 3 -> both
+    //    state   true to enable PS ethernet; false to disable
+    bool WritePsEthernetEnable(unsigned int chan, bool state);
 
     // Read Ethernet data
     //    buffer  buffer for storing data

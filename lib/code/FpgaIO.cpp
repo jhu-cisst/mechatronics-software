@@ -650,6 +650,16 @@ bool FpgaIO::WriteEthernetClearErrors(unsigned int chan)
     return WriteEthernetControl(write_data);
 }
 
+bool FpgaIO::WritePsEthernetEnable(unsigned int chan, bool state)
+{
+    quadlet_t write_data = ETH_CTRL_EN_PS_ETH_V3;
+    if (state && (chan&1))
+        write_data |= ETH_PORT_CTRL_EN_PS_ETH;
+    if (state && (chan&2))
+        write_data |= (ETH_PORT_CTRL_EN_PS_ETH<<8);
+    return WriteEthernetControl(write_data);
+}
+
 bool FpgaIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
 {
     if (GetFirmwareVersion() < 5) return false;

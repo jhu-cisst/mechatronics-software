@@ -271,6 +271,7 @@ void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
                 else if (linkSpeed == 2)                          debugStream << "1000 Mbps ";
                 if (portStatus & FpgaIO::ETH_PORT_STAT_RECV_ERR)  debugStream << "RecvErr ";
                 if (portStatus & FpgaIO::ETH_PORT_STAT_SEND_OVF)  debugStream << "SendOvf ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_PS_ETH)    debugStream << "PS-Eth ";
                 debugStream << std::endl;
             }
         }

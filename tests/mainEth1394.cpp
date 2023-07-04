@@ -1417,6 +1417,25 @@ int main(int argc, char **argv)
             }
             break;
 
+        case 'E':
+            if (curBoardEth && (eth_port > 0)) {
+                // Read the status
+                uint32_t status;
+                curBoardEth->ReadEthernetStatus(status);
+                uint8_t portStatus = FpgaIO::GetEthernetPortStatusV3(status, eth_port);
+                bool ethEnabled = (portStatus & FpgaIO::ETH_PORT_STAT_PS_ETH);
+                std::cout << "PS Eth" << eth_port << " ";
+                if (ethEnabled) {
+                    std::cout << "enabled, disabling..." << std::endl;
+                    curBoardEth->WritePsEthernetEnable(eth_port, false);
+                }
+                else {
+                    std::cout << "disabled, enabling..." << std::endl;
+                    curBoardEth->WritePsEthernetEnable(eth_port, true);
+                }
+            }
+            break;
+
         case 'f':
 #if Amp1394_HAS_RAW1394
             if (curBoardFw) {
