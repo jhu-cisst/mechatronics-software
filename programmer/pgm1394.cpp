@@ -81,15 +81,18 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
             std::cout << "9) Download PROM to MCS file" << std::endl;
         }
         else {
-            // With FPGA V3, we can only program or read the QLA PROM
+            // With FPGA V3, we can only program or read the QLA PROM,
+            // or read the FPGA S/N
             if (hver == DQLA_String) {
-                std::cout << "5) Program QLA 1 SN" << std::endl;
-                std::cout << "6) Program QLA 2 SN" << std::endl;
-                std::cout << "7) Read QLA 1+2 SN" << std::endl;
+                std::cout << "4) Program QLA 1 SN" << std::endl
+                          << "5) Program QLA 2 SN" << std::endl
+                          << "6) Read FPGA SN" << std::endl
+                          << "7) Read QLA 1+2 SN" << std::endl;
             }
             else {
-                std::cout << "5) Program QLA SN" << std::endl;
-                std::cout << "7) Read QLA SN" << std::endl;
+                std::cout << "5) Program QLA SN" << std::endl
+                          << "6) Read FPGA SN" << std::endl
+                          << "7) Read QLA SN" << std::endl;
             }
         }
         std::cout << std::endl;
@@ -649,22 +652,19 @@ int main(int argc, char** argv)
         case 4:
             if (!fpgaV3)
                 result = PromFPGASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+            else if (hver == DQLA_String)
+                result = PromQLASerialNumberProgram(Board, 1) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 5:
             if (hver == DQLA_String)
-                result = PromQLASerialNumberProgram(Board, 1) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+                result = PromQLASerialNumberProgram(Board, 2) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             else
                 result = PromQLASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 6:
-            if (!fpgaV3) {
-                sn = Board.GetFPGASerialNumber();
-                if (!sn.empty())
-                    std::cout << "FPGA serial number: " << sn << std::endl;
-            }
-            else if (hver == DQLA_String) {
-                result = PromQLASerialNumberProgram(Board, 2) ? RESULT_OK : RESULT_PROGRAM_FAILED;
-            }
+            sn = Board.GetFPGASerialNumber();
+            if (!sn.empty())
+                 std::cout << "FPGA serial number: " << sn << std::endl;
             break;
         case 7:
             if (hver == DQLA_String) {

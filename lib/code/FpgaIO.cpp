@@ -213,7 +213,7 @@ bool FpgaIO::PromReadData(uint32_t addr, uint8_t *data,
                       << std::hex << read_data << std::dec << std::endl;
             return false;
         }
-        // Now, read result. This should be the number of quadlets written.
+        // Now, read result. This should be the number of quadlets read.
         uint32_t nRead;
         if (!PromGetResult(nRead)) {
             std::cout << "PromReadData: failed to get PROM result" << std::endl;
