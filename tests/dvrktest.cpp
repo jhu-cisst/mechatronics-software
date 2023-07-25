@@ -3,11 +3,7 @@
 
 /******************************************************************************
  *
- * This program is used to test the FPGA1394+QLA board, assuming that it is
- * connected to the FPGA1394-QLA-Test board. It relies on the curses library
- * and the AmpIO library (which depends on libraw1394 and/or pcap).
- *
- * Usage: qlatest [-pP] <board num>
+ * Usage: dvrktest [-pP] <controller sn> <board num> [<board num2>]
  *        where P is the Firewire port number (default 0),
  *        or a string such as ethP and fwP, where P is the port number
  *
@@ -50,11 +46,11 @@ const unsigned long POT_TEST_ADC_ERROR_TOLERANCE = 0x500;
 
 std::array<uint8_t, 3> DIGITAL_IN_TEST_LOW_STATE{0x08, 0x03, 0x07};
 std::array<uint8_t, 3> DIGITAL_IN_TEST_HIGH_STATE{0x0f, 0x0f, 0x0f};
-const unsigned long DIGITAL_IN_TEST_WAIT_TIME_MS = 400;
+const unsigned long DIGITAL_IN_TEST_WAIT_TIME_MS = 1000;
 
-const unsigned long ENCODER_TEST_WAIT_TIME_MS = 2000;
+const unsigned long ENCODER_TEST_WAIT_TIME_MS = 1000;
 const unsigned long ENCODER_TEST_INCREMENT = 10;
-const unsigned long ENCODER_TEST_INCREMENT_TOLERANCE = 1;
+const unsigned long ENCODER_TEST_INCREMENT_TOLERANCE = 2;
 
 const unsigned long POWER_AMP_TEST_DAC = 0x8500;
 const unsigned long POWER_AMP_TEST_TOLERANCE = 0x200;
@@ -229,7 +225,7 @@ Result TestMotorPowerControl(AmpIO **Board, BasePort *Port) {
         Board[board_index]->WriteSafetyRelay(true);
         Board[board_index]->WriteWatchdogPeriod(0x0000);
         Board[board_index]->WritePowerEnable(true);
-        Board[board_index]->WriteAmpEnable(0x0f, 0x0f);
+        Board[board_index]->WriteAmpEnable(0xff, 0xff);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     Port->ReadAllBoards();
@@ -241,16 +237,26 @@ Result TestMotorPowerControl(AmpIO **Board, BasePort *Port) {
                   << safety_relay_status;
 
         if (safety_relay_status) {
-            if ((status & 0x000c0000) == 0x000c0000) {
+            if (Board[board_index]->GetPowerStatus()) {
                 std::cout << " mv_good=ok";
-                if ((status & 0x000cffff) == 0x000c0f0f) {
-                    std::cout << " amp_power=ok";
-                    std::cout << PASS << std::endl;
+                bool board_failed = false;
+                std::cout << " amp_power=";
 
-                } else {
+                for (int channel_index = 0; channel_index < num_channel_per_qla; channel_index++) {
+                    if (Board[board_index]->GetAmpStatus(channel_index)) {
+                        std::cout << 1;
+                    } else {
+                        std::cout << 0;
+                        board_failed = true;
+                    }
+
+                }
+                if (board_failed) {
                     std::cout << " amp_power=bad";
                     result = fatal_fail;
                     std::cout << FAIL << std::endl;
+                } else {
+                    std::cout << PASS << std::endl;
                 }
             } else {
                 std::cout << " mv_good=bad";
@@ -386,6 +392,14 @@ int main(int argc, char **argv) {
             args_found++;
         }
     }
+
+    std::cout << "*********************** WARNING **************************" << std::endl;
+    std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
+    std::cout << "Running the test with a robot (PSM/MTM) can cause injury and damage the robot." << std::endl;
+    std::cout << "Do not use this program with a Si controller." << std::endl;
+    std::cout << "Do not use this program with a controller connected to a robot." << std::endl;
+    std::cout << "Press [Enter] to run the test. Press [Ctrl-C] to exit." << std::endl;
+    std::cin.ignore();
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
     BasePort *Port;
