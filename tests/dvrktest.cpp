@@ -248,6 +248,7 @@ Result TestMotorPowerControl(AmpIO **Board, BasePort *Port) {
                   << safety_relay_status;
 
         if (safety_relay_status) {
+            std::cout << std::endl << "    ";
             if (Board[board_index]->GetPowerStatus()) {
                 std::cout << " mv_good=ok";
                 bool board_failed = false;
@@ -364,7 +365,7 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
 }
 
 Result TestDallas(AmpIO **Board, BasePort *Port) {
-    std::cout << "dallas - ";
+    std::cout << "dallas ";
     AmpIO *board;
     if (is_dqla) {
         board = Board[0];
@@ -374,9 +375,11 @@ Result TestDallas(AmpIO **Board, BasePort *Port) {
     unsigned char buffer[2048];
     bool ret = board->DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
     if (!ret) {
+        std::cout << FAIL << std::endl;
         std::cout << COLOR_ERROR << "(DallasReadMemory failed)" << COLOR_OFF << std::endl;
         return fail;
     } else {
+        std::cout << PASS << std::endl;
         return pass;
     }
 }
