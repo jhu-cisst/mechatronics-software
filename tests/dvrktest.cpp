@@ -18,6 +18,7 @@
 #include <chrono>
 #include <thread>
 #include <array>
+#include <vector>
 
 #include <Amp1394/AmpIORevision.h>
 
@@ -40,6 +41,81 @@ int NUM_CHANNEL_PER_FPGA = 8;
 bool is_dqla = true;
 
 char* controller_sn;
+
+//**************************** Find dVRK Controllers **************************************
+
+struct ControllerInfo {
+    enum ControllerType    { MTML, MTMR, PSM1, PSM2, PSM3, ECM, SUJ, UNSUPPORTED };
+
+    unsigned int board_id;     // Base FPGA board id (first id if more than one FPGA board)
+    ControllerType armType;    // Arm type (e.g., MTML, PSM1), based on board id setting
+    unsigned long  hwVersion;  // Hardware version (e.g., QLA, DQLA, dRAC)
+};
+
+std::string ControllerTypeString[] = { "MTML", "MTMR", "PSM1", "PSM2", "PSM3", "ECM", "SUJ", "UNSUPPORTED" };
+
+ControllerInfo::ControllerType BoardIdMap[16] = {
+                   ControllerInfo::MTML, ControllerInfo::MTML,   // 0,1
+                   ControllerInfo::MTMR, ControllerInfo::MTMR,   // 2,3
+                   ControllerInfo::ECM,  ControllerInfo::ECM,    // 4,5
+                   ControllerInfo::PSM1, ControllerInfo::PSM1,   // 6,7
+                   ControllerInfo::PSM2, ControllerInfo::PSM2,   // 8,9
+                   ControllerInfo::PSM3, ControllerInfo::PSM3,   // 10,11
+                   ControllerInfo::SUJ,  ControllerInfo::UNSUPPORTED,        // 12,13
+                   ControllerInfo::UNSUPPORTED, ControllerInfo::UNSUPPORTED  // 14,15
+               };
+
+// Return vector of all dVRK Controllers on the specified port
+std::vector<ControllerInfo> GetControllerList(const BasePort *port)
+{
+    std::vector<ControllerInfo> infoList;
+    ControllerInfo info;
+
+    for (unsigned int i = 0; i < BoardIO::MAX_BOARDS; i++) {
+        info.board_id = i;
+        info.hwVersion = port->GetHardwareVersion(i);
+        info.armType = ControllerInfo::UNSUPPORTED;
+        if (info.hwVersion == dRA1_String) {
+            // dRAC setup uses even numbers; for now an odd number is UNSUPPORTED
+            info.armType = (i&1) ? ControllerInfo::UNSUPPORTED : BoardIdMap[i];
+            // Also, dRAC does not currently support MTMs or (separate) SUJ
+            if ((info.armType == ControllerInfo::MTML) || (info.armType == ControllerInfo::MTMR) ||
+                (info.armType == ControllerInfo::SUJ))
+                info.armType = ControllerInfo::UNSUPPORTED;
+        }
+        else if (info.hwVersion == DQLA_String) {
+            // DQLA uses even numbers; for now, an odd number is UNSUPPORTED
+            info.armType = (i&1) ? ControllerInfo::UNSUPPORTED : BoardIdMap[i];
+            // Also, DQLA does not support SUJ
+            if (info.armType == ControllerInfo::SUJ)
+                info.armType = ControllerInfo::UNSUPPORTED;
+        }
+        else if (info.hwVersion == QLA1_String) {
+            // QLA setup requires 2 boards, except for SUJ. First QLA must have an
+            // even board id
+            info.armType = BoardIdMap[i];
+            if (info.armType != ControllerInfo::SUJ) {
+                if (!(i&1)) {  // even board id
+                    unsigned long hver2 = port->GetHardwareVersion(i+1);
+                    if (hver2 == QLA1_String) {
+                        i++;  // skip next board
+                    }
+                    else {    // next board not QLA
+                        info.armType = ControllerInfo::UNSUPPORTED;
+                    }
+                }
+                else {  // odd board id
+                    info.armType = ControllerInfo::UNSUPPORTED;
+                }
+            }
+        }
+        if (info.hwVersion != 0)
+            infoList.push_back(info);
+    }
+    return infoList;
+}
+
+//******************************** Test Functions *****************************************
 
 const unsigned long POT_TEST_ADC_COUNT[8] = {0x4000, 0x4000, 0x4000, 0x4000, 0x8000, 0x8000, 0x8000, 0x8000};
 const unsigned long POT_TEST_ADC_ERROR_TOLERANCE = 0x500;
@@ -381,6 +457,8 @@ Result TestDallas(AmpIO **Board, BasePort *Port) {
     }
 }
 
+//*********************************** Main ********************************************
+
 void PrintDebugStream(std::stringstream &debugStream)
 {
     std::cerr << debugStream.str() << std::endl;
@@ -388,7 +466,8 @@ void PrintDebugStream(std::stringstream &debugStream)
     debugStream.str("");
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
 #if Amp1394_HAS_RAW1394
     BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
 #else
@@ -415,21 +494,10 @@ int main(int argc, char **argv) {
                 board1 = atoi(argv[i]);
             } else if (args_found == 1) {
                 board2 = atoi(argv[i]);
-                is_dqla = false;
-                NUM_FPGA = 2;
-                NUM_CHANNEL_PER_FPGA = 4;
             }
             args_found++;
         }
     }
-
-    std::cout << "*********************** WARNING **************************" << std::endl;
-    std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
-    std::cout << "Running the test with a robot (PSM/MTM) can cause injury and damage the robot." << std::endl;
-    std::cout << "Do not use this program with a Si controller." << std::endl;
-    std::cout << "Do not use this program with a controller connected to a robot." << std::endl;
-    std::cout << "Press [Enter] to run the test. Press [Ctrl-C] to exit." << std::endl;
-    std::cin.ignore();
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
     BasePort *Port = 0;
@@ -456,6 +524,65 @@ int main(int argc, char **argv) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
         return -1;
+    }
+
+    // Now that Port is initialized, look for dVRK Controllers
+    std::vector<ControllerInfo> ControllerList = GetControllerList(Port);
+    if (ControllerList.size() > 0) {
+        std::cout << "Controllers on " << BasePort::PortTypeString(desiredPort) << ":" << std::endl;
+        std::vector<ControllerInfo>::const_iterator it;
+        for (it = ControllerList.begin(); it != ControllerList.end(); it++) {
+            std::cout << "   " << ControllerTypeString[it->armType] << ", " << Port->GetHardwareVersionString(it->board_id);
+            if (it->hwVersion == QLA1_String)
+                std::cout << ", boards " << it->board_id << ", " << it->board_id+1 << std::endl;
+            else
+                std::cout << ", board " << it->board_id << std::endl;
+        }
+        std::cout << std::endl;
+    }
+    else {
+        std::cout << "No controllers found on " << BasePort::PortTypeString(desiredPort) << ", exiting" << std::endl;
+        return -1;
+    }
+
+    if (ControllerList.size() != 1) {
+        std::cout << "More than one controller found, please remove all controllers except unit under test" << std::endl;
+        return -1;
+    }
+
+    if (ControllerList[0].hwVersion == dRA1_String) {
+        std::cout << "dVRK-Si Controller detected -- this program is only for testing a dVRK (Classic) controller" << std::endl;
+        return -1;
+    }
+
+    if (ControllerList[0].hwVersion == BCFG_String) {
+        std::cout << "Controller boot error -- please confirm that the MicroSD card is inserted into the controller" << std::endl;
+        return -1;
+    }
+
+    if ((ControllerList[0].hwVersion != QLA1_String) && (ControllerList[0].hwVersion != DQLA_String)) {
+        // Should not happen, since not dRA1_String or BCFG_String, but checking just in case
+        std::cout << "Unexpected controller hardware: " << std::hex << ControllerList[0].hwVersion << std::dec << std::endl;
+        return -1;
+    }
+
+    std::cout << "*********************** WARNING **************************" << std::endl;
+    std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
+    std::cout << "Running the test with a robot (PSM/MTM) can cause injury and damage the robot." << std::endl;
+    std::cout << "Do not use this program with a controller connected to a robot." << std::endl;
+    std::cout << "Press [Enter] to run the test. Press [Ctrl-C] to exit." << std::endl;
+    std::cin.ignore();
+
+    // If user did not specify board id, use the one obtained by scanning the bus.
+    // Perhaps we will remove ability to specify board id(s) on command line.
+    if (board1 == BoardIO::MAX_BOARDS) {
+        board1 = ControllerList[0].board_id;
+        if (ControllerList[0].hwVersion == QLA1_String) {
+            board2 = board1+1;
+            is_dqla = false;
+            NUM_FPGA = 2;
+            NUM_CHANNEL_PER_FPGA = 4;
+        }
     }
 
     std::vector<AmpIO *> BoardList;
