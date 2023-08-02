@@ -82,6 +82,12 @@ Result TestSerialNumberAndVersion(AmpIO **Board, BasePort *Port) {
             }
             uint32_t FPGA_VER = Board[board_index]->GetFirmwareVersion();
             std::cout << "FPGA_ver=" << FPGA_VER << std::endl;
+            uint32_t hwver = Board[board_index]->GetHardwareVersion();
+            if (hwver == dRA1_String || hwver == BCFG_String) {
+                std::cout << COLOR_ERROR << "(Unexpected board type.)" << COLOR_OFF << std::endl;
+                result = fatal_fail;
+                break;
+            }
         }
     } else {
         std::cout << COLOR_ERROR << "(Can't talk to controller.)" << COLOR_OFF
@@ -203,7 +209,7 @@ Result TestEncoders(AmpIO **Board, BasePort *Port) {
             each_encoder_result |= 1 << i;
         } else {
             std::cout << FAIL << std::endl;
-            result = fail;
+            result = fatal_fail;
         }
     }
 
@@ -211,6 +217,11 @@ Result TestEncoders(AmpIO **Board, BasePort *Port) {
         std::cout << COLOR_ERROR << "(Check SCSI (68-pin) cables!)" << COLOR_OFF <<
                   std::endl;
         result = fatal_fail;
+    }
+
+    if (result == fatal_fail) {
+        std::cout << COLOR_ERROR << "(Skipped motor tests due to failed encoder test.)" << COLOR_OFF <<
+                  std::endl;
     }
 
     return result;
@@ -352,6 +363,26 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
 
 }
 
+Result TestDallas(AmpIO **Board, BasePort *Port) {
+    std::cout << "dallas - ";
+    Result result = pass;
+    uint32_t status;
+    AmpIO *board;
+    if (is_dqla) {
+        board = Board[0];
+    } else {
+        board = Board[1];
+    }
+    unsigned char buffer[2048];
+    bool ret = board->DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
+    if (!ret) {
+        std::cout << COLOR_ERROR << "(DallasReadMemory failed)" << COLOR_OFF << std::endl;
+        return fail;
+    } else {
+        return pass;
+    }
+}
+
 int main(int argc, char **argv) {
 #if Amp1394_HAS_RAW1394
     bool useFireWire = true;
@@ -454,6 +485,7 @@ int main(int argc, char **argv) {
     test_functions.push_back(TestEncoders);
     test_functions.push_back(TestAnalogInputs);
     test_functions.push_back(TestDigitalInputs);
+    test_functions.push_back(TestDallas);
     test_functions.push_back(TestMotorPowerControl);
     test_functions.push_back(TestPowerAmplifier);
 
