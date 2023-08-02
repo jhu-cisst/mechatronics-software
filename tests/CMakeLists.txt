@@ -64,6 +64,9 @@ install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
          COMPONENT Amp1394-utils
          DESTINATION bin)
 
-install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest
+add_executable(dvrktest dvrktest.cpp)
+target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+
+install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest dvrktest
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
