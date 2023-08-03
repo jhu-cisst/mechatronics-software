@@ -608,24 +608,33 @@ int main(int argc, char **argv)
     }
 
     // Check motor supply voltage
-    double V1 = 0.0;   // QLA 1 measured motor supply voltage
-    double V2 = 0.0;   // QLA 2 measured motor supply voltage
+    double V[2] = { 0.0, 0.0};   // QLA 1,2 measured motor supply voltage
     if (is_dqla) {
-        V1 = MeasureMotorSupplyVoltage(Port, BoardList[0], 1);
-        V2 = MeasureMotorSupplyVoltage(Port, BoardList[0], 2);
+        V[0] = MeasureMotorSupplyVoltage(Port, BoardList[0], 1);
+        V[1] = MeasureMotorSupplyVoltage(Port, BoardList[0], 2);
     }
     else {
-        V1 = MeasureMotorSupplyVoltage(Port, BoardList[0]);
-        V2 = MeasureMotorSupplyVoltage(Port, BoardList[1]);
+        V[0] = MeasureMotorSupplyVoltage(Port, BoardList[0]);
+        V[1] = MeasureMotorSupplyVoltage(Port, BoardList[1]);
     }
     // Nominal motor supply voltages
-    double V1Nom = ControllerMotorSupplyVoltage[board1];
-    double V2Nom = ControllerMotorSupplyVoltage[board1+1];
-    // Check that measured supply voltage not more than 10% different from nominal voltage
-    if ((fabs(V1-V1Nom) > 0.1*V1Nom) || (fabs(V2-V2Nom) > 0.1*V2Nom)) {
+    double VNom[2];
+    VNom[0] = ControllerMotorSupplyVoltage[board1];
+    VNom[1] = ControllerMotorSupplyVoltage[board1+1];
+    // Check that measured supply voltage (if non-zero) is not more than
+    // 10% different from nominal voltage. If measured supply voltage is 0,
+    // we assume that hardware cannot measure motor supply voltage.
+    bool V_mismatch = false;
+    for (int v = 0; v < 2; v++) {
+        if (V[v] > 0.0) {
+            std::cout << "QLA " << (v+1) << " Motor Supply Voltage: " << V[v]
+                      << " (should be " << VNom[v] << ")" << std::endl;
+            if (fabs(V[v]-VNom[v]) > 0.1*VNom[v])
+                V_mismatch = true;
+        }
+    }
+    if (V_mismatch) {
         std::cout << "WARNING: Motor supply voltages do not match controller type" << std::endl;
-        std::cout << "   V1 = " << V1 << " (should be " << V1Nom << "), V2 = " << V2
-                  << " (should be " << V2Nom << ")" << std::endl;
         // Could add prompt whether to continue or exit
     }
 
