@@ -31,6 +31,7 @@
 #include "EthUdpPort.h"
 
 #include "AmpIO.h"
+#include "MotorVoltage.h"
 
 enum Result {
     pass, fail, fatal_fail
@@ -63,6 +64,17 @@ ControllerInfo::ControllerType BoardIdMap[16] = {
                    ControllerInfo::PSM3, ControllerInfo::PSM3,   // 10,11
                    ControllerInfo::SUJ,  ControllerInfo::UNSUPPORTED,        // 12,13
                    ControllerInfo::UNSUPPORTED, ControllerInfo::UNSUPPORTED  // 14,15
+               };
+
+double ControllerMotorSupplyVoltage[16] = {
+                   24.0, 12.0,   // MTML
+                   24.0, 12.0,   // MTMR
+                   36.0, 36.0,   // ECM
+                   24.0, 24.0,   // PSM1
+                   24.0, 24.0,   // PSM2
+                   24.0, 24.0,   // PSM3
+                   48.0,  0.0,   // SUJ
+                    0.0,  0.0
                };
 
 // Return vector of all dVRK Controllers on the specified port
@@ -172,7 +184,6 @@ Result TestSerialNumberAndVersion(AmpIO **Board, BasePort *Port) {
     }
     return result;
 }
-
 
 Result TestAnalogInputs(AmpIO **Board, BasePort *Port) {
     Result result = pass;
@@ -594,6 +605,28 @@ int main(int argc, char **argv)
     if (!is_dqla) {
         BoardList.push_back(new AmpIO(board2));
         Port->AddBoard(BoardList[1]);
+    }
+
+    // Check motor supply voltage
+    double V1 = 0.0;   // QLA 1 measured motor supply voltage
+    double V2 = 0.0;   // QLA 2 measured motor supply voltage
+    if (is_dqla) {
+        V1 = MeasureMotorSupplyVoltage(Port, BoardList[0], 1);
+        V2 = MeasureMotorSupplyVoltage(Port, BoardList[0], 2);
+    }
+    else {
+        V1 = MeasureMotorSupplyVoltage(Port, BoardList[0]);
+        V2 = MeasureMotorSupplyVoltage(Port, BoardList[1]);
+    }
+    // Nominal motor supply voltages
+    double V1Nom = ControllerMotorSupplyVoltage[board1];
+    double V2Nom = ControllerMotorSupplyVoltage[board1+1];
+    // Check that measured supply voltage not more than 10% different from nominal voltage
+    if ((fabs(V1-V1Nom) > 0.1*V1Nom) || (fabs(V2-V2Nom) > 0.1*V2Nom)) {
+        std::cout << "WARNING: Motor supply voltages do not match controller type" << std::endl;
+        std::cout << "   V1 = " << V1 << " (should be " << V1Nom << "), V2 = " << V2
+                  << " (should be " << V2Nom << ")" << std::endl;
+        // Could add prompt whether to continue or exit
     }
 
     for (int i = 0; i < NUM_CHANNEL_PER_FPGA; i++) {

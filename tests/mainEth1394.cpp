@@ -21,6 +21,7 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
+#include "MotorVoltage.h"
 
 const uint32_t VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const uint32_t DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
@@ -1511,52 +1512,15 @@ int main(int argc, char **argv)
         case 'v':
             // Measure power supply voltage (QLA 1.5+)
             if (curBoard) {
-                unsigned int numQla = 0;
-                if (curBoard->GetHardwareVersion() == QLA1_String)
-                    numQla = 1;
-                else if (curBoard->GetHardwareVersion() == DQLA_String)
-                    numQla = 2;
-                if (numQla > 0) {
-                    // Make sure board power is on and amplifier power is off
-                    curBoard->WritePowerEnable(true);
-                    if (numQla == 1)
-                        curBoard->WriteAmpEnable(0x0f, 0);
-                    else
-                        curBoard->WriteAmpEnable(0xff, 0);
+                if (curBoard->GetHardwareVersion() == DQLA_String) {
+                    double V1 = MeasureMotorSupplyVoltage(curPort, curBoard, 1);
+                    double V2 = MeasureMotorSupplyVoltage(curPort, curBoard, 2);
+                    std::cout << "Measured motor supply voltages: " << V1 << ", " << V2 << std::endl;
                 }
-                for (unsigned int idx = 0; idx < numQla; idx++) {
-                    uint32_t volts;
-                    uint32_t vinc = 0x1000;
-                    nodeaddr_t dac_addr = (idx == 0) ? 0x41 : 0x81;
-                    for (volts = 0; volts <= 0x0000ffff; volts += vinc) {
-                        // Write voltage to DAC 4 or 8 (for DQLA)
-                        curPort->WriteQuadlet(curBoard->GetBoardId(), dac_addr, volts | 0x80000000);
-                        Amp1394_Sleep(0.001);
-                        bool dac_lt_supply = curBoard->ReadMotorSupplyVoltageBit(idx+1);
-                        if (!dac_lt_supply) {
-                            // if DAC voltage greater than supply,
-                            // backup and reduce resolution
-                            if (vinc <= 1) break;
-                            volts -= vinc;
-                            vinc >>= 1;
-                        }
-                    }
-                    if (volts <= 0x0000ffff) {
-                        const double bits2volts = (2.5/65535)*21.0;
-                        if (numQla == 2)
-                            std::cout << "QLA " << (idx+1) << ": ";
-                        std::cout << "Measured power supply voltage = " << volts << " (" << (volts*bits2volts)
-                                  << ")" << std::endl;
-                    }
-                    else {
-                        if (numQla == 2)
-                            std::cout << "QLA " << (idx+1) << ": ";
-                        std::cout << "Failed to measure motor supply voltage" << std::endl;
-                    }
-                    curPort->WriteQuadlet(curBoard->GetBoardId(), dac_addr, 0x80008000);
+                else if (curBoard->GetHardwareVersion() == QLA1_String) {
+                    double V = MeasureMotorSupplyVoltage(curPort, curBoard);
+                    std::cout << "Measured motor supply voltage: " << V << std::endl;
                 }
-                if (numQla > 0)
-                    curBoard->WritePowerEnable(false);
             }
             break;
 
