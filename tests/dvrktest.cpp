@@ -19,7 +19,8 @@
 #include <thread>
 #include <array>
 #include <vector>
-#include <filesystem>
+#include <experimental/filesystem>
+#include <iomanip>
 
 #include <Amp1394/AmpIORevision.h>
 
@@ -617,11 +618,8 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    std::cout << "*********************** WARNING **************************" << std::endl;
+    std::cout << "*********** dVRK  Classic Controller Test ***********" << std::endl;
     std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
-    std::cout << "Running the test with a robot (PSM/MTM) can cause injury and damage the robot." << std::endl;
-    std::cout << "Do not use this program with a controller connected to a robot." << std::endl;
-    std::cout << "Press [Enter] to run the test. Press [Ctrl-C] to exit." << std::endl;
 
     // If user did not specify board id, use the one obtained by scanning the bus.
     // Perhaps we will remove ability to specify board id(s) on command line.
@@ -652,8 +650,8 @@ int main(int argc, char **argv)
     std::stringstream filename;
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
-    std::filesystem::create_directory("dVRK_test_results");
-    filename << "dVRK_test_results/dVRK_" << std::put_time(&tm, "%Y-%m-%d-%H-%M-%S") << "_" << controller_sn << ".txt";
+    std::experimental::filesystem::create_directory("dVRK_test_results");
+    filename << "dVRK_test_results/dVRK_" << controller_sn << "_" << std::put_time(&tm, "%Y-%m-%d-%H-%M-%S") << ".txt";
     logfile.open(filename.str(), std::fstream::out);
 
 
@@ -704,7 +702,7 @@ int main(int argc, char **argv)
     if (!is_dqla) logfile << " Board 1=" << board2;
     logfile << std::endl;
 
-    bool pass = true;
+    bool all_pass = true;
 
     std::vector<Result (*)(AmpIO **, BasePort *)> test_functions;
     test_functions.push_back(TestSerialNumberAndVersion);
@@ -721,19 +719,19 @@ int main(int argc, char **argv)
         logfile << "Section result: " << (result == pass ? "PASS" : "FAIL") << std::endl;
         logfile << std::endl;
         if (result == fatal_fail) {
-            pass = false;
+            all_pass = false;
             break;
         } else if (result == fail) {
-            pass = false;
+            all_pass = false;
         }
     }
 
-    if (pass) {
+    if (all_pass) {
         std::cout << COLOR_GOOD << "PASS" << COLOR_OFF << ": all tests passed." <<std::endl;
     } else {
         std::cout << COLOR_ERROR << "FAIL" << COLOR_OFF << ": one or more tests failed." << std::endl;
     }
-    logfile << "Final result: " << (pass ? "PASS" : "FAIL") << std::endl;
+    logfile << "Final result: " << (all_pass ? "PASS" : "FAIL") << std::endl;
 
 
     for (auto &j : BoardList) {
@@ -742,6 +740,6 @@ int main(int argc, char **argv)
         Port->RemoveBoard(j);
     }
 
-    return pass ? 0 : -1;
+    return all_pass ? 0 : -1;
 
 }
