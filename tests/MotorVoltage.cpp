@@ -16,7 +16,7 @@ double MeasureMotorSupplyVoltage(BasePort *curPort, AmpIO *curBoard, unsigned in
     // QLA IO expander must be present (QLA 1.5+)
     curPort->ReadAllBoards();
     if (!curBoard->IsQLAExpanded(index)) {
-        std::cerr << "QLA does not support voltage measurement" << std::endl;
+        std::cerr << "MeasureMotorSupplyVoltage: QLA does not support voltage measurement" << std::endl;
         return 0.0;
     }
 
@@ -25,6 +25,10 @@ double MeasureMotorSupplyVoltage(BasePort *curPort, AmpIO *curBoard, unsigned in
     curBoard->WritePowerEnable(true);
     curBoard->WriteAmpEnable(0xff, 0);
     Amp1394_Sleep(1.0);
+    if (!curBoard->ReadPowerStatus()) {
+        std::cerr << "MeasureMotorSupplyVoltage: motor supply not enabled, check safety circuit" << std::endl;
+        return 0.0;
+    }
 
     double V = 0.0;    // Measured voltage (in volts)
     uint32_t volts;    // Measured voltage (in bits)
