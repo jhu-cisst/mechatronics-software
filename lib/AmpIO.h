@@ -210,10 +210,14 @@ public:
     // GetPowerEnable: return power enable control
     bool GetPowerEnable(void) const;
 
-    // GetPowerStatus: returns true if motor power supply voltage
-    // is present on the QLA. If not present, it could be because
-    // power is disabled or the power supply is off.
-    bool GetPowerStatus(void) const;
+    // GetPowerStatus: returns true if motor power supply voltage is present on the QLA.
+    // If not present, it could be because power is disabled or the power supply is off.
+    // The index parameter is ignored for the QLA, but used for the DQLA, where index=1
+    // returns the result for QLA 1 and index=2 returns the result for QLA 2.
+    // The index is used as a bitmask, so index=3 will return true if both QLAs have power.
+    // Also, for the DQLA, index=0 returns the power status summary bit set by the FPGA,
+    // which should be the same as when index=3.
+    bool GetPowerStatus(unsigned int index = 0) const;
 
     // GetPowerFault: returns true if motor power fault is detected.
     // This is supported from Rev 6 firmware and requires a QLA 1.4+
@@ -288,7 +292,7 @@ public:
     // GetXXX methods which read data from a buffer that is read from the board
     // via the more efficient block transfer.
 
-    bool ReadPowerStatus(void) const;
+    bool ReadPowerStatus(unsigned int index = 0) const;
     bool ReadSafetyRelayStatus(void) const;
     uint32_t ReadSafetyAmpDisable(void) const;
 

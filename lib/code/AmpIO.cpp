@@ -48,22 +48,28 @@ const uint32_t MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits *
 const uint32_t ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
 const int32_t  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
 
-// Offsets into status register
+// Offsets into status register (all boards, except as noted)
 const uint32_t DOUT_CFG_RESET   = 0x01000000;  /*!< Reset DOUT config (Rev 7+, write only) */
 const uint32_t WDOG_TIMEOUT     = 0x00800000;  /*!< Watchdog timeout (read only) */
-const uint32_t DOUT_CFG_VALID   = 0x00200000;  /*!< Digital output configuration valid (Rev 7+) */
-const uint32_t DOUT_CFG         = 0x00100000;  /*!< Digital output configuration, 1=bidir (Rev 7+) */
 const uint32_t MV_GOOD_BIT      = 0x00080000;  /*!< Motor voltage good (read only) */
 const uint32_t PWR_ENABLE_MASK  = 0x00080000;  /*!< Power enable mask (write only) */
 const uint32_t PWR_ENABLE_BIT   = 0x00040000;  /*!< Power enable status (read/write) */
 const uint32_t PWR_ENABLE       = PWR_ENABLE_MASK|PWR_ENABLE_BIT;
 const uint32_t PWR_DISABLE      = PWR_ENABLE_MASK;
-const uint32_t RELAY_FB         = 0x00020000;  /*!< Safety relay feedback (read only) */
+const uint32_t RELAY_FB         = 0x00020000;  /*!< Safety relay feedback (read only), 0 for DQLA */
 const uint32_t RELAY_MASK       = 0x00020000;  /*!< Safety relay enable mask (write only) */
 const uint32_t RELAY_BIT        = 0x00010000;  /*!< Safety relay enable (read/write) */
 const uint32_t RELAY_ON         = RELAY_MASK|RELAY_BIT;
 const uint32_t RELAY_OFF        = RELAY_MASK;
-const uint32_t MV_FAULT_BIT     = 0x00008000;  /*!< Motor supply fault (read only, QLA) */
+
+// Offsets into status register (QLA)
+const uint32_t QLA_DOUT_CFG_VALID = 0x00200000;  /*!< Digital output configuration valid (Rev 7+) */
+const uint32_t QLA_DOUT_CFG       = 0x00100000;  /*!< Digital output configuration, 1=bidir (Rev 7+) */
+const uint32_t QLA_MV_FAULT_BIT   = 0x00008000;  /*!< Motor supply fault (read only, QLA) */
+
+// Offsets into status register (DQLA)
+const uint32_t DQLA_MV_GOOD_2   = 0x00008000;    /*!< Motor voltage good for QLA 2 (read only) */
+const uint32_t DQLA_MV_GOOD_1   = 0x00004000;    /*!< Motor voltage good for QLA 1 (read only) */
 
 // Masks for feedback signals
 const uint32_t MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current adc bits */
@@ -711,10 +717,19 @@ bool AmpIO::GetPowerEnable(void) const
     return (GetStatus() & PWR_ENABLE_BIT);
 }
 
-bool AmpIO::GetPowerStatus(void) const
+bool AmpIO::GetPowerStatus(unsigned int index) const
 {
     // Bit 19: MV_GOOD
-    return (GetStatus() & MV_GOOD_BIT);
+    uint32_t status = GetStatus();
+    bool ret = status & MV_GOOD_BIT;
+    if (GetHardwareVersion() == DQLA_String) {
+        uint32_t mask = 0;
+        if (index&1) mask |= DQLA_MV_GOOD_1;
+        if (index&2) mask |= DQLA_MV_GOOD_2;
+        if (mask != 0)
+            ret = ((status & mask) == mask);
+    }
+    return ret;
 }
 
 bool AmpIO::GetPowerFault(void) const
@@ -722,7 +737,7 @@ bool AmpIO::GetPowerFault(void) const
     bool ret = false;
     if (GetHardwareVersion() == QLA1_String) {
         // Bit 15: motor power fault
-        ret = GetStatus() & MV_FAULT_BIT;
+        ret = GetStatus() & QLA_MV_FAULT_BIT;
     }
     return ret;
 }
@@ -985,9 +1000,18 @@ bool AmpIO::SetMotorVoltageRatio(unsigned int index, double ratio)
  * Read commands
  */
 
-bool AmpIO::ReadPowerStatus(void) const
+bool AmpIO::ReadPowerStatus(unsigned int index) const
 {
-    return (ReadStatus() & MV_GOOD_BIT);
+    uint32_t status = ReadStatus();
+    bool ret = status & MV_GOOD_BIT;
+    if (GetHardwareVersion() == DQLA_String) {
+        uint32_t mask = 0;
+        if (index&1) mask |= DQLA_MV_GOOD_1;
+        if (index&2) mask |= DQLA_MV_GOOD_2;
+        if (mask != 0)
+            ret = ((status & mask) == mask);
+    }
+    return ret;
 
 }
 
