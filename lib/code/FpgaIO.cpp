@@ -195,18 +195,18 @@ bool FpgaIO::PromReadData(uint32_t addr, uint8_t *data,
         unsigned int bytesToRead = ((nbytes-page)<maxReadSize) ? (nbytes-page) : maxReadSize;
         if (!port->WriteQuadlet(BoardId, 0x08, write_data))
             return false;
-        // Read FPGA status register; if 4 LSB are 0, command has finished.
+        // Read FPGA status register; if 3 LSB are 0, command has finished.
         // The IEEE-1394 clock is 24.576 MHz, so it should take
         // about 256*8*(1/24.576) = 83.3 microseconds to read 256 bytes.
         // Experimentally, 1 iteration of the loop below is sufficient
         // most of the time, with 2 iterations required occasionally.
-        quadlet_t read_data = 0x000f;
+        quadlet_t read_data = 0x0007;
         int i;
         const int MAX_LOOP_CNT = 8;
         for (i = 0; (i < MAX_LOOP_CNT) && read_data; i++) {
             Amp1394_Sleep(0.00001);   // 10 usec
             if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
-            read_data = read_data&0x000f;
+            read_data = read_data&0x0007;
         }
         if (i == MAX_LOOP_CNT) {
             std::cout << "PromReadData: command failed to finish, status = "
