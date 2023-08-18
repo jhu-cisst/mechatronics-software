@@ -740,6 +740,9 @@ int main(int argc, char **argv)
         Port->RemoveBoard(j);
     }
 
+    std::cout << "Press [Enter] to exit." << std::endl;
+    std::cin.ignore();
+
     return all_pass ? 0 : -1;
 
 }
