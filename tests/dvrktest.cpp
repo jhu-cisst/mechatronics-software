@@ -19,6 +19,8 @@
 #include <thread>
 #include <array>
 #include <vector>
+#include <experimental/filesystem>
+#include <iomanip>
 
 #include <Amp1394/AmpIORevision.h>
 
@@ -41,8 +43,7 @@ int NUM_FPGA = 1;
 int NUM_CHANNEL_PER_FPGA = 8;
 bool is_dqla = true;
 
-char* controller_sn;
-
+std::ofstream logfile;
 //**************************** Find dVRK Controllers **************************************
 
 struct ControllerInfo {
@@ -155,22 +156,31 @@ Result TestSerialNumberAndVersion(AmpIO **Board, BasePort *Port) {
     if (Port->ReadAllBoards()) {
         for (int board_index = 0; board_index < NUM_FPGA; board_index++) {
             std::cout << "Board " << board_index << " - ";
+            logfile << "Board " << board_index << " - ";
             std::string FPGA_SN = Board[board_index]->GetFPGASerialNumber();
             std::cout << "FPGA_sn=" << FPGA_SN << " ";
+            logfile << "FPGA_sn=" << FPGA_SN << " ";
             std::string HW_STRING = Board[board_index]->GetHardwareVersionString();
             std::cout << "HW_ver=" << HW_STRING << " ";
+            logfile << "HW_ver=" << HW_STRING << " ";
+            std::cout << std::endl;
             if (is_dqla) {
                 std::string QLA1_SN = Board[board_index]->GetQLASerialNumber(1);
                 std::cout << "QLA1_sn=" << QLA1_SN << " ";
+                logfile << "QLA1_sn=" << QLA1_SN << " ";
                 std::string QLA2_SN = Board[board_index]->GetQLASerialNumber(2);
                 std::cout << "QLA2_sn=" << QLA2_SN << " ";
+                logfile << "QLA2_sn=" << QLA2_SN << " ";
             } else {
                 std::string QLA_SN = Board[board_index]->GetQLASerialNumber();
                 std::cout << "QLA_sn=" << QLA_SN << " ";
+                logfile << "QLA_sn=" << QLA_SN << " ";
             }
             uint32_t FPGA_VER = Board[board_index]->GetFirmwareVersion();
             std::cout << "FPGA_ver=" << FPGA_VER << std::endl;
+            logfile << "FPGA_ver=" << FPGA_VER << std::endl;
             uint32_t hwver = Board[board_index]->GetHardwareVersion();
+            logfile << "HW_ver=" << Board[board_index]->GetHardwareVersionString() << std::endl;
             if (hwver == dRA1_String || hwver == BCFG_String) {
                 std::cout << COLOR_ERROR << "(Unexpected board type.)" << COLOR_OFF << std::endl;
                 result = fatal_fail;
@@ -187,30 +197,37 @@ Result TestSerialNumberAndVersion(AmpIO **Board, BasePort *Port) {
 
 Result TestAnalogInputs(AmpIO **Board, BasePort *Port) {
     Result result = pass;
-    if (Port->ReadAllBoards()) {
-        for (int board_index = 0; board_index < NUM_FPGA; board_index++) {
-            for (int channel_index = 0; channel_index < NUM_CHANNEL_PER_FPGA; channel_index++) {
-                unsigned long reading = Board[board_index]->GetAnalogInput(channel_index);
-                std::cout << std::hex << "board " << board_index << " pot channel " << channel_index << " - "
-                          << " expected="
-                          << POT_TEST_ADC_COUNT[board_index * 4 + channel_index] << " measured=" << reading;
-                if (std::fabs((long) reading - (long) POT_TEST_ADC_COUNT[board_index * 4 + channel_index]) > POT_TEST_ADC_ERROR_TOLERANCE) {
-                    std::cout << FAIL << std::endl;
-                    result = fail;
-                    // check for swapped cable
-                    if (std::fabs((long) reading - (long) POT_TEST_ADC_COUNT[(1 ^ board_index)  * 4 + channel_index]) <
-                        POT_TEST_ADC_ERROR_TOLERANCE) {
-                        std::cout << COLOR_ERROR << "(Looks like the 68-pin cable is crossed!)" << COLOR_OFF
-                                  << std::endl;
-                        result = fatal_fail;
-                    }
-
-                } else {
-                    std::cout << PASS << std::endl;
+    Port->ReadAllBoards();
+    for (int board_index = 0; board_index < NUM_FPGA; board_index++) {
+        for (int channel_index = 0; channel_index < NUM_CHANNEL_PER_FPGA; channel_index++) {
+            unsigned long reading = Board[board_index]->GetAnalogInput(channel_index);
+            std::cout << std::hex << "board " << board_index << " pot channel " << channel_index << " - "
+                        << " expected="
+                        << POT_TEST_ADC_COUNT[board_index * 4 + channel_index] << " measured=" << reading;
+            logfile << std::hex << "board " << board_index << " pot channel " << channel_index << " - "
+                        << " expected="
+                        << POT_TEST_ADC_COUNT[board_index * 4 + channel_index] << " measured=" << reading;
+            if (std::fabs((long) reading - (long) POT_TEST_ADC_COUNT[board_index * 4 + channel_index]) > POT_TEST_ADC_ERROR_TOLERANCE) {
+                std::cout << FAIL << std::endl;
+                logfile << "... FAIL" << std::endl;
+                logfile << "Tolerance=" << POT_TEST_ADC_ERROR_TOLERANCE << std::endl;
+                result = fail;
+                // check for swapped cable
+                if (std::fabs((long) reading - (long) POT_TEST_ADC_COUNT[(1 ^ board_index)  * 4 + channel_index]) <
+                    POT_TEST_ADC_ERROR_TOLERANCE) {
+                    std::cout << COLOR_ERROR << "(Looks like the 68-pin cable is crossed!)" << COLOR_OFF
+                                << std::endl;
+                    logfile << "Crossed scsi?" << std::endl;
+                    result = fatal_fail;
                 }
+
+            } else {
+                std::cout << PASS << std::endl;
+                logfile << "... PASS" << std::endl;
             }
         }
     }
+    
     return result;
 }
 
@@ -240,17 +257,21 @@ Result TestDigitalInputs(AmpIO **Board, BasePort *Port) {
     }
 
     std::cout << "digital inputs - ";
+    logfile << "digital inputs - ";
 
     for (int i = 0; i < 3; i++) {
         std::cout << std::hex << (int) before[i] << "->" << (int) after[i] << " ";
+        logfile << std::hex << (int) before[i] << "->" << (int) after[i] << " ";
     }
 
     if ((before == DIGITAL_IN_TEST_HIGH_STATE && after == DIGITAL_IN_TEST_LOW_STATE) ||
         (before == DIGITAL_IN_TEST_LOW_STATE && after == DIGITAL_IN_TEST_HIGH_STATE)) {
         std::cout << PASS << std::endl;
+        logfile << "... PASS" << std::endl;
     } else {
         result = fail;
         std::cout << FAIL << std::endl;
+        logfile << "... FAIL" << std::endl;
         std::cout << COLOR_ERROR << "(False-positive failure is possible. Consider it pass if retry OK.)" << COLOR_OFF
                   << std::endl;
     }
@@ -291,11 +312,14 @@ Result TestEncoders(AmpIO **Board, BasePort *Port) {
         auto increment = encoder_count_after[i] - encoder_count_before[i];
 
         std::cout << std::dec << "encoder " << i << " increment - expected=10 measured=" << increment;
+        logfile << std::dec << "encoder " << i << " increment - expected=10 measured=" << increment;
         if (std::fabs((long) increment - (long) ENCODER_TEST_INCREMENT) < ENCODER_TEST_INCREMENT_TOLERANCE) {
             std::cout << PASS << std::endl;
+            logfile << "... PASS" << std::endl;
             each_encoder_result |= 1 << i;
         } else {
             std::cout << FAIL << std::endl;
+            logfile << "... FAIL" << std::endl;
             result = fatal_fail;
         }
     }
@@ -333,39 +357,51 @@ Result TestMotorPowerControl(AmpIO **Board, BasePort *Port) {
         auto safety_relay_status = Board[board_index]->GetSafetyRelayStatus();
         std::cout << std::hex << "board " << board_index << " power - status=" << status << " safety_relay="
                   << safety_relay_status;
+        logfile << std::hex << "board " << board_index << " power - status=" << status << " safety_relay="
+                  << safety_relay_status;
 
         if (safety_relay_status) {
             std::cout << std::endl << "    ";
             if (Board[board_index]->GetPowerStatus()) {
                 std::cout << " mv_good=ok";
+                logfile << " mv_good=ok";
                 bool board_failed = false;
                 std::cout << " amp_power=";
+                logfile << " amp_power=";
 
                 for (int channel_index = 0; channel_index < NUM_CHANNEL_PER_FPGA; channel_index++) {
                     if (Board[board_index]->GetAmpStatus(channel_index)) {
                         std::cout << 1;
+                        logfile << 1;
                     } else {
                         std::cout << 0;
+                        logfile << 0;
                         board_failed = true;
                     }
 
                 }
                 if (board_failed) {
                     std::cout << " amp_power=bad";
+                    logfile << " amp_power=bad";
                     result = fatal_fail;
                     std::cout << FAIL << std::endl;
+                    logfile << "... FAIL" << std::endl;
                 } else {
                     std::cout << PASS << std::endl;
+                    logfile << "... PASS" << std::endl;
                 }
             } else {
                 std::cout << " mv_good=bad";
+                logfile << " mv_good=bad";
                 mv_good_fail_count++;
                 result = fatal_fail;
                 std::cout << FAIL << std::endl;
+                logfile << "... FAIL" << std::endl;
             }
         } else {
             result = fatal_fail;
             std::cout << FAIL << std::endl;
+            logfile << "... FAIL" << std::endl;
         }
     }
 
@@ -393,6 +429,7 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
             if (std::fabs((long) Board[0]->GetAnalogInput(0) - (long) POT_TEST_ADC_COUNT[0] / 2) <
                 POT_TEST_ADC_ERROR_TOLERANCE) {
                 std::cout << COLOR_ERROR << "(unexpected current detected on channel 0)" << COLOR_OFF << std::endl;
+                logfile << "unexpected current detected on channel 0" << std::endl;
                 return fatal_fail;
             }
 
@@ -423,12 +460,17 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
             std::cout << std::hex << "board " << board_index << " amp channel " << channel_index << " - "
                       << " expected="
                       << POWER_AMP_TEST_DAC << " measured=" << motor_current;
+            logfile << std::hex << "board " << board_index << " amp channel " << channel_index << " - "
+                        << " expected="
+                        << POWER_AMP_TEST_DAC << " measured=" << motor_current;
 
             if (!amp_working) {
                 result = fail;
                 std::cout << FAIL << std::endl;
+                logfile << "... FAIL" << std::endl;
             } else {
                 std::cout << PASS << std::endl;
+                logfile << "... PASS" << std::endl;
             }
 
             Board[board_index]->SetMotorCurrent(channel_index, 0x8000);
@@ -441,6 +483,7 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
     if (crossed_db9_error_count == 2) {
         result = fatal_fail;
         std::cout << COLOR_ERROR << "(DB9 cables are likely crossed!)" << COLOR_OFF << std::endl;
+        logfile << "DB9 cables are likely crossed!" << std::endl;
     }
 
     if (result == fail) {
@@ -453,6 +496,7 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
 
 Result TestDallas(AmpIO **Board, BasePort *Port) {
     std::cout << "dallas ";
+    logfile << "dallas ";
     AmpIO *board;
     if (is_dqla) {
         board = Board[0];
@@ -464,9 +508,11 @@ Result TestDallas(AmpIO **Board, BasePort *Port) {
     if (!ret) {
         std::cout << FAIL << std::endl;
         std::cout << COLOR_ERROR << "(DallasReadMemory failed)" << COLOR_OFF << std::endl;
+        logfile << "... FAIL" << std::endl;
         return fail;
     } else {
         std::cout << PASS << std::endl;
+        logfile << "... PASS" << std::endl;
         return pass;
     }
 }
@@ -492,7 +538,6 @@ int main(int argc, char **argv)
     int board2 = BoardIO::MAX_BOARDS;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
-    int args_found = 0;
     for (int i = 1; i < argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
             // -p option can be -pN, -pfwN, or -pethN, where N
@@ -503,13 +548,6 @@ int main(int argc, char **argv)
                 return 0;
             }
             std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
-        } else {
-            if (args_found == 0) {
-                board1 = atoi(argv[i]);
-            } else if (args_found == 1) {
-                board2 = atoi(argv[i]);
-            }
-            args_found++;
         }
     }
 
@@ -580,12 +618,8 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    std::cout << "*********************** WARNING **************************" << std::endl;
+    std::cout << "*********** dVRK  Classic Controller Test ***********" << std::endl;
     std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
-    std::cout << "Running the test with a robot (PSM/MTM) can cause injury and damage the robot." << std::endl;
-    std::cout << "Do not use this program with a controller connected to a robot." << std::endl;
-    std::cout << "Press [Enter] to run the test. Press [Ctrl-C] to exit." << std::endl;
-    std::cin.ignore();
 
     // If user did not specify board id, use the one obtained by scanning the bus.
     // Perhaps we will remove ability to specify board id(s) on command line.
@@ -606,6 +640,20 @@ int main(int argc, char **argv)
         BoardList.push_back(new AmpIO(board2));
         Port->AddBoard(BoardList[1]);
     }
+
+    Port->ReadAllBoards();
+    auto controller_sn = BoardList[0]->GetFPGASerialNumber();
+    if (controller_sn.empty()) {
+        controller_sn = "unknown";
+    }
+    
+    std::stringstream filename;
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::experimental::filesystem::create_directory("dVRK_test_results");
+    filename << "dVRK_test_results/dVRK_" << controller_sn << "_" << std::put_time(&tm, "%Y-%m-%d-%H-%M-%S") << ".txt";
+    logfile.open(filename.str(), std::fstream::out);
+
 
     // Check motor supply voltage
     double V[2] = { 0.0, 0.0};   // QLA 1,2 measured motor supply voltage
@@ -629,13 +677,17 @@ int main(int argc, char **argv)
         if (V[v] > 0.0) {
             std::cout << "QLA " << (v+1) << " Motor Supply Voltage: " << V[v]
                       << " (should be " << VNom[v] << ")" << std::endl;
+            logfile << "QLA " << (v+1) << " Motor Supply Voltage: " << V[v]
+                      << " (should be " << VNom[v] << ")" << std::endl;
             if (fabs(V[v]-VNom[v]) > 0.1*VNom[v])
                 V_mismatch = true;
         }
     }
     if (V_mismatch) {
         std::cout << "WARNING: Motor supply voltages do not match controller type" << std::endl;
-        // Could add prompt whether to continue or exit
+        logfile << "WARNING: Motor supply voltages do not match controller type" << std::endl;
+        std::cout << "Press [Enter] to continue. Press [Ctrl-C] to exit." << std::endl;
+        std::cin.ignore();
     }
 
     for (int i = 0; i < NUM_CHANNEL_PER_FPGA; i++) {
@@ -646,9 +698,11 @@ int main(int argc, char **argv)
     std::cout << "Board ID selected: Board 0=" << board1;
     if (!is_dqla) std::cout << " Board 1=" << board2;
     std::cout << std::endl;
+    logfile << "Board ID selected: Board 0=" << board1;
+    if (!is_dqla) logfile << " Board 1=" << board2;
+    logfile << std::endl;
 
-
-    bool pass = true;
+    bool all_pass = true;
 
     std::vector<Result (*)(AmpIO **, BasePort *)> test_functions;
     test_functions.push_back(TestSerialNumberAndVersion);
@@ -662,19 +716,22 @@ int main(int argc, char **argv)
     for (auto test_function : test_functions) {
         auto result = test_function(&BoardList[0], Port);
         std::cout << std::endl;
+        logfile << "Section result: " << (result == pass ? "PASS" : "FAIL") << std::endl;
+        logfile << std::endl;
         if (result == fatal_fail) {
-            pass = false;
+            all_pass = false;
             break;
         } else if (result == fail) {
-            pass = false;
+            all_pass = false;
         }
     }
 
-    if (pass) {
+    if (all_pass) {
         std::cout << COLOR_GOOD << "PASS" << COLOR_OFF << ": all tests passed." <<std::endl;
     } else {
         std::cout << COLOR_ERROR << "FAIL" << COLOR_OFF << ": one or more tests failed." << std::endl;
     }
+    logfile << "Final result: " << (all_pass ? "PASS" : "FAIL") << std::endl;
 
 
     for (auto &j : BoardList) {
@@ -683,6 +740,9 @@ int main(int argc, char **argv)
         Port->RemoveBoard(j);
     }
 
-    return pass ? 0 : -1;
+    std::cout << "Press [Enter] to exit." << std::endl;
+    std::cin.ignore();
+
+    return all_pass ? 0 : -1;
 
 }

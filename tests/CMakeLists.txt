@@ -65,7 +65,7 @@ install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
          DESTINATION bin)
 
 add_executable(dvrktest dvrktest.cpp MotorVoltage.h MotorVoltage.cpp)
-target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES} stdc++fs)
 
 install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest dvrktest
          COMPONENT Amp1394-utils
