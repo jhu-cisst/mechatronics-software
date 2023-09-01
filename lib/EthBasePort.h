@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -223,7 +223,7 @@ public:
 
     static void PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads);
 
-    static void PrintDebug(std::ostream &debugStream, unsigned short status);
+    static void PrintStatus(std::ostream &debugStream, uint32_t status);
 
     // Print Ethernet debug data; clockPeriod is in seconds
     //   CheckDebugHeader   looks for debug header string ("DBG2")

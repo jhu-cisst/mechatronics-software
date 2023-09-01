@@ -84,8 +84,8 @@ protected:
 public:
     enum {MAX_BOARDS = 16};   // Maximum number of boards
 
-    // The following registers are required to be supported on all boards because
-    // they are used by the Port classes when scanning/configuring the bus.
+    // The following registers are required to be supported on all boards because they are used by
+    // the Port classes when scanning/configuring the bus.
     //
     //   BOARD_STATUS:     Bits 27-24 contain the board number (e.g., rotary switch)
     //   FW_PHY_REQ:       Write 0 to this register to initiate a read of PHY register 0 (self-id);
@@ -94,6 +94,7 @@ public:
     //   HARDWARE_VERSION: Indicates type of connected board (e.g., QLA, dRAC)
     //   FIRMWARE_VERSION: Version of FPGA firmware
     //   IP_ADDR:          Ethernet IP address (written during Ethernet configuration)
+    //   ETH_STATUS:       Ethernet status register (used to distinguish FPGA version)
     //
     enum Registers {
         BOARD_STATUS = 0,      // RW: Board status/control register
@@ -101,7 +102,8 @@ public:
         FW_PHY_RESP = 2,       // RO: Firewire PHY register read response
         HARDWARE_VERSION = 4,  // RO: Companion board type (e.g., "QLA1")
         FIRMWARE_VERSION = 7,  // RO: Firmware version number
-        IP_ADDR = 11           // RW: Ethernet IP address (Firmware V7+)
+        IP_ADDR = 11,          // RW: Ethernet IP address (Firmware V7+)
+        ETH_STATUS = 12        // RW: Ethernet status register (Firmware V5+)
     };
 
     BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),
@@ -123,6 +125,17 @@ public:
     inline void ClearWriteErrors() { numWriteErrors = 0; }
 
     uint32_t GetFirmwareVersion(void) const;
+
+    // Return FPGA major version number (1, 2, 3)
+    // Returns 0 if unknown
+    unsigned int GetFpgaVersionMajor(void) const;
+
+    /*! Get FPGA major version from Ethernet status register
+        \param status  Ethernet status register (input)
+        \return unsigned int: FPGA major version (1, 2 or 3)
+    */
+    static unsigned int GetFpgaVersionMajorFromStatus(uint32_t status);
+
     uint32_t GetHardwareVersion(void) const;
     std::string GetHardwareVersionString(void) const;
 

@@ -15,7 +15,7 @@ cmake_minimum_required (VERSION 2.6)
 
 # Set the version number
 set (Amp1394_VERSION_MAJOR "1")
-set (Amp1394_VERSION_MINOR "6")
+set (Amp1394_VERSION_MINOR "7")
 set (Amp1394_VERSION_PATCH "0")
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
@@ -54,6 +54,9 @@ if (WIN32)
     find_path (PCAP_LIBRARY_DIR "wpcap.lib" DOC "Path to WinPcap/Npcap wpcap and Packet libraries")
     set (PCAP_LIBRARIES "wpcap" "Packet")
   endif (Amp1394_HAS_PCAP)
+
+  # Disable annoying warnings
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 
 else (WIN32)
 

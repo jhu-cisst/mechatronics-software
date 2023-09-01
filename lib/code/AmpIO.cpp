@@ -48,22 +48,28 @@ const uint32_t MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits *
 const uint32_t ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
 const int32_t  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
 
-// Offsets into status register
+// Offsets into status register (all boards, except as noted)
 const uint32_t DOUT_CFG_RESET   = 0x01000000;  /*!< Reset DOUT config (Rev 7+, write only) */
 const uint32_t WDOG_TIMEOUT     = 0x00800000;  /*!< Watchdog timeout (read only) */
-const uint32_t DOUT_CFG_VALID   = 0x00200000;  /*!< Digital output configuration valid (Rev 7+) */
-const uint32_t DOUT_CFG         = 0x00100000;  /*!< Digital output configuration, 1=bidir (Rev 7+) */
 const uint32_t MV_GOOD_BIT      = 0x00080000;  /*!< Motor voltage good (read only) */
 const uint32_t PWR_ENABLE_MASK  = 0x00080000;  /*!< Power enable mask (write only) */
 const uint32_t PWR_ENABLE_BIT   = 0x00040000;  /*!< Power enable status (read/write) */
 const uint32_t PWR_ENABLE       = PWR_ENABLE_MASK|PWR_ENABLE_BIT;
 const uint32_t PWR_DISABLE      = PWR_ENABLE_MASK;
-const uint32_t RELAY_FB         = 0x00020000;  /*!< Safety relay feedback (read only) */
+const uint32_t RELAY_FB         = 0x00020000;  /*!< Safety relay feedback (read only), 0 for DQLA */
 const uint32_t RELAY_MASK       = 0x00020000;  /*!< Safety relay enable mask (write only) */
 const uint32_t RELAY_BIT        = 0x00010000;  /*!< Safety relay enable (read/write) */
 const uint32_t RELAY_ON         = RELAY_MASK|RELAY_BIT;
 const uint32_t RELAY_OFF        = RELAY_MASK;
-const uint32_t MV_FAULT_BIT     = 0x00008000;  /*!< Motor supply fault (read only, QLA) */
+
+// Offsets into status register (QLA)
+const uint32_t QLA_DOUT_CFG_VALID = 0x00200000;  /*!< Digital output configuration valid (Rev 7+) */
+const uint32_t QLA_DOUT_CFG       = 0x00100000;  /*!< Digital output configuration, 1=bidir (Rev 7+) */
+const uint32_t QLA_MV_FAULT_BIT   = 0x00008000;  /*!< Motor supply fault (read only, QLA) */
+
+// Offsets into status register (DQLA)
+const uint32_t DQLA_MV_GOOD_2   = 0x00008000;    /*!< Motor voltage good for QLA 2 (read only) */
+const uint32_t DQLA_MV_GOOD_1   = 0x00004000;    /*!< Motor voltage good for QLA 1 (read only) */
 
 // Masks for feedback signals
 const uint32_t MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current adc bits */
@@ -152,7 +158,13 @@ void AmpIO::InitBoard(void)
         NumMotors = 8;
         NumEncoders = 8;
         NumDouts = 8;
-    } else {
+    }
+    else if (GetHardwareVersion() == BCFG_String) {
+        NumMotors = 0;
+        NumEncoders = 0;
+        NumDouts = 0;
+    }
+    else {
         NumMotors = 4;
         NumEncoders = 4;
         NumDouts = 4;
@@ -272,7 +284,7 @@ std::string AmpIO::GetQLASerialNumber(unsigned char chan)
             data[i] = 0;
         address += 1;
     }
-    if (strncmp((char *)data, "QLA ", 4) == 0)
+    if (strncmp((char *)data, "QLA ", 4) == 0 || strncmp((char *)data, "dRA ", 4) == 0)
         sn.assign((char *)data+4);
     return sn;
 }
@@ -316,6 +328,12 @@ void AmpIO::DisplayReadBuffer(std::ostream &out) const
         out << std::endl;
     }
     out << std::dec;
+}
+
+bool AmpIO::HasQLA() const
+{
+    return (GetHardwareVersion() == QLA1_String) ||
+           (GetHardwareVersion() == DQLA_String);
 }
 
 uint32_t AmpIO::GetStatus(void) const
@@ -699,10 +717,19 @@ bool AmpIO::GetPowerEnable(void) const
     return (GetStatus() & PWR_ENABLE_BIT);
 }
 
-bool AmpIO::GetPowerStatus(void) const
+bool AmpIO::GetPowerStatus(unsigned int index) const
 {
     // Bit 19: MV_GOOD
-    return (GetStatus() & MV_GOOD_BIT);
+    uint32_t status = GetStatus();
+    bool ret = status & MV_GOOD_BIT;
+    if (GetHardwareVersion() == DQLA_String) {
+        uint32_t mask = 0;
+        if (index&1) mask |= DQLA_MV_GOOD_1;
+        if (index&2) mask |= DQLA_MV_GOOD_2;
+        if (mask != 0)
+            ret = ((status & mask) == mask);
+    }
+    return ret;
 }
 
 bool AmpIO::GetPowerFault(void) const
@@ -710,7 +737,7 @@ bool AmpIO::GetPowerFault(void) const
     bool ret = false;
     if (GetHardwareVersion() == QLA1_String) {
         // Bit 15: motor power fault
-        ret = GetStatus() & MV_FAULT_BIT;
+        ret = GetStatus() & QLA_MV_FAULT_BIT;
     }
     return ret;
 }
@@ -973,9 +1000,18 @@ bool AmpIO::SetMotorVoltageRatio(unsigned int index, double ratio)
  * Read commands
  */
 
-bool AmpIO::ReadPowerStatus(void) const
+bool AmpIO::ReadPowerStatus(unsigned int index) const
 {
-    return (ReadStatus() & MV_GOOD_BIT);
+    uint32_t status = ReadStatus();
+    bool ret = status & MV_GOOD_BIT;
+    if (GetHardwareVersion() == DQLA_String) {
+        uint32_t mask = 0;
+        if (index&1) mask |= DQLA_MV_GOOD_1;
+        if (index&2) mask |= DQLA_MV_GOOD_2;
+        if (mask != 0)
+            ret = ((status & mask) == mask);
+    }
+    return ret;
 
 }
 
@@ -1095,6 +1131,27 @@ bool AmpIO::ReadIOExpander(uint32_t &resp) const
     return port->ReadQuadlet(BoardId, 14, resp);
 }
 
+bool AmpIO::ReadMotorSupplyVoltageBit(unsigned int index) const
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (GetHardwareVersion() == QLA1_String) {
+        // Bit 28 in digital I/O register
+        uint32_t dig_in;
+        if (port && port->ReadQuadlet(BoardId, 0x0a, dig_in))
+            ret = (dig_in&0x10000000);
+
+    }
+    else if ((GetHardwareVersion() == DQLA_String) && ((index == 1) || (index == 2))) {
+        // Bits 5 (QLA2) and 4 (QLA1) in status register
+        uint32_t status;
+        if (port && port->ReadQuadlet(BoardId, BoardIO::BOARD_STATUS, status))
+            ret = (status & (index << 4) );
+    }
+    return ret;
+}
+
 bool AmpIO::ReadMotorConfig(unsigned int index, uint32_t &cfg) const
 {
     bool ret = false;
@@ -1117,7 +1174,16 @@ bool AmpIO::ReadMotorCurrentLimit(unsigned int index, uint16_t &mcurlim) const
     uint32_t cfg;
     bool ret = ReadMotorConfig(index, cfg);
     if (ret)
-        mcurlim = static_cast<uint16_t>(cfg&MCFG_CURRENT_LIMIT_MASK);
+        mcurlim = static_cast<uint16_t>(cfg & MCFG_CURRENT_LIMIT_MASK);
+    return ret;
+}
+
+bool AmpIO::ReadAmpEnableDelay(unsigned int index, uint8_t &ampdelay) const
+{
+    uint32_t cfg;
+    bool ret = ReadMotorConfig(index, cfg);
+    if (ret)
+        ampdelay = static_cast<uint8_t>((cfg & MCFG_AMP_ENABLE_DELAY_MASK)>>16);
     return ret;
 }
 
@@ -1235,15 +1301,6 @@ bool AmpIO::WriteWaveformControl(uint8_t mask, uint8_t bits)
 
 bool AmpIO::WriteWatchdogPeriod(uint32_t counts)
 {
-    //TODO: hack
-    if (GetHardwareVersion() == dRA1_String) {
-        for (int axis = 1; axis < 11; axis ++) {
-            WriteCurrentKpRaw(axis - 1, 2000);
-            WriteCurrentKiRaw(axis - 1, 200);
-            WriteCurrentITermLimitRaw(axis - 1, 1000);
-            WriteDutyCycleLimit(axis - 1, 1000);
-        }
-    }
     // period = counts(16 bits) * 5.208333 us (0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, counts);
 }
@@ -1346,7 +1403,7 @@ bool AmpIO::WriteMotorConfig(unsigned int index, uint32_t cfg)
     bool ret = false;
     if (GetFirmwareVersion() < 8) return ret;
 
-    if ((GetHardwareVersion() != dRA1_String) && port && (index < NumMotors)) {
+    if (HasQLA() && port && (index < NumMotors)) {
         unsigned int channel = (index+1) << 4;
         ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
     }
@@ -1355,9 +1412,31 @@ bool AmpIO::WriteMotorConfig(unsigned int index, uint32_t cfg)
 
 bool AmpIO::WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim)
 {
-    // TODO: change firmware to use one of the upper bits as a mask, so that we can
-    // write a new motor current limit without affecting other bits.
-    return false;
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+    // Return false if motor current limit exceeds maximum range (rather
+    // than allowing firmware to set msb to 0).
+    if (mcurlim > 0x7fff) return ret;
+
+    if (HasQLA() && port && (index < NumMotors)) {
+        uint32_t cfg = MCFG_SET_CUR_LIMIT | mcurlim;
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
+}
+
+bool AmpIO::WriteAmpEnableDelay(unsigned int index, uint8_t ampdelay)
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (HasQLA() && port && (index < NumMotors)) {
+        uint32_t cfg = MCFG_SET_AMP_DELAY | (ampdelay<<16);
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
 }
 
 /*******************************************************************************
@@ -1591,24 +1670,43 @@ bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned 
     return true;
 }
 
-uint32_t AmpIO::SPSMReadToolModel(void) const
+bool AmpIO::WriteRobotLED(uint32_t rgb1, uint32_t rgb2, bool blink1, bool blink2) const
 {
-    uint32_t instrument_id = 0;
     if (GetHardwareVersion() == dRA1_String) {
-        port->ReadQuadlet(BoardId, 0xb012, instrument_id);
-        instrument_id = bswap_32(instrument_id);
+        uint8_t r1 = (rgb1 >> 20) & 0xF;
+        uint8_t g1 = (rgb1 >> 12) & 0xF;
+        uint8_t b1 = (rgb1 >> 4) & 0xF;
+        uint8_t r2 = (rgb2 >> 20) & 0xF;
+        uint8_t g2 = (rgb2 >> 12) & 0xF;
+        uint8_t b2 = (rgb2 >> 4) & 0xF;
+        uint32_t command = (r1 << 10) | (g1 << 5) | (b1 << 0) | (blink1 << 15) | (r2 << 26) | (g2 << 21) | (b2 << 16) | (blink2 << 31) ;
+        return (port ? port->WriteQuadlet(BoardId, 0xa001, command) : false);
     }
-    return instrument_id;
+    return false;
 }
 
-uint8_t AmpIO::SPSMReadToolVersion(void) const
+std::string AmpIO::ReadRobotSerialNumber() const
 {
-    uint32_t q = 0;
+    // Experimental: implementation will likely change
+    const size_t read_length = 16; // 16 words, 32 bytes.
+    char buf[read_length * 2 + 1] = {'\0'};
     if (GetHardwareVersion() == dRA1_String) {
-        port->ReadQuadlet(BoardId, 0xb013, q);
-        q &= 0xFF;
+        uint16_t* buf16 = reinterpret_cast<uint16_t*>(buf);
+        uint32_t base_flash_addr = 0;
+        for (size_t i = 0; i < read_length; i++) {
+            for (uint32_t flash_en = 0; flash_en < 2; flash_en++) {
+                uint32_t flash_command = (flash_en << 28) | (1 << 24) | (base_flash_addr + i) ;
+                port->WriteQuadlet(BoardId, 0xa002, flash_command);
+                Amp1394_Sleep(0.01);
+            }
+            uint32_t q;
+            port->ReadQuadlet(BoardId, 0xa031, q);
+            buf16[i] = q & 0xFFFF;
+        }
+        port->WriteQuadlet(BoardId, 0xa002, 0);
     }
-    return q;
+    std::string serial_number(buf);
+    return serial_number;
 }
 
 // ************************************* Waveform methods ****************************************
@@ -1761,6 +1859,95 @@ void AmpIO::CheckCollectCallback()
 }
 
 //******* Following methods are for dRA1 ********
+
+std::string AmpIO::ExplainSiFault() const
+{
+    if (GetHardwareVersion() != dRA1_String) {
+        return "Not a Si controller";
+    }
+    std::stringstream ss;
+    const char* amp_fault_text[16] = {"-", "ADC saturated", "Current deviation", "HW overcurrent", "HW overtemp", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined"};
+    uint32_t status = GetStatus();
+    ss << "Explaining faults in the Si controller:" << std::endl;
+    ss << std::endl;
+    ss << "1. Interlocks that are preventing the axis from turning on:" << std::endl;
+    if (!(status & (1 << 0))) ss << "ESPM->dVRK communication failed. Robot not programmed? Cables?" << std::endl;
+    if ((status & (1 << 0)) && !(status & (1 << 1))) ss << "ESII/CC->ESPM communication failed. The problem is inside the robot." << std::endl;
+    if (!(status & (1 << 3))) ss << "Encoder preload is out of sync. You must preload encoder at least once." << std::endl;
+    if (!GetPowerStatus()) ss << "48V bad. E-stop pressed?" << std::endl;
+    if (GetWatchdogTimeoutStatus()) ss << "Watchdog timeout." << std::endl;
+    ss << "(end)" << std::endl;
+    ss << std::endl;
+    ss << "2. Amps that are in fault state:" << std::endl;
+    for (unsigned int i = 0; i < NumMotors; i++) {
+        // std::cout << NumMotors << std::endl;
+        uint32_t amp_fault = GetAmpFaultCode(i);
+        // std::cout << amp_fault << std::endl;
+        if (amp_fault) {
+            ss << "Amp " << i << ": " << amp_fault_text[amp_fault] << std::endl;
+        }
+    }
+    ss << "(end)" << std::endl;
+    ss << std::endl;
+    ss << std::endl;
+    return ss.str();
+}
+
+bool AmpIO::WriteSiCurrentLoopParams(unsigned int index, const SiCurrentLoopParams& params) const
+{
+    if (!port) return false;
+    if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() != dRA1_String) {
+        std::cerr << "AmpIO::WriteSiCurrentLoopParams not implemented for " << GetHardwareVersion() << std::endl;
+        return false;
+    }
+    if (index >= NumMotors) return false;
+    if (params.kp >= 1 << 18) return false;
+    if (params.ki >= 1 << 18) return false;
+    if (params.kd >= 1 << 18) return false;
+    if (params.iTermLimit > 1023) return false;
+    if (params.dutyCycleLimit > 1023) return false;
+
+    bool success = true;
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KP, params.kp);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KI, params.ki);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KD, params.kd);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_FF_RESISTIVE, params.ff_resistive);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_I_TERM_LIMIT, params.iTermLimit);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_DUTY_CYCLE_LIMIT, params.dutyCycleLimit);
+    return success;
+}
+
+bool AmpIO::ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& params) const
+{
+    if (!port) return false;
+    uint32_t read_data = 0;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, read_data);
+    params.kp = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, read_data);
+    params.ki = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KD, read_data);
+    params.kd = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_FF_RESISTIVE, read_data);
+    params.ff_resistive = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, read_data);
+    params.iTermLimit = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, read_data);
+    params.dutyCycleLimit = read_data;
+    return true;
+}
 
 bool AmpIO::WriteMotorControlMode(unsigned int index, uint16_t mode) {
     return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_MOTOR_CONTROL_MODE, mode) : false);

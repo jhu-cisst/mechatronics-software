@@ -27,6 +27,15 @@ http://www.cisst.org/cisst/license.txt.
 
 class ostream;
 
+struct SiCurrentLoopParams {
+    uint32_t kp; // uint18 Q0.18
+    uint32_t ki; // uint18 Q0.18
+    uint32_t kd; // uint18 Q0.18
+    uint32_t ff_resistive; // uint18 Q0.18
+    uint16_t iTermLimit; // uint 0-1023
+    uint16_t dutyCycleLimit; // uint 0-1023
+};
+
 /*! See Interface Spec: https://github.com/jhu-cisst/mechatronics-software/wiki/Interface-Specification */
 class AmpIO : public FpgaIO
 {
@@ -47,6 +56,9 @@ public:
     //   chan:  0 for QLA; 1 or 2 for DQLA
     std::string GetQLASerialNumber(unsigned char chan = 0);
     void DisplayReadBuffer(std::ostream &out = std::cout) const;
+
+    // Return true if QLA or DQLA
+    bool HasQLA() const;
 
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
@@ -198,10 +210,14 @@ public:
     // GetPowerEnable: return power enable control
     bool GetPowerEnable(void) const;
 
-    // GetPowerStatus: returns true if motor power supply voltage
-    // is present on the QLA. If not present, it could be because
-    // power is disabled or the power supply is off.
-    bool GetPowerStatus(void) const;
+    // GetPowerStatus: returns true if motor power supply voltage is present on the QLA.
+    // If not present, it could be because power is disabled or the power supply is off.
+    // The index parameter is ignored for the QLA, but used for the DQLA, where index=1
+    // returns the result for QLA 1 and index=2 returns the result for QLA 2.
+    // The index is used as a bitmask, so index=3 will return true if both QLAs have power.
+    // Also, for the DQLA, index=0 returns the power status summary bit set by the FPGA,
+    // which should be the same as when index=3.
+    bool GetPowerStatus(unsigned int index = 0) const;
 
     // GetPowerFault: returns true if motor power fault is detected.
     // This is supported from Rev 6 firmware and requires a QLA 1.4+
@@ -276,7 +292,7 @@ public:
     // GetXXX methods which read data from a buffer that is read from the board
     // via the more efficient block transfer.
 
-    bool ReadPowerStatus(void) const;
+    bool ReadPowerStatus(unsigned int index = 0) const;
     bool ReadSafetyRelayStatus(void) const;
     uint32_t ReadSafetyAmpDisable(void) const;
 
@@ -323,6 +339,16 @@ public:
      */
     bool ReadIOExpander(uint32_t &resp) const;
 
+    /*! \brief Read motor supply voltage feedback bit, available in QLA 1.5+, that compares
+               channel 4 DAC output to motor supply voltage.
+               The index parameter is ignored for the QLA, but used for the DQLA,
+               where index=1 returns the result for QLA 1 and index=2 returns the
+               result for QLA 2.
+        \returns false if DAC voltage is greater than motor supply voltage (or QLA < 1.5)
+                 true if DAC voltage is less than motor supply voltage
+    */
+    bool ReadMotorSupplyVoltageBit(unsigned int index = 0) const;
+
     /*! \brief Read motor configuration register (Firmware Rev 8+)
         \param index motor number, 0..NumMotors-1
         \param cfg   value read from configuration register
@@ -332,13 +358,18 @@ public:
     enum MotorConfigBitMask {
         MCFG_VOLTAGE_CONTROL = 0x02000000,           // 1 -> voltage control available (QLA 1.5+)
         MCFG_CURRENT_CONTROL = 0x01000000,           // 1 -> current control available (QLA)
-        MCFG_AMP_ENABLE_DELAY_MASK  = 0x00ff0000,    // mask for setting amplifier delay (20.83 us resolution)
-        MCFG_CURRENT_LIMIT_MASK = 0x0000ffff };      // mask for setting motor current limit
+        MCFG_SET_AMP_DELAY   = 0x02000000,           // 1 -> write new value of amplifier delay (QLA 1.5+)
+        MCFG_SET_CUR_LIMIT   = 0x01000000,           // 1 -> write new value for current limit (QLA)
+        MCFG_AMP_ENABLE_DELAY_MASK = 0x00ff0000,     // mask for amplifier delay (20.83 us resolution, QLA 1.5+)
+        MCFG_CURRENT_LIMIT_MASK = 0x0000ffff };      // mask for motor current limit
 
     bool ReadMotorConfig(unsigned int index, uint32_t &cfg) const;
 
     // ReadMotorCurrentLimit (calls ReadMotorConfig)
     bool ReadMotorCurrentLimit(unsigned int index, uint16_t &mcurlim) const;
+
+    // ReadAmpEnableDelay (calls ReadMotorConfig)
+    bool ReadAmpEnableDelay(unsigned int index, uint8_t &ampdelay) const;
 
     // ********************** WRITE Methods **********************************
 
@@ -451,9 +482,14 @@ public:
     bool WriteMotorConfig(unsigned int index, uint32_t cfg);
 
     // WriteMotorCurrentLimit is for QLA/DQLA and used when motor is
-    // in voltage control mode (QLA V1.5+).
-    // This method calls WriteMotorConfig.
+    // in voltage control mode (QLA V1.5+). Note that mcurlim is limited
+    // to 15 bits (0x0 - 0x7fff) and the method returns false if a value
+    // greater than 0x7fff is specified. One bit is approximately equal
+    // to 0.19 mA. This method calls WriteMotorConfig.
     bool WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim);
+
+    // WriteAmpEnableDelay is for QLA 1.5+. This method calls WriteMotorConfig.
+    bool WriteAmpEnableDelay(unsigned int index, uint8_t ampdelay);
 
     // **************** Static WRITE Methods (for broadcast) ********************
 
@@ -501,15 +537,23 @@ public:
     bool DallasReadBlock(unsigned char *data, unsigned int nbytes) const;
     bool DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes);
 
-    /*! \brief Reads model number of the tool on an S PSM
-        \returns Model number. 0xffffffff when no tool is present.
-    */
-    uint32_t SPSMReadToolModel(void) const;
+    // ********************** Si PSM/ECM Methods **************************
 
-    /*! \brief Reads version of the tool on an S PSM
-        \returns Version. 0xff when no tool is present.
+    /* \brief Writes the LED color on an Si PSM or ECM
+       \param rgb1 24-bit RGB value for LED 1🔵. The value will be internally truncated to 4 bits per
+                    color component. E.g. 0x00ff00 is green, 0xff0000 is red, 0x0000ff is blue.
+       \param rgb2 24-bit RGB value for LED 2🟠
+       \param blink1 use blink pattern 🔵🟠 🟠🔵 🔵🟠 🟠🔵
+       \param blink2 use blink pattern 🔵🔵 🟠🟠 🔵🔵 🟠🟠
+       \returns true if successful
     */
-    uint8_t SPSMReadToolVersion(void) const;
+    bool WriteRobotLED(uint32_t rgb1, uint32_t rgb2, bool blink1 = 0, bool blink2 = 0) const;
+
+    /*! \brief Reads the serial number of an Si PSM or ECM. Currently, it reads the cal file filename.
+        \returns a string containing the calibration file name. The caller may have to parse the string
+                 to obtain the serial number.
+    */
+    std::string ReadRobotSerialNumber() const;
 
     // ********************** Waveform Generator Methods *****************************
     // FPGA Firmware Version 7 introduced a Waveform table that can be used to drive
@@ -580,6 +624,11 @@ public:
         VOLTAGE = 1,
         CURRENT = 0
     };
+
+    std::string ExplainSiFault() const;
+
+    bool WriteSiCurrentLoopParams(unsigned int index, const SiCurrentLoopParams& params) const;
+    bool ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& params) const;
 
     bool WriteMotorControlMode(unsigned int index, uint16_t val);
     bool WriteCurrentKpRaw(unsigned int index, uint32_t val);
@@ -745,6 +794,8 @@ protected:
         OFF_CURRENT_KI = 2,
         OFF_CURRENT_I_TERM_LIMIT = 3,
         OFF_DUTY_CYCLE_LIMIT = 4,
+        OFF_CURRENT_KD = 5,
+        OFF_CURRENT_FF_RESISTIVE = 6,
         OFF_DUTY_CYCLE = 10,
         OFF_FAULT = 11,
         OFF_CURRENT_I_TERM = 12 // awaiting new assignment

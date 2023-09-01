@@ -81,15 +81,18 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
             std::cout << "9) Download PROM to MCS file" << std::endl;
         }
         else {
-            // With FPGA V3, we can only program or read the QLA PROM
+            // With FPGA V3, we can only program or read the QLA PROM,
+            // or read the FPGA S/N
             if (hver == DQLA_String) {
-                std::cout << "5) Program QLA 1 SN" << std::endl;
-                std::cout << "6) Program QLA 2 SN" << std::endl;
-                std::cout << "7) Read QLA 1+2 SN" << std::endl;
+                std::cout << "4) Program QLA 1 SN" << std::endl
+                          << "5) Program QLA 2 SN" << std::endl
+                          << "6) Read FPGA SN" << std::endl
+                          << "7) Read QLA 1+2 SN" << std::endl;
             }
             else {
-                std::cout << "5) Program QLA SN" << std::endl;
-                std::cout << "7) Read QLA SN" << std::endl;
+                std::cout << "5) Program QLA SN" << std::endl
+                          << "6) Read FPGA SN" << std::endl
+                          << "7) Read QLA SN" << std::endl;
             }
         }
         std::cout << std::endl;
@@ -132,7 +135,7 @@ bool PromProgramTest(AmpIO &Board)
     unsigned char readBuffer[256];
     size_t i;
     for (i = 0; i < sizeof(testBuffer); i++)
-        testBuffer[i] = i;
+        testBuffer[i] = static_cast<unsigned char>(i);
 
     std::cout << "Testing PROM programming" << std::endl;
     std::cout << "  Erasing sector 1E0000 " << std::flush;
@@ -231,7 +234,7 @@ bool PromVerify(AmpIO &Board, mcsFile &promFile)
 bool PromDownload(AmpIO&Board)
 {
     std::string mcsName;
-    unsigned int fpgaVer = Board.GetFPGAVersionMajor();
+    unsigned int fpgaVer = Board.GetFpgaVersionMajor();
     if (fpgaVer == 1)
         mcsName = std::string("FPGA1394-QLA-");
     else if (fpgaVer == 2)
@@ -350,7 +353,7 @@ bool PromFPGASerialNumberProgram(AmpIO &Board)
     std::cin.ignore(20,'\n');
     ss << BoardType << " " << FPGASN;
     str = ss.str();
-    char buffer[20];
+    unsigned char buffer[20];
     size_t len = str.length();
     if (len > 20) {
         std::cerr << "FPGA Serial Number too long" << std::endl;
@@ -479,6 +482,7 @@ int main(int argc, char** argv)
     int port = 0;
     int board = BoardIO::MAX_BOARDS;
     std::string mcsName;
+    std::string mcsNameAlt;
     std::string sn;
     bool auto_mode = false;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
@@ -553,11 +557,15 @@ int main(int argc, char** argv)
     Port->AddBoard(&Board);
 
     if (mcsName.empty()) {
-        unsigned int fpgaVer = Board.GetFPGAVersionMajor();
-        if (fpgaVer == 1)
-            mcsName = std::string("FPGA1394-QLA.mcs");
-        else if (fpgaVer == 2)
-            mcsName = std::string("FPGA1394Eth-QLA.mcs");
+        unsigned int fpgaVer = Board.GetFpgaVersionMajor();
+        if (fpgaVer == 1) {
+            mcsName = std::string("FPGA1394V1-QLA.mcs");
+            mcsNameAlt = std::string("FPGA1394-QLA.mcs");
+        }
+        else if (fpgaVer == 2) {
+            mcsName = std::string("FPGA1394V2-QLA.mcs");
+            mcsNameAlt = std::string("FPGA1394Eth-QLA.mcs");
+        }
         else if (fpgaVer != 3) {
             std::cerr << "Unsupported FPGA (Version = " << fpgaVer << ")" << std::endl;
             return RESULT_UNKNOWN_BOARD;
@@ -565,8 +573,19 @@ int main(int argc, char** argv)
     }
     mcsFile promFile;
     if (!mcsName.empty()) {
-        if (!promFile.OpenFile(mcsName)) {
-            std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
+        bool fileOk = promFile.OpenFile(mcsName);
+        if ((!fileOk) && (!mcsNameAlt.empty())) {
+            fileOk = promFile.OpenFile(mcsNameAlt);
+            if (fileOk) {
+                mcsName = mcsNameAlt;
+                std::cerr << "Switched to alternate filename " << mcsNameAlt << std::endl;
+            }
+        }
+        if (!fileOk) {
+            std::cerr << "Failed to open PROM file: " << mcsName;
+            if (!mcsNameAlt.empty())
+                std::cerr << " or " << mcsNameAlt;
+            std::cout << std::endl;
             return RESULT_NO_PROM_FILE;
         }
     }
@@ -633,22 +652,19 @@ int main(int argc, char** argv)
         case 4:
             if (!fpgaV3)
                 result = PromFPGASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+            else if (hver == DQLA_String)
+                result = PromQLASerialNumberProgram(Board, 1) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 5:
             if (hver == DQLA_String)
-                result = PromQLASerialNumberProgram(Board, 1) ? RESULT_OK : RESULT_PROGRAM_FAILED;
+                result = PromQLASerialNumberProgram(Board, 2) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             else
                 result = PromQLASerialNumberProgram(Board) ? RESULT_OK : RESULT_PROGRAM_FAILED;
             break;
         case 6:
-            if (!fpgaV3) {
-                sn = Board.GetFPGASerialNumber();
-                if (!sn.empty())
-                    std::cout << "FPGA serial number: " << sn << std::endl;
-            }
-            else if (hver == DQLA_String) {
-                result = PromQLASerialNumberProgram(Board, 2) ? RESULT_OK : RESULT_PROGRAM_FAILED;
-            }
+            sn = Board.GetFPGASerialNumber();
+            if (!sn.empty())
+                 std::cout << "FPGA serial number: " << sn << std::endl;
             break;
         case 7:
             if (hver == DQLA_String) {
