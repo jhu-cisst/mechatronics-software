@@ -575,6 +575,8 @@ int main(int argc, char **argv)
     if (!Port || !Port->IsOK()) {
         PrintDebugStream(debugStream);
         std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        std::cerr << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
         return -1;
     }
 
@@ -594,27 +596,37 @@ int main(int argc, char **argv)
     }
     else {
         std::cout << "No controllers found on " << BasePort::PortTypeString(desiredPort) << ", exiting" << std::endl;
+        std::cout << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
         return -1;
     }
 
     if (ControllerList.size() != 1) {
         std::cout << "More than one controller found, please remove all controllers except unit under test" << std::endl;
+        std::cout << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
         return -1;
     }
 
     if (ControllerList[0].hwVersion == dRA1_String) {
         std::cout << "dVRK-Si Controller detected -- this program is only for testing a dVRK (Classic) controller" << std::endl;
+        std::cout << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
         return -1;
     }
 
     if (ControllerList[0].hwVersion == BCFG_String) {
         std::cout << "Controller boot error -- please confirm that the MicroSD card is inserted into the controller" << std::endl;
+        std::cout << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
         return -1;
     }
 
     if ((ControllerList[0].hwVersion != QLA1_String) && (ControllerList[0].hwVersion != DQLA_String)) {
         // Should not happen, since not dRA1_String or BCFG_String, but checking just in case
         std::cout << "Unexpected controller hardware: " << std::hex << ControllerList[0].hwVersion << std::dec << std::endl;
+        std::cout << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
         return -1;
     }
 
