@@ -46,6 +46,11 @@ if (Amp1394_HAS_PCAP)
   set (SOURCE_FILES ${SOURCE_FILES} code/EthRawPort.cpp)
 endif (Amp1394_HAS_PCAP)
 
+if (Amp1394_HAS_EMIO)
+  set (HEADERS ${HEADERS} ZynqEmioPort.h)
+  set (SOURCE_FILES ${SOURCE_FILES} code/ZynqEmioPort.cpp)
+endif (Amp1394_HAS_EMIO)
+
 include_directories(${Amp1394_INCLUDE_DIR} ${Amp1394_EXTRA_INCLUDE_DIR})
 link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 

@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
 
-  (C) Copyright 2012-2022 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -206,7 +206,7 @@ int main(int argc, char** argv)
     unsigned int curBoardIndex = 0;           // Current board (when curAxis != 0)
     unsigned int curAxisIndex = 0;            // Current axis on current board (when curAxis != 0)
     char axisString[4] = "all";
-    std::string portDescription;
+    std::string portDescription = BasePort::DefaultPort();
     std::string hardwareList;
 
     for (i = 1; i < (unsigned int)argc; i++) {

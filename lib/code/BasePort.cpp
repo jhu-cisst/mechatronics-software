@@ -426,6 +426,8 @@ std::string BasePort::PortTypeString(PortType portType)
         return std::string("Ethernet-Raw");
     else if (portType == PORT_ETH_UDP)
         return std::string("Ethernet-UDP");
+    else if (portType == PORT_ZYNQ_EMIO)
+        return std::string("Zynq-EMIO");
     else
         return std::string("Unknown");
 }
@@ -489,6 +491,11 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
             sscanf(arg+4, "%d", &portNum);  // TEMP: portNum==1 for UDP means set eth1394 mode
         return true;
     }
+    else if (strncmp(arg, "emio", 4) == 0) {
+        portType = PORT_ZYNQ_EMIO;
+        portNum = 0;
+        return true;
+    }
     // older default, fw and looking for port number
     portType = PORT_FIREWIRE;
     // scan port number
@@ -499,10 +506,24 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     return false;
 }
 
+BasePort::PortType BasePort::DefaultPortType(void)
+{
+#if Amp1394_HAS_RAW1394
+    return PORT_FIREWIRE;
+#elif Amp1394_HAS_EMIO
+    return PORT_ZYNQ_EMIO;
+#else
+    return PORT_ETH_UDP;
+#endif
+
+}
+
 std::string BasePort::DefaultPort(void)
 {
 #if Amp1394_HAS_RAW1394
     return "fw:0";
+#elif Amp1394_HAS_EMIO
+    return "emio";
 #else
     return "udp:" ETH_UDP_DEFAULT_IP;
 #endif

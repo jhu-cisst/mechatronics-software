@@ -64,12 +64,19 @@ install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
          COMPONENT Amp1394-utils
          DESTINATION bin)
 
-add_executable(dvrktest dvrktest.cpp MotorVoltage.h MotorVoltage.cpp)
-target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
-if (NOT WIN32)
-  target_link_libraries(dvrktest stdc++fs)
-endif (NOT WIN32)
-
-install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest dvrktest
+install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
+
+if (ARM32)
+  message (STATUS "Skipping dvrktest for ARM32 build")
+else ()
+  add_executable(dvrktest dvrktest.cpp MotorVoltage.h MotorVoltage.cpp)
+  target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+  if (NOT WIN32)
+    target_link_libraries(dvrktest stdc++fs)
+  endif (NOT WIN32)
+  install (TARGETS dvrktest
+           COMPONENT Amp1394-utils
+           RUNTIME DESTINATION bin)
+endif ()

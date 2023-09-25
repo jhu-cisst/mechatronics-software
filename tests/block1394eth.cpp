@@ -17,13 +17,7 @@
 #include "Amp1394BSwap.h"
 
 #include <Amp1394/AmpIORevision.h>
-#if Amp1394_HAS_RAW1394
-#include "FirewirePort.h"
-#endif
-#if Amp1394_HAS_PCAP
-#include "EthRawPort.h"
-#endif
-#include "EthUdpPort.h"
+#include "PortFactory.h"
 #include "AmpIO.h"
 
 void PrintDebugStream(std::stringstream &debugStream)
@@ -47,21 +41,12 @@ int main(int argc, char** argv)
     int i, j = 0;
     int bid = 0;
     bool verbose = false;
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
-#endif
-    int port = 0;
-    std::string IPaddr(ETH_UDP_DEFAULT_IP);
+    std::string portDescription = BasePort::DefaultPort();
 
     for (i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
             if (argv[i][1] == 'p') {
-                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                    std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                    return 0;
-                }
+                portDescription = argv[i]+2;
             }
             else if (argv[i][1] == 'b') {
                 bid = atoi(argv[i]+2);
@@ -107,32 +92,17 @@ int main(int argc, char** argv)
     }
 
 
-    BasePort* Port = NULL;
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
 
-    if (desiredPort == BasePort::PORT_FIREWIRE) {
-#if Amp1394_HAS_RAW1394
-        Port = new FirewirePort(port, debugStream);
-#else
-        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
+    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
+    if (!Port) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to create port using: " << portDescription << std::endl;
         return -1;
-#endif
     }
-    else if (desiredPort == BasePort::PORT_ETH_UDP) {
-        Port = new EthUdpPort(port, IPaddr, debugStream);
-    }
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-#if Amp1394_HAS_PCAP
-        Port = new EthRawPort(port, debugStream);
-#else
-        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-
     if (!Port->IsOK()) {
         PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
         return -1;
     }
     else if (verbose) {

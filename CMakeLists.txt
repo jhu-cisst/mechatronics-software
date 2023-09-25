@@ -31,6 +31,13 @@ if (NOT EXECUTABLE_OUTPUT_PATH)
   set (EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/bin")
 endif (NOT EXECUTABLE_OUTPUT_PATH)
 
+# Set ARM32 when cross-compiling for Zynq
+if (Arch STREQUAL "arm32")
+  set (ARM32 ON)
+else ()
+  set (ARM32 OFF)
+endif ()
+
 # TODO: Move include files to Amp1394 subdirectory, i.e., lib/Amp1394 or lib/include/Amp1394.
 set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Amp1394_BINARY_DIR}")
 set (Amp1394_LIBRARY_DIR ${LIBRARY_OUTPUT_PATH})
@@ -58,11 +65,16 @@ if (WIN32)
   # Disable annoying warnings
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 
-else (WIN32)
+else ()
 
   # On other platforms (mostly Linux), can build with pcap and/or libraw1394
-  option (Amp1394_HAS_PCAP   "Build Amp1394 with Ethernet support (pcap)"       OFF)
-  option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
+  # On Zynq (embedded Linux), use EMIO interface to FPGA
+  if (ARM32)
+    option (Amp1394_HAS_EMIO   "Build Amp1394 with Zynq EMIO support" ON)
+  else ()
+    option (Amp1394_HAS_PCAP   "Build Amp1394 with Ethernet support (pcap)"       OFF)
+    option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
+  endif ()
 
   if (Amp1394_HAS_PCAP)
     # For now, assume pcap is installed somewhere standard
@@ -78,11 +90,11 @@ else (WIN32)
     if (CURSES_FOUND)
       set (Amp1394Console_EXTRA_LIBRARIES ${Amp1394Console_EXTRA_LIBRARIES} ${CURSES_LIBRARIES})
     else (CURSES_FOUND)
-      message ("Cannot find Curses library, changing to VT100 mode")
+      message (STATUS "Cannot find Curses library, changing to VT100 mode")
     endif (CURSES_FOUND)
   endif (Amp1394Console_HAS_CURSES)
 
-endif (WIN32)
+endif ()
 
 # TODO: Determine whether it is necessary to have separate EXTRA variables for LIBRARY_DIR
 #       and LIBRARIES. Currently, it seems that both are always used together.
@@ -104,6 +116,9 @@ if (WIN32)
   # for Windows, need WinSock, Iphlpapi (for getting interface info) and Ws2_32 (for WSAIoctl)
   set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} WSOCK32 Iphlpapi Ws2_32)
 endif (WIN32)
+if (Amp1394_HAS_EMIO)
+  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} "fpgav3")
+endif (Amp1394_HAS_EMIO)
 
 # Generate Amp1394Config.cmake
 set (CONF_INCLUDE_DIR ${Amp1394_INCLUDE_DIR})
