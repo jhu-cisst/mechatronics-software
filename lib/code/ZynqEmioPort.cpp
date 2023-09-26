@@ -27,7 +27,12 @@ ZynqEmioPort::ZynqEmioPort(int portNum, std::ostream &debugStream):
 bool ZynqEmioPort::Init(void)
 {
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
+
+    // Initialize EMIO interface to FPGA
     emio = EMIO_Init();
+
+    // Turn off verbose output
+    EMIO_SetVerbose(emio, false);
 
     bool ret = ScanNodes();
     if (ret)
