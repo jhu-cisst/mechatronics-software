@@ -32,7 +32,7 @@ bool ZynqEmioPort::Init(void)
     emio = EMIO_Init();
 
     // Turn off verbose output
-    EMIO_SetVerbose(emio, false);
+    // EMIO_SetVerbose(emio, false);
 
     bool ret = ScanNodes();
     if (ret)
