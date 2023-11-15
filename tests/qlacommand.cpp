@@ -75,9 +75,7 @@ int main(int argc, char** argv)
     } else if (command == "reset-eth") {
         AmpIO::ResetEthernetAll(port);
     } else if (command == "reset-encoder-preload") {
-        for (i = 0; i < 4; i++) {
-            AmpIO::WriteEncoderPreloadAll(port, i, 0);
-        }
+        AmpIO::WriteEncoderPreloadAll(port, 0);
     }
 
     delete port;

@@ -497,7 +497,7 @@ public:
 
     static bool WriteSafetyRelayAll(BasePort *port, bool state);
 
-    static bool WriteEncoderPreloadAll(BasePort *port, unsigned int index, int32_t sdata);
+    static bool WriteEncoderPreloadAll(BasePort *port, int32_t sdata);
 
     // ********************** Dallas DS2505 (1-wire) Methods **************************
 

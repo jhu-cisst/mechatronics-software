@@ -1458,19 +1458,21 @@ bool AmpIO::WriteSafetyRelayAll(BasePort *port, bool state)
     return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
-bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, int32_t sdata)
+bool AmpIO::WriteEncoderPreloadAll(BasePort *port, int32_t sdata)
 {
-    unsigned int channel = (index+1) << 4;
+    bool ret = true;
+    for (size_t index = 0; index < 8; ++index) {
+        unsigned int channel = (index+1) << 4;
 
-    if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
-        std::cerr << "AmpIO::WriteEncoderPreloadAll, preload out of range " << sdata << std::endl;
-        return false;
-    }
-    bool ret = false;
-    // Cannot use NumEncoders below because this is a static method
-    if (port && (index < MAX_CHANNELS)) {
-        ret = port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_REG,
-                                 static_cast<uint32_t>(sdata + ENC_MIDRANGE));
+        if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
+            std::cerr << "AmpIO::WriteEncoderPreloadAll, preload out of range " << sdata << std::endl;
+            return false;
+        }
+        // Cannot use NumEncoders below because this is a static method
+        if (port && (index < MAX_CHANNELS)) {
+            ret &= port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_REG,
+                                      static_cast<uint32_t>(sdata + ENC_MIDRANGE));
+        }
     }
     return ret;
 }
