@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -9,14 +9,11 @@
 #
 # --- end cisst license ---
 
-project (Amp1394)
+project (Amp1394 VERSION 2.0.0)
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.10)
 
 # Set the version number
-set (Amp1394_VERSION_MAJOR "1")
-set (Amp1394_VERSION_MINOR "7")
-set (Amp1394_VERSION_PATCH "0")
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
 # If LIBRARY_OUTPUT_PATH is not defined, define it here (note that if this

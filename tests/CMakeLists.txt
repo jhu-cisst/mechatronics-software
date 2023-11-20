@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -9,8 +9,8 @@
 #
 # --- end cisst license ---
 
-cmake_minimum_required(VERSION 2.6)
-project(Amp1394Tests)
+cmake_minimum_required(VERSION 3.10)
+project(Amp1394Tests VERSION 2.0.0)
 
 include_directories(${Amp1394_INCLUDE_DIR})
 link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})

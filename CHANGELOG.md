@@ -1,6 +1,26 @@
 Change log
 ==========
 
+2.0.0 (2023-11-xx)
+==================
+* API changes:
+  * New packet format for firmware 8
+  * `qlacloserelays` removed, use `qlacommand` instead
+  * Firmware renamed from FPGA and FPGAEth to FPGAv1, FPGAv2 and FPGAv3
+  * Use types from `stdint` instead of custom `AmpIO_*` 
+* New features:
+  * Support for Dallas dongle for QLA Classic controllers
+  * Support for new hardware:
+    * Si controllers (dRA1+FPGAv3)
+    * New Classic controllers (QLA+DQLA+FPGAv3)
+  * Added `qlacommand`
+  * More data displayed in `qladisp`
+  * Added `Amp1394Console` library from existing files, so that it can more easily be used by other projects
+* Bug fixes:
+  * Improved velocity estimation
+  * New implementation for FireWire broadcast
+
+
 1.7.0 (2021-08-11)
 ==================
 * API changes:
