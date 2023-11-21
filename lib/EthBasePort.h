@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -223,10 +223,17 @@ public:
 
     static void PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads);
 
-    static void PrintDebug(std::ostream &debugStream, unsigned short status);
+    static void PrintStatus(std::ostream &debugStream, uint32_t status);
 
     // Print Ethernet debug data; clockPeriod is in seconds
+    //   CheckDebugHeader   looks for debug header string ("DBG2")
+    //   PrintDebugData     from higher-level module (EthernetIO)
+    //   PrintDebugDataKSZ  from lower-level module on FPGA V2 (KSZ8851)
+    //   PrintDebugDataRTL  from lower-level module on FPGA V3 (RTL8211F)
+    static bool CheckDebugHeader(std::ostream &debugStream, const std::string &caller, const char *header);
     static void PrintDebugData(std::ostream &debugStream, const quadlet_t *data, double clockPeriod);
+    static void PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *data, double clockPeriod);
+    static void PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *data, double clockPeriod);
 };
 
 #endif  // __EthBasePort_H__

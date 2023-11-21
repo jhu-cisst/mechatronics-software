@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -9,34 +9,19 @@
 #
 # --- end cisst license ---
 
-cmake_minimum_required(VERSION 2.6)
-project(Amp1394Tests)
+cmake_minimum_required(VERSION 3.10)
+project(Amp1394Tests VERSION 2.0.0)
 
 include_directories(${Amp1394_INCLUDE_DIR})
 link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 
-set (CONSOLE_LIBRARIES "")
+add_executable(qladisp qladisp.cpp)
+target_link_libraries(qladisp ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES}
+                              ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
 
-if (NOT WIN32)
-  option (Amp1394_HAS_CURSES "Build Amp1394 test programs with curses (OFF --> VT100 mode)" ON)
-
-  if (Amp1394_HAS_CURSES)
-    find_package (Curses)
-    if (CURSES_FOUND)
-      add_definitions(-DAmp1394_HAS_CURSES)
-      include_directories (${CURSES_INCLUDE_DIR})
-      set (CONSOLE_LIBRARIES ${CONSOLE_LIBRARIES} ${CURSES_LIBRARIES})
-    else (CURSES_FOUND)
-      message ("Cannot find Curses library, changing to VT100 mode")
-    endif (CURSES_FOUND)
-  endif (Amp1394_HAS_CURSES)
-endif (NOT WIN32)
-
-add_executable(qladisp qladisp.cpp Amp1394Console.h Amp1394Console.cpp)
-target_link_libraries(qladisp ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES} ${CONSOLE_LIBRARIES})
-
-add_executable(qlatest qlatest.cpp Amp1394Console.h Amp1394Console.cpp)
-target_link_libraries(qlatest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES} ${CONSOLE_LIBRARIES})
+add_executable(qlatest qlatest.cpp)
+target_link_libraries(qlatest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES}
+                              ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
 
 install (TARGETS qladisp qlatest
          COMPONENT Amp1394-utils
@@ -57,7 +42,7 @@ target_link_libraries(qlacloserelays ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRAR
 add_executable(qlacommand qlacommand.cpp)
 target_link_libraries(qlacommand ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
-add_executable(eth1394Test mainEth1394.cpp)
+add_executable(eth1394Test mainEth1394.cpp MotorVoltage.h MotorVoltage.cpp)
 target_link_libraries(eth1394Test ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
 add_executable(instrument instrument.cpp)
@@ -82,3 +67,16 @@ install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
 install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
+
+if (ARM32)
+  message (STATUS "Skipping dvrktest for ARM32 build")
+else ()
+  add_executable(dvrktest dvrktest.cpp MotorVoltage.h MotorVoltage.cpp)
+  target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+  if (NOT WIN32)
+    target_link_libraries(dvrktest stdc++fs)
+  endif (NOT WIN32)
+  install (TARGETS dvrktest
+           COMPONENT Amp1394-utils
+           RUNTIME DESTINATION bin)
+endif ()

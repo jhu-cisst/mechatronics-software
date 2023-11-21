@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -9,14 +9,11 @@
 #
 # --- end cisst license ---
 
-project (Amp1394)
+project (Amp1394 VERSION 2.0.0)
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.10)
 
 # Set the version number
-set (Amp1394_VERSION_MAJOR "1")
-set (Amp1394_VERSION_MINOR "7")
-set (Amp1394_VERSION_PATCH "0")
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
 # If LIBRARY_OUTPUT_PATH is not defined, define it here (note that if this
@@ -31,10 +28,19 @@ if (NOT EXECUTABLE_OUTPUT_PATH)
   set (EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/bin")
 endif (NOT EXECUTABLE_OUTPUT_PATH)
 
+# Set ARM32 when cross-compiling for Zynq
+if (Arch STREQUAL "arm32")
+  set (ARM32 ON)
+else ()
+  set (ARM32 OFF)
+endif ()
+
 # TODO: Move include files to Amp1394 subdirectory, i.e., lib/Amp1394 or lib/include/Amp1394.
 set (Amp1394_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib;${Amp1394_BINARY_DIR}")
 set (Amp1394_LIBRARY_DIR ${LIBRARY_OUTPUT_PATH})
 set (Amp1394_LIBRARIES   Amp1394)
+set (Amp1394Console_LIBRARIES Amp1394Console)
+set (Amp1394Console_EXTRA_LIBRARIES "")
 
 if (WIN32)
 
@@ -53,11 +59,21 @@ if (WIN32)
     set (PCAP_LIBRARIES "wpcap" "Packet")
   endif (Amp1394_HAS_PCAP)
 
-else (WIN32)
+  # Disable annoying warnings
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+
+else ()
 
   # On other platforms (mostly Linux), can build with pcap and/or libraw1394
-  option (Amp1394_HAS_PCAP   "Build Amp1394 with Ethernet support (pcap)"       OFF)
-  option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
+  # On Zynq (embedded Linux), use EMIO interface to FPGA
+  if (ARM32)
+    option (Amp1394_HAS_EMIO   "Build Amp1394 with Zynq EMIO support" ON)
+  else ()
+    option (Amp1394_HAS_PCAP   "Build Amp1394 with Ethernet support (pcap)"       OFF)
+    if (NOT APPLE)
+      option (Amp1394_HAS_RAW1394 "Build Amp1394 with FireWire support (libraw1394)" ON)
+    endif (NOT APPLE)
+  endif ()
 
   if (Amp1394_HAS_PCAP)
     # For now, assume pcap is installed somewhere standard
@@ -66,7 +82,18 @@ else (WIN32)
     set (PCAP_LIBRARIES "pcap")
   endif (Amp1394_HAS_PCAP)
 
-endif (WIN32)
+  option (Amp1394Console_HAS_CURSES "Build Amp1394 console library with curses (OFF --> VT100 mode)" ON)
+
+  if (Amp1394Console_HAS_CURSES)
+    find_package (Curses)
+    if (CURSES_FOUND)
+      set (Amp1394Console_EXTRA_LIBRARIES ${Amp1394Console_EXTRA_LIBRARIES} ${CURSES_LIBRARIES})
+    else (CURSES_FOUND)
+      message (STATUS "Cannot find Curses library, changing to VT100 mode")
+    endif (CURSES_FOUND)
+  endif (Amp1394Console_HAS_CURSES)
+
+endif ()
 
 # TODO: Determine whether it is necessary to have separate EXTRA variables for LIBRARY_DIR
 #       and LIBRARIES. Currently, it seems that both are always used together.
@@ -88,11 +115,15 @@ if (WIN32)
   # for Windows, need WinSock, Iphlpapi (for getting interface info) and Ws2_32 (for WSAIoctl)
   set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} WSOCK32 Iphlpapi Ws2_32)
 endif (WIN32)
+if (Amp1394_HAS_EMIO)
+  set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} "fpgav3")
+endif (Amp1394_HAS_EMIO)
 
 # Generate Amp1394Config.cmake
 set (CONF_INCLUDE_DIR ${Amp1394_INCLUDE_DIR})
 set (CONF_LIBRARY_DIR ${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 set (CONF_LIBRARIES   ${Amp1394_LIBRARIES}   ${Amp1394_EXTRA_LIBRARIES})
+set (CONF_CONSOLE_LIBRARIES ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
 configure_file (Amp1394Config.cmake.in
                 "${Amp1394_BINARY_DIR}/Amp1394Config.cmake" @ONLY)
 
@@ -123,7 +154,7 @@ endif (Amp1394_HAS_RAW1394)
 # Code for library Amp1394
 add_subdirectory (lib)
 
-# Test programs (some use curses for text based display)
+# Test programs
 add_subdirectory (tests)
 
 # Utility to flash/test board

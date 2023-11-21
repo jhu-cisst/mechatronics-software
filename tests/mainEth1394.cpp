@@ -21,12 +21,13 @@
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
+#include "MotorVoltage.h"
 
-const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
-const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
+const uint32_t VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
+const uint32_t DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 
 // CRC16-CCIT (also called CRC-ITU)
-const AmpIO_UInt16 crc16_table[256] = {
+const uint16_t crc16_table[256] = {
 	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
 	0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
 	0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
@@ -61,9 +62,9 @@ const AmpIO_UInt16 crc16_table[256] = {
 	0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
 };
 
-AmpIO_UInt16 ComputeCRC16(unsigned char *data, size_t len)
+uint16_t ComputeCRC16(unsigned char *data, size_t len)
 {
-    AmpIO_UInt16 crc16 = 0;
+    uint16_t crc16 = 0;
     for (size_t i = 0; i < len; i++)
         crc16 = (crc16 << 8) ^ crc16_table[((crc16 >> 8) ^ data[i]) & 0x00ff];
     return  crc16;
@@ -71,7 +72,7 @@ AmpIO_UInt16 ComputeCRC16(unsigned char *data, size_t len)
 
 void ComputeConfigCRC()
 {
-    AmpIO_UInt16 crc16, crc16Eth;
+    uint16_t crc16, crc16Eth;
     quadlet_t bus_info[4];
     bus_info[0] = bswap_32(0x31333934);  // "1394"
     bus_info[1] = bswap_32(0x00ffa000);
@@ -125,9 +126,9 @@ void ComputeConfigCRC()
     std::cout << std::dec;
 }
 
-AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
+uint32_t KSZ8851CRC(const unsigned char *data, size_t len)
 {
-    AmpIO_UInt32 crc = 0xffffffff;
+    uint32_t crc = 0xffffffff;
     for (size_t i = 0; i < len; i++) {
         for (size_t j = 0; j < 8; j++) {
             if (((crc >> 31) ^ (data[i] >> j)) & 0x01)
@@ -140,31 +141,28 @@ AmpIO_UInt32 KSZ8851CRC(const unsigned char *data, size_t len)
 }
 
 // Compute parameters to initialize multicast hash table
-void ComputeMulticastHash(unsigned char *MulticastMAC, AmpIO_UInt8 &regAddr, AmpIO_UInt16 &regData)
+void ComputeMulticastHash(unsigned char *MulticastMAC, uint8_t &regAddr, uint16_t &regData)
 {
-    AmpIO_UInt32 crc = KSZ8851CRC(MulticastMAC, 6);
+    uint32_t crc = KSZ8851CRC(MulticastMAC, 6);
     int regOffset = (crc >> 29) & 0x0006;  // first 2 bits of CRC (x2)
     int regBit = (crc >> 26) & 0x00F;      // next 4 bits of CRC
     regAddr = 0xA0 + regOffset;            // 0xA0 --> MAHTR0 (MAC Address Hash Table Register 0)
     regData = (1 << regBit);
 }
 
-// Ethernet debug
-void PrintEthernetDebug(AmpIO &Board)
+// Ethernet status from FPGA register 12
+void PrintEthernetStatus(AmpIO &Board)
 {
-    AmpIO_UInt16 status = Board.ReadKSZ8851Status();
-    if (!(status&0x8000)) {
-        std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
-        return;
-    }
-    EthBasePort::PrintDebug(std::cout, status);
+    uint32_t status;
+    if (Board.ReadEthernetStatus(status))
+        EthBasePort::PrintStatus(std::cout, status);
 }
 
 #if Amp1394_HAS_RAW1394
 // Ethernet status, as reported by KSZ8851 on FPGA board
-void PrintEthernetStatus(AmpIO &Board)
+void PrintEthernetPhyStatusV2(AmpIO &Board)
 {
-    AmpIO_UInt16 reg;
+    uint16_t reg;
     Board.ReadKSZ8851Reg(0xF8, reg);
     std::cout << "Port 1 status:";
     if (reg & 0x0020) std::cout << " link-good";
@@ -177,10 +175,54 @@ void PrintEthernetStatus(AmpIO &Board)
     std::cout << std::endl;
 }
 
-// Check contents of KSZ8851 register
-bool CheckRegister(AmpIO &Board, AmpIO_UInt8 regNum, AmpIO_UInt16 mask, AmpIO_UInt16 value)
+void PrintEthernetPhyStatusV3(AmpIO &Board, unsigned int chan)
 {
-    AmpIO_UInt16 reg;
+    std::cout << "PHY" << chan << ":";
+    uint16_t reg;
+    unsigned int phyAddr = FpgaIO::PHY_RTL8211F;
+    // This should be on page 0xa43, but seems to work fine on default page
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYSR, reg)) {
+        std::cout << " failed to read PHYSR" << std::endl;
+        return;
+    }
+    if (reg & 0x0004) std::cout << " link-good";
+    if (reg & 0x0008) std::cout << " full-duplex";
+    else std::cout << " half-duplex";
+    unsigned int speed = (reg & 0x0030)>>4;
+    const char *speedStr[4] = { "10Mbps", "100 Mbps", "1000 Mbps", "??" };
+    std::cout << " " << speedStr[speed];
+    if (reg & 0x0002) std::cout << " polarity-reversed";
+    std::cout << std::endl;
+
+    // Speed setting uses bits 6 and 13, as follows:
+    //
+    //   speed | Mbps | 6,13  | register value
+    //     0   |   10 | 0, 0  |     0x0000
+    //     1   |  100 | 0, 1  |     0x2000
+    //     2   | 1000 | 1, 0  |     0x0040
+    //     3   |   ?? | 1, 1  |     0x2040
+    unsigned short speedMap[4] = { 0x0000, 0x2000, 0x0040, 0x2040 };
+    std::cout << "Reading GMII core register: ";
+    uint16_t coreReg;
+    if (Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, coreReg)) {
+        std::cout << std::hex << coreReg << std::dec;
+        for (size_t i = 0; i < 4; i++) {
+            if ((coreReg&0x2040) == speedMap[i]) {
+                std::cout << ", Speed: " << speedStr[i];
+                break;
+            }
+        }
+        std::cout << std::endl;
+    }
+    else {
+        std::cout << " failed to read to GMII core register" << std::endl;
+    }
+}
+
+// Check contents of KSZ8851 register
+bool CheckRegister(AmpIO &Board, uint8_t regNum, uint16_t mask, uint16_t value)
+{
+    uint16_t reg;
     Board.ReadKSZ8851Reg(regNum, reg);
     if ((reg&mask) != value) {
         std::cout << "Register " << std::hex << (int)regNum << ": read = " << reg
@@ -191,7 +233,7 @@ bool CheckRegister(AmpIO &Board, AmpIO_UInt8 regNum, AmpIO_UInt16 mask, AmpIO_UI
 }
 
 // Check whether Ethernet initialized correctly
-bool CheckEthernet(AmpIO &Board)
+bool CheckEthernetV2(AmpIO &Board)
 {
     std::cout << "Checking --- start ---" << "\n";
     bool ret = true;
@@ -206,8 +248,8 @@ bool CheckEthernet(AmpIO &Board)
     // Check multicast hash table
     unsigned char MulticastMAC[6];
     EthBasePort::GetDestMulticastMacAddr(MulticastMAC);
-    AmpIO_UInt8 HashReg;
-    AmpIO_UInt16 HashValue;
+    uint8_t HashReg;
+    uint16_t HashValue;
     ComputeMulticastHash(MulticastMAC, HashReg, HashValue);
     ret &= CheckRegister(Board, HashReg, 0xffff, HashValue);
     ret &= CheckRegister(Board, 0x82, 0x03f7, 0x0020);  // Enable QMU frame count threshold (1), no auto-dequeue
@@ -216,56 +258,166 @@ bool CheckEthernet(AmpIO &Board)
     return ret;
 }
 
-bool InitEthernet(AmpIO &Board)
+bool CheckRTL8211F_RegIO(AmpIO &Board, unsigned int chan, unsigned int phyAddr)
+{
+    uint16_t curPage;
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, curPage)) {
+        std::cout << "Failed to read PHY" << chan << " PAGSR" << std::endl;
+        return false;
+    }
+    if (curPage != FpgaIO::RTL8211F_PAGE_DEFAULT) {
+        std::cout << std::hex << "Changing page from " << curPage << " to " << FpgaIO::RTL8211F_PAGE_DEFAULT << std::endl;
+        if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT)) {
+            std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
+            return false;
+        }
+    }
+    // Perform walking bit test on INER (interrupt enable register, 18)
+    uint16_t curIner, mask_read;
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, curIner)) {
+        std::cout << "Failed to read PHY" << chan << " INER" << std::endl;
+        return false;
+    }
+    std::cout << "Testing RTL8211F PHY" << chan << " Register I/O, initial value = " << std::hex << curIner << std::endl;
+    bool allOK = true;
+    for (uint16_t mask = 0x1; mask != 0; mask <<= 1) {
+        Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, mask);
+        Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, mask_read);
+        if (mask != mask_read) {
+            std::cout << "Error: wrote " << mask << ", read " << mask_read << std::endl;
+            allOK = false;
+            //break;
+        }
+    }
+    std::cout << std::dec << "Test complete" << std::endl;
+    // Restore original values
+    Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_INER, curIner);
+    Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, curPage);
+    return allOK;
+}
+
+bool CheckEthernetV3(AmpIO &Board, unsigned int chan)
+{
+    unsigned int phyAddr = FpgaIO::PHY_RTL8211F;
+
+    // Check Register I/O
+    if (!CheckRTL8211F_RegIO(Board, chan, phyAddr))
+        return false;
+
+    // Check PHYID1 and PHYID2 (assumes we are on correct page)
+    uint16_t phyid1 = 0, phyid2 = 0;
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYID1, phyid1))
+        std::cout << "Failed to read PHY" << chan << " PHYID1" << std::endl;
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PHYID2, phyid2))
+        std::cout << "Failed to read PHY" << chan << " PHYID2" << std::endl;
+    std::cout << "PHY" << chan << std::hex
+              << " PHYID1: " << std::setw(4) << std::setfill('0') << phyid1 << " (should be 001c),"
+              << " PHYID2: " << std::setw(4) << std::setfill('0') << phyid2 << " (should be c916)"
+              << std::dec << std::endl;
+
+    // Now, check undocumented registers 0x11 (17) and 0x15 (21) on page 0xd08
+    //   Register 17, Bit 8 (0x0100) indicates state of TX_DELAY
+    //   Register 21, Bit 3 (0x0008) indicates state of RX_DELAY
+    if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, 0xd08))
+        std::cout << "Failed to set PHY" << chan << " PAGSR to 0xd08" << std::endl;
+    uint16_t phyreg17, phyreg21;
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, 17, phyreg17))
+        std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 17" << std::endl;
+    std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 17: " << phyreg17 << std::dec << std::endl;
+    std::cout << "Tx Delay: " << ((phyreg17 & 0x0100) ? "ON" : "OFF") << std::endl;
+    if (!Board.ReadRTL8211F_Register(chan, phyAddr, 21, phyreg21))
+        std::cout << "Failed to read PHY" << chan << " Page 0xd08, Reg 21" << std::endl;
+    std::cout << "PHY" << chan << std::hex << " Page 0xd08, Register 21: " << phyreg21 << std::dec << std::endl;
+    std::cout << "Rx Delay: " << ((phyreg21 & 0x0008) ? "ON" : "OFF") << std::endl;
+
+    // Restore default page
+    if (!Board.WriteRTL8211F_Register(chan, phyAddr, FpgaIO::RTL8211F_PAGSR, FpgaIO::RTL8211F_PAGE_DEFAULT))
+        std::cout << "Failed to write PHY" << chan << " PAGSR" << std::endl;
+
+    // Check GMII to RGMII core PHY register
+    // Based on the VHDL source code for this core, PHY Specific Control Register 1 should be at address 16
+    uint16_t phyCR;
+    if (!Board.ReadRTL8211F_Register(chan, FpgaIO::PHY_GMII_CORE, 16, phyCR)) {
+        std::cout << "Failed to read GMII PHY" << chan << " Reg 16" << std::endl;
+    }
+    else {
+        std::cout << std::hex << "GMII PHY Reg 16: " << phyCR << std::dec << std::endl;
+    }
+
+    return (phyid1 == 0x001c) && (phyid2 == 0xc916);
+}
+
+bool InitEthernet(AmpIO &Board, unsigned int eth_port)
 {
     if (Board.GetFirmwareVersion() < 5) {
         std::cout << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
         return false;
     }
 
-    AmpIO_UInt16 status = Board.ReadKSZ8851Status();
-    if (!(status&0x8000)) {
-        std::cout << "   No Ethernet controller, status = " << std::hex << status << std::endl;
+    unsigned int fpga_ver = Board.GetFpgaVersionMajor();
+    if (fpga_ver < 2) {
+        std::cout << "   No Ethernet in FPGA V" << fpga_ver << std::endl;
         return false;
     }
-    std::cout << "   Ethernet controller status = " << std::hex << status << std::endl;
-    PrintEthernetDebug(Board);
+    PrintEthernetStatus(Board);
 
     // Reset the board
-    Board.ResetKSZ8851();
-    // Wait 100 msec
-    Amp1394_Sleep(0.1);
-    // Scan Nodes
+    Board.WriteEthernetPhyReset(eth_port);
+    if (fpga_ver == 2) {
+        // Wait 100 msec
+        Amp1394_Sleep(0.1);
+    }
+    else {
+        // Wait 500 msec
+        Amp1394_Sleep(0.5);
+    }
 
     // Read the status
-    status = Board.ReadKSZ8851Status();
-    std::cout << "   After reset, status = " << std::hex << status << std::endl;
+    uint32_t status;
+    Board.ReadEthernetStatus(status);
+    std::cout << "   After reset, status = " << std::hex << ((fpga_ver == 2) ? (status>>16) : status) << std::endl;
 
-    if (!(status&0x2000)) {
-        std::cout << "   Ethernet failed initialization" << std::endl;
-        PrintEthernetDebug(Board);
-        return false;
+    if (fpga_ver == 2) {
+        if (!(status & FpgaIO::ETH_STAT_INIT_OK_V2)) {
+            std::cout << "   Ethernet V2 failed initialization" << std::endl;
+            EthBasePort::PrintStatus(std::cout, status);
+            return false;
+        }
+
+        // Read the Chip ID (16-bit read)
+        uint16_t chipID = Board.ReadKSZ8851ChipID();
+        std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
+        if ((chipID&0xfff0) != 0x8870)
+            return false;
+
+
+        // Check that KSZ8851 registers are as expected
+        if (!CheckEthernetV2(Board)) {
+            PrintEthernetStatus(Board);
+            return false;
+        }
+
+        // Display the MAC address
+        uint16_t regLow, regMid, regHigh;
+        Board.ReadKSZ8851Reg(0x10, regLow);   // MAC address low = 0x94nn (nn = board id)
+        Board.ReadKSZ8851Reg(0x12, regMid);   // MAC address middle = 0xOE13
+        Board.ReadKSZ8851Reg(0x14, regHigh);  // MAC address high = 0xFA61
+        std::cout << "   MAC address = " << std::hex << regHigh << ":" << regMid << ":" << regLow << std::endl;
     }
+    else if (fpga_ver == 3) {
+        uint8_t portStatus = FpgaIO::GetEthernetPortStatusV3(status, eth_port);
+        if (!(portStatus & FpgaIO::ETH_PORT_STAT_INIT_OK)) {
+            std::cout << "   Ethernet V3 failed initialization" << std::endl;
+            EthBasePort::PrintStatus(std::cout, status);
+            return false;
+        }
 
-    // Read the Chip ID (16-bit read)
-    AmpIO_UInt16 chipID = Board.ReadKSZ8851ChipID();
-    std::cout << "   Chip ID = " << std::hex << chipID << std::endl;
-    if ((chipID&0xfff0) != 0x8870)
-        return false;
-
-
-    // Check that KSZ8851 registers are as expected
-    if (!CheckEthernet(Board)) {
-        PrintEthernetDebug(Board);
-        return false;
+        // Check that RTL8211F registers are as expected
+        if (!CheckEthernetV3(Board, eth_port)) {
+            PrintEthernetStatus(Board);
+            return false;
+        }
     }
-
-    // Display the MAC address
-    AmpIO_UInt16 regLow, regMid, regHigh;
-    Board.ReadKSZ8851Reg(0x10, regLow);   // MAC address low = 0x94nn (nn = board id)
-    Board.ReadKSZ8851Reg(0x12, regMid);   // MAC address middle = 0xOE13
-    Board.ReadKSZ8851Reg(0x14, regHigh);  // MAC address high = 0xFA61
-    std::cout << "   MAC address = " << std::hex << regHigh << ":" << regMid << ":" << regLow << std::endl;
 
     // Wait 2.5 sec
     Amp1394_Sleep(2.5);
@@ -312,7 +464,7 @@ void TestDacRW(BasePort *port, unsigned char boardNum)
               << write_block[1] << ", " << write_block[2] << ", "
               << write_block[3] << std::endl;
     for (i = 0; i < 4; i++) {
-        write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+(i+1)*0x100));
+        write_block[i] = bswap_32(VALID_BIT | (boardNum<<24) | (write_block[i]+static_cast<quadlet_t>(i+1)*0x100));
     }
     write_block[4] = 0;   // power control
     std::cout << "Setting new values" << std::endl;
@@ -375,31 +527,38 @@ void  ContinuousWriteTest(BasePort *ethPort, unsigned char boardNum)
     quadlet_t read_data;
     size_t success = 0;
     size_t writeFailures = 0;
+    size_t readFailures = 0;
     size_t compareFailures = 0;
     quadlet_t write_data = 0x0;
     int count = 0;
+    nodeaddr_t regnum = 0x14;  // Channel 1 preload (was 0x0F for REG_DEBUG)
 
     while (!done) {
         read_data = -1;
         write_data++;
         count++;
-        if (!ethPort->WriteQuadlet(boardNum, 0x0F, write_data))   // 0x0F is REG_DEBUG
+        if (!ethPort->WriteQuadlet(boardNum, regnum, write_data))
             writeFailures++;
         else {
             Amp1394_Sleep(50*1e-6);  // sleep 50 us
-            ethPort->ReadQuadlet(boardNum, 0x0F, read_data);
-            if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
-                success++;
+            if (ethPort->ReadQuadlet(boardNum, regnum, read_data)) {
+                if (memcmp((void *)&read_data, (void *)&write_data, 4) == 0)
+                    success++;
+                else {
+                    compareFailures++;
+                    std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
+                }
+            }
             else {
-                compareFailures++;
-                std::cout << std::hex << "write_data = 0x" << write_data << "  " << " read_data = 0x" << read_data << std::endl;
+                readFailures++;
             }
         }
-        if (writeFailures + compareFailures > 200) done = true;
+        if (writeFailures + readFailures + compareFailures > 200) done = true;
 
         if (count % 1000 == 0) {
-            std::cout << "Success = " << std::dec << success << ", write failures = " << writeFailures << ", compare failures = "
-                      << compareFailures << std::endl;
+            std::cout << "Success = " << std::dec << success << ", write failures = " << writeFailures
+                      << ", read failures = " << readFailures
+                      << ", compare failures = " << compareFailures << std::endl;
         }
 
         if (count >= 10000) {
@@ -459,7 +618,7 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
     std::cout << "Bus_Info length = " << bus_info_len << std::endl;
     if (bus_info_len > 1) {
         unsigned int bus_info_crc = bswap_32(block_data[0])&0x0000ffff;
-        AmpIO_UInt16 crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[1]), bus_info_len*sizeof(quadlet_t));
+        uint16_t crc16 = ComputeCRC16(reinterpret_cast<unsigned char *>(&block_data[1]), bus_info_len*sizeof(quadlet_t));
         std::cout << "Bus_Info CRC: ROM = " << std::hex << bus_info_crc << ", Computed = " << crc16 << std::dec << std::endl;
         unsigned int root_len = (bswap_32(block_data[bus_info_len+1])&0xffff0000) >> 16;
         unsigned int root_dir_crc = bswap_32(block_data[bus_info_len+1])&0x0000ffff;
@@ -477,7 +636,7 @@ void ReadConfigROM(BasePort *port, unsigned int boardNum)
     }
 }
 
-bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, const std::string &msgType, size_t numIter = 1000)
+bool RunTiming(const std::string &portName, AmpIO *boardTest, EthBasePort *ethPort, const std::string &msgType, size_t numIter = 1000)
 {
     size_t i;
     EthBasePort::TCODE msgCode;
@@ -493,14 +652,13 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
     double timeSum = 0.0;
     double minTime = 1.0;   // one second should be much higher than expected readings
     double maxTime = 0.0;
-    unsigned short minTimeReceive = 65535;
-    unsigned short maxTimeReceive = 0;
-    unsigned short minTimeSend = 65535;
-    unsigned short maxTimeSend = 0;
-    double clockPeriod_us = 1.0e6*boardTest->GetFPGAClockPeriod();  // clock period in microseconds
+    double minTimeReceive = 1.0;
+    double maxTimeReceive = 0.0;
+    double minTimeSend = 1.0;
+    double maxTimeSend = 0.0;
     for (i = 0; i < numIter; i++) {
         double startTime, deltaTime = 0;
-        AmpIO_UInt32 status;
+        uint32_t status;
         if (msgCode == EthBasePort::QREAD) {
             startTime = Amp1394_GetTime();
             status = boardTest->ReadStatus();
@@ -522,55 +680,57 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, AmpIO *hubFw, cons
             minTime = deltaTime;
         if (deltaTime > maxTime)
             maxTime = deltaTime;
-        if (hubFw) {
-            // Read Ethernet timing from FPGA
-            // TODO: formalize this, rather than hard-coding buffer[8] below
-            quadlet_t buffer[16];
-            if (hubFw->ReadEthernetData(buffer, 0x80, 16)) {
-                unsigned short timeReceive = (buffer[8]&0x0000ffff);
-                unsigned short timeSend = (buffer[8]>>16) - timeReceive;
-                if (timeReceive < minTimeReceive)
-                    minTimeReceive = timeReceive;
-                if (timeReceive > maxTimeReceive)
-                    maxTimeReceive = timeReceive;
-                if (timeSend < minTimeSend)
-                    minTimeSend = timeSend;
-                if (timeSend > maxTimeSend)
-                    maxTimeSend = timeSend;
-            }
+        if (ethPort) {
+            // Get Ethernet timing (from FPGA)
+            // Note that timeSend is a little short because it does not include the time
+            // to send the last few bytes of the packet.
+            double timeReceive = ethPort->GetFpgaReceiveTime();
+            double timeSend = ethPort->GetFpgaTotalTime() - timeReceive;
+            if (timeReceive < minTimeReceive)
+                minTimeReceive = timeReceive;
+            if (timeReceive > maxTimeReceive)
+                maxTimeReceive = timeReceive;
+            if (timeSend < minTimeSend)
+                minTimeSend = timeSend;
+            if (timeSend > maxTimeSend)
+                maxTimeSend = timeSend;
         }
     }
     if (i > 0) {
         std::cout << "   Times (us), " << i << " iterations: mean = " << std::fixed << std::setprecision(2)
                   << (1.0e6*timeSum/i) << ", min = " << (1.0e6*minTime) << ", max = " << (1.0e6*maxTime) << std::endl;
-        if (hubFw) {
-            std::cout << "      FPGA receive min/max (us) = " << (clockPeriod_us*minTimeReceive) << "/" << (clockPeriod_us*maxTimeReceive);
+        if (ethPort) {
+            std::cout << "      FPGA receive min/max (us) = " << (1.0e6*minTimeReceive) << "/" << (1.0e6*maxTimeReceive);
             if (msgType == "quadlet read")
-                std::cout << ", send min/max (us) = " << (clockPeriod_us*minTimeSend) << "/" << (clockPeriod_us*maxTimeSend);
+                std::cout << ", send min/max (us) = " << (1.0e6*minTimeSend) << "/" << (1.0e6*maxTimeSend);
             std::cout << std::endl;
         }
     }
     return true;
 }
 
-void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
+void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard, unsigned int eth_port)
 {
     quadlet_t waveform[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
     quadlet_t waveform_read[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
     const unsigned int WLEN_MAX = (wport->GetMaxWriteDataSize()/sizeof(quadlet_t));
-    size_t i;
+    unsigned int i;
     unsigned int min_left = WLEN_MAX;
     unsigned int min_wlen = WLEN_MAX;
     unsigned int max_wait = 0;
     unsigned int max_wlen = WLEN_MAX;
+    unsigned int bw_err_cnt = 0;
     unsigned int numSilentMismatch = 0;
 
     // Check if debug data available, in which case we can query bw_left
-    bool debugValid = false;
-    if (rboard->ReadEthernetData(waveform_read, 0x80, 16)) {
+    unsigned int debugVersion = 0;
+    if (rboard->ReadEthernetData(waveform_read, (eth_port << 8) | 0x80, 16)) {
         char *cptr = reinterpret_cast<char *>(waveform_read);
         if (strncmp(cptr, "DBG1", 4) == 0) {
-            debugValid = true;
+            debugVersion = 1;
+        }
+        if (strncmp(cptr, "DBG2", 4) == 0) {
+            debugVersion = 2;
         }
         else {
             std::cout << "Debug data not available" << std::endl;
@@ -578,14 +738,23 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
         }
     }
 
-    for (size_t wlen = 2; wlen < WLEN_MAX; wlen++) {
+    for (unsigned int wlen = 2; wlen < WLEN_MAX; wlen++) {
         bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
         unsigned int len16 = 2*wlen;  // length in words
-        unsigned int trigger_comp = 10 + len16/2+len16/8 + 2;   // computation on FPGA
+        double trigger;               // actual trigger value
+        unsigned int trigger_comp;    // trigger computation on FPGA
+        if (eth_port == 0) {
+            trigger_comp = 10 + len16/2+len16/8-len16/64 + 2; // FPGA V2 (KSZ8851)
+            trigger = (3*wlen-2)/5.0;
+        }
+        else {
+            trigger_comp = 10 + len16/2 + 2;   // FPGA V3 (RTL8211F)
+            trigger = (wlen-1)/2.0;
+        }
         if (doOut) {
             std::cout << "Len=" << std::dec << wlen << ": ";
-            if (debugValid) {
-                std::cout << "trigger = " << (3*wlen-2)/5.0
+            if (debugVersion) {
+                std::cout << "trigger = " << trigger
                           << ", trigger_fpga = " << (trigger_comp-10)/2 << ", ";
             }
         }
@@ -599,22 +768,41 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             return;
         }
         Amp1394_Sleep(0.05);
-        if (debugValid) {
-            if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
+        if (debugVersion) {
+            // Read 32 quadlets to get EthernetIO debug data (0x80-0x8f) and low-level
+            // (KSZ or RTL/ESW) debug data (0x90-0x9f) for debugVersion==2
+            if (!rboard->ReadEthernetData(waveform_read, (eth_port << 8) | 0x80, 32))
                 break;
-            unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
-            unsigned short bw_left = ptr[0];
+            unsigned short bw_left = 0;
+            unsigned short bw_wait = 0;
+            if (debugVersion == 1) {
+                unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
+                bw_left = ptr[0];
+                bw_wait = ptr[1];
+            }
+            else if (debugVersion == 2) {
+                bw_left = static_cast<unsigned short>(waveform_read[8]>>16);
+                bool bw_err = (waveform_read[8] & 0x00008000);
+                if (bw_err) {
+                    bw_err_cnt++;
+                }
+                if (eth_port == 0)   // FPGA V2 (KSZ8851 DebugData)
+                    bw_wait = static_cast<unsigned short>(waveform_read[20]>>16);
+                else                 // FPGA V3 (EthSwitchRt DebugData)
+                    bw_wait = static_cast<unsigned short>(waveform_read[28]>>16);
+            }
             if (bw_left < min_left) {
                 min_left = bw_left;
                 min_wlen = wlen;
             }
-            unsigned short bw_wait = ptr[1];
             if (bw_wait > max_wait) {
                 max_wait = bw_wait;
                 max_wlen = wlen;
             }
             if (doOut) {
                 std::cout << "bw_left = " << bw_left << ", bw_wait = " << bw_wait;
+                if (bw_err_cnt > 0)
+                    std::cout << ", bw_err_cnt = " << bw_err_cnt;
             }
         }
         if (!rboard->ReadWaveformTable(waveform_read, 0, wlen)) {
@@ -641,14 +829,14 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             }
         }
         if (doOut) {
-            if (!debugValid && allOK) std::cout << " Pass";
+            if (!debugVersion && allOK) std::cout << " Pass";
             std::cout << std::endl;
         }
     }
     if (numSilentMismatch > 0) {
         std::cout << "There were " << numSilentMismatch << " additional lengths with mismatches" << std::endl;
     }
-    if (debugValid) {
+    if (debugVersion) {
         std::cout << "Mininum bw_left = " << std::dec << min_left << " at wlen = " << min_wlen << std::endl;
         std::cout << "Maximum bw_wait = " << std::dec << max_wait << " at wlen = " << max_wlen << std::endl;
     }
@@ -662,7 +850,7 @@ void TestWaveform(AmpIO *board)
     size_t i;
     // Set up square waves that change every 1 msec
     double clkPer = board->GetFPGAClockPeriod();
-    AmpIO_UInt32 numTicks = static_cast<AmpIO_UInt32>(0.001/clkPer);
+    uint32_t numTicks = static_cast<uint32_t>(0.001/clkPer);
     std::cout << "Setting waveform with " << numTicks << " counts (1 msec edges)" << std::endl;
     if ((numTicks&0x7fffff) != numTicks)
         std::cout << "Warning: numTicks does not fit in 23 bits" << std::endl;
@@ -708,6 +896,141 @@ void TestWaveform(AmpIO *board)
 #endif
 }
 
+// Following prints feedback from the MAX7317 I/O Expander on QLA Rev 1.5+
+// Feedback from the MAX7301 I/O Expander on DQLA is a little different
+void PrintIOExp(uint32_t iodata)
+{
+    std::cout << std::hex << (iodata&0x0000ffff) << "  :";
+    bool output_error = iodata&0x01000000;
+    if (output_error)
+        std::cout << " output_error (" << ((iodata&0x00ff0000)>>16) << ") ";
+    if (iodata&0x02000000) std::cout << " read_error";
+    if (iodata&0x04000000) std::cout << " do_reg_io";
+    if (iodata&0x08000000) std::cout << " reg_io_read";
+    if (iodata&0x10000000) std::cout << " other_busy";
+    std::cout << std::dec << std::endl;
+}
+
+// Following checks the configuration of MAX7317 I/O Expander on QLA Rev 1.5+
+// (channel 0)
+bool QLA_IOExp_Check(AmpIO &Board, unsigned long chan = 0)
+{
+    // TODO: update for non-zero channels (DQLA)
+    uint32_t iodata;
+    Board.WriteIOExpander(0x1345);   // Write 0x45 to RAM
+    Board.WriteIOExpander(0x9300);   // Read from RAM
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from RAM (45): ";
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x1300);   // Write 0x00 to RAM
+    Board.WriteIOExpander(0x9300);   // Read from RAM
+    std::cout << "Read from RAM (00): ";
+    Board.ReadIOExpander(iodata);
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x13ff);   // Write 0xff to RAM
+    Board.WriteIOExpander(0x9300);   // Read from RAM
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from RAM (ff): ";
+    PrintIOExp(iodata);
+    for (int i = 0; i < 10; i++) {
+        uint32_t cmd = 0x8000 | (i << 8);
+        Board.WriteIOExpander(cmd);   // Read Port i status
+        Board.ReadIOExpander(iodata);
+        std::cout << "Read from Port " << i << ": ";
+        PrintIOExp(iodata);
+    }
+    Board.WriteIOExpander(0x8e00);   // Read Ports 0-7
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from Ports 0-7: ";
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x8f00);   // Read Ports 8-9
+    Board.ReadIOExpander(iodata);
+    std::cout << "Read from Ports 8-9: ";
+    PrintIOExp(iodata);
+    Board.WriteIOExpander(0x40000000);   // Select debug register
+    Board.ReadIOExpander(iodata);
+    std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
+    Board.WriteIOExpander(0xc0000000);   // Clear errors, select debug register
+    Board.ReadIOExpander(iodata);
+    std::cout << "outputs = " << std::hex << iodata << std::dec << std::endl;
+    return true;
+}
+
+// Following checks the configuration of one of MAX7301 I/O Expanders on the DQLA
+bool DQLA_IOExp_Check(AmpIO &Board, unsigned long chan)
+{
+    uint32_t iodata;
+    unsigned int DQLA_Num = (chan == 3) ? 1 : 2;
+    chan <<= 16;
+    Board.WriteIOExpander(chan|0x08000000);     // NOP command to set channel for reading
+    Board.ReadIOExpander(iodata);
+    std::cout << "Checking DQLA I/O Expander " << DQLA_Num << " ..." << std::endl;
+    if (iodata&0x00400000) {
+        std::cout << "Error: not configured" << std::endl;
+        return false;
+    }
+    if (iodata&0x00800000) {
+        std::cout << "Error: failed to initialize" << std::endl;
+        return false;
+    }
+    if (iodata&0x02000000) {
+        std::cout << "Warning: read error detected" << std::endl;
+    }
+    // Check config commands: IOP[7:4], IOP[11:8], IOP[15:12], ...
+    uint16_t configCmd[8] = {  0x09ff, 0x0aff, 0x0b55, 0x0c57, 0x0dff, 0x0eff, 0x0f55, 0x0401 };
+    for (unsigned int j = 0; j < sizeof(configCmd)/sizeof(uint16_t); j++) {
+        uint16_t readCmd = (configCmd[j]&0xff00)|0x8000;
+        std::cout << "Checking config cmd " << j << ": " << std::hex << readCmd << std::dec << std::endl;
+        unsigned int cnt;
+        for (cnt = 0; cnt < 100; cnt++) {
+            Board.WriteIOExpander(chan|readCmd);            // Read config
+            Board.ReadIOExpander(iodata);
+            if (iodata&0x04000000) {
+                std::cout << "  Warning: register I/O still in process" << std::endl;
+            }
+            if (iodata&0x08000000) {
+                std::cout << "  Warning: still waiting for register read data" << std::endl;
+            }
+            if ((iodata&0x0000ff00) == (readCmd&0x0000ff00))
+                break;
+        }
+        if (cnt == 100) {
+            std::cout << "  Warning: command mismatch, received: " << std::hex << (iodata&0x0000ff00)
+                      << std::dec <<std::endl;
+            continue;
+        }
+        else if (cnt > 0) {
+            std::cout << "  Warning: took " << cnt << " attempts to obtain correct response" << std::endl;
+        }
+        if (iodata&0x01000000) {
+            std::cout << "  Warning: output error detected (" << std::hex << ((iodata&0x001f0000)>>16)
+                      << std::dec << ") " << std::endl;
+        }
+        if (iodata&0x10000000) {
+            std::cout << "  Warning:  register I/O error (command ignored because previous not finished)" << std::endl;
+        }
+        else if ((iodata&0x000000ff) != (configCmd[j]&0x00ff)) {
+            std::cout << "  Warning: configuration mismatch, received: " << std::hex << (iodata&0x000000ff)
+                      << " (should be " << (configCmd[j]&0x00ff) << ")" << std::dec << std::endl;
+        }
+        else {
+            std::cout << "  Configuration verified" << std::endl;
+        }
+    }
+    Board.WriteIOExpander(chan|0x40000000);    // Select debug register
+    Board.ReadIOExpander(iodata);
+    unsigned int num_output_errors = (iodata&0x00ff0000)>>16;
+    std::cout << "Debug register, number of output errors: " << num_output_errors << std::endl;
+    if (iodata&0x02000000) {
+        std::cout << "Warning: read_error detected" << std::endl;
+    }
+    if ((num_output_errors > 0) || (iodata&0x02000000)) {
+        std::cout << "Clearing errors" << std::endl;
+        Board.WriteIOExpander(chan|0x80000000);   // Clear errors (deselect debug)
+    }
+    return true;
+ }
+
 static char QuadletReadCallbackBoardId = 0;
 
 bool QuadletReadCallback(EthBasePort &, unsigned char boardId, std::ostream &debugStream)
@@ -727,7 +1050,6 @@ int main(int argc, char **argv)
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
 
     if (argc > 1) {
-        int args_found = 0;
         for (int i = 1; i < argc; i++) {
             if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
                 if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
@@ -738,9 +1060,6 @@ int main(int argc, char **argv)
                     std::cerr << "Please select Ethernet raw (-pethP) or UDP (-pudp[xx.xx.xx.xx])" << std::endl;
                     return 0;
                 }
-            }
-            else if (args_found == 0) {
-                // Could parse additional args here
             }
             else {
                     std::cerr << "Usage: eth1394test [-pP]" << std::endl
@@ -756,8 +1075,8 @@ int main(int argc, char **argv)
     // The results (RegAddr and RegData) are hard-coded in the FPGA code (EthernetIO.v).
     unsigned char MulticastMAC[6];
     EthBasePort::GetDestMulticastMacAddr(MulticastMAC);
-    AmpIO_UInt8 RegAddr;
-    AmpIO_UInt16 RegData;
+    uint8_t RegAddr;
+    uint16_t RegData;
     ComputeMulticastHash(MulticastMAC, RegAddr, RegData);
     std::cout << "Multicast hash table: register " << std::hex << (int)RegAddr << ", data = " << RegData << std::endl;
 
@@ -768,6 +1087,8 @@ int main(int argc, char **argv)
     AmpIO *curBoardFw = 0;   // Current board via Firewire
     AmpIO *curBoardEth = 0;  // Current board via Ethernet (sets boardNum)
     AmpIO *HubFw = 0;        // Ethernet Hub board via Firewire
+
+    BasePort *curPort = 0;   // Current port (Ethernet or Firewire)
 
 #if Amp1394_HAS_RAW1394
     FirewirePort FwPort(0, std::cout);
@@ -786,8 +1107,8 @@ int main(int argc, char **argv)
     if (FwBoardList.size() > 0) {
         curBoardFw = FwBoardList[0];
     }
-
 #endif
+
     EthBasePort *EthPort = 0;
     if (desiredPort == BasePort::PORT_ETH_UDP) {
         std::cout << "Creating Ethernet UDP port, IP address = " << IPaddr << std::endl;
@@ -840,17 +1161,41 @@ int main(int argc, char **argv)
     quadlet_t read_data;
     quadlet_t write_data = 0L;
     quadlet_t buffer[128];
+    unsigned int eth_port = 0;
 
     while (!done) {
 
-        // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth
-        curBoard = curBoardFw ? curBoardFw : curBoardEth;
+        // Set curBoard to curBoardFw if it is valid; otherwise curBoardEth.
+        // Also set curPort to be consistent with curBoard.
+#if Amp1394_HAS_RAW1394
+        if (curBoardFw) {
+            curBoard = curBoardFw;
+            curPort = &FwPort;
+        }
+        else {
+            curBoard = curBoardEth;
+            curPort = EthPort;
+        }
+#else
+        curBoard = curBoardEth;
+        curPort = EthPort;
+#endif
 
         std::cout << std::endl << "Ethernet Test Program" << std::endl;
-        if (curBoardFw)
+        if (curBoard) {
+            uint32_t status;
+            curBoard->ReadEthernetStatus(status);
+            eth_port = FpgaIO::GetEthernetPortCurrent(status);
+        }
+        if (curBoardFw) {
             std::cout << "  Firewire board: " << static_cast<unsigned int>(curBoardFw->GetBoardId()) << std::endl;
-        if (curBoardEth)
-            std::cout << "  Ethernet board: " << static_cast<unsigned int>(curBoardEth->GetBoardId()) << std::endl;
+        }
+        if (curBoardEth) {
+            std::cout << "  Ethernet board: " << static_cast<unsigned int>(curBoardEth->GetBoardId());
+            if (eth_port != 0)
+                std::cout << ", Eth" << eth_port << std::endl;
+            std::cout << std::endl;
+        }
         std::cout << "  0) Quit" << std::endl;
         if (curBoardEth) {
             std::cout << "  1) Quadlet write (power/relay toggle) to board via Ethernet" << std::endl;
@@ -865,7 +1210,7 @@ int main(int argc, char **argv)
             std::cout << "  6) Initialize Ethernet port" << std::endl;
         }
         if (curBoard)
-            std::cout << "  7) Ethernet debug info" << std::endl;
+            std::cout << "  7) Ethernet status info" << std::endl;
         std::cout << "  8) Multicast quadlet read via Ethernet" << std::endl;
         if (curBoardEth) {
             std::cout << "  a) WriteAllBoards test" << std::endl;
@@ -886,14 +1231,19 @@ int main(int argc, char **argv)
             std::cout << "  i) Read IPv4 address via FireWire" << std::endl;
             std::cout << "  I) Clear IPv4 address via FireWire" << std::endl;
         }
+        if (curBoard) {
+            std::cout << "  m) Initialize and test I/O Expander (QLA 1.5+)" << std::endl;
+        }
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (curBoardFw)
             std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
         if (curBoardEth)
             std::cout << "  t) Run Ethernet timing analysis" << std::endl;
         if (curBoard) {
+            std::cout << "  v) Measure motor power supply voltage (QLA 1.5+)" << std::endl;
             std::cout << "  w) Test waveform buffer" << std::endl;
             std::cout << "  x) Read Ethernet debug data" << std::endl;
+            std::cout << "  X) Clear Ethernet errors" << std::endl;
         }
         if (curBoardEth)
             std::cout << "  y) Read Firewire data via Ethernet" << std::endl;
@@ -907,7 +1257,6 @@ int main(int argc, char **argv)
         nodeaddr_t addr;
         quadlet_t fw_block_data[28];
         quadlet_t eth_block_data[28];
-        quadlet_t write_block[5] = { 0x11111111, 0x22222222, 0x33333333, 0x44444444, 0x55555555 };
         int i;
         char buf[5];
 
@@ -992,19 +1341,27 @@ int main(int argc, char **argv)
 
 #if Amp1394_HAS_RAW1394
         case '5':
-            if (curBoardFw)
-                PrintEthernetStatus(*curBoardFw);
+            if (curBoardFw) {
+                unsigned int fpgaVer = curBoardFw->GetFpgaVersionMajor();
+                if (fpgaVer == 2) {
+                    PrintEthernetPhyStatusV2(*curBoardFw);
+                }
+                else if (fpgaVer == 3) {
+                    PrintEthernetPhyStatusV3(*curBoardFw, 1);
+                    PrintEthernetPhyStatusV3(*curBoardFw, 2);
+                }
+            }
             break;
 
         case '6':
             if (curBoardFw)
-                InitEthernet(*curBoardFw);
+                InitEthernet(*curBoardFw, eth_port);
             break;
 #endif
 
         case '7':
             if (curBoard)
-                PrintEthernetDebug(*curBoard);
+                PrintEthernetStatus(*curBoard);
             break;
 
         case '8':   // Read request via Ethernet multicast
@@ -1023,7 +1380,7 @@ int main(int argc, char **argv)
 
         case 'B':
             if (curBoardEth)
-                TestBlockWrite(EthPort, curBoardEth, curBoard);
+                TestBlockWrite(EthPort, curBoardEth, curBoard, eth_port);
             break;
 
         case 'b':
@@ -1047,7 +1404,7 @@ int main(int argc, char **argv)
 
         case 'e':
             if (curBoardFw) {
-                AmpIO_UInt16 reg;
+                uint16_t reg;
                 if (curBoardFw->ReadKSZ8851Reg(0x90, reg))
                     std::cout << "IER    = 0x" << std::hex << reg << "  ";
                 if (curBoardFw->ReadKSZ8851Reg(0x92, reg))
@@ -1058,6 +1415,25 @@ int main(int argc, char **argv)
                     std::cout << "RXFHSR = 0x" << std::hex << reg << "  ";
                 if (curBoardFw->ReadKSZ8851Reg(0x80, reg))
                     std::cout << "TXQCR = 0x" << std::hex << reg << std::endl;
+            }
+            break;
+
+        case 'E':
+            if (curBoardEth && (eth_port > 0)) {
+                // Read the status
+                uint32_t status;
+                curBoardEth->ReadEthernetStatus(status);
+                uint8_t portStatus = FpgaIO::GetEthernetPortStatusV3(status, eth_port);
+                bool ethEnabled = (portStatus & FpgaIO::ETH_PORT_STAT_PS_ETH);
+                std::cout << "PS Eth" << eth_port << " ";
+                if (ethEnabled) {
+                    std::cout << "enabled, disabling..." << std::endl;
+                    curBoardEth->WritePsEthernetEnable(eth_port, false);
+                }
+                else {
+                    std::cout << "disabled, enabling..." << std::endl;
+                    curBoardEth->WritePsEthernetEnable(eth_port, true);
+                }
             }
             break;
 
@@ -1089,6 +1465,23 @@ int main(int argc, char **argv)
             }
             break;
 
+        case 'm':   // TEST I/O EXPANDER
+            if (curBoard) {
+                if (curBoard->GetHardwareVersion() == DQLA_String) {
+                    DQLA_IOExp_Check(*curBoard, 3);
+                    DQLA_IOExp_Check(*curBoard, 4);
+                    // Could also test I/O expanders on QLA Rev 1.5+
+                    // In DQLA systems, need to use channels 1 and 2
+                    // QLA_IOExp_Check(*curBoard, 1);
+                    // QLA_IOExp_Check(*curBoard, 2);
+                }
+                else {
+                    // Test I/O expander on QLA Rev 1.5+ (channel 0)
+                    QLA_IOExp_Check(*curBoard);
+                }
+            }
+            break;
+
         case 'r':
             if (EthPort->IsOK())
                 EthPort->CheckFwBusGeneration("EthPort", true);
@@ -1107,13 +1500,28 @@ int main(int argc, char **argv)
 
         case 't':
             if (curBoardEth)
-                RunTiming("Ethernet", curBoardEth, HubFw, "quadlet read");
+                RunTiming("Ethernet", curBoardEth, EthPort, "quadlet read");
             if (curBoardFw)
                 RunTiming("Firewire", curBoardFw, 0, "quadlet read");
             if (curBoardEth)
-                RunTiming("Ethernet", curBoardEth, HubFw, "quadlet write");
+                RunTiming("Ethernet", curBoardEth, EthPort, "quadlet write");
             if (curBoardFw)
                 RunTiming("Firewire", curBoardFw, 0, "quadlet write");
+            break;
+
+        case 'v':
+            // Measure power supply voltage (QLA 1.5+)
+            if (curBoard) {
+                if (curBoard->GetHardwareVersion() == DQLA_String) {
+                    double V1 = MeasureMotorSupplyVoltage(curPort, curBoard, 1);
+                    double V2 = MeasureMotorSupplyVoltage(curPort, curBoard, 2);
+                    std::cout << "Measured motor supply voltages: " << V1 << ", " << V2 << std::endl;
+                }
+                else if (curBoard->GetHardwareVersion() == QLA1_String) {
+                    double V = MeasureMotorSupplyVoltage(curPort, curBoard);
+                    std::cout << "Measured motor supply voltage: " << V << std::endl;
+                }
+            }
             break;
 
         case 'w':
@@ -1122,23 +1530,38 @@ int main(int argc, char **argv)
 
         case 'x':
             if (curBoard) {
-                if (curBoard->ReadEthernetData(buffer, 0xc0, 16))
+                unsigned int fpgaVer = curBoard->GetFpgaVersionMajor();
+                double clkPeriod = curBoard->GetFPGAClockPeriod();
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0xc0, 16))     // PacketBuffer
                     EthBasePort::PrintEthernetPacket(std::cout, buffer, 16);
-                if (curBoard->ReadEthernetData(buffer, 0, 64))
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8), 64))            // FireWire packet
                     EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
-                if (curBoard->ReadEthernetData(buffer, 0x80, 16))
-                    EthBasePort::PrintDebugData(std::cout, buffer, curBoard->GetFPGAClockPeriod());
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0x80, 16))     // EthernetIO DebugData
+                    EthBasePort::PrintDebugData(std::cout, buffer, clkPeriod);
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0x90, 16)) {   // Low-level DebugData
+                    if (fpgaVer == 2)
+                        EthBasePort::PrintDebugDataKSZ(std::cout, buffer, clkPeriod);  // KSZ8851 (FPGA V2)
+                    else {
+                        EthBasePort::PrintDebugDataRTL(std::cout, buffer, clkPeriod);  // RTL8211F (FPGA V3)
+                        uint32_t ethStatus;
+                        curBoard->ReadEthernetStatus(ethStatus);
+                        if (ethStatus & FpgaIO::ETH_STAT_CLK_OK_V3)
+                            std::cout << "200 MHz clock running" << std::endl;
+                        else
+                            std::cout << "**** 200 MHz clock not running -- initialize PS" << std::endl;
+                    }
+                }
 #if 0
-                if (curBoard->ReadEthernetData(buffer, 0xa0, 32)) {
+                if ((fpgaVer == 2) && (curBoard->ReadEthernetData(buffer, 0xa0, 32))) {
                     std::cout << "Initialization Program:" << std::endl;
                     for (int i = 0; i < 32; i++) {
                         if (i == 16)
-                            std::cout << "Run Program:" << std::endl;
+                           std::cout << "Run Program:" << std::endl;
                         if (buffer[i] != 0) {
                            if (buffer[i]&0x02000000) std::cout << "   Write ";
                            else std::cout << "   Read  ";
                            std::cout << std::hex << std::setw(2) << std::setfill('0')
-                                     << ((buffer[i]&0x00ff0000)>>16) << " ";       // address
+                                     << ((buffer[i]&0x00ff0000)>>16) << " ";           // address
                            std::cout << std::hex << std::setw(4) << std::setfill('0')
                                      << (buffer[i]&0x0000ffff);
                            if (buffer[i]&0x01000000) std::cout << " MOD";
@@ -1146,13 +1569,19 @@ int main(int argc, char **argv)
                         }
                     }
                 }
-                if (curBoard->ReadEthernetData(buffer, 0xe0, 21)) {
+                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0xe0, 21)) {   // ReplyIndex
                     const uint16_t *packetw = reinterpret_cast<const uint16_t *>(buffer);
                     std::cout << "ReplyIndex: " << std::endl;
                     for (int i = 0; i < 41; i++)
                         std::cout << std::dec << i << ":  " << packetw[i] << std::endl;
                 }
 #endif
+            }
+            break;
+
+        case 'X':
+            if (curBoard) {
+                curBoard->WriteEthernetClearErrors(eth_port);
             }
             break;
 
@@ -1164,9 +1593,17 @@ int main(int argc, char **argv)
 #if Amp1394_HAS_RAW1394
         case 'z':
             if (curBoardFw) {
-                // Check that KSZ8851 registers are as expected
-                if (!CheckEthernet(*curBoardFw))
-                    PrintEthernetDebug(*curBoardFw);
+                unsigned int fpgaVer = curBoardFw->GetFpgaVersionMajor();
+                std::cout << "FPGA Rev " << fpgaVer << std::endl;
+                if (fpgaVer == 2) {
+                    // Check that KSZ8851 registers are as expected
+                    if (!CheckEthernetV2(*curBoardFw))
+                        PrintEthernetStatus(*curBoardFw);
+                }
+                else if (fpgaVer == 3) {
+                    CheckEthernetV3(*curBoardFw, 1);
+                    CheckEthernetV3(*curBoardFw, 2);
+                }
             }
             break;
 #endif

@@ -5,7 +5,7 @@
   Author(s):  Anton Deguet, Zihan Chen
   Created on: 2015 (from qlacloserelays)
 
-  (C) Copyright 2015-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2015-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -73,11 +73,9 @@ int main(int argc, char** argv)
     } else if (command == "reboot") {
         AmpIO::WriteRebootAll(port);
     } else if (command == "reset-eth") {
-        AmpIO::ResetKSZ8851All(port);
+        AmpIO::ResetEthernetAll(port);
     } else if (command == "reset-encoder-preload") {
-        for (i = 0; i < 4; i++) {
-            AmpIO::WriteEncoderPreloadAll(port, i, 0);
-        }
+        AmpIO::WriteEncoderPreloadAll(port, 0);
     }
 
     delete port;

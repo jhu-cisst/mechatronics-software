@@ -51,7 +51,6 @@ int main(int argc, char** argv)
     int port = 0;
     int board = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
-    bool useDS2480B = false;
 
     if (argc > 1) {
         int args_found = 0;
@@ -64,15 +63,11 @@ int main(int argc, char** argv)
                     }
                     std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
                 }
-                else if (argv[i][1] == 'd') {
-                    useDS2480B = true;
-                }
                 else {
                     std::cerr << "Usage: instrument <board-num> [-pP] [-d]" << std::endl
                               << "       where <board-num> = rotary switch setting (0-15)" << std::endl
                               << "             P = port number (default 0)" << std::endl
-                              << "       can also specify -pfwP, -pethP or -pudp" << std::endl
-                              << "       -d option for DS2480B driver chip" << std::endl;
+                              << "       can also specify -pfwP, -pethP or -pudp" << std::endl;
                     return 0;
                 }
             }
@@ -113,25 +108,18 @@ int main(int argc, char** argv)
     AmpIO Board(board);
     Port->AddBoard(&Board);
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
     if (fver < 7) {
         std::cerr << "Instrument read requires firmware version 7+ (detected version " << fver << ")" << std::endl;
         Port->RemoveBoard(board);
         delete Port;
         return -1;
     }
-    AmpIO_UInt32 status = Board.ReadStatus();
-    // Check whether bi-directional I/O is available
-    if ((status & 0x00300000) != 0x00300000) {
-        std::cerr << "QLA does not support bidirectional I/O (QLA Rev 1.4+ required)" << std::endl;
-        Port->RemoveBoard(board);
-        delete Port;
-        return -1;
-    }
+    uint32_t status = Board.ReadStatus();
 
     // Now, we try to read the Dallas chip. This will also populate the status field.
     unsigned char buffer[2048];  // Buffer for entire contents of DS2505 memory (2 Kbytes)
-    bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer), useDS2480B);
+    bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
     if (!Board.DallasReadStatus(status)) {
         std::cerr << "Failed to read DS2505 status" << std::endl;
         Port->RemoveBoard(board);
@@ -144,24 +132,6 @@ int main(int argc, char** argv)
     if ((status & 0x00000001) != 0x00000001) {
         std::cerr << "DS2505 interface not enabled (hardware problem)" << std::endl;
         return -1;
-    }
-    if (useDS2480B) {
-        unsigned int unexpected_idx = (status & 0x00000e00) >> 9;
-        unsigned int state = (status & 0x000001f0) >> 4;
-        if ((unexpected_idx != 0) || (state != 0)) {
-            std::cerr << "DS2480B status = " << std::hex << status << std::dec << std::endl;
-            if (unexpected_idx != 0) {
-               unsigned int recv = (status&0x00FF0000)>>16;
-               std::cerr << "DS2480B failed to return expected response, idx = " << unexpected_idx
-                         << ", received = " << std::hex << recv << std::dec << std::endl;
-            }
-            if (state != 0)
-               std::cerr << "DS2480B state = " << state << std::endl;
-        }
-        if ((status & 0x0000c000) != 0x0000c000) {
-            std::cerr << "DS2480B not initialized: status = " << std::hex << status << std::dec << std::endl;
-            return -1;
-        }
     }
     unsigned char ds_reset = static_cast<unsigned char>((status & 0x00000006)>>1);
     if (ds_reset != 1) {
@@ -178,6 +148,7 @@ int main(int argc, char** argv)
                   << " (DS2505 should be 0x0B)" << std::endl;
         return -1;
     }
+    bool useDS2480B = (status & 0x00008000) == 0x00008000;
     if (!useDS2480B) {
         unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
         std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;

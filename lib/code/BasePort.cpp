@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -20,11 +20,16 @@ http://www.cisst.org/cisst/license.txt.
 #include <stdio.h>
 #include <string>
 #include <algorithm>   // for std::max
+#include <cstdlib>
 
 #include <Amp1394/AmpIORevision.h>
 #include "BasePort.h"
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
+
+// Starting with C++11, can initialize using an initializer list.
+// Currently, the supported hardware (e.g., QLA1) is added in the BasePort constructor.
+std::vector<unsigned long> BasePort::SupportedHardware;
 
 void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr, bool newLine) const
 {
@@ -45,10 +50,11 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         outStr(ostr),
         Protocol_(BasePort::PROTOCOL_SEQ_RW),
         IsAllBoardsBroadcastCapable_(false),
-        IsAllBoardsBroadcastShorterWait_(false),
-        IsNoBoardsBroadcastShorterWait_(true),
+        IsAllBoardsRev4_5_(false),
+        IsAllBoardsRev4_6_(false),
+        IsAllBoardsRev6_(false),
         IsAllBoardsRev7_(false),
-        IsNoBoardsRev7_(false),
+        IsAllBoardsRev8_(false),
         ReadErrorCounter_(0),
         PortNum(portNum),
         FwBusGeneration(0),
@@ -64,6 +70,8 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     for (i = 0; i < BoardIO::MAX_BOARDS; i++) {
         BoardList[i] = 0;
         FirmwareVersion[i] = 0;
+        FpgaVersion[i] = 0;
+        HardwareVersion[i] = 0;
         Board2Node[i] = MAX_NODES;
     }
     ReadBufferBroadcast = 0;
@@ -71,6 +79,12 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
     GenericBuffer = 0;
     for (i = 0; i < MAX_NODES; i++)
         Node2Board[i] = BoardIO::MAX_BOARDS;
+    // Note that AddHardwareVersion will not add duplicates
+    BasePort::AddHardwareVersion(QLA1_String);
+    BasePort::AddHardwareVersion(dRA1_String);
+    BasePort::AddHardwareVersion(DQLA_String);
+    BasePort::AddHardwareVersion(BCFG_String);
+    BasePort::AddHardwareVersion(0x54455354); // "TEST"
 }
 
 BasePort::~BasePort()
@@ -132,10 +146,10 @@ bool BasePort::SetProtocol(ProtocolType prot) {
                    << "          please upgrade your firmware"  << std::endl;
             return false;
         }
-        if (!(IsAllBoardsRev7_ || IsNoBoardsRev7_)) {
+        if (!IsBroadcastFirmwareMixValid()) {
             outStr << "BasePort::SetProtocol" << std::endl
-                   << "***Error: cannot use broadcast mode with mix of Rev 7 and older boards, " << std::endl
-                   << "          please upgrade your firmware to Rev 7" << std::endl;
+                   << "***Error: cannot use broadcast mode with this mix of firmware, " << std::endl
+                   << "          please upgrade your firmware" << std::endl;
             return false;
         }
     }
@@ -186,6 +200,18 @@ void BasePort::SetWriteBufferBroadcast(void)
     }
 }
 
+// Return expected size for broadcast read, in bytes
+unsigned int BasePort::GetBroadcastReadSize(void) const
+{
+    unsigned int nBytes = 0;
+    for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
+        BoardIO *board = BoardList[boardNum];
+        if (board)
+            nBytes += (board->GetReadNumBytes()+sizeof(quadlet_t));
+    }
+    return nBytes;
+}
+
 void BasePort::SetReadInvalid(void)
 {
     for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
@@ -210,10 +236,11 @@ bool BasePort::ScanNodes(void)
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
     IsAllBoardsBroadcastCapable_ = true;
-    IsAllBoardsBroadcastShorterWait_ = true;
-    IsNoBoardsBroadcastShorterWait_ = true;
+    IsAllBoardsRev4_5_ = true;
+    IsAllBoardsRev4_6_ = true;
+    IsAllBoardsRev6_ = true;
     IsAllBoardsRev7_ = true;
-    IsNoBoardsRev7_ = true;
+    IsAllBoardsRev8_ = true;
     NumOfNodes_ = 0;
 
     nodeid_t max_nodes = InitNodes();
@@ -222,55 +249,80 @@ bool BasePort::ScanNodes(void)
     // Iterate through all possible nodes
     for (node = 0; node < max_nodes; node++) {
         quadlet_t data;
+        unsigned long hver = 0;
         // check hardware version
-        if (!ReadQuadletNode(node, 4, data)) {
+        if (!ReadQuadletNode(node, BoardIO::HARDWARE_VERSION, data)) {
             if (GetPortType() == PORT_FIREWIRE)
                 outStr << "BasePort::ScanNodes: unable to read from node " << node << std::endl;
             continue;
         }
-        // 0x54455354 == "TEST"
-        if ((data != QLA1_String) && (data !=  0x54455354)) {
-            outStr << "BasePort::ScanNodes: node " << node << " is not a QLA board (data = "
+        hver = data;
+
+        if (!HardwareVersionValid(hver)) {
+            outStr << "BasePort::ScanNodes: node " << node << " is not a supported board (data = "
                    << std::hex << data << std::dec << ")" << std::endl;
             continue;
         }
 
         // read firmware version
         unsigned long fver = 0;
-        if (!ReadQuadletNode(node, 7, data)) {
+        if (!ReadQuadletNode(node, BoardIO::FIRMWARE_VERSION, data)) {
             outStr << "BasePort::ScanNodes: unable to read firmware version from node "
                    << node << std::endl;
             continue;
         }
         fver = data;
 
+        // read FPGA version (for Firmware Rev 5+)
+        unsigned long fpga_ver = 1;
+        if (fver >= 5) {
+            if (!ReadQuadletNode(node, BoardIO::ETH_STATUS, data)) {
+                outStr << "BasePort::ScanNodes: unable to read FPGA version (ETH_STATUS) from node "
+                       << node << std::endl;
+                continue;
+            }
+            fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+        }
+
         // read board id
-        if (!ReadQuadletNode(node, 0, data)) {
+        if (!ReadQuadletNode(node, BoardIO::BOARD_STATUS, data)) {
             outStr << "BasePort::ScanNodes: unable to read status from node " << node << std::endl;
             continue;
         }
         // board_id is bits 27-24, BOARD_ID_MASK = 0x0F000000
         board = (data & BOARD_ID_MASK) >> 24;
+        FpgaVersion[board] = fpga_ver;
+        HardwareVersion[board] = hver;
+        FirmwareVersion[board] = fver;
         outStr << "  Node " << node << ", BoardId = " << board
-               << ", Firmware Version = " << fver << std::endl;
+               << ", " << GetFpgaVersionMajorString(board)
+               << ", Hardware = " << GetHardwareVersionString(board)
+               << ", Firmware Version = " << GetFirmwareVersion(board) << std::endl;
 
         if (Node2Board[node] < BoardIO::MAX_BOARDS) {
             outStr << "    Duplicate entry, previous value = "
                    << static_cast<int>(Node2Board[node]) << std::endl;
         }
-
         Node2Board[node] = static_cast<unsigned char>(board);
-        FirmwareVersion[board] = fver;
 
         // check firmware version
-        // FirmwareVersion >= 4, broadcast capable
-        if (fver < 4) IsAllBoardsBroadcastCapable_ = false;
-        // FirmwareVersion >= 6, broadcast with possibly shorter wait (i.e., skipping nodes
+        // Firmware Version >= 4, broadcast capable
+        if (fver < 4) {
+            IsAllBoardsBroadcastCapable_ = false;
+            IsAllBoardsRev4_5_ = false;
+            IsAllBoardsRev4_6_ = false;
+        }
+        if (fver > 5) IsAllBoardsRev4_5_ = false;
+        if (fver > 6) IsAllBoardsRev4_6_ = false;
+        // Firmware Version 6, broadcast with possibly shorter wait (i.e., skipping nodes
         // on the bus that are not part of the current configuration).
-        if (fver < 6) IsAllBoardsBroadcastShorterWait_ = false;
-        else          IsNoBoardsBroadcastShorterWait_ = false;
-        if (fver < 7) IsAllBoardsRev7_ = false;
-        else          IsNoBoardsRev7_ = false;
+        if (fver != 6) IsAllBoardsRev6_ = false;
+        // Firmware Version 7, added power control to block write; added velocity estimation
+        // fields to block read
+        if (fver != 7) IsAllBoardsRev7_ = false;
+        // Firmware Version 8, added header quadlet to block write; support larger entries in
+        // block read (both changes to support dRAC).
+        if (fver != 8) IsAllBoardsRev8_ = false;
         NumOfNodes_++;
     }
     outStr << "BasePort::ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
@@ -298,17 +350,17 @@ void BasePort::SetDefaultProtocol(void)
     Protocol_ = BasePort::PROTOCOL_SEQ_RW;
     // Use broadcast by default if all firmware are bc capable
     if ((NumOfNodes_ > 0) && IsAllBoardsBroadcastCapable_) {
-        if (IsAllBoardsRev7_ || IsNoBoardsRev7_) {
+        if (IsBroadcastFirmwareMixValid()) {
             Protocol_ = BasePort::PROTOCOL_SEQ_R_BC_W;
-            if (IsAllBoardsBroadcastShorterWait_)
+            if (IsBroadcastShorterWait())
                 outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and support shorter wait" << std::endl;
-            else if (IsNoBoardsBroadcastShorterWait_)
+            else if (IsAllBoardsRev4_5_)
                 outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and do not support shorter wait" << std::endl;
-            else
+            else if (IsAllBoardsRev4_6_)
                 outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable and some support shorter wait" << std::endl;
         }
         else
-            outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable, but disabled due to mix of Rev 7 and older firmware" << std::endl;
+            outStr << "BasePort::SetDefaultProtocol: all nodes broadcast capable, but disabled due to mix of firmware" << std::endl;
     }
 }
 
@@ -321,6 +373,7 @@ bool BasePort::AddBoard(BoardIO *board)
     }
     BoardList[id] = board;
     board->port = this;
+    board->InitBoard();
 
     // Make sure read/write buffers are allocated
     SetReadBufferBroadcast();
@@ -373,6 +426,8 @@ std::string BasePort::PortTypeString(PortType portType)
         return std::string("Ethernet-Raw");
     else if (portType == PORT_ETH_UDP)
         return std::string("Ethernet-UDP");
+    else if (portType == PORT_ZYNQ_EMIO)
+        return std::string("Zynq-EMIO");
     else
         return std::string("Unknown");
 }
@@ -436,6 +491,11 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
             sscanf(arg+4, "%d", &portNum);  // TEMP: portNum==1 for UDP means set eth1394 mode
         return true;
     }
+    else if (strncmp(arg, "emio", 4) == 0) {
+        portType = PORT_ZYNQ_EMIO;
+        portNum = 0;
+        return true;
+    }
     // older default, fw and looking for port number
     portType = PORT_FIREWIRE;
     // scan port number
@@ -446,10 +506,24 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     return false;
 }
 
+BasePort::PortType BasePort::DefaultPortType(void)
+{
+#if Amp1394_HAS_RAW1394
+    return PORT_FIREWIRE;
+#elif Amp1394_HAS_EMIO
+    return PORT_ZYNQ_EMIO;
+#else
+    return PORT_ETH_UDP;
+#endif
+
+}
+
 std::string BasePort::DefaultPort(void)
 {
 #if Amp1394_HAS_RAW1394
     return "fw:0";
+#elif Amp1394_HAS_EMIO
+    return "emio";
 #else
     return "udp:" ETH_UDP_DEFAULT_IP;
 #endif
@@ -465,6 +539,80 @@ nodeid_t BasePort::ConvertBoardToNode(unsigned char boardId) const
     else if (boardId == FW_NODE_BROADCAST)
         node = FW_NODE_BROADCAST;
     return node;
+}
+
+std::string BasePort::GetFpgaVersionMajorString(unsigned char boardId) const
+{
+    unsigned int fpga_ver = GetFpgaVersionMajor(boardId);
+    std::string fStr("FPGA_V");
+    if (fpga_ver == 0)
+        fStr.push_back('?');
+    else
+        fStr.push_back('0'+fpga_ver);
+    return fStr;
+}
+
+std::string BasePort::GetHardwareVersionString(unsigned char boardId) const
+{
+    std::string hStr;
+    if ((boardId < BoardIO::MAX_BOARDS) && HardwareVersion[boardId]) {
+        unsigned long hver = bswap_32(HardwareVersion[boardId]);
+        hStr.assign(reinterpret_cast<const char *>(&hver), sizeof(unsigned long));
+        hStr.resize(4);
+    } else {
+        hStr = "Invalid";
+    }
+    return hStr;
+}
+
+void BasePort::AddHardwareVersion(unsigned long hver)
+{
+    // Add if non-zero and not already on list
+    if (hver && !HardwareVersionValid(hver))
+        SupportedHardware.push_back(hver);
+}
+
+void BasePort::AddHardwareVersionString(const std::string &hStr)
+{
+    if (hStr.empty()) return;
+    unsigned long hver = 0;
+    if ((hStr.compare(0,2,"0x") == 0) || (hStr.compare(0,2,"0X") == 0)) {
+        // if hex
+        hver = std::strtoul(hStr.c_str()+2, 0, 16);
+    }
+    else {
+        std::string(hStr.rbegin(), hStr.rend()).copy(reinterpret_cast<char *>(&hver), sizeof(unsigned long));
+    }
+    AddHardwareVersion(hver);
+}
+
+void BasePort::AddHardwareVersionStringList(const std::string &hStr)
+{
+    if (hStr.empty()) return;
+    std::string::size_type n = 0;
+    while (n != std::string::npos) {
+        std::string::size_type p = hStr.find(',', n);
+        if (p == std::string::npos) {
+            AddHardwareVersionString(hStr.substr(n, p));
+            n = std::string::npos;
+        }
+        else {
+            AddHardwareVersionString(hStr.substr(n, (p-n)));
+            n = p+1;
+        }
+    }
+}
+
+bool BasePort::HardwareVersionValid(unsigned long hver)
+{
+    bool valid = false;
+    for (size_t i = 0; i < SupportedHardware.size(); i++) {
+        if (SupportedHardware[i] == hver) {
+            valid = true;
+            break;
+        }
+    }
+    return valid;
 }
 
 bool BasePort::CheckFwBusGeneration(const std::string &caller, bool doScan)
@@ -610,7 +758,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
+    if (!IsBroadcastFirmwareMixValid()) {
         outStr << "BasePort::ReadAllBoardsBroadcast: invalid mix of firmware" << std::endl;
         OnNoneRead();
         return false;
@@ -644,17 +792,23 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     // Wait for broadcast read data
     WaitBroadcastRead();
 
-    int readSize;        // Block size per board (depends on firmware version)
-    if (IsNoBoardsRev7_)
+    unsigned int readSize;        // Block size per board (depends on firmware version)
+    if (IsAllBoardsRev4_6_)
         readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
-    else
+    else if (IsAllBoardsRev7_)
         readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
-
-    int hubReadSize;        // Actual read size (depends on firmware version)
-    if (IsNoBoardsRev7_)
-        hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
     else
-        hubReadSize = readSize*NumOfBoards_+1;         // Rev 7: NumOfBoards * 29 + 1
+        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8, QLA)
+
+    // Note that Rev 8 also supports dRAC, which has readSize = 60
+
+    unsigned int hubReadSize;        // Actual read size (depends on firmware version)
+    if (IsAllBoardsRev4_6_)
+        hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
+    else if (IsAllBoardsRev7_)
+        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7: NumOfBoards * readSize + 1
+    else
+        hubReadSize = (GetBroadcastReadSize()/sizeof(quadlet_t))+1; // Rev 8 (could call this once and save result)
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
     memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
@@ -676,7 +830,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             unsigned int numAxes = (statusQuad&0xf0000000)>>28;
             unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
             bool thisOK = false;
-            if (numAxes != 4) {
+            if (!IsAllBoardsRev8_ && (numAxes != 4)) {
                 outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
                        << std::dec << std::endl;
             }
@@ -686,12 +840,31 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             }
             else {
                 bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
-                if (IsAllBoardsRev7_) {
+                if (IsAllBoardsRev8_) {
+                    // For Rev 8, only the LSB of the sequence is returned, but bit 14 also indicates
+                    // whether the 16-bit sequence number did not match on the FPGA side.
+                    bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
+                    bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 14
+                    if (bcReadInfo.boardInfo[boardNum].sequence != (bcReadInfo.readSequence & 0x00ff))
+                        bcReadInfo.boardInfo[boardNum].seq_error = true;
+                    bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
+                    unsigned int bdReadSize = board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
+                    if (bcReadInfo.boardInfo[boardNum].blockSize != bdReadSize) {
+                        outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
+                               << ", blockSize = " << bcReadInfo.boardInfo[boardNum].blockSize
+                               << ", expected = " << bdReadSize << std::endl;
+                    }
+                }
+                else {
+                    bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != bcReadInfo.readSequence);
+                    bcReadInfo.boardInfo[boardNum].blockSize = readSize;
+                }
+                if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
                     clkPeriod = board->GetFPGAClockPeriod();
                     bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
                 }
-                if (bcReadInfo.boardInfo[boardNum].sequence == bcReadInfo.readSequence) {
+                if (!bcReadInfo.boardInfo[boardNum].seq_error) {
                     thisOK = true;
                 }
                 else {
@@ -710,16 +883,16 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             else {
                 allOK = false;
             }
-            curPtr += readSize;
+            curPtr += bcReadInfo.boardInfo[boardNum].blockSize;
         }
-        else if (IsNoBoardsRev7_) {
+        else if (IsAllBoardsRev4_6_) {
             // Skip unused boards for firmware < 7
             curPtr += readSize;
         }
     }
 
-    if (IsAllBoardsRev7_) {
-        quadlet_t timingInfo = bswap_32(hubReadBuffer[hubReadSize-1]);
+    if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
+        quadlet_t timingInfo = bswap_32(curPtr[0]);
         bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
         bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
     }
@@ -731,7 +904,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         outStr << "BasePort::ReadAllBoardsBroadcast: rtRead is false" << std::endl;
 
 #if 0
-    if (IsAllBoardsRev7_) {
+    if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
         bcReadInfo.PrintTiming(outStr);
     }
 #endif
@@ -825,7 +998,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         return false;
     }
 
-    if (!(IsAllBoardsRev7_||IsNoBoardsRev7_)) {
+    if (!IsBroadcastFirmwareMixValid()) {
         outStr << "BasePort::WriteAllBoardsBroadcast: invalid mix of firmware" << std::endl;
         OnNoneWritten();
         return false;
@@ -850,7 +1023,7 @@ bool BasePort::WriteAllBoardsBroadcast(void)
         if (BoardList[board]) {
             unsigned int numBytes = BoardList[board]->GetWriteNumBytes();
             quadlet_t *bcPtr = bcBuffer+bcBufferOffset/sizeof(quadlet_t);
-            if (IsNoBoardsRev7_) {
+            if (IsAllBoardsRev4_6_) {
                 numBytes -= sizeof(quadlet_t);   // for ctrl offset
                 unsigned int numQuads = numBytes/4;
                 BoardList[board]->GetWriteData(bcPtr, 0, numQuads);

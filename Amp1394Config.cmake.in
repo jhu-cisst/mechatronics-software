@@ -3,6 +3,7 @@
 #  Amp1394_INCLUDE_DIR  - include directories for Amp1394
 #  Amp1394_LIBRARY_DIR  - link library directories for Amp1394
 #  Amp1394_LIBRARIES    - libraries to link against
+#  Amp1394Console_LIBRARIES - libraries for Amp1394Console
 
 # Version
 set (Amp1394_VERSION_MAJOR "@Amp1394_VERSION_MAJOR@")
@@ -16,7 +17,11 @@ set (Amp1394_LIBRARY_DIR "@CONF_LIBRARY_DIR@")
  
 # Libraries to link against
 set (Amp1394_LIBRARIES "@CONF_LIBRARIES@")
+set (Amp1394Console_LIBRARIES "@CONF_CONSOLE_LIBRARIES@")
 
 # FireWire/Ethernet support
 set (Amp1394_HAS_RAW1394 "@Amp1394_HAS_RAW1394@")
 set (Amp1394_HAS_PCAP    "@Amp1394_HAS_PCAP@")
+
+# Whether using curses for console
+set (Amp1394Console_HAS_CURSES "@Amp1394Console_HAS_CURSES@")

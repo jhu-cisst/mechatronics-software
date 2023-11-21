@@ -8,8 +8,6 @@
 #include "AmpIO.h"
 #include "EthUdpPort.h"
 
-typedef AmpIO::EncoderVelocityData EncoderVelocityData;
-
 #if Amp1394_HAS_RAW1394
   #include "FirewirePort.h"
 #endif
@@ -142,15 +140,15 @@ uint32_t bswap32(uint32_t in);
 
 
 // AmpIO class
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &rdata};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &rdata};
 // ReadDoutControl
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsHigh};
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsLow};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &countsHigh};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &countsLow};
 // ReadEncoderPreload
-%apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata};
+%apply int32_t& ARGOUT_INT32_T {int32_t &sdata};
 
-%ignore AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
-%ignore AmpIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
+%ignore FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata);
+%ignore FpgaIO::WriteKSZ8851Reg(uint8_t, uint8_t const &);
 
 %import "AmpIORevision.h"
 
@@ -159,7 +157,10 @@ uint32_t bswap32(uint32_t in);
 %constant int VERSION_PATCH = Amp1394_VERSION_PATCH;
 %constant std::string VERSION = Amp1394_VERSION;
 
+%include "Amp1394Types.h"
+%include "EncoderVelocity.h"
 %include "BoardIO.h"
+%include "FpgaIO.h"
 %include "AmpIO.h"
 
 %apply (int* IN_ARRAY1, int DIM1) {(int* data, int size)};

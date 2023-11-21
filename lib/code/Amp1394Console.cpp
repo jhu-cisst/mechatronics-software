@@ -25,7 +25,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <Windows.h>
 #else
 #include <unistd.h>
-#ifdef Amp1394_HAS_CURSES
+#ifdef Amp1394Console_HAS_CURSES
 #include <curses.h>
 #else
 #include <termios.h>
@@ -34,7 +34,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include "Amp1394Console.h"
 
-#ifdef Amp1394_HAS_CURSES
+#ifdef Amp1394Console_HAS_CURSES
 
 // Implementation using Curses library
 
@@ -47,6 +47,7 @@ bool Amp1394Console::Init()
         noecho();              // do not echo input characters
     if (noBlock)
         nodelay(stdscr, TRUE); // getch non-blocking
+    isOk = true;
     return true;
 }
 
@@ -90,6 +91,7 @@ struct Amp1394Console::ConsoleInternals {
 
 bool Amp1394Console::Init()
 {
+    isOk = false;
 #ifdef _MSC_VER
     HANDLE stdscr = GetStdHandle(STD_OUTPUT_HANDLE);
     if (stdscr == INVALID_HANDLE_VALUE) {
@@ -130,6 +132,7 @@ bool Amp1394Console::Init()
     if (noEcho)
         printf("\x1b[?25l");  // Hide cursor
     printf("\x1b[2J");        // Erase screen
+    isOk = true;
     return true;
 }
 

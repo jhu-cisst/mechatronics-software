@@ -1,6 +1,42 @@
 Change log
 ==========
 
+2.0.0 (2023-11-21)
+==================
+* API changes:
+  * New packet format for Firmware Rev 8
+    * Supports different numbers of signals for different boards (QLA, DQLA, DRAC)
+  * `qlacloserelays` removed, use `qlacommand` instead
+  * Consistent naming of firmware
+    * FPGA V1 firmware renamed from `FPGA1394-QLA` to `FPGA1394V1-QLA`
+    * FPGA V2 firmware renamed from `FPGA1394Eth-QLA` to `FPGA1394V2-QLA`
+    * FPGA V3 firmware is named `FPGA1394V3-XXX`, where `XXX` is `BCFG`, `QLA`, `DQLA` or `DRAC`
+  * Use types from `stdint` instead of custom `AmpIO_*`
+  * Moved FPGA-specific methods from `AmpIO` to new `FpgaIO` class (`AmpIO` inherits from `FpgaIO`)
+* New features:
+  * Support for new hardware:
+    * Si controllers (dRA1+FPGAv3)
+    * New Classic controllers (QLA+DQLA+FPGAv3)
+  * Support for QLA Version 1.5+
+    * Control either motor current (as before) or voltage (`AmpIO::SetMotorVoltage`)
+    * Interface to I/O expander for additional digital I/O
+  * Support for cross-compiling for FPGAv3 ARM32 processor
+    * Added `ZynqEmioPort` for Zynq ARM to access FPGA registers via EMIO interface
+  * Support for dongle (with Dallas DS2480B driver) to access DS2505 chip in da Vinci instruments
+  * Read/write motor configuration and status registers (Firmware Rev 8+)
+  * Added `qlacommand`
+  * `BasePort` class gathers more information about connected boards (FPGA version, hardware type)
+  * More data displayed in `qladisp`
+  * Added `dvrktest` for manufacturing testing
+    * Displays summary of connected controllers
+    * Requires custom test board for running tests
+  * Added `Amp1394Console` library from existing files, so that it can more easily be used by other projects
+  * Added `pgm1394` option to download FPGA PROM to MCS file
+* Bug fixes:
+  * Improved velocity estimation
+
+
+
 1.7.0 (2021-08-11)
 ==================
 * API changes:

@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -19,6 +19,7 @@ http://www.cisst.org/cisst/license.txt.
 #define __BasePort_H__
 
 #include <iostream>
+#include <vector>
 #include "BoardIO.h"
 
 /*
@@ -48,8 +49,11 @@ http://www.cisst.org/cisst/license.txt.
 #define ETH_UDP_DEFAULT_IP "169.254.0.100"
 
 // Some useful constants
-const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
+const unsigned long BOARD_ID_MASK = 0x0f000000;  /* Mask for board_id */
 const unsigned long QLA1_String = 0x514C4131;
+const unsigned long dRA1_String = 0x64524131;
+const unsigned long DQLA_String = 0x44514C41;
+const unsigned long BCFG_String = 0x42434647;
 
 // Maximum possible data size in bytes; this should only be used for sizing static buffers;
 // the actual limit is port-specific and generally less than this.
@@ -74,7 +78,7 @@ public:
 
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
 
-    enum PortType { PORT_FIREWIRE, PORT_ETH_UDP, PORT_ETH_RAW };
+    enum PortType { PORT_FIREWIRE, PORT_ETH_UDP, PORT_ETH_RAW, PORT_ZYNQ_EMIO };
 
     // Protocol types:
     //   PROTOCOL_SEQ_RW      sequential (individual) read and write to each board
@@ -91,10 +95,12 @@ public:
         double readFinishTime;        // When the PC finished reading the hub feedback data
         struct BroadcastBoardInfo {   // For each board:
             bool inUse;               //   Whether board is participating in broadcast read
+            unsigned int blockSize;   //   Number of quadlets from this board
             unsigned int sequence;    //   The sequence number received (should be same as readSequence)
+            bool seq_error;           //   Sequence error mismatch on FPGA
             double updateTime;        //   When the hub feedback data was updated
 
-            BroadcastBoardInfo() : inUse(false), sequence(0), updateTime(0.0) {}
+            BroadcastBoardInfo() : inUse(false), blockSize(0), sequence(0), seq_error(false), updateTime(0.0) {}
             ~BroadcastBoardInfo() {}
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
@@ -107,12 +113,13 @@ public:
 protected:
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
-    ProtocolType Protocol_;         // protocol type in use
-    bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
-    bool IsAllBoardsBroadcastShorterWait_;   // TRUE if all nodes bc capable and support shorter wait
-    bool IsNoBoardsBroadcastShorterWait_;    // TRUE if no nodes support the shorter wait
-    bool IsAllBoardsRev7_;                   // TRUE if all boards are Firmware Rev 7
-    bool IsNoBoardsRev7_;                    // TRUE if no boards are Firmware Rev 7
+    ProtocolType Protocol_;               // protocol type in use
+    bool IsAllBoardsBroadcastCapable_;    // TRUE if all nodes bc capable (Firmware Rev 4+)
+    bool IsAllBoardsRev4_5_;              // TRUE if all boards are Firmware Rev 4 or 5
+    bool IsAllBoardsRev4_6_;              // TRUE if all boards are Firmware Rev 4-6
+    bool IsAllBoardsRev6_;                // TRUE if all boards are Firmware Rev 6 (shorter wait)
+    bool IsAllBoardsRev7_;                // TRUE if all boards are Firmware Rev 7
+    bool IsAllBoardsRev8_;                // TRUE if all boards are Firmware Rev 8
 
     size_t ReadErrorCounter_;
 
@@ -150,6 +157,16 @@ protected:
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
+    // FPGA versions
+    unsigned int FpgaVersion[BoardIO::MAX_BOARDS];
+
+    // Hardware versions (e.g., QLA1)
+    unsigned long HardwareVersion[BoardIO::MAX_BOARDS];
+
+    // List of supported hardware versions.
+    // Static so that it can be initialized before calling constructor.
+    static std::vector<unsigned long> SupportedHardware;
+
     // Mappings between board numbers and node numbers
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
@@ -159,6 +176,14 @@ protected:
 
     // Cleanup port (called by destructor and Reset)
     virtual void Cleanup(void) = 0;
+
+    // Whether all boards support broadcast with shorter wait
+    bool IsBroadcastShorterWait(void) const
+    { return (IsAllBoardsRev6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_); }
+
+    // Whether a valid mix of firmware for broadcast
+    bool IsBroadcastFirmwareMixValid(void) const
+    { return (IsAllBoardsRev4_6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_); }
 
     // Sets default protocol based on firmware
     void SetDefaultProtocol(void);
@@ -170,6 +195,9 @@ protected:
     // the real-time read and write.
     void SetReadBufferBroadcast(void);
     void SetWriteBufferBroadcast(void);
+
+    // Return expected size for broadcast read, in bytes
+    unsigned int GetBroadcastReadSize(void) const;
 
     // Convenience function
     void SetReadInvalid(void);
@@ -276,8 +304,70 @@ public:
      \param boardId: board ID (rotary switch value)
      \return unsigned long: firmware version number
     */
-    unsigned long GetFirmwareVersion(unsigned char boardId) const
-    { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
+    inline unsigned long GetFirmwareVersion(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0;
+    }
+
+    /*!
+     \brief Get FPGA major version
+
+     \param boardId: board ID (rotary switch value)
+     \return unsigned int: FPGA major version (1, 2 or 3)
+    */
+    inline unsigned int GetFpgaVersionMajor(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? FpgaVersion[boardId] : 0;
+    }
+
+    /*!
+     \brief Get FPGA major version as a string
+     \param boardId: board ID
+     \return A string that identifies the FPGA major version, "FPGA_V1", "FPGA_V2", or "FPGA_V3".
+             If version could not be identified, returns "FPGA_V?".
+    */
+    std::string GetFpgaVersionMajorString(unsigned char boardId) const;
+
+    /*!
+     \brief Get hardware version
+     \param boardId: board ID
+     \return unsigned long: hardware version (a 32-bit value that identifies the type of board
+             connected to the FPGA).
+    */
+    inline unsigned long GetHardwareVersion(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? HardwareVersion[boardId] : 0;
+    }
+
+    /*!
+     \brief Get hardware version as a string
+     \param boardId: board ID
+     \return A string that identifies the hardware version of the board connected to the FPGA (e.g., "QLA1")
+     \note Assumes that all valid (non-zero) hardware versions contain printable characters.
+    */
+    std::string GetHardwareVersionString(unsigned char boardId) const;
+
+    /*!
+     \brief Add a hardware version to the list of supported (valid) hardware
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersion(unsigned long hver);
+
+    /*!
+     \brief Add a hardware version (specified as a 4-character string)
+            to the list of supported (valid) hardware.
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersionString(const std::string &hStr);
+
+    /*!
+     \brief Add comma-separated hardware versions (specified as 4-character strings)
+            to the list of supported (valid) hardware.
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersionStringList(const std::string &hStr);
+
+    /*!
+     \brief Whether hardware version is valid (i.e., supported hardware)
+    */
+    static bool HardwareVersionValid(unsigned long hver);
 
     // Get BroadcastReadInfo
     BroadcastReadInfo GetBroadcastReadInfo(void) const
@@ -296,6 +386,7 @@ public:
     static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
                              std::ostream &ostr = std::cerr);
 
+    static PortType DefaultPortType(void);
     static std::string DefaultPort(void);
 
     //*********************** Pure virtual methods **********************************

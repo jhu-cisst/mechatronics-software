@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2022 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -267,7 +267,7 @@ bool FirewirePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
 bool FirewirePort::WriteBroadcastReadRequest(unsigned int seq)
 {
     quadlet_t bcReqData = (seq << 16);
-    if (IsAllBoardsBroadcastShorterWait_ || IsNoBoardsBroadcastShorterWait_)
+    if (IsAllBoardsRev4_5_ || IsBroadcastShorterWait())
         bcReqData += BoardInUseMask_;
     else
         // For a mixed set of boards, disable the shorter wait capability by "tricking" the system into thinking
@@ -277,7 +277,7 @@ bool FirewirePort::WriteBroadcastReadRequest(unsigned int seq)
         bcReqData += ((1 << NumOfNodes_)-1);
 
     nodeaddr_t bcReqAddr;
-    if (IsNoBoardsRev7_)
+    if (IsAllBoardsRev4_6_)
         bcReqAddr = 0xffffffff000f;      // special address to trigger broadcast read
     else
         bcReqAddr = 0x1800;              // special address to trigger broadcast read
@@ -297,7 +297,7 @@ void FirewirePort::WaitBroadcastRead(void)
     // Wait for all boards to respond with data
     // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
     // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
-    double waitTime_uS = IsAllBoardsBroadcastShorterWait_ ? (10.0 + 5.0*NumOfBoards_) : (5.0 + 5.0*NumOfNodes_);
+    double waitTime_uS = IsBroadcastShorterWait() ? (10.0 + 5.0*NumOfBoards_) : (5.0 + 5.0*NumOfNodes_);
     Amp1394_Sleep(waitTime_uS*1e-6);
 }
 

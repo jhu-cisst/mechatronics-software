@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -24,104 +24,85 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 
-const AmpIO_UInt32 VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
-const AmpIO_UInt32 COLLECT_BIT      = 0x40000000;  /*!< Enable data collection on FPGA */
-const AmpIO_UInt32 MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
-const AmpIO_UInt32 ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
-const AmpIO_Int32  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
+// Offsets into DAC command (offset 1)
+const uint32_t VALID_BIT         = 0x80000000;  /*!< High bit of 32-bit word */
+const uint32_t COLLECT_BIT       = 0x40000000;  /*!< Enable data collection on FPGA */
+const uint32_t MOTOR_ENABLE_MASK = 0x20000000;  /*!< Mask for enable bit (Firmware Rev 8+) */
+const uint32_t MOTOR_ENABLE_BIT  = 0x10000000;  /*!< Enable amplifier for motor (Firmware Rev 8+) */
 
-const AmpIO_UInt32 DOUT_CFG_RESET   = 0x01000000;  /*!< Reset DOUT config (Rev 7+) */
-const AmpIO_UInt32 REBOOT_FPGA      = 0x00300000;  /*!< Reboot FPGA (Rev 7+)       */
-const AmpIO_UInt32 PWR_ENABLE       = 0x000c0000;  /*!< Turn pwr_en on             */
-const AmpIO_UInt32 PWR_DISABLE      = 0x00080000;  /*!< Turn pwr_en off            */
-const AmpIO_UInt32 RELAY_ON         = 0x00030000;  /*!< Turn safety relay on       */
-const AmpIO_UInt32 RELAY_OFF        = 0x00020000;  /*!< Turn safety relay off      */
-const AmpIO_UInt32 ENABLE_MASK      = 0x0000ffff;  /*!< Mask for power enable bits */
-const AmpIO_UInt32 MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current adc bits */
-const AmpIO_UInt32 ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
-const AmpIO_UInt32 ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
-const AmpIO_UInt32 DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
-const AmpIO_UInt32 RESET_KSZ8851    = 0x04000000;  /*!< Mask to reset KSZ8851 Ethernet chip */
-const AmpIO_UInt32 ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
-const AmpIO_UInt32 ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
-const AmpIO_UInt32 ENC_VEL_MASK_16  = 0x0000ffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version <= 5 (16 bits) */
-const AmpIO_UInt32 ENC_VEL_MASK_22  = 0x003fffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version == 6 (22 bits) */
-const AmpIO_UInt32 ENC_VEL_MASK_26  = 0x03ffffff;  /*!< Mask for encoder velocity (period) bits, Firmware Version >= 7 (26 bits) */
+// Offsets into Motor Status (offset 12)
+// For the QLA:
+//   MSTAT_AMP_REQ is set when amplifier enable is requested by the host; note that host enable requests could
+//                 be ignored due to interlocks (e.g., when board power is not enabled)
+//   MSTAT_AMP_STATUS is set to indicate that the amplifier is enabled
+//   MSTAT_AMP_FAULT is based on the FAULT feedback from the amplifier
+//                        1 --> fault (probably thermal shutdown)
+//                        0 --> no fault
+//   MSTAT_SAFETY_DIS is set when the motor current safety check trips
+const uint32_t MSTAT_AMP_STATUS  = 0x20000000;  /*!< Motor status bit for amplifier (1=on, 0=off) (Rev 8+) */
+const uint32_t MSTAT_AMP_REQ     = 0x10000000;  /*!< Motor status bit for amplifier enable request (Rev 8+) */
+const uint32_t MSTAT_SAFETY_DIS  = 0x00020000;  /*!< Motor status bit for safety amp disable (Rev 8+) */
+const uint32_t MSTAT_AMP_FAULT   = 0x00010000;  /*!< Motor status bit for amplifier fault (Rev 8+) */
 
-// The following masks read the most recent quarter-cycle period and the previous one of the same type, which are used
-// for estimating acceleration in Firmware Rev 6+.
-// Following are for Firmware Rev 6, which split the bits among different fields due to packet size limitations.
-const AmpIO_UInt32 ENC_ACC_REC_MS_MASK   = 0xfff00000;   /*!< Mask (into encoder freq/acc) for upper 12 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_REC_LS_MASK   = 0x3fc00000; /*!< Mask (into encoder period) for lower 8 bits of most recent quarter-cycle period */
-const AmpIO_UInt32 ENC_ACC_PREV_MASK     = 0x000fffff; /*!< Mask (into encoder period) for all 20 bits of previous quarter-cycle period */
-// Following are for Firmware Rev 7+, which increased the block read packet size, allowing all bits to be grouped together
-const AmpIO_UInt32 ENC_VEL_QTR_MASK   = 0x03ffffff;   /*!< Mask (into encoder QTR1/QTR5) for all 26 bits of quarter cycle period */
+const uint32_t MIDRANGE_ADC     = 0x00008000;  /*!< Midrange value of ADC bits */
+const uint32_t ENC_PRELOAD      = 0x007fffff;  /*!< Encoder position preload value */
+const int32_t  ENC_MIDRANGE     = 0x00800000;  /*!< Encoder position midrange value */
 
-// Following offsets are for FPGA Firmware Version 6 (22 bits) and 7+ (26 bits)
-// (Note that older versions of software assumed that Firmware Version 6 would have different bit assignments)
-const AmpIO_UInt32 ENC_VEL_OVER_MASK   = 0x80000000;  /*!< Mask for encoder velocity (period) overflow bit */
-const AmpIO_UInt32 ENC_DIR_MASK        = 0x40000000;  /*!< Mask for encoder velocity (period) direction bit */
-const AmpIO_UInt32 ENC_DIR_CHANGE_MASK = 0x20000000;  /*!< Mask for encoder velocity (period) direction change (V7+) */
+// Offsets into status register (all boards, except as noted)
+const uint32_t DOUT_CFG_RESET   = 0x01000000;  /*!< Reset DOUT config (Rev 7+, write only) */
+const uint32_t WDOG_TIMEOUT     = 0x00800000;  /*!< Watchdog timeout (read only) */
+const uint32_t MV_GOOD_BIT      = 0x00080000;  /*!< Motor voltage good (read only) */
+const uint32_t PWR_ENABLE_MASK  = 0x00080000;  /*!< Power enable mask (write only) */
+const uint32_t PWR_ENABLE_BIT   = 0x00040000;  /*!< Power enable status (read/write) */
+const uint32_t PWR_ENABLE       = PWR_ENABLE_MASK|PWR_ENABLE_BIT;
+const uint32_t PWR_DISABLE      = PWR_ENABLE_MASK;
+const uint32_t RELAY_FB         = 0x00020000;  /*!< Safety relay feedback (read only), 0 for DQLA */
+const uint32_t RELAY_MASK       = 0x00020000;  /*!< Safety relay enable mask (write only) */
+const uint32_t RELAY_BIT        = 0x00010000;  /*!< Safety relay enable (read/write) */
+const uint32_t RELAY_ON         = RELAY_MASK|RELAY_BIT;
+const uint32_t RELAY_OFF        = RELAY_MASK;
+
+// Offsets into status register (QLA)
+const uint32_t QLA_DOUT_CFG_VALID = 0x00200000;  /*!< Digital output configuration valid (Rev 7+) */
+const uint32_t QLA_DOUT_CFG       = 0x00100000;  /*!< Digital output configuration, 1=bidir (Rev 7+) */
+const uint32_t QLA_MV_FAULT_BIT   = 0x00008000;  /*!< Motor supply fault (read only, QLA) */
+
+// Offsets into status register (DQLA)
+const uint32_t DQLA_MV_GOOD_2   = 0x00008000;    /*!< Motor voltage good for QLA 2 (read only) */
+const uint32_t DQLA_MV_GOOD_1   = 0x00004000;    /*!< Motor voltage good for QLA 1 (read only) */
+
+// Masks for feedback signals
+const uint32_t MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current adc bits */
+const uint32_t ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
+const uint32_t ADC_MASK         = 0x0000ffff;  /*!< Mask for right aligned ADC bits */
+const uint32_t DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
+const uint32_t ENC_POS_MASK     = 0x00ffffff;  /*!< Encoder position mask (24 bits) */
+const uint32_t ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
+const uint32_t ENC_A_MASK       = 0x10000000;  /*!< Encoder A channel mask (Rev 8+) */
+const uint32_t ENC_B_MASK       = 0x20000000;  /*!< Encoder B channel mask (Rev 8+) */
+const uint32_t ENC_I_MASK       = 0x40000000;  /*!< Encoder I channel mask (Rev 8+) */
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
+const double VEL_PERD_ESPM          = 1.0/40000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
 const double VEL_PERD               = 1.0/49152000;   /* Clock period for velocity measurements (Rev 7+ firmware) */
 const double VEL_PERD_REV6          = 1.0/3072000;    /* Slower clock for velocity measurements (Rev 6 firmware) */
 const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for velocity measurements (prior to Rev 6 firmware) */
 
 const double WDOG_ClockPeriod       = 256.0/(FPGA_sysclk_MHz*1e6);   /* Watchdog clock period, in seconds */
 
-// PROGRESS_CALLBACK: inform the caller when the software is busy waiting: in this case,
-//                    the parameter is NULL, but the function returns an error if
-//                    the callback returns false.
-// ERROR_CALLBACK:    inform the caller of an error; in this case, the error message
-//                    (char *) is passed as a parameter, and the return value is ignored.
-
-#define PROGRESS_CALLBACK(CB, ERR)             \
-    if (CB) { if (!(*CB)(0)) return ERR; }     \
-    else std::cout << '.';
-
-#define ERROR_CALLBACK(CB, MSG)         \
-    if (CB) (*CB)(MSG.str().c_str());   \
-    else { std::cerr << MSG.str() << std::endl; }
-
-
-AmpIO_UInt8 BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 0011
+uint8_t BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 0011
                                 0x2, 0xA, 0x6, 0xE,         // 0100, 0101, 0110, 0111
                                 0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                                 0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
-void AmpIO::EncoderVelocityData::Init()
-{
-    clkPeriod = 1.0;
-    velPeriod = 0;
-    velOverflow = false;
-    velPeriodMax = 0;
-    velDir = false;
-    dirChange = false;
-    encError = false;
-    partialCycle = true;
-    qtr1Period = 0;
-    qtr1Overflow = false;
-    qtr1Dir = false;
-    qtr1Edges = 0;
-    qtr5Period = 0;
-    qtr5Overflow = false;
-    qtr5Dir = false;
-    qtr5Edges = 0;
-    qtrPeriodMax = 0;
-    runPeriod = 0;
-    runOverflow = false;
-}
-
-AmpIO::AmpIO(AmpIO_UInt8 board_id, unsigned int numAxes) : BoardIO(board_id), NumAxes(numAxes),
-                                                           firmwareTime(0.0), collect_state(false), collect_cb(0)
+AmpIO::AmpIO(uint8_t board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0), NumDouts(0),
+                                     dallasState(ST_DALLAS_START), dallasTimeoutSec(10.0), collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
-    InitWriteBuffer();
-    for (size_t i = 0; i < NUM_CHANNELS; i++) {
-        encVelData[i].Init();
-        encErrorCount[i] = 0;
-    }
+    memset(WriteBuffer, 0, sizeof(WriteBuffer));
+    // Calling InitBoard here will initialize as a 4-axis QLA.
+    // InitBoard should be called again from BasePort::AddBoard
+    InitBoard();
 }
 
 AmpIO::~AmpIO()
@@ -135,31 +116,125 @@ AmpIO::~AmpIO()
 
 unsigned int AmpIO::GetReadNumBytes() const
 {
-    return (GetFirmwareVersion() < 7) ? (ReadBufSize_Old*sizeof(quadlet_t)) : (ReadBufSize*sizeof(quadlet_t));
+    uint32_t fver = GetFirmwareVersion();
+    unsigned int numQuads;
+    if (fver < 7) {
+        numQuads = 4 + 4*NumEncoders;
+    } else if (fver == 7) {
+        numQuads = 4 + 6*NumEncoders;
+    }
+    else {
+        numQuads = 4 + 2*NumMotors + 5*NumEncoders;
+    }
+    return numQuads * sizeof(quadlet_t);
 }
 
 void AmpIO::SetReadData(const quadlet_t *buf)
 {
-    unsigned int numQuads = (GetFirmwareVersion() < 7) ? ReadBufSize_Old : ReadBufSize;
-    size_t i;
-    for (i = 0; i < numQuads; i++)
+    unsigned int numQuads = GetReadNumBytes() / sizeof(quadlet_t);
+    unsigned int i;
+    for (i = 0; i < numQuads; i++) {
         ReadBuffer[i] = bswap_32(buf[i]);
-    for (i = 0; i < NUM_CHANNELS; i++)
+    }
+    for (i = 0; i < NumEncoders; i++) {
         SetEncoderVelocityData(i);
+    }
     // Add 1 to timestamp because block read clears counter, rather than incrementing
     firmwareTime += (GetTimestamp()+1)*GetFPGAClockPeriod();
 }
 
+void AmpIO::InitBoard(void)
+{
+    // This method should be called when the port is valid, so that GetHardwareVersion
+    // and GetFirmwareVersion return the correct values.
+    // If the port is not yet valid, these methods will both return 0, so board will be
+    // initialized as a 4-axis QLA and assume firmware version < 8.
+    if (GetHardwareVersion() == dRA1_String) {
+        NumMotors = 10;
+        NumEncoders = 7;
+        NumDouts = 0;
+    }
+    else if (GetHardwareVersion() == DQLA_String) {
+        NumMotors = 8;
+        NumEncoders = 8;
+        NumDouts = 8;
+    }
+    else if (GetHardwareVersion() == BCFG_String) {
+        NumMotors = 0;
+        NumEncoders = 0;
+        NumDouts = 0;
+    }
+    else {
+        NumMotors = 4;
+        NumEncoders = 4;
+        NumDouts = 4;
+    }
+
+    // Check whether buffers are too small (should never happen, but if it does, would
+    // be better to exit rather than just print a message). The alternative is to use
+    // dynamic memory allocation.
+    if ((GetReadNumBytes()/sizeof(quadlet_t)) > ReadBufSize_Max) {
+        std::cerr << "AmpIO: Read buffer size too large: " << GetReadNumBytes()/sizeof(quadlet_t)
+                  << " (max = " << ReadBufSize_Max << ") quadlets" << std::endl;
+    }
+    if ((GetWriteNumBytes()/sizeof(quadlet_t)) > WriteBufSize_Max) {
+        std::cerr << "AmpIO: Write buffer size too large: " << GetWriteNumBytes()/sizeof(quadlet_t)
+                  << " (max = " << WriteBufSize_Max << ") quadlets" << std::endl;
+    }
+
+    ENC_POS_OFFSET      = MOTOR_CURR_OFFSET + NumMotors;
+    ENC_VEL_OFFSET      = ENC_POS_OFFSET    + NumEncoders;
+    ENC_FRQ_OFFSET      = ENC_VEL_OFFSET    + NumEncoders;
+    ENC_QTR1_OFFSET     = ENC_FRQ_OFFSET;
+    ENC_QTR5_OFFSET     = ENC_QTR1_OFFSET   + NumEncoders;
+    ENC_RUN_OFFSET      = ENC_QTR5_OFFSET   + NumEncoders;
+    MOTOR_STATUS_OFFSET = ENC_RUN_OFFSET    + NumEncoders;
+
+    WB_HEADER_OFFSET = 0;   // only used for Firmware Rev 8+
+    WB_CURR_OFFSET = (GetFirmwareVersion() < 8) ? 0 : 1;
+    WB_CTRL_OFFSET = WB_CURR_OFFSET + NumMotors;
+
+    for (size_t i = 0; i < NumEncoders; i++) {
+        encVelData[i].Init();
+        encErrorCount[i] = 0;
+    }
+    InitWriteBuffer();
+}
+
 void AmpIO::InitWriteBuffer(void)
 {
-    quadlet_t data = (BoardId & 0x0F) << 24;
-    for (size_t i = 0; i < NUM_CHANNELS; i++)
-        WriteBuffer[WB_CURR_OFFSET+i] = data;
-    WriteBuffer[WB_CTRL_OFFSET] = 0;
+    if (GetFirmwareVersion() < 8) {
+        WB_CURR_OFFSET = 0;
+        WB_CTRL_OFFSET = WB_CURR_OFFSET + NumMotors;
+        quadlet_t data = (BoardId & 0x0F) << 24;
+        for (size_t i = 0; i < NumMotors; i++) {
+            WriteBuffer[WB_CURR_OFFSET+i] = data;
+        }
+        WriteBuffer[WB_CTRL_OFFSET] = 0;
+    } else {
+        WB_CURR_OFFSET = 1;
+        WB_CTRL_OFFSET = WB_CURR_OFFSET + NumMotors;
+        //std::fill(std::begin(WriteBuffer), std::end(WriteBuffer), 0);
+        memset(WriteBuffer, 0, sizeof(WriteBuffer));
+        // Write buffer size = NumMotors+2 (quadlets)
+        WriteBuffer[WB_HEADER_OFFSET] = (BoardId & 0x0F) << 8 | ((NumMotors+2) & 0xFF);
+    }
+}
+
+unsigned int AmpIO::GetWriteNumBytes(void) const
+{
+    unsigned int numQuads;
+    if (GetFirmwareVersion() < 8) {
+        numQuads = NumMotors + 1;
+    } else {
+        numQuads = NumMotors + 2;
+    }
+    return numQuads * sizeof(quadlet_t);
 }
 
 bool AmpIO::GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQuads, bool doSwap) const
 {
+    unsigned int WriteBufSize = GetWriteNumBytes() / sizeof(quadlet_t);
     if ((offset+numQuads) > WriteBufSize) {
         std::cerr << "AmpIO:GetWriteData: invalid args: " << offset << ", " << numQuads << std::endl;
         return false;
@@ -172,62 +247,44 @@ bool AmpIO::GetWriteData(quadlet_t *buf, unsigned int offset, unsigned int numQu
 
 bool AmpIO::WriteBufferResetsWatchdog(void) const
 {
-    return
-        (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 2] & VALID_BIT)
-        | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
-}
-
-AmpIO_UInt32 AmpIO::GetFirmwareVersion(void) const
-{
-    return (port ? port->GetFirmwareVersion(BoardId) : 0);
-}
-
-std::string AmpIO::GetFPGASerialNumber(void)
-{
-    // Format: FPGA 1234-56 (12 bytes) or FPGA 1234-567 (13 bytes).
-    // Note that on PROM, the string is terminated by 0xff because the sector
-    // is first erased (all bytes set to 0xff) before the string is written.
-    AmpIO_UInt32 address = 0x001FFF00;
-    char data[20];
-    std::string sn;
-    const size_t FPGASNSize = 13;
-    const size_t bytesToRead = (FPGASNSize+3)&0xFC;  // must be multiple of 4
-
-    data[FPGASNSize] = 0;    // Make sure null-terminated
-    if (PromReadData(address, (AmpIO_UInt8 *)data, bytesToRead)) {
-        if (strncmp(data, "FPGA ", 5) == 0) {
-            char *p = strchr(data+5, 0xff);
-            if (p) *p = 0;      // Null terminate at first 0xff
-            sn.assign(data+5);
-        }
+    bool ret = true;
+    if (GetFirmwareVersion() < 8) {
+        // For Firmware versions prior to Rev 7, we must check whether any DAC valid bit
+        // is set. For now, we also perform this check for Firmware Rev 7, but it could
+        // be removed. Starting with Firmware Rev 7, the power control quadlet is always
+        // written, so the watchdog is always reset.
+        ret = (WriteBuffer[WB_CURR_OFFSET + 0] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 1] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 2] & VALID_BIT)
+            | (WriteBuffer[WB_CURR_OFFSET + 3] & VALID_BIT);
     }
-    else
-        std::cerr << "AmpIO::GetFPGASerialNumber: failed to read FPGA Serial Number" << std::endl;
-    return sn;
+    return ret;
 }
 
-std::string AmpIO::GetQLASerialNumber(void)
+std::string AmpIO::GetQLASerialNumber(unsigned char chan)
 {
     // Format: QLA 1234-56 or QLA 1234-567.
     // String is terminated by 0 or 0xff.
-    AmpIO_UInt16 address = 0x0000;
-    AmpIO_UInt8 data[20];
+    uint16_t address = 0x0000;
+    uint8_t data[20];
     const size_t QLASNSize = 12;
     std::string sn;
 
     data[QLASNSize] = 0;  // make sure null-terminated
     for (size_t i = 0; i < QLASNSize; i++) {
-        if (!PromReadByte25AA128(address, data[i])) {
-            std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+        if (!PromReadByte25AA128(address, data[i], chan)) {
+            if (chan == 0)
+                std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+            else
+                std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA " << static_cast<unsigned int>(chan)
+                          << " Serial Number" << std::endl;
             break;
         }
         if (data[i] == 0xff)
             data[i] = 0;
         address += 1;
     }
-    if (strncmp((char *)data, "QLA ", 4) == 0)
+    if (strncmp((char *)data, "QLA ", 4) == 0 || strncmp((char *)data, "dRA ", 4) == 0)
         sn.assign((char *)data+4);
     return sn;
 }
@@ -235,45 +292,56 @@ std::string AmpIO::GetQLASerialNumber(void)
 void AmpIO::DisplayReadBuffer(std::ostream &out) const
 {
     // first two quadlets are timestamp and status, resp.
-    out << std::hex << ReadBuffer[0] << std::endl;
-    out << std::hex << ReadBuffer[1] << std::endl;
+    out << std::hex << ReadBuffer[TIMESTAMP_OFFSET] << std::endl;
+    out << std::hex << ReadBuffer[STATUS_OFFSET] << std::endl;
     // next two quadlets are digital I/O and amplifier temperature
-    out << std::hex << ReadBuffer[2] << std::endl;
-    out << std::hex << ReadBuffer[3] << std::endl;
+    out << std::hex << ReadBuffer[DIGIO_OFFSET] << std::endl;
+    out << std::hex << ReadBuffer[TEMP_OFFSET] << std::endl;
 
-    // remaining quadlets are in 4 groups of NUM_CHANNELS as follows:
+    // remaining quadlets are in groups of NumMotors/NumEncoders as follows:
     //   - motor current and analog pot per channel
     //   - encoder position per channel
     //   - encoder velocity per channel
     //   - encoder acceleration data (depends on firmware version)
-    for (unsigned int i=4; i < GetReadNumBytes()/sizeof(quadlet_t); i++) {
+    unsigned int i;
+    for (i = MOTOR_CURR_OFFSET; i < ENC_POS_OFFSET; i++)
         out << std::hex << ReadBuffer[i] << " ";
-        if (!((i-1)%NUM_CHANNELS)) out << std::endl;
+    out << std::endl;
+    for (i = ENC_POS_OFFSET; i < ENC_VEL_OFFSET; i++)
+        out << std::hex << ReadBuffer[i] << " ";
+    out << std::endl;
+    for (i = ENC_VEL_OFFSET; i < ENC_QTR1_OFFSET; i++)
+        out << std::hex << ReadBuffer[i] << " ";
+    out << std::endl;
+    for (i = ENC_QTR1_OFFSET; i < ENC_QTR5_OFFSET; i++)
+        out << std::hex << ReadBuffer[i] << " ";
+    out << std::endl;
+    for (i = ENC_QTR5_OFFSET; i < ENC_RUN_OFFSET; i++)
+        out << std::hex << ReadBuffer[i] << " ";
+    out << std::endl;
+    for (i = ENC_RUN_OFFSET; i < MOTOR_STATUS_OFFSET; i++)
+        out << std::hex << ReadBuffer[i] << " ";
+    out << std::endl;
+    if (GetFirmwareVersion() >= 8) {
+        for (i = MOTOR_STATUS_OFFSET; i < GetReadNumBytes()/sizeof(quadlet_t); i++)
+            out << std::hex << ReadBuffer[i] << " ";
+        out << std::endl;
     }
     out << std::dec;
 }
 
-double AmpIO::GetFPGAClockPeriod(void) const
+bool AmpIO::HasQLA() const
 {
-    return (1.0e-6/FPGA_sysclk_MHz);
+    return (GetHardwareVersion() == QLA1_String) ||
+           (GetHardwareVersion() == DQLA_String);
 }
 
-bool AmpIO::HasEthernet(void) const
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return false;
-    // Bit 31 indicates whether Ethernet is present
-    return (read_data&0x80000000);
-}
-
-AmpIO_UInt32 AmpIO::GetStatus(void) const
+uint32_t AmpIO::GetStatus(void) const
 {
     return ReadBuffer[STATUS_OFFSET];
 }
 
-AmpIO_UInt32 AmpIO::GetTimestamp(void) const
+uint32_t AmpIO::GetTimestamp(void) const
 {
     return ReadBuffer[TIMESTAMP_OFFSET];
 }
@@ -283,91 +351,189 @@ double AmpIO::GetTimestampSeconds(void) const
     return GetTimestamp()*GetFPGAClockPeriod();
 }
 
-AmpIO_UInt32 AmpIO::GetDigitalInput(void) const
+uint32_t AmpIO::GetDigitalInput(void) const
 {
     return ReadBuffer[DIGIO_OFFSET];
 }
 
-AmpIO_UInt8 AmpIO::GetDigitalOutput(void) const
+uint8_t AmpIO::GetDigitalOutput(void) const
 {
     // Starting with Version 1.3.0 of this library, the digital outputs are inverted
     // before being returned to the caller because they are inverted in hardware and/or firmware.
     // This way, the digital output state matches the hardware state (i.e., 0 means digital output
     // is at 0V).
-    AmpIO_UInt8 dout = static_cast<AmpIO_UInt8>((~(ReadBuffer[DIGIO_OFFSET]>>12))&0x000f);
+    uint8_t dout = static_cast<uint8_t>((~(ReadBuffer[DIGIO_OFFSET]>>12))&0x0000000f);
+
     // Firmware versions < 5 have bits in reverse order with respect to schematic
     if (GetFirmwareVersion() < 5)
         dout = BitReverse4[dout];
+
+    if (GetHardwareVersion() == DQLA_String) {
+        dout |= static_cast<uint8_t>((~(ReadBuffer[DIGIO_OFFSET]>>24))&0x000000f0);
+    }
     return dout;
 }
 
-AmpIO_UInt8 AmpIO::GetNegativeLimitSwitches(void) const
+uint8_t AmpIO::GetNegativeLimitSwitches(void) const
 {
-    return (this->GetDigitalInput()&0x0f00)>>8;
+    uint8_t neglim = static_cast<uint8_t>((this->GetDigitalInput()&0x00000f00)>>8);
+    if (GetHardwareVersion() == DQLA_String) {
+        neglim |= static_cast<uint8_t>((this->GetDigitalInput()&0x0f000000)>>20);
+    }
+    return neglim;
 }
 
-AmpIO_UInt8 AmpIO::GetPositiveLimitSwitches(void) const
+uint8_t AmpIO::GetPositiveLimitSwitches(void) const
 {
-    return (this->GetDigitalInput()&0x00f0)>>4;
+    uint8_t poslim = static_cast<uint8_t>((this->GetDigitalInput()&0x000000f0)>>4);
+    if (GetHardwareVersion() == DQLA_String) {
+        poslim |= static_cast<uint8_t>((this->GetDigitalInput()&0x00f000f0)>>16);
+    }
+    return poslim;
 }
 
-AmpIO_UInt8 AmpIO::GetHomeSwitches(void) const
+uint8_t AmpIO::GetHomeSwitches(void) const
 {
-    return (this->GetDigitalInput()&0x00f);
+    uint8_t home = static_cast<uint8_t>(this->GetDigitalInput()&0x0000000f);
+    if (GetHardwareVersion() == DQLA_String) {
+        home |= static_cast<uint8_t>((this->GetDigitalInput()&0x000f0000)>>12);
+    }
+    return home;
 }
 
-AmpIO_UInt8 AmpIO::GetEncoderChannelA(void) const
+uint8_t AmpIO::GetEncoderChannelA(void) const
 {
-    return (this->GetDigitalInput()&0x0f000000)>>24;
+    uint8_t encA;
+    if (GetHardwareVersion() == DQLA_String) {
+        // This also works for QLA with Rev 8+
+        encA = 0;
+        for (unsigned int i = 0; i < NumEncoders; i++) {
+            if (ReadBuffer[ENC_POS_OFFSET+i]&ENC_A_MASK)
+                encA |= (1 << i);
+        }
+    }
+    else {
+        encA =  static_cast<uint8_t>((this->GetDigitalInput()&0x0f000000)>>24);
+    }
+ return encA;
 }
 
 bool AmpIO::GetEncoderChannelA(unsigned int index) const
 {
-    const AmpIO_UInt8 mask = (0x0001 << index);
+    const uint8_t mask = (0x01 << index);
     return GetEncoderChannelA()&mask;
 }
 
-AmpIO_UInt8 AmpIO::GetEncoderChannelB(void) const
+uint8_t AmpIO::GetEncoderChannelB(void) const
 {
-    return (this->GetDigitalInput()&0x00f00000)>>20;
+    uint8_t encB;
+    if (GetHardwareVersion() == DQLA_String) {
+        // This also works for QLA with Rev 8+
+        encB = 0;
+        for (unsigned int i = 0; i < NumEncoders; i++) {
+            if (ReadBuffer[ENC_POS_OFFSET+i]&ENC_B_MASK)
+                encB |= (1 << i);
+        }
+    }
+    else {
+        encB =  static_cast<uint8_t>((this->GetDigitalInput()&0x00f00000)>>20);
+    }
+    return encB;
 }
 
 bool AmpIO::GetEncoderChannelB(unsigned int index) const
 {
-    const AmpIO_UInt8 mask = (0x0001 << index);
+    const uint8_t mask = (0x01 << index);
     return GetEncoderChannelB()&mask;
 }
 
-AmpIO_UInt8 AmpIO::GetEncoderIndex(void) const
+uint8_t AmpIO::GetEncoderIndex(void) const
 {
-    return (this->GetDigitalInput()&0x000f0000)>>16;
+    uint8_t encI;
+    if (GetHardwareVersion() == DQLA_String) {
+        // This also works for QLA with Rev 8+
+        encI = 0;
+        for (unsigned int i = 0; i < NumEncoders; i++) {
+            if (ReadBuffer[ENC_POS_OFFSET+i]&ENC_I_MASK)
+                encI |= (1 << i);
+        }
+    }
+    else {
+        encI =  static_cast<uint8_t>((this->GetDigitalInput()&0x000f0000)>>16);
+    }
+    return encI;
 }
 
-AmpIO_UInt8 AmpIO::GetAmpTemperature(unsigned int index) const
+uint8_t AmpIO::GetAmpTemperature(unsigned int index) const
 {
-    AmpIO_UInt8 temp = 0;
+    uint8_t temp = 0;
     if (index == 0)
         temp = (ReadBuffer[TEMP_OFFSET]>>8) & 0x000000ff;
     else if (index == 1)
         temp = ReadBuffer[TEMP_OFFSET] & 0x000000ff;
+    else if (GetHardwareVersion() == DQLA_String) {
+        if (index == 2)
+            temp = (ReadBuffer[TEMP_OFFSET]>>24) & 0x000000ff;
+        else if (index == 3)
+            temp = (ReadBuffer[TEMP_OFFSET]>>16) & 0x000000ff;
+    }
     return temp;
 }
 
-AmpIO_UInt32 AmpIO::GetMotorCurrent(unsigned int index) const
+uint32_t AmpIO::GetMotorCurrent(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumMotors)
         return 0L;
 
     quadlet_t buff;
     buff = ReadBuffer[index+MOTOR_CURR_OFFSET];
     buff &= MOTOR_CURR_MASK;       // mask for applicable bits
 
-    return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
+    return static_cast<uint32_t>(buff) & ADC_MASK;
 }
 
-AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
+bool AmpIO::GetMotorCurrent(unsigned int index, double &amps) const
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumMotors)
+        return false;
+    uint32_t bits = GetMotorCurrent(index);
+    const double Bits2AmpsQLA = (2.5*5.0/65536);
+    amps = bits*Bits2AmpsQLA - 6.25;
+    return true;
+}
+
+uint32_t AmpIO::GetMotorStatus(unsigned int index) const
+{
+    if (index >= NumMotors)
+        return 0L;
+
+    if (GetFirmwareVersion() < 8)
+        return 0L;
+
+    return static_cast<uint32_t>(ReadBuffer[index+MOTOR_STATUS_OFFSET]);
+}
+
+// For dRA1 only
+double AmpIO::GetMotorVoltageRatio(unsigned int index) const
+{
+    if (GetHardwareVersion() != dRA1_String)
+        return 0.0;
+
+    if (index >= NumMotors) {
+        return 0.0;
+    }
+    quadlet_t buff;
+    buff = ReadBuffer[index+MOTOR_STATUS_OFFSET];
+    int16_t raw = buff & 0xffff;
+    return (raw >> 5) / 1023.0l;
+}
+
+uint32_t AmpIO::GetAnalogInput(unsigned int index) const
+{
+    // Checking against NumMotors is correct because the analog input (e.g., pot) is in the same
+    // quadlet as the motor current feedback. Logically, it would have made more sense to use
+    // NumEncoders, since the number of pots would likely match the number of encoders.
+    if (index >= NumMotors)
         return 0L;
 
     quadlet_t buff;
@@ -375,25 +541,27 @@ AmpIO_UInt32 AmpIO::GetAnalogInput(unsigned int index) const
     buff &= ANALOG_POS_MASK;       // mask for applicable bits
     buff >>= 16;                   // shift to lsb alignment
 
-    return static_cast<AmpIO_UInt32>(buff) & ADC_MASK;
+    return static_cast<uint32_t>(buff) & ADC_MASK;
 }
 
-AmpIO_Int32 AmpIO::GetEncoderPosition(unsigned int index) const
+int32_t AmpIO::GetEncoderPosition(unsigned int index) const
 {
-    if (index < NUM_CHANNELS) {
-        return static_cast<AmpIO_Int32>(ReadBuffer[index + ENC_POS_OFFSET] & ENC_POS_MASK) - ENC_MIDRANGE;
+    if (index < NumEncoders) {
+        return static_cast<int32_t>(ReadBuffer[index + ENC_POS_OFFSET] & ENC_POS_MASK) - ENC_MIDRANGE;
     }
     return 0;
 }
 
 bool AmpIO::GetEncoderOverflow(unsigned int index) const
 {
-    if (index < NUM_CHANNELS) {
+    if (GetHardwareVersion() == dRA1_String)
+        return false;
+
+    if (index < NumEncoders) {
         return ReadBuffer[index+ENC_POS_OFFSET] & ENC_OVER_MASK;
-    }
-    else {
+    } else {
         std::cerr << "AmpIO::GetEncoderOverflow: index out of range " << index
-                  << ", nb channels is " << NUM_CHANNELS << std::endl;
+                  << ", nb channels is " << NumEncoders << std::endl;
     }
     return true; // send error "code"
 }
@@ -401,117 +569,43 @@ bool AmpIO::GetEncoderOverflow(unsigned int index) const
 double AmpIO::GetEncoderClockPeriod(void) const
 {
     // Could instead return encVelData[0].clkPeriod
-    AmpIO_UInt32 fver = GetFirmwareVersion();
+    uint32_t fver = GetFirmwareVersion();
     if (fver < 6)
         return VEL_PERD_OLD;
     else if (fver == 6)
         return VEL_PERD_REV6;
-    return VEL_PERD;
+    return (GetHardwareVersion() == dRA1_String) ? VEL_PERD_ESPM : VEL_PERD;
 }
 
 // Returns encoder velocity in counts/sec -> 4/period
 double AmpIO::GetEncoderVelocity(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumEncoders)
         return 0L;
-
-    double clkPeriod = encVelData[index].clkPeriod;
-    AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;
-
-    // Avoid divide by 0 (should never happen)
-    if (velPeriod == 0) velPeriod = 1;
-
-    double vel = 0.0;
-    if (!encVelData[index].velOverflow && !encVelData[index].dirChange) {
-        vel = 4.0/(velPeriod*clkPeriod);
-        if (!encVelData[index].velDir)
-            vel = -vel;
-    }
-
-    return vel;
+    return encVelData[index].GetEncoderVelocity();
 }
 
 // Returns predicted encoder velocity in counts/sec, taking into account
 // acceleration and running counter.
 double AmpIO::GetEncoderVelocityPredicted(unsigned int index, double percent_threshold) const
 {
-    double encVel = GetEncoderVelocity(index);
-    double encAcc = GetEncoderAcceleration(index, percent_threshold);
-    // The encoder measurement delay is half the measured period, based on the assumption that measuring the
-    // period over a full cycle (4 quadrature counts) estimates the velocity in the middle of that cycle.
-    double encDelay = encVelData[index].velPeriod*encVelData[index].clkPeriod/2.0;
-    double encRun = GetEncoderRunningCounterSeconds(index);
-    double deltaVel = encAcc*(encDelay+encRun);
-    double predVel = encVel+deltaVel;
-    if (encVel < 0) {
-        // Do not change velocity direction
-        if (predVel > 0.0)
-            predVel = 0.0;
-        // Maximum velocity limited by 1 count (i.e., we know
-        // that a count has not happened for encRun seconds)
-        if (predVel*encRun < -1.0)
-            predVel = -1.0/encRun;
-    }
-    else if (encVel > 0.0) {
-        // Do not change velocity direction
-        if (predVel < 0.0)
-            predVel = 0.0;
-        // Maximum velocity limited by 1 count (i.e., we know
-        // that a count has not happened for encRun seconds)
-        if (predVel*encRun > 1.0)
-            predVel = 1.0/encRun;
-    }
-    else {
-        // If not moving, do not attempt to predict
-        predVel = 0.0;
-    }
-    return predVel;
+    if (index >= NumEncoders)
+        return 0.0;
+    return encVelData[index].GetEncoderVelocityPredicted(percent_threshold);
 }
 
 // Estimate acceleration from two quarters of the same type; units are counts/second**2
 // Valid for firmware version 6+.
 double AmpIO::GetEncoderAcceleration(unsigned int index, double percent_threshold) const
 {
-
-    if (index >= NUM_CHANNELS)
+    if (index >= NumEncoders)
         return 0.0;
-
-    if (encVelData[index].velOverflow)
-        return 0.0;
-
-    double clkPeriod = encVelData[index].clkPeriod;
-    AmpIO_UInt32 qtr1Period = encVelData[index].qtr1Period;               // Current quarter-cycle period
-    AmpIO_UInt32 qtr5Period = encVelData[index].qtr5Period;               // Previous quarter-cycle period of same type
-    AmpIO_UInt32 velPeriod = encVelData[index].velPeriod;                 // Current full-cycle period
-    AmpIO_UInt32 velPeriodPrev = velPeriod - qtr1Period + qtr5Period;     // Previous full-cycle period
-    if (encVelData[index].qtr5Overflow)
-        velPeriodPrev = encVelData[index].velPeriodMax;
-
-    // Should never happen
-    if ((qtr1Period == 0) || (qtr5Period == 0) || (velPeriod == 0) || (velPeriodPrev == 0))
-        return 0.0;
-
-    if (encVelData[index].qtr1Edges != encVelData[index].qtr5Edges)
-        return 0.0;
-
-    if ((encVelData[index].qtr1Dir != encVelData[index].qtr5Dir) || (encVelData[index].qtr1Dir != encVelData[index].velDir))
-        return 0.0;
-
-    double acc = 0.0;
-    if (1.0/qtr1Period <= percent_threshold) {
-        double qtrDiff = static_cast<double>(qtr5Period) - static_cast<double>(qtr1Period);
-        double qtrSum = static_cast<double>(qtr5Period + qtr1Period);
-        double velProd = static_cast<double>(velPeriod)*static_cast<double>(velPeriodPrev)*clkPeriod*clkPeriod;
-        acc = (8.0*qtrDiff)/(velProd*qtrSum);
-        if (!encVelData[index].velDir)
-            acc = -acc;
-    }
-    return acc;
+    return encVelData[index].GetEncoderAcceleration(percent_threshold);
 }
 
 // Raw velocity field; includes period of velocity and other data, depending on firmware version.
 // For firmware version 6, includes part of AccRec. For later firmware versions, no AccRec
-AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
+uint32_t AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 {
     return ReadBuffer[index+ENC_VEL_OFFSET];
 }
@@ -521,28 +615,28 @@ AmpIO_UInt32 AmpIO::GetEncoderVelocityRaw(unsigned int index) const
 // For Firmware Version 6, it was reused to return some data that can be used to estimate the acceleration.
 // For Firmware Version 7+, it returns QTR1; note that this method is equivalent to GetEncoderQtr1Raw because
 // ENC_FRQ_OFFSET == ENC_QTR1_OFFSET. For testing only.
-AmpIO_UInt32 AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
+uint32_t AmpIO::GetEncoderAccelerationRaw(unsigned int index) const
 {
     return ReadBuffer[index+ENC_FRQ_OFFSET];
 }
 
 // Get the most recent encoder quarter cycle period for internal use and testing (Rev 7+).
 // Note that this is equivalent to GetEncoderAccelerationRaw because ENC_FRQ_OFFSET == ENC_QTR1_OFFSET
-AmpIO_UInt32 AmpIO::GetEncoderQtr1Raw(unsigned int index) const
+uint32_t AmpIO::GetEncoderQtr1Raw(unsigned int index) const
 {
     return ReadBuffer[index+ENC_QTR1_OFFSET];
 }
 
 // Get the encoder quarter cycle period from 5 cycles ago (i.e., 4 cycles prior to the one returned
 // by GetEncoderQtr1) for internal use and testing (Rev 7+).
-AmpIO_UInt32 AmpIO::GetEncoderQtr5Raw(unsigned int index) const
+uint32_t AmpIO::GetEncoderQtr5Raw(unsigned int index) const
 {
     return ReadBuffer[index+ENC_QTR5_OFFSET];
 }
 
 // Get the encoder running counter, which measures the elasped time since the last encoder edge;
 // for internal use and testing (Rev 7+).
-AmpIO_UInt32 AmpIO::GetEncoderRunningCounterRaw(unsigned int index) const
+uint32_t AmpIO::GetEncoderRunningCounterRaw(unsigned int index) const
 {
     return ReadBuffer[index+ENC_RUN_OFFSET];
 }
@@ -551,116 +645,43 @@ AmpIO_UInt32 AmpIO::GetEncoderRunningCounterRaw(unsigned int index) const
 // also supports the running counter in Firmware Rev 4-5.
 double AmpIO::GetEncoderRunningCounterSeconds(unsigned int index) const
 {
-    return (encVelData[index].runPeriod)*(encVelData[index].clkPeriod);
+    if (index >= NumEncoders)
+        return 0.0;
+    return encVelData[index].GetEncoderRunningCounterSeconds();
 }
 
-AmpIO_Int32 AmpIO::GetEncoderMidRange(void)
+int32_t AmpIO::GetEncoderMidRange(void)
 {
     return ENC_MIDRANGE;
 }
 
 bool AmpIO::SetEncoderVelocityData(unsigned int index)
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumEncoders)
         return false;
 
-    encVelData[index].Init();  // Set default values
-    AmpIO_UInt32 fver = GetFirmwareVersion();
-
+    uint32_t fver = GetFirmwareVersion();
     if (fver < 6) {
-        // Prior to Firmware Version 6, the latched counter value is returned
-        // as the lower 16 bits. Starting with Firmware Version 4, the upper 16 bits are
-        // the free-running counter, which was not used.
-        // Note that the counter values are signed, so we convert to unsigned and set a direction bit
-        // to be consistent with later versions of firmware.
-        encVelData[index].clkPeriod = VEL_PERD_OLD;
-        encVelData[index].velPeriodMax = ENC_VEL_MASK_16;
-        AmpIO_UInt16 velPeriod = static_cast<AmpIO_UInt16>(ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_16);
-        // Convert from signed count to unsigned count and direction
-        if (velPeriod == 0x8000) { // if overflow
-            encVelData[index].velPeriod = 0x00007fff;
-            encVelData[index].velOverflow = true;
-            // Firmware also sets velPeriod to overflow when direction change occurred, so could potentially
-            // set encVelData[index].dirChange = true.
-        }
-        else if (velPeriod & 0x8000) {  // if negative
-            velPeriod = ~velPeriod;     // ones complement (16-bits)
-            encVelData[index].velPeriod = velPeriod + 1;  // twos complement (32-bits)
-            encVelData[index].velDir = false;
-        }
-        else {
-            encVelData[index].velPeriod = velPeriod;
-            encVelData[index].velDir = true;
-        }
-        if (fver >= 4) {
-            AmpIO_UInt16 runCtr = static_cast<AmpIO_UInt16>((ReadBuffer[ENC_VEL_OFFSET+index]>>16) & ENC_VEL_MASK_16);
-            // Convert from signed count to unsigned count and direction
-            if (runCtr == 0x8000) {  // if overflow
-                encVelData[index].runOverflow = true;
-                runCtr = 0x7fff;
-            }
-            else if (runCtr & 0x8000) {  // if negative
-                runCtr = ~runCtr;        // ones complement (16-bits)
-                runCtr += 1;             // twos complement (16-bits)
-            }
-            encVelData[index].runPeriod = static_cast<AmpIO_UInt32>(runCtr);
-        }
+        encVelData[index].SetDataOld(ReadBuffer[ENC_VEL_OFFSET+index], (fver >= 4));
     }
     else if (fver == 6) {
-        encVelData[index].clkPeriod = VEL_PERD_REV6;
-        encVelData[index].velPeriodMax = ENC_VEL_MASK_22;
-        encVelData[index].qtrPeriodMax = ENC_ACC_PREV_MASK;  // 20 bits
-        // Firmware 6 has bits stuffed in different places:
-        //   Q1: lower 8 bits in velPeriod[29:22] and upper 12 bits in accQtr1[31:20]
-        //   Q5: all 20 bits in accQtr1[19:0]
-        encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_22;
-        encVelData[index].qtr1Period = (((ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_REC_MS_MASK)>>12) |
-                          ((ReadBuffer[ENC_VEL_OFFSET+index] & ENC_ACC_REC_LS_MASK) >> 22)) & ENC_ACC_PREV_MASK;
-        encVelData[index].qtr5Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_ACC_PREV_MASK;
-        encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
-        // Qtr1 and Qtr5 overflow at 0x000fffff (no overflow bit is set by firmware)
-        if (encVelData[index].qtr1Period == encVelData[index].qtrPeriodMax)
-            encVelData[index].qtr1Overflow = true;
-        if (encVelData[index].qtr5Period == encVelData[index].qtrPeriodMax)
-            encVelData[index].qtr5Overflow = true;
-        // Qtr1 and Qtr5 direction are not recorded, so set them same as velDir;
-        // i.e., assume that there hasn't been a direction change.
-        encVelData[index].qtr1Dir = encVelData[index].velDir;
-        encVelData[index].qtr5Dir = encVelData[index].velDir;
+        encVelData[index].SetDataRev6(ReadBuffer[ENC_VEL_OFFSET+index], ReadBuffer[ENC_QTR1_OFFSET+index]);
     }
     else {  // V7+
-        encVelData[index].clkPeriod = VEL_PERD;
-        encVelData[index].velPeriodMax = ENC_VEL_MASK_26;
-        encVelData[index].qtrPeriodMax = ENC_VEL_QTR_MASK;  // 26 bits
-        encVelData[index].velPeriod = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_MASK_26;
-        encVelData[index].velOverflow = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].velDir = ReadBuffer[ENC_VEL_OFFSET+index] & ENC_DIR_MASK;
-        encVelData[index].dirChange = ReadBuffer[ENC_VEL_OFFSET+index] & 0x20000000;
-        encVelData[index].encError = ReadBuffer[ENC_VEL_OFFSET+index] & 0x10000000;
-        encVelData[index].partialCycle = ReadBuffer[ENC_VEL_OFFSET+index] & 0x08000000;
-        encVelData[index].qtr1Period = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_VEL_QTR_MASK;
-        encVelData[index].qtr1Overflow = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].qtr1Dir = ReadBuffer[ENC_QTR1_OFFSET+index] & ENC_DIR_MASK;
-        encVelData[index].qtr1Edges = (ReadBuffer[ENC_QTR1_OFFSET+index]>>26)&0x0f;
-        encVelData[index].qtr5Period = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_VEL_QTR_MASK;
-        encVelData[index].qtr5Overflow = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_VEL_OVER_MASK;
-        encVelData[index].qtr5Dir = ReadBuffer[ENC_QTR5_OFFSET+index] & ENC_DIR_MASK;
-        encVelData[index].qtr5Edges = (ReadBuffer[ENC_QTR5_OFFSET+index]>>26)&0x0f;
-        encVelData[index].runPeriod = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_QTR_MASK;
-        encVelData[index].runOverflow = ReadBuffer[ENC_RUN_OFFSET+index] & ENC_VEL_OVER_MASK;
+        bool isESPM = (GetHardwareVersion() == dRA1_String);
+        encVelData[index].SetData(ReadBuffer[ENC_VEL_OFFSET+index], ReadBuffer[ENC_QTR1_OFFSET+index],
+                                  ReadBuffer[ENC_QTR5_OFFSET+index], ReadBuffer[ENC_RUN_OFFSET+index], isESPM);
     }
-
     // Increment error counter if necessary
-    if (encVelData[index].encError)
+    if (encVelData[index].IsEncoderError())
         encErrorCount[index]++;
 
     return true;
 }
 
-bool AmpIO::GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data) const
+bool AmpIO::GetEncoderVelocityData(unsigned int index, EncoderVelocity &data) const
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumEncoders)
         return false;
     data = encVelData[index];
     return true;
@@ -668,91 +689,178 @@ bool AmpIO::GetEncoderVelocityData(unsigned int index, EncoderVelocityData &data
 
 unsigned int AmpIO::GetEncoderErrorCount(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumEncoders)
         return 0;
     return encErrorCount[index];
 }
 
 bool AmpIO::ClearEncoderErrorCount(unsigned int index)
 {
-    if (index > NUM_CHANNELS)
-        return false;
-
-    if (index == NUM_CHANNELS) {
+    bool ret = true;
+    if (index == MAX_CHANNELS) {
         // Clear all counters
-        for (unsigned int i = 0; i < NUM_CHANNELS; i++)
+        for (unsigned int i = 0; i < NumEncoders; i++)
             encErrorCount[i] = 0;
     }
-    else {
+    else if (index < NumEncoders) {
         encErrorCount[index] = 0;
     }
-
-    return true;
+    else {
+        ret = false;
+    }
+    return ret;
 }
 
 bool AmpIO::GetPowerEnable(void) const
 {
     // Bit 18
-    return (GetStatus()&0x00040000);
+    return (GetStatus() & PWR_ENABLE_BIT);
 }
 
-bool AmpIO::GetPowerStatus(void) const
+bool AmpIO::GetPowerStatus(unsigned int index) const
 {
     // Bit 19: MV_GOOD
-    return (GetStatus()&0x00080000);
+    uint32_t status = GetStatus();
+    bool ret = status & MV_GOOD_BIT;
+    if (GetHardwareVersion() == DQLA_String) {
+        uint32_t mask = 0;
+        if (index&1) mask |= DQLA_MV_GOOD_1;
+        if (index&2) mask |= DQLA_MV_GOOD_2;
+        if (mask != 0)
+            ret = ((status & mask) == mask);
+    }
+    return ret;
 }
 
 bool AmpIO::GetPowerFault(void) const
 {
-    // Bit 15: motor power fault
-    return (GetStatus()&0x00008000);
+    bool ret = false;
+    if (GetHardwareVersion() == QLA1_String) {
+        // Bit 15: motor power fault
+        ret = GetStatus() & QLA_MV_FAULT_BIT;
+    }
+    return ret;
 }
 
 bool AmpIO::GetSafetyRelay(void) const
 {
     // Bit 16
-    return (GetStatus()&0x00010000);
+    return (GetStatus() & RELAY_BIT);
 }
 
 bool AmpIO::GetSafetyRelayStatus(void) const
 {
+    // DQLA does not have this feedback (uses LEDs instead),
+    // so we just return true if the relay should be on.
+    if (GetHardwareVersion() == DQLA_String)
+        return GetSafetyRelay();
+
     // Bit 17
-    return (GetStatus()&0x00020000);
+    return (GetStatus() & RELAY_FB);
 }
 
 bool AmpIO::GetWatchdogTimeoutStatus(void) const
 {
     // Bit 23
-    return (GetStatus()&0x00800000);
+    return (GetStatus() & WDOG_TIMEOUT);
 }
 
 bool AmpIO::GetAmpEnable(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumMotors)
         return false;
-    AmpIO_UInt32 mask = (0x00000001 << index);
-    return GetStatus()&mask;
+
+    bool ret;
+    if (GetFirmwareVersion() < 8) {
+        uint32_t mask = (0x00000001 << index);
+        ret = GetStatus()&mask;
+    }
+    else {
+        ret = ReadBuffer[MOTOR_STATUS_OFFSET + index] & MSTAT_AMP_REQ;
+    }
+    return ret;
 }
 
-AmpIO_UInt8 AmpIO::GetAmpEnableMask(void) const
+uint8_t AmpIO::GetAmpEnableMask(void) const
 {
-    return GetStatus()&0x0000000f;
+    uint8_t ampEnable = 0;
+    if (GetHardwareVersion() == QLA1_String) {
+        // For the QLA, the following is more efficient than the general case
+        ampEnable = GetStatus()&0x0000000f;
+    }
+    else {
+        for (unsigned int i = 0; i < NumMotors; i++) {
+            if (GetAmpEnable(i))
+                ampEnable |= (1 << i);
+        }
+    }
+    return ampEnable;
 }
 
 bool AmpIO::GetAmpStatus(unsigned int index) const
 {
-    if (index >= NUM_CHANNELS)
+    if (index >= NumMotors)
         return false;
-    AmpIO_UInt32 mask = (0x00000100 << index);
-    return GetStatus()&mask;
+
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) {
+        uint32_t mask = (0x00000100 << index);
+        ret = GetStatus()&mask;
+    }
+    else {
+        ret = ReadBuffer[MOTOR_STATUS_OFFSET + index] & MSTAT_AMP_STATUS;
+    }
+    return ret;
 }
 
-AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
+bool AmpIO::GetSafetyAmpDisable(unsigned int index) const
 {
-    AmpIO_UInt32 mask = 0x000000F0;
-    return (GetStatus() & mask) >> 4;
+    if (index >= NumMotors)
+        return false;
+
+    bool ret = false;
+    if (GetHardwareVersion() == QLA1_String) {
+        ret = GetStatus() & (1 << index);
+    }
+    else if (GetHardwareVersion() == DQLA_String) {
+        ret = ReadBuffer[MOTOR_STATUS_OFFSET + index] & MSTAT_SAFETY_DIS;
+    }
+    return ret;
 }
 
+uint32_t AmpIO::GetSafetyAmpDisable(void) const
+{
+    uint32_t ampStatus = 0;
+    if (GetHardwareVersion() == QLA1_String) {
+        ampStatus = (GetStatus() & 0x000000F0) >> 4;
+    }
+    else if (GetHardwareVersion() == DQLA_String) {
+        for (unsigned int i = 0; i < NumMotors; i++) {
+            if (GetSafetyAmpDisable(i))
+                ampStatus |= (1 << i);
+        }
+    }
+    return ampStatus;
+}
+
+uint32_t AmpIO::GetAmpFaultCode(unsigned int index) const
+{
+    if (GetFirmwareVersion() < 8) {
+        // Could pick fault bits from other registers
+        return 0;
+    }
+    return (ReadBuffer[MOTOR_STATUS_OFFSET + index] & (0x000f0000)) >> 16;
+}
+
+bool AmpIO::IsQLAExpanded(unsigned int index) const
+{
+    bool ret = false;
+    if (GetHardwareVersion() == QLA1_String)
+        ret = GetStatus() & 0x00001000;
+    else if (GetHardwareVersion() == DQLA_String)
+        ret = GetStatus() & (index&0x0003);
+    return ret;
+}
 
 /*******************************************************************************
  * Set commands
@@ -760,119 +868,188 @@ AmpIO_UInt32 AmpIO::GetSafetyAmpDisable(void) const
 
 void AmpIO::SetPowerEnable(bool state)
 {
-    AmpIO_UInt32 enable_mask = 0x00080000;
-    AmpIO_UInt32 state_mask  = 0x00040000;
-    WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
+    WriteBuffer[WB_CTRL_OFFSET] |=  PWR_ENABLE_MASK;
     if (state)
-        WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] |=  PWR_ENABLE_BIT;
     else
-        WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] &= ~PWR_ENABLE_BIT;
 }
 
 bool AmpIO::SetAmpEnable(unsigned int index, bool state)
 {
-    if (index < NUM_CHANNELS) {
-        AmpIO_UInt32 enable_mask = 0x00000100 << index;
-        AmpIO_UInt32 state_mask  = 0x00000001 << index;
+    if (index >= NumMotors)
+        return false;
+
+    if (GetFirmwareVersion() < 8) {
+        uint32_t enable_mask = 0x00000100 << index;
+        uint32_t state_mask  = 0x00000001 << index;
         WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
         if (state)
             WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
         else
             WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
-        return true;
     }
-    return false;
+    else {
+        WriteBuffer[WB_CURR_OFFSET + index] |=  MOTOR_ENABLE_MASK;
+        if (state)
+            WriteBuffer[WB_CURR_OFFSET + index] |=  MOTOR_ENABLE_BIT;
+        else
+            WriteBuffer[WB_CURR_OFFSET + index] &= ~MOTOR_ENABLE_BIT;
+    }
+    return true;
 }
 
-bool AmpIO::SetAmpEnableMask(AmpIO_UInt8 mask, AmpIO_UInt8 state)
+bool AmpIO::SetAmpEnableMask(uint32_t mask, uint32_t state)
 {
-    AmpIO_UInt32 enable_mask = static_cast<AmpIO_UInt32>(mask) << 8;
-    AmpIO_UInt32 state_clr_mask = static_cast<AmpIO_UInt32>(mask);
-    AmpIO_UInt32 state_set_mask = static_cast<AmpIO_UInt32>(state);
-    // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
-    // with different masks
-    WriteBuffer[WB_CTRL_OFFSET] = (WriteBuffer[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
+    if (GetFirmwareVersion() < 8) {
+        uint32_t enable_mask = static_cast<uint32_t>(mask) << 8;
+        uint32_t state_clr_mask = static_cast<uint32_t>(mask);
+        uint32_t state_set_mask = static_cast<uint32_t>(state);
+        // Following will correctly handle case where SetAmpEnable/SetAmpEnableMask is called multiple times,
+        // with different masks
+        WriteBuffer[WB_CTRL_OFFSET] = (WriteBuffer[WB_CTRL_OFFSET]&(~state_clr_mask)) | enable_mask | state_set_mask;
+    }
+    else {
+        for (unsigned int i = 0; i < NumMotors; i++) {
+            if ((mask >> i) & 1)
+                SetAmpEnable(i, (state >> i) & 1);
+        }
+    }
     return true;
 }
 
 void AmpIO::SetSafetyRelay(bool state)
 {
-    AmpIO_UInt32 enable_mask = 0x00020000;
-    AmpIO_UInt32 state_mask  = 0x00010000;
-    WriteBuffer[WB_CTRL_OFFSET] |=  enable_mask;
+    WriteBuffer[WB_CTRL_OFFSET] |=  RELAY_MASK;
     if (state)
-        WriteBuffer[WB_CTRL_OFFSET] |=  state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] |=  RELAY_BIT;
     else
-        WriteBuffer[WB_CTRL_OFFSET] &= ~state_mask;
+        WriteBuffer[WB_CTRL_OFFSET] &= ~RELAY_BIT;
 }
 
-bool AmpIO::SetMotorCurrent(unsigned int index, AmpIO_UInt32 sdata)
+bool AmpIO::SetMotorCurrent(unsigned int index, uint32_t sdata)
 {
-    quadlet_t data = VALID_BIT | ((BoardId & 0x0F) << 24) | (sdata & DAC_MASK);
+    if (index >= NumMotors)
+        return false;
+
+    quadlet_t data = VALID_BIT | (sdata & DAC_MASK);
     if (collect_state && (collect_chan == (index+1)))
         data |= COLLECT_BIT;
-
-    if (index < NUM_CHANNELS) {
-        WriteBuffer[index+WB_CURR_OFFSET] = data;
-        return true;
+    if (GetFirmwareVersion() < 8) {
+        data |= ((BoardId & 0x0F) << 24);
     }
-    else
+    else {
+        // Preserve any motor enable bits set by SetAmpEnable
+        data |= WriteBuffer[WB_CURR_OFFSET+index]&(MOTOR_ENABLE_MASK|MOTOR_ENABLE_BIT);
+    }
+    WriteBuffer[WB_CURR_OFFSET+index] = data;
+    return true;
+}
+
+bool AmpIO::SetMotorVoltage(unsigned int index, uint32_t volts)
+{
+    if (index >= NumMotors)
         return false;
+    if (GetFirmwareVersion() < 8)
+        return false;
+    // Could check MotorConfig to verify that voltage control is available
+    // (MCFG_VOLTAGE_CONTROL); firmware will ignore voltage command if voltage
+    // control is not available.
+
+    quadlet_t data = VALID_BIT  | (1 << 24) | (volts & DAC_MASK);
+    if (collect_state && (collect_chan == (index+1)))
+        data |= COLLECT_BIT;
+     // Preserve any motor enable bits set by SetAmpEnable
+    data |= WriteBuffer[WB_CURR_OFFSET+index]&(MOTOR_ENABLE_MASK|MOTOR_ENABLE_BIT);
+    WriteBuffer[WB_CURR_OFFSET+index] = data;
+    return true;
+}
+
+bool AmpIO::SetMotorVoltage(unsigned int index, double volts)
+{
+    if (GetHardwareVersion() == dRA1_String)
+        return false;
+
+    const double Volts2BitsQLA = 65535/91.0;   // 91.0 = 36.4*2.5
+    uint32_t bits = static_cast<uint32_t>((volts+45.5)*Volts2BitsQLA+0.5);
+    if (bits&0xffff0000)
+        return false;    // volts too high or low (could instead truncate)
+    return SetMotorVoltage(index, bits);
+}
+
+bool AmpIO::SetMotorVoltageRatio(unsigned int index, double ratio)
+{
+    if (GetHardwareVersion() != dRA1_String)
+        return false;
+
+    if (index < NumMotors) {
+        if (collect_state && (collect_chan == (index+1))) {
+            WriteBuffer[index+WB_CURR_OFFSET] |= COLLECT_BIT;
+        }
+        WriteBuffer[index+WB_CURR_OFFSET] |= VALID_BIT;
+        WriteBuffer[index+WB_CURR_OFFSET] &= ~0x0FFFFFFF;
+        WriteBuffer[index+WB_CURR_OFFSET] |= 1 << 24; // select voltage mode
+        WriteBuffer[index+WB_CURR_OFFSET] |= ((int)(ratio * 1023) & 0b11111111111) << 13;
+        return true;
+    } else {
+        return false;
+    }
 }
 
 /*******************************************************************************
  * Read commands
  */
 
-AmpIO_UInt32 AmpIO::ReadStatus(void) const
+bool AmpIO::ReadPowerStatus(unsigned int index) const
 {
-    AmpIO_UInt32 read_data = 0;
-    if (port) port->ReadQuadlet(BoardId, 0, read_data);
-    return read_data;
-}
-
-bool AmpIO::ReadBlock(nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes)
-{
-    if (!port) {
-        return false;
+    uint32_t status = ReadStatus();
+    bool ret = status & MV_GOOD_BIT;
+    if (GetHardwareVersion() == DQLA_String) {
+        uint32_t mask = 0;
+        if (index&1) mask |= DQLA_MV_GOOD_1;
+        if (index&2) mask |= DQLA_MV_GOOD_2;
+        if (mask != 0)
+            ret = ((status & mask) == mask);
     }
-    return port->ReadBlock(BoardId, addr, rdata, nbytes);
-}
-
-bool AmpIO::ReadPowerStatus(void) const
-{
-    return (ReadStatus()&0x00080000);
+    return ret;
 
 }
 
 bool AmpIO::ReadSafetyRelayStatus(void) const
 {
-    return (ReadStatus()&0x00020000);
+    return (ReadStatus() & RELAY_FB);
 }
 
-AmpIO_UInt32 AmpIO::ReadSafetyAmpDisable(void) const
+uint32_t AmpIO::ReadSafetyAmpDisable(void) const
 {
-    AmpIO_UInt32 read_data = 0;
-    // 11: quadlet read address for Safety Amp Disable
-    if (port) port->ReadQuadlet(BoardId, 11, read_data);
-    return read_data & 0x0000000F;
+    uint32_t val = 0;
+    if (GetHardwareVersion() == QLA1_String) {
+        // This field has been present in the Status register since Firmware Rev 3
+        // (Firmware Rev 2 used register 11 and Firmware Rev 1 did not have this field)
+        val = (ReadStatus()&0x000000F0) >> 4;
+    }
+    else {
+        // This could be implemented by issuing NumMotors quadlet reads
+        std::cerr << "ReadSafetyAmpDisable not implemented for this hardware" << std::endl;
+    }
+    return val;
 }
 
-bool AmpIO::ReadEncoderPreload(unsigned int index, AmpIO_Int32 &sdata) const
+bool AmpIO::ReadEncoderPreload(unsigned int index, int32_t &sdata) const
 {
     bool ret = false;
-    if (port && (index < NUM_CHANNELS)) {
-        AmpIO_UInt32 read_data;
+    if (port && (index < NumEncoders)) {
+        uint32_t read_data;
         unsigned int channel = (index+1) << 4;
-        ret = port->ReadQuadlet(BoardId, channel | ENC_LOAD_OFFSET, read_data);
-        if (ret) sdata = static_cast<AmpIO_Int32>(read_data);
+        ret = port->ReadQuadlet(BoardId, channel | ENC_LOAD_REG, read_data);
+        if (ret) sdata = static_cast<int32_t>(read_data);
     }
     return ret;
 }
 
 bool AmpIO::IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) const
 {
-    AmpIO_Int32 encoderPreload;
+    int32_t encoderPreload;
     bool ret = ReadEncoderPreload(index, encoderPreload);
     if (ret) {
         isMidrange = (encoderPreload == ENC_MIDRANGE);
@@ -880,9 +1057,9 @@ bool AmpIO::IsEncoderPreloadMidrange(unsigned int index, bool & isMidrange) cons
     return ret;
 }
 
-AmpIO_Int32 AmpIO::ReadWatchdogPeriod(bool applyMask) const
+int32_t AmpIO::ReadWatchdogPeriod(bool applyMask) const
 {
-    AmpIO_UInt32 counts = 0;
+    uint32_t counts = 0;
     if (port) {
         port->ReadQuadlet(BoardId, 3, counts);
     }
@@ -896,14 +1073,14 @@ double AmpIO::ReadWatchdogPeriodInSeconds(void) const
     return ReadWatchdogPeriod()*WDOG_ClockPeriod;
 }
 
-AmpIO_UInt32 AmpIO::ReadDigitalIO(void) const
+uint32_t AmpIO::ReadDigitalIO(void) const
 {
-    AmpIO_UInt32 read_data = 0;
+    uint32_t read_data = 0;
     if (port) port->ReadQuadlet(BoardId, 0x0a, read_data);
     return read_data;
 }
 
-bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_UInt16 &countsLow)
+bool AmpIO::ReadDoutControl(unsigned int index, uint16_t &countsHigh, uint16_t &countsLow)
 {
     countsHigh = 0;
     countsLow = 0;
@@ -911,25 +1088,35 @@ bool AmpIO::ReadDoutControl(unsigned int index, AmpIO_UInt16 &countsHigh, AmpIO_
         std::cerr << "AmpIO::ReadDoutControl: requires firmware 5 or above" << std::endl;
         return false;
     }
+    if (GetHardwareVersion() == dRA1_String) {
+        std::cerr << "AmpIO::ReadDoutControl not implemented for dRAC" << std::endl;
+        return false;
+    }
 
-    AmpIO_UInt32 read_data;
+    uint32_t read_data;
     unsigned int channel = (index+1) << 4;
-    if (port && (index < NUM_CHANNELS)) {
-        if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, read_data)) {
+    if (port && (index < NumDouts)) {
+        if (port->ReadQuadlet(BoardId, channel | DOUT_CTRL_REG, read_data)) {
             // Starting with Version 1.3.0 of this library, we swap the high and low times
             // because the digital outputs are inverted in hardware.
-            countsLow = static_cast<AmpIO_UInt16>(read_data >> 16);
-            countsHigh  = static_cast<AmpIO_UInt16>(read_data);
+            countsLow = static_cast<uint16_t>(read_data >> 16);
+            countsHigh  = static_cast<uint16_t>(read_data);
             return true;
         }
     }
     return false;
 }
 
-bool AmpIO::ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex)
+bool AmpIO::ReadWaveformStatus(bool &active, uint32_t &tableIndex)
 {
     if (GetFirmwareVersion() < 7) return false;
-    AmpIO_UInt32 read_data = 0;
+
+    if (GetHardwareVersion() == dRA1_String) {
+        std::cerr << "ReadWaveformStatus not implemented for dRAC" << std::endl;
+        return false;
+    }
+
+    uint32_t read_data = 0;
     if (!port) return false;
     bool ret = port->ReadQuadlet(BoardId, 6, read_data);
     if (ret) {
@@ -939,53 +1126,135 @@ bool AmpIO::ReadWaveformStatus(bool &active, AmpIO_UInt32 &tableIndex)
     return ret;
 }
 
-AmpIO_UInt32 AmpIO::ReadIPv4Address(void) const
+bool AmpIO::ReadIOExpander(uint32_t &resp) const
 {
-    if (GetFirmwareVersion() < 7) {
-        std::cerr << "AmpIO::ReadIPv4Address: requires firmware 7 or above" << std::endl;
-        return 0;
+    return port->ReadQuadlet(BoardId, 14, resp);
+}
+
+bool AmpIO::ReadMotorSupplyVoltageBit(unsigned int index) const
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (GetHardwareVersion() == QLA1_String) {
+        // Bit 28 in digital I/O register
+        uint32_t dig_in;
+        if (port && port->ReadQuadlet(BoardId, 0x0a, dig_in))
+            ret = (dig_in&0x10000000);
+
     }
-    AmpIO_UInt32 read_data = 0;
-    if (port)
-        port->ReadQuadlet(BoardId, 11, read_data);
-    return read_data;
+    else if ((GetHardwareVersion() == DQLA_String) && ((index == 1) || (index == 2))) {
+        // Bits 5 (QLA2) and 4 (QLA1) in status register
+        uint32_t status;
+        if (port && port->ReadQuadlet(BoardId, BoardIO::BOARD_STATUS, status))
+            ret = (status & (index << 4) );
+    }
+    return ret;
+}
+
+bool AmpIO::ReadMotorConfig(unsigned int index, uint32_t &cfg) const
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (GetHardwareVersion() == dRA1_String) {
+        // dRAC supports either voltage or current control
+        cfg = MCFG_VOLTAGE_CONTROL | MCFG_CURRENT_CONTROL;
+        ret = true;
+    }
+    else if (port && (index < NumMotors)) {
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
+}
+
+bool AmpIO::ReadMotorCurrentLimit(unsigned int index, uint16_t &mcurlim) const
+{
+    uint32_t cfg;
+    bool ret = ReadMotorConfig(index, cfg);
+    if (ret)
+        mcurlim = static_cast<uint16_t>(cfg & MCFG_CURRENT_LIMIT_MASK);
+    return ret;
+}
+
+bool AmpIO::ReadAmpEnableDelay(unsigned int index, uint8_t &ampdelay) const
+{
+    uint32_t cfg;
+    bool ret = ReadMotorConfig(index, cfg);
+    if (ret)
+        ampdelay = static_cast<uint8_t>((cfg & MCFG_AMP_ENABLE_DELAY_MASK)>>16);
+    return ret;
 }
 
 /*******************************************************************************
  * Write commands
  */
 
-bool AmpIO::WriteReboot(void)
-{
-    if (GetFirmwareVersion() < 7) {
-        // Could instead allow this to be used with older firmware, where the "reboot"
-        // flag was instead used as a "soft reset".
-        std::cerr << "AmpIO::WriteReboot: requires firmware 7 or above" << std::endl;
-        return false;
-    }
-    AmpIO_UInt32 write_data = REBOOT_FPGA;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
-}
-
 bool AmpIO::WritePowerEnable(bool state)
 {
-    AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    uint32_t write_data = state ? PWR_ENABLE : PWR_DISABLE;
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
-bool AmpIO::WriteAmpEnable(AmpIO_UInt8 mask, AmpIO_UInt8 state)
+bool AmpIO::WriteAmpEnable(uint32_t mask, uint32_t state)
 {
-    quadlet_t write_data = (mask << 8) | state;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    if (!port)
+        return false;
+
+    bool ret;
+    if (GetHardwareVersion() == QLA1_String) {
+        // Following still works for Firmware Rev 8 (at least for QLA)
+        quadlet_t write_data = (mask << 8) | state;
+        ret = port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data);
+    }
+    else {
+        // For other boards, it is necessary to do a block write
+        quadlet_t localBuffer[MAX_CHANNELS+2];
+        localBuffer[WB_HEADER_OFFSET] = bswap_32((BoardId & 0x0F) << 8 | ((NumMotors+2) & 0xFF));
+        for (uint32_t i = 0; i < NumMotors; i++) {
+            uint32_t iMask = (1 << i);
+            localBuffer[WB_CURR_OFFSET+i] = 0;
+            if (mask & iMask) {
+                localBuffer[WB_CURR_OFFSET+i] |= bswap_32(MOTOR_ENABLE_MASK);
+                if (state & iMask) {
+                    localBuffer[WB_CURR_OFFSET+i] |=  bswap_32(MOTOR_ENABLE_BIT);
+                }
+            }
+        }
+        localBuffer[WB_CTRL_OFFSET] = 0;
+        ret = port->WriteBlock(BoardId, 0, localBuffer, GetWriteNumBytes());
+    }
+    return ret;
+}
+
+bool AmpIO::WriteAmpEnableAxis(unsigned int index, bool state)
+{
+    if (index >= NumMotors)
+        return false;
+
+    if (GetFirmwareVersion() < 8) {
+        quadlet_t mask = (1 << index);
+        quadlet_t write_data = (mask << 8);
+        if (state) write_data |= mask;
+        return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
+    }
+    else {
+        quadlet_t write_data = MOTOR_ENABLE_MASK;
+        if (state)
+            write_data |=  MOTOR_ENABLE_BIT;
+        unsigned int channel = (index+1) << 4;
+        return (port ? port->WriteQuadlet(BoardId, channel | DAC_CTRL_REG, write_data) : false);
+    }
 }
 
 bool AmpIO::WriteSafetyRelay(bool state)
 {
-    AmpIO_UInt32 write_data = state ? RELAY_ON : RELAY_OFF;
-    return (port ? port->WriteQuadlet(BoardId, 0, write_data) : false);
+    uint32_t write_data = state ? RELAY_ON : RELAY_OFF;
+    return (port ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
-bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
+bool AmpIO::WriteEncoderPreload(unsigned int index, int32_t sdata)
 {
     unsigned int channel = (index+1) << 4;
 
@@ -994,21 +1263,22 @@ bool AmpIO::WriteEncoderPreload(unsigned int index, AmpIO_Int32 sdata)
         return false;
     }
     bool ret = false;
-    if (port && (index < NUM_CHANNELS)) {
-        ret = port->WriteQuadlet(BoardId, channel | ENC_LOAD_OFFSET,
-                                 static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
+    if (port && (index < NumEncoders)) {
+        ret = port->WriteQuadlet(BoardId, channel | ENC_LOAD_REG,
+                                 static_cast<uint32_t>(sdata + ENC_MIDRANGE));
     }
     return ret;
 }
 
 bool AmpIO::WriteDoutConfigReset(void)
 {
-    return (port && (GetFirmwareVersion() >= 7)) ? port->WriteQuadlet(BoardId, 0, DOUT_CFG_RESET) : false;
+    return (port && (GetFirmwareVersion() >= 7)) ? port->WriteQuadlet(BoardId, BoardIO::BOARD_STATUS, DOUT_CFG_RESET) : false;
 }
 
-bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
+bool AmpIO::WriteDigitalOutput(uint8_t mask, uint8_t bits)
 {
     // Firmware versions < 5 have bits in reverse order with respect to schematic
+    // (do not need to handle more than 4 bits in this case)
     if (GetFirmwareVersion() < 5) {
         mask = BitReverse4[mask&0x0f];
         bits = BitReverse4[bits&0x0f];
@@ -1017,19 +1287,19 @@ bool AmpIO::WriteDigitalOutput(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
     // before being sent because they are inverted in hardware and/or firmware.
     // This way, the digital output state matches the hardware state (i.e., 0 means digital output
     // is at 0V).
-    quadlet_t write_data = (mask << 8) | ((~bits)&0x0f);
+    quadlet_t write_data = (static_cast<quadlet_t>(mask) << 8) | (static_cast<quadlet_t>(~bits)&mask);
     return port->WriteQuadlet(BoardId, 6, write_data);
 }
 
-bool AmpIO::WriteWaveformControl(AmpIO_UInt8 mask, AmpIO_UInt8 bits)
+bool AmpIO::WriteWaveformControl(uint8_t mask, uint8_t bits)
 {
-    quadlet_t write_data = (mask << 8) | ((~bits)&0x0f);
+    quadlet_t write_data = (static_cast<quadlet_t>(mask) << 8) | (static_cast<quadlet_t>(~bits)&mask);
     if (mask != 0)
         write_data |= VALID_BIT;  // Same valid bit as motor current
     return port->WriteQuadlet(BoardId, 6, write_data);
 }
 
-bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
+bool AmpIO::WriteWatchdogPeriod(uint32_t counts)
 {
     // period = counts(16 bits) * 5.208333 us (0 = no timeout)
     return port->WriteQuadlet(BoardId, 3, counts);
@@ -1037,7 +1307,7 @@ bool AmpIO::WriteWatchdogPeriod(AmpIO_UInt32 counts)
 
 bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay)
 {
-    AmpIO_UInt32 counts;
+    uint32_t counts;
     if (seconds == 0.0) {
         // Disable watchdog
         counts = 0;
@@ -1045,18 +1315,22 @@ bool AmpIO::WriteWatchdogPeriodInSeconds(const double seconds, bool ledDisplay)
         // Use at least one tick just to make sure we don't accidentaly disable;
         // the truth is that the count will be so low that watchdog will
         // continuously trigger.
-        counts = static_cast<AmpIO_UInt32>(seconds/WDOG_ClockPeriod);
-        counts = std::max(counts, static_cast<AmpIO_UInt32>(1));
+        counts = static_cast<uint32_t>(seconds/WDOG_ClockPeriod);
+        counts = std::max(counts, static_cast<uint32_t>(1));
     }
     if (ledDisplay)
         counts |= 0x80000000;
     return WriteWatchdogPeriod(counts);
 }
 
-bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_UInt16 countsLow)
+bool AmpIO::WriteDoutControl(unsigned int index, uint16_t countsHigh, uint16_t countsLow)
 {
     if (GetFirmwareVersion() < 5) {
         std::cerr << "AmpIO::WriteDoutControl: requires firmware 5 or above" << std::endl;
+        return false;
+    }
+    if (GetHardwareVersion() == dRA1_String) {
+        std::cerr << "AmpIO::WriteDoutControl not implemented for dRAC" << std::endl;
         return false;
     }
 
@@ -1064,11 +1338,11 @@ bool AmpIO::WriteDoutControl(unsigned int index, AmpIO_UInt16 countsHigh, AmpIO_
     //    Max high/low time = (2^16-1)/49.152 usec = 1333.3 usec = 1.33 msec
     //    The max PWM period with full adjustment of duty cycle (1-65535) is (2^16-1+1)/49.152 usec = 1.33 msec
     unsigned int channel = (index+1) << 4;
-    if (port && (index < NUM_CHANNELS)) {
+    if (port && (index < NumDouts)) {
         // Starting with Version 1.3.0 of this library, we swap the high and low times
         // because the digital outputs are inverted in hardware.
-        AmpIO_UInt32 counts = (static_cast<AmpIO_UInt32>(countsLow) << 16) | countsHigh;
-        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_OFFSET, counts);
+        uint32_t counts = (static_cast<uint32_t>(countsLow) << 16) | countsHigh;
+        return port->WriteQuadlet(BoardId, channel | DOUT_CTRL_REG, counts);
     } else {
         return false;
     }
@@ -1080,15 +1354,21 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
     if (freq <= 375.0) return false;
     // Check for valid duty cycle (0-1)
     if ((duty < 0.0) || (duty > 1.0)) return false;
+
+    if (GetHardwareVersion() == dRA1_String) {
+        std::cerr << "AmpIO::WritePWM not implemented for dRAC" << std::endl;
+        return false;
+    }
+
     // Compute high time and low time (in counts). Note that we return false
     // if either time is greater than 16 bits, rather than attempting to adjust.
     // Starting with Version 1.3.0 of this library, digital outputs are inverted
     // to match the actual output. This function does not need to be changed,
     // however,  because the inversion is performed in WriteDoutControl and
     // WriteDigitalOutput.
-    AmpIO_UInt32 highTime = GetDoutCounts(duty/freq);
+    uint32_t highTime = GetDoutCounts(duty/freq);
     if (highTime > 65535L) return false;
-    AmpIO_UInt32 lowTime = GetDoutCounts((1.0-duty)/freq);
+    uint32_t lowTime = GetDoutCounts((1.0-duty)/freq);
     if (lowTime > 65535L) return false;
     // Following can occur if frequency is too high
     if ((highTime == 0) && (lowTime == 0)) return false;
@@ -1104,412 +1384,230 @@ bool AmpIO::WritePWM(unsigned int index, double freq, double duty)
         ret &= WriteDigitalOutput((1<<index), 1);
     }
     else
-        ret = WriteDoutControl(index, static_cast<AmpIO_UInt16>(highTime), static_cast<AmpIO_UInt16>(lowTime));
+        ret = WriteDoutControl(index, static_cast<uint16_t>(highTime), static_cast<uint16_t>(lowTime));
     return ret;
 }
 
-bool AmpIO::WriteIPv4Address(AmpIO_UInt32 IPaddr)
+uint32_t AmpIO::GetDoutCounts(double time) const
 {
-    if (GetFirmwareVersion() < 7) {
-        std::cerr << "AmpIO::WriteIPv4Address: requires firmware 7 or above" << std::endl;
-        return false;
-    }
-    return (port ? port->WriteQuadlet(BoardId, 11, IPaddr) : false);
+    return static_cast<uint32_t>((FPGA_sysclk_MHz*1e6)*time + 0.5);
 }
 
-AmpIO_UInt32 AmpIO::GetDoutCounts(double time) const
+bool AmpIO::WriteIOExpander(uint32_t cmd)
 {
-    return static_cast<AmpIO_UInt32>((FPGA_sysclk_MHz*1e6)*time + 0.5);
+    return port->WriteQuadlet(BoardId, 14, cmd);
+}
+
+bool AmpIO::WriteMotorConfig(unsigned int index, uint32_t cfg)
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (HasQLA() && port && (index < NumMotors)) {
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
+}
+
+bool AmpIO::WriteMotorCurrentLimit(unsigned int index, uint16_t mcurlim)
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+    // Return false if motor current limit exceeds maximum range (rather
+    // than allowing firmware to set msb to 0).
+    if (mcurlim > 0x7fff) return ret;
+
+    if (HasQLA() && port && (index < NumMotors)) {
+        uint32_t cfg = MCFG_SET_CUR_LIMIT | mcurlim;
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
+}
+
+bool AmpIO::WriteAmpEnableDelay(unsigned int index, uint8_t ampdelay)
+{
+    bool ret = false;
+    if (GetFirmwareVersion() < 8) return ret;
+
+    if (HasQLA() && port && (index < NumMotors)) {
+        uint32_t cfg = MCFG_SET_AMP_DELAY | (ampdelay<<16);
+        unsigned int channel = (index+1) << 4;
+        ret = port->WriteQuadlet(BoardId, channel | MOTOR_CONFIG_REG, cfg);
+    }
+    return ret;
 }
 
 /*******************************************************************************
  * Static Write methods (for broadcast)
  *
- * These methods duplicate the board-specific methods (WriteReboot, WritePowerEnable,
- * WriteAmpEnable, ...), but are sent to the broadcast address (FW_NODE_BROADCAST).
+ * These methods duplicate the board-specific methods (WritePowerEnable,
+ * WriteSafetyRelay, ...), but are sent to the broadcast address (FW_NODE_BROADCAST).
  */
-
-bool AmpIO::WriteRebootAll(BasePort *port)
-{
-    // Note that Firmware V7+ supports the reboot command; earlier versions of
-    // firmware will instead perform a limited reset.
-    AmpIO_UInt32 write_data = REBOOT_FPGA;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
-}
 
 bool AmpIO::WritePowerEnableAll(BasePort *port, bool state)
 {
-    AmpIO_UInt32 write_data = state ? PWR_ENABLE : PWR_DISABLE;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
-}
-
-bool AmpIO::WriteAmpEnableAll(BasePort *port, AmpIO_UInt8 mask, AmpIO_UInt8 state)
-{
-    quadlet_t write_data = (mask << 8) | state;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+    uint32_t write_data = state ? PWR_ENABLE : PWR_DISABLE;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
 bool AmpIO::WriteSafetyRelayAll(BasePort *port, bool state)
 {
-    AmpIO_UInt32 write_data = state ? RELAY_ON : RELAY_OFF;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 0, write_data) : false);
+    uint32_t write_data = state ? RELAY_ON : RELAY_OFF;
+    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, write_data) : false);
 }
 
-bool AmpIO::WriteEncoderPreloadAll(BasePort *port, unsigned int index, AmpIO_Int32 sdata)
+bool AmpIO::WriteEncoderPreloadAll(BasePort *port, int32_t sdata)
 {
-    unsigned int channel = (index+1) << 4;
+    bool ret = true;
+    for (size_t index = 0; index < 8; ++index) {
+        unsigned int channel = (index+1) << 4;
 
-    if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
-        std::cerr << "AmpIO::WriteEncoderPreloadAll, preload out of range " << sdata << std::endl;
-        return false;
-    }
-    bool ret = false;
-    if (port && (index < NUM_CHANNELS)) {
-        ret = port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_OFFSET,
-                                 static_cast<AmpIO_UInt32>(sdata + ENC_MIDRANGE));
+        if ((sdata >= ENC_MIDRANGE) || (sdata < -ENC_MIDRANGE)) {
+            std::cerr << "AmpIO::WriteEncoderPreloadAll, preload out of range " << sdata << std::endl;
+            return false;
+        }
+        // Cannot use NumEncoders below because this is a static method
+        if (port && (index < MAX_CHANNELS)) {
+            ret &= port->WriteQuadlet(FW_NODE_BROADCAST, channel | ENC_LOAD_REG,
+                                      static_cast<uint32_t>(sdata + ENC_MIDRANGE));
+        }
     }
     return ret;
 }
 
-bool AmpIO::ResetKSZ8851All(BasePort *port) {
-    quadlet_t write_data = RESET_KSZ8851;
-    return (port ? port->WriteQuadlet(FW_NODE_BROADCAST, 12, write_data) : false);
-}
-
-/*******************************************************************************
- * PROM commands (M25P16)
- *    data e.g. 0x9f000000 the higher 8-bit is M25P16 cmd
- *    see DataSheet Table 5: Command Set Codes
- */
-
-AmpIO_UInt32 AmpIO::PromGetId(void)
+// ********************** Dallas DS2505 (1-wire / DS2480B) Reading Methods ****************************************
+AmpIO::DallasStatus AmpIO::DallasReadTool(uint32_t &model, uint8_t &version, std::string &name,
+                                          double timeoutSec)
 {
-    AmpIO_UInt32 id = 0;
-    quadlet_t data = 0x9f000000;
-    if (port->WriteQuadlet(BoardId, 0x08, data)) {
-        port->PromDelay();
-        // Should be ready by now...
-        PromGetResult(id);
-    }
-    return id;
-}
+    DallasStatus ret = DALLAS_WAIT;
 
-bool AmpIO::PromGetStatus(AmpIO_UInt32 &status, PromType type)
-{
-    quadlet_t data = 0x05000000;
-    nodeaddr_t address = GetPromAddress(type, true);
-
-    bool ret = port->WriteQuadlet(BoardId, address, data);
-    if (ret) {
-        port->PromDelay();
-        // Should be ready by now...
-        ret = PromGetResult(status, type);
+    if (GetFirmwareVersion() < 7) {
+        ret = DALLAS_NONE;
     }
+    else if (GetHardwareVersion() == dRA1_String) {
+        if (!port->ReadQuadlet(BoardId, 0xb012, model))
+            return DALLAS_IO_ERROR;
+        model = bswap_32(model);
+        uint32_t ver;
+        if (!port->ReadQuadlet(BoardId, 0xb013, ver))
+            return DALLAS_IO_ERROR;
+        version = ver & 0x000000ff;
+        name = "";
+        if (version != 255)
+            ret = DALLAS_OK;
+    }
+    else {   // QLA or DQLA
+
+        uint32_t status;
+        uint32_t ctrl;
+        char buffer[256];
+
+        dallasTimeoutSec = timeoutSec;
+
+        switch (dallasState) {
+
+        case ST_DALLAS_START:
+            // Start reading at address DALLAS_START_READ
+            ctrl = (DALLAS_START_READ<<16)|2;
+            if (DallasWriteControl(ctrl)) {
+                dallasState = ST_DALLAS_WAIT;
+                dallasStateNext = ST_DALLAS_READ;
+                dallasWaitStart = Amp1394_GetTime();
+            }
+            else {
+                ret = DALLAS_IO_ERROR;
+            }
+            break;
+
+        case ST_DALLAS_WAIT:
+            if (DallasReadStatus(status)) {
+                // Done when in idle state. The following test works for both Firmware Rev 7
+                // (state is bits 7:4) and Firmware Rev 8 (state is bits 8:4 and busy flag is bit 13)
+                if ((status&0x000020F0) == 0) {
+                    dallasState = dallasStateNext;
+                    // Automatically detect interface in use
+                    dallasUseDS2480B = (status & 0x00008000) == 0x00008000;
+                }
+                else if (Amp1394_GetTime() > dallasWaitStart + dallasTimeoutSec) {
+                    ret = DALLAS_TIMEOUT;
+                }
+            }
+            else {
+                ret = DALLAS_IO_ERROR;
+            }
+            break;
+
+        case ST_DALLAS_READ:
+            if (DallasReadBlock(reinterpret_cast<unsigned char *>(buffer), sizeof(buffer))) {
+                // make sure we read the 997 from company statement
+                if (strncmp(buffer, "997", 3) == 0) {
+                    // get model and name of tool to create unique string identifier
+                    // model number uses only 3 bytes, set first one to zero just in case
+                    buffer[DALLAS_MODEL_OFFSET] = 0;
+                    model = *(reinterpret_cast<uint32_t *>(buffer + (DALLAS_MODEL_OFFSET - DALLAS_START_READ)));
+                    model = bswap_32(model);
+                    // version number
+                    version = static_cast<uint8_t>(buffer[DALLAS_VERSION_OFFSET - DALLAS_START_READ]);
+                    // name
+                    buffer[DALLAS_NAME_END - DALLAS_START_READ] = '\0';
+                    name = buffer + (DALLAS_NAME_OFFSET - DALLAS_START_READ);
+                    ret = DALLAS_OK;
+                    dallasState = ST_DALLAS_START;  // Nominal; could be updated below for DS2480B
+                }
+                else {
+                    ret = DALLAS_DATA_ERROR;
+                }
+            }
+            else {
+                ret = DALLAS_IO_ERROR;
+            }
+            if (dallasUseDS2480B) {
+                // 0x09 indicates reg_wdata[3] == 1 && reg_wdata[1:0] == 01 in firmware DS2505.v
+                // If the write fails, we ignore it and return to ST_DALLAS_START, rather than
+                // return DALLAS_IO_ERROR, because this is after the read.
+                if (DallasWriteControl(0x09)){
+                    dallasState = ST_DALLAS_WAIT;
+                    dallasStateNext = ST_DALLAS_START;
+                    dallasWaitStart = Amp1394_GetTime();
+                }
+            }
+            break;
+        }
+
+        if ((ret == DALLAS_IO_ERROR) || (ret == DALLAS_TIMEOUT) || (ret == DALLAS_DATA_ERROR)) {
+            dallasState = ST_DALLAS_START;
+        }
+    }
+
     return ret;
 }
 
-bool AmpIO::PromGetResult(AmpIO_UInt32 &result, PromType type)
-{
-    quadlet_t read_data;
-    nodeaddr_t address = GetPromAddress(type, false);
-
-    bool ret = port->ReadQuadlet(BoardId, address, read_data);
-    if (ret)
-        result = static_cast<AmpIO_UInt32>(read_data);
-    return ret;
-}
-
-bool AmpIO::PromReadData(AmpIO_UInt32 addr, AmpIO_UInt8 *data,
-                         unsigned int nbytes)
-{
-    AmpIO_UInt32 addr24 = addr&0x00ffffff;
-    if (addr24+nbytes > 0x00ffffff)
-        return false;
-    quadlet_t write_data = 0x03000000|addr24;  // 03h = Read Data Bytes
-    AmpIO_UInt32 page = 0;
-    while (page < nbytes) {
-        const unsigned int maxReadSize = 64u;
-        unsigned int bytesToRead = ((nbytes-page)<maxReadSize) ? (nbytes-page) : maxReadSize;
-        if (!port->WriteQuadlet(BoardId, 0x08, write_data))
-            return false;
-        // Read FPGA status register; if 4 LSB are 0, command has finished.
-        // The IEEE-1394 clock is 24.576 MHz, so it should take
-        // about 256*8*(1/24.576) = 83.3 microseconds to read 256 bytes.
-        // Experimentally, 1 iteration of the loop below is sufficient
-        // most of the time, with 2 iterations required occasionally.
-        quadlet_t read_data = 0x000f;
-        int i;
-        const int MAX_LOOP_CNT = 8;
-        for (i = 0; (i < MAX_LOOP_CNT) && read_data; i++) {
-            Amp1394_Sleep(0.00001);   // 10 usec
-            if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return false;
-            read_data = read_data&0x000f;
-        }
-        if (i == MAX_LOOP_CNT) {
-            std::cout << "PromReadData: command failed to finish, status = "
-                      << std::hex << read_data << std::dec << std::endl;
-            return false;
-        }
-        // Now, read result. This should be the number of quadlets written.
-        AmpIO_UInt32 nRead;
-        if (!PromGetResult(nRead)) {
-            std::cout << "PromReadData: failed to get PROM result" << std::endl;
-            return false;
-        }
-        nRead *= 4;
-        // should never happen, as for now firmware always reads 256 bytes
-        // and saves to local registers in FPGA
-        if (nRead != 256) {
-            std::cout << "PromReadData: incorrect number of bytes = "
-                      << nRead << std::endl;
-            return false;
-        }
-
-        AmpIO_UInt32 fver = GetFirmwareVersion();
-        nodeaddr_t address;
-        if (fver >= 4) {address = 0x2000;}
-        else {address = 0xc0;}
-        if (!port->ReadBlock(BoardId, address, (quadlet_t *)(data+page), bytesToRead))
-            return false;
-        write_data += bytesToRead;
-        page += bytesToRead;
-    }
-    return true;
-}
-
-bool AmpIO::PromWriteEnable(PromType type)
-{
-    quadlet_t write_data = 0x06000000;
-    nodeaddr_t address = GetPromAddress(type, true);
-    return port->WriteQuadlet(BoardId, address, write_data);
-}
-
-bool AmpIO::PromWriteDisable(PromType type)
-{
-    quadlet_t write_data = 0x04000000;
-    nodeaddr_t address = GetPromAddress(type, true);
-    return port->WriteQuadlet(BoardId, address, write_data);
-}
-
-bool AmpIO::PromSectorErase(AmpIO_UInt32 addr, const ProgressCallback cb)
-{
-    PromWriteEnable();
-    quadlet_t write_data = 0xd8000000 | (addr&0x00ffffff);
-    if (!port->WriteQuadlet(BoardId, 0x08, write_data))
-        return false;
-    // Wait for erase to finish
-    AmpIO_UInt32 status;
-    if (!PromGetStatus(status))
-        return false;
-    while (status) {
-        PROGRESS_CALLBACK(cb, false);
-        if (!PromGetStatus(status))
-            return false;
-    }
-    return true;
-}
-
-int AmpIO::PromProgramPage(AmpIO_UInt32 addr, const AmpIO_UInt8 *bytes,
-                           unsigned int nbytes, const ProgressCallback cb)
-{
-    const unsigned int MAX_PAGE = 256;  // 64 quadlets
-    if (nbytes > MAX_PAGE) {
-        std::ostringstream msg;
-        msg << "AmpIO::PromProgramPage: error, nbytes = " << nbytes
-            << " (max = " << MAX_PAGE << ")";
-        ERROR_CALLBACK(cb, msg);
-        return -1;
-    }
-    PromWriteEnable();
-    // Block write of the data (+1 quad for command)
-    AmpIO_UInt8 page_data[MAX_PAGE+sizeof(quadlet_t)];
-    quadlet_t *data_ptr = reinterpret_cast<quadlet_t *>(page_data);
-    // First quadlet is the "page program" instruction (0x02)
-    data_ptr[0] = bswap_32(0x02000000 | (addr & 0x00ffffff));
-    // Remaining quadlets are the data to be programmed. These do not
-    // need to be byte-swapped.
-    memcpy(page_data+sizeof(quadlet_t), bytes, nbytes);
-
-    // select address based on firmware version number
-    AmpIO_UInt32 fver = GetFirmwareVersion();
-    nodeaddr_t address;
-    if (fver >= 4) {address = 0x2000;}
-    else {address = 0xc0;}
-    if (!port->WriteBlock(BoardId, address, data_ptr, nbytes+sizeof(quadlet_t))) {
-        std::ostringstream msg;
-        msg << "AmpIO::PromProgramPage: failed to write block, nbytes = " << nbytes;
-        ERROR_CALLBACK(cb, msg);
-        return -1;
-    }
-    // Read FPGA status register; if 4 LSB are 0, command has finished
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
-    while (read_data&0x000f) {
-        PROGRESS_CALLBACK(cb, -1);
-        if (!port->ReadQuadlet(BoardId, 0x08, read_data)) return -1;
-    }
-    if (read_data & 0xff000000) { // shouldn't happen
-        std::ostringstream msg;
-        msg << "AmpIO::PromProgramPage: FPGA error = " << read_data;
-        ERROR_CALLBACK(cb, msg);
-    }
-    // Now, read result. This should be the number of quadlets written.
-    AmpIO_UInt32 nWritten;
-    if (!PromGetResult(nWritten)) {
-        std::ostringstream msg;
-        msg << "AmpIO::PromProgramPage: could not get PROM result";
-        ERROR_CALLBACK(cb, msg);
-    }
-    if (nWritten > 0)
-        nWritten = 4*(nWritten-1);  // convert from quadlets to bytes
-    if (nWritten != nbytes) {
-        std::ostringstream msg;
-        msg << "AmpIO::PromProgramPage: wrote " << nWritten << " of "
-            << nbytes << " bytes";
-        ERROR_CALLBACK(cb, msg);
-    }
-    // Wait for "Write in Progress" bit to be cleared
-    AmpIO_UInt32 status;
-    bool ret = PromGetStatus(status);
-    while (status&MASK_WIP) {
-        if (ret) {
-            PROGRESS_CALLBACK(cb, 0);
-        }
-        else {
-            std::ostringstream msg;
-            msg << "AmpIO::PromProgramPage: could not get PROM status" << std::endl;
-            ERROR_CALLBACK(cb, msg);
-        }
-        ret = PromGetStatus(status);
-    }
-    return nWritten;
-}
-
-
-nodeaddr_t AmpIO::GetPromAddress(PromType type, bool isWrite)
-{
-    if (type == PROM_M25P16 && isWrite)
-        return 0x0008;
-    else if (type == PROM_M25P16 && !isWrite)
-        return 0x0009;
-    else if (type == PROM_25AA128 && isWrite)
-        return 0x3000;
-    else if (type == PROM_25AA128 && !isWrite)
-        return 0x3002;
-    else
-        std::cerr << "AmpIO::GetPromAddress: unsupported PROM type " << type << std::endl;
-
-    return 0x00;
-}
-
-
-// ********************** QLA PROM ONLY Methods ***********************************
-bool AmpIO::PromReadByte25AA128(AmpIO_UInt16 addr, AmpIO_UInt8 &data)
-{
-    // 8-bit cmd + 16-bit addr (2 MSBs ignored)
-    AmpIO_UInt32 result = 0x00000000;
-    quadlet_t write_data = 0x03000000|(addr << 8);
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-
-    if (port->WriteQuadlet(BoardId, address, write_data)) {
-        port->PromDelay();
-        // Should be ready by now...
-        if (!PromGetResult(result, PROM_25AA128))
-            return false;
-        // Get the last 8-bit of result
-        data = result & 0xFF;
-        return true;
-    } else {
-        data = 0x00;
-        return false;
-    }
-}
-
-bool AmpIO::PromWriteByte25AA128(AmpIO_UInt16 addr, const AmpIO_UInt8 &data)
-{
-    // enable write
-    PromWriteEnable(PROM_25AA128);
-    Amp1394_Sleep(0.0001);   // 100 usec
-
-    // 8-bit cmd + 16-bit addr + 8-bit data
-    quadlet_t write_data = 0x02000000|(addr << 8)|data;
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (port->WriteQuadlet(BoardId, address, write_data)) {
-        // wait 5ms for the PROM to be ready to take new commands
-        Amp1394_Sleep(0.005);
-        return true;
-    }
-    else
-        return false;
-}
-
-
-// Read block data (quadlet)
-bool AmpIO::PromReadBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
-{
-    // nquads sanity check
-    if (nquads == 0 || nquads > 16) {
-        std::cout << "invalid number of quadlets" << std::endl;
-        return false;
-    }
-
-    // trigger read
-    quadlet_t write_data = 0xFE000000|(addr << 8)|(nquads-1);
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    if (!port->WriteQuadlet(BoardId, address, write_data))
-        return false;
-
-    // get result
-    if (!port->ReadBlock(BoardId, address, data, nquads * 4))
-        return false;
-    else
-        return true;
-}
-
-
-// Write block data (quadlet)
-bool AmpIO::PromWriteBlock25AA128(AmpIO_UInt16 addr, quadlet_t *data, unsigned int nquads)
-{
-    // address sanity check
-    if (nquads == 0 || nquads > 16) {
-        std::cout << "invalid number of quadlets" << std::endl;
-        return false;
-    }
-
-    // block write data to buffer
-    if (!port->WriteBlock(BoardId, 0x3100, data, nquads*sizeof(quadlet_t)))
-        return false;
-
-    // enable write
-    PromWriteEnable(PROM_25AA128);
-
-    // trigger write
-    quadlet_t write_data = 0xFF000000|(addr << 8)|(nquads-1);
-    nodeaddr_t address = GetPromAddress(PROM_25AA128, true);
-    return port->WriteQuadlet(BoardId, address, write_data);
-}
-
-// ********************** Dallas DS2505 (1-wire) Methods ****************************************
-bool AmpIO::DallasWriteControl(AmpIO_UInt32 ctrl)
+bool AmpIO::DallasWriteControl(uint32_t ctrl)
 {
     if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() == dRA1_String) return false;
     return port->WriteQuadlet(BoardId, 13, ctrl);
 }
 
 
-bool AmpIO::DallasReadStatus(AmpIO_UInt32 &status)
+bool AmpIO::DallasReadStatus(uint32_t &status)
 {
     status = 0;
     if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() == dRA1_String) return false;
     return port->ReadQuadlet(BoardId, 13, status);
 }
 
 bool AmpIO::DallasWaitIdle()
 {
     int i;
-    AmpIO_UInt32 status;
-    // Wait up to 500 msec. Based on measurements, approximate wait time is 250-300 msec.
-    for (i = 0; i < 500; i++) {
+    uint32_t status;
+    // For each block (256 bytes), wait up to 2000 msec. The actual processing time varies according to system setting.
+    // Based on measurements, direct 1-wire interface costs about 250-300 msec to read entire 2048 bytes.
+    // For DS2480B serial method, the approximate read time is 5 sec.
+    for (i = 0; i < 2000; i++) {
         // Wait 1 msec
         Amp1394_Sleep(0.001);
         if (!DallasReadStatus(status)) return false;
@@ -1519,180 +1617,107 @@ bool AmpIO::DallasWaitIdle()
             break;
     }
     //std::cerr << "Wait time = " << i << " milliseconds" << std::endl;
-    return (i < 500);
+    return (i < 2000);
 }
 
-bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes, bool useDS2480B)
+bool AmpIO::DallasReadBlock(unsigned char *data, unsigned int nbytes) const
+{
+    if (GetHardwareVersion() == dRA1_String)
+        return false;
+
+    nodeaddr_t address = 0x6000;
+    if (nbytes > 256)
+        return false;
+    if (port)
+        return port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(data), nbytes);
+    return false;
+}
+
+bool AmpIO::DallasReadMemory(unsigned short addr, unsigned char *data, unsigned int nbytes)
 {
     if (GetFirmwareVersion() < 7) return false;
-    AmpIO_UInt32 status = ReadStatus();
-    // Check whether bi-directional I/O is available
-    if ((status & 0x00300000) != 0x00300000) return false;
-    AmpIO_UInt32 ctrl = (addr<<16)|2;
-    if (useDS2480B) ctrl |= 4;
+    if (GetHardwareVersion() == dRA1_String) return false;
+
+    uint32_t status;
+    uint32_t ctrl = (addr<<16)|2;
     if (!DallasWriteControl(ctrl)) return false;
     if (!DallasWaitIdle()) return false;
     if (!DallasReadStatus(status)) return false;
-    // Check family_code, dout_cfg_bidir, ds_reset, and ds_enable
-    if ((status & 0xFF00000F) != 0x0B00000B) return false;
-    nodeaddr_t address = 0x6000;
+
+    // Automatically detect interface in use
+    bool useDS2480B = (status & 0x00008000) == 0x00008000;
+
     unsigned char *ptr = data;
     // Read first block of data (up to 256 bytes)
     unsigned int nb = (nbytes>256) ? 256 : nbytes;
-    if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
+    if (!DallasReadBlock(ptr, nb)) return false;
     ptr += nb;
     nbytes -= nb;
     // Read additional blocks of data if necessary
     while (nbytes > 0) {
-        if (!DallasWriteControl(3)) return false;
+        // 0x03 indicates reg_wdata[1:0] == 11 in firmware DS2505.v
+        if (!DallasWriteControl(0x03)) return false;
         if (!DallasWaitIdle()) return false;
         nb = (nbytes>256) ? 256 : nbytes;
-        if (!port->ReadBlock(BoardId, address, reinterpret_cast<quadlet_t *>(ptr), nb)) return false;
+        if (!DallasReadBlock(ptr, nb)) return false;
         ptr += nb;
         nbytes -= nb;
     }
+    // End all blocks reading for DS2480B interface
+    if (nbytes <= 0 && useDS2480B) {
+        // 0x09 indicates reg_wdata[3] == 1 && reg_wdata[1:0] == 01 in firmware DS2505.v
+        if (!DallasWriteControl(0x09)) return false;
+        if (!DallasWaitIdle()) return false;
+    }
     return true;
 }
 
-// ********************** KSZ8851 Ethernet Controller Methods ***********************************
-
-bool AmpIO::ResetKSZ8851()
+bool AmpIO::WriteRobotLED(uint32_t rgb1, uint32_t rgb2, bool blink1, bool blink2) const
 {
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = RESET_KSZ8851;
-    return port->WriteQuadlet(BoardId, 12, write_data);
-}
-
-bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt8 &data)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x02000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
-}
-
-bool AmpIO::WriteKSZ8851Reg(AmpIO_UInt8 addr, const AmpIO_UInt16 &data)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x03000000 | (static_cast<quadlet_t>(addr) << 16) | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
-}
-
-bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = (static_cast<quadlet_t>(addr) << 16) | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data))
-        return false;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return false;
-    // Bit 31 indicates whether Ethernet is present
-    if (!(read_data&0x80000000)) return false;
-    // Bit 30 indicates whether last command had an error
-    if (read_data&0x40000000) return false;
-    rdata = static_cast<AmpIO_UInt8>(read_data);
-    return true;
-}
-
-bool AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt16 &rdata)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x01000000 | (static_cast<quadlet_t>(addr) << 16) | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data)) {
-        std::cout << "WriteQuadlet failed" << std::endl;
-        return false;
+    if (GetHardwareVersion() == dRA1_String) {
+        uint8_t r1 = (rgb1 >> 20) & 0xF;
+        uint8_t g1 = (rgb1 >> 12) & 0xF;
+        uint8_t b1 = (rgb1 >> 4) & 0xF;
+        uint8_t r2 = (rgb2 >> 20) & 0xF;
+        uint8_t g2 = (rgb2 >> 12) & 0xF;
+        uint8_t b2 = (rgb2 >> 4) & 0xF;
+        uint32_t command = (r1 << 10) | (g1 << 5) | (b1 << 0) | (blink1 << 15) | (r2 << 26) | (g2 << 21) | (b2 << 16) | (blink2 << 31) ;
+        return (port ? port->WriteQuadlet(BoardId, 0xa001, command) : false);
     }
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data)) {
-        std::cout << "ReadQuadlet failed" << std::endl;
-        return false;
+    return false;
+}
+
+std::string AmpIO::ReadRobotSerialNumber() const
+{
+    // Experimental: implementation will likely change
+    const size_t read_length = 16; // 16 words, 32 bytes.
+    char buf[read_length * 2 + 1] = {'\0'};
+    if (GetHardwareVersion() == dRA1_String) {
+        uint16_t* buf16 = reinterpret_cast<uint16_t*>(buf);
+        uint32_t base_flash_addr = 0;
+        for (size_t i = 0; i < read_length; i++) {
+            for (uint32_t flash_en = 0; flash_en < 2; flash_en++) {
+                uint32_t flash_command = (flash_en << 28) | (1 << 24) | (base_flash_addr + i) ;
+                port->WriteQuadlet(BoardId, 0xa002, flash_command);
+                Amp1394_Sleep(0.01);
+            }
+            uint32_t q;
+            port->ReadQuadlet(BoardId, 0xa031, q);
+            buf16[i] = q & 0xFFFF;
+        }
+        port->WriteQuadlet(BoardId, 0xa002, 0);
     }
-    // Bit 31 indicates whether Ethernet is present
-    if (!(read_data&0x80000000)) return false;
-    // Bit 30 indicates whether last command had an error
-    if (read_data&0x40000000) return false;
-    rdata = static_cast<AmpIO_UInt16>(read_data);
-    return true;
+    std::string serial_number(buf);
+    return serial_number;
 }
 
-// DMA access (no address specified)
-// This assumes that the chip has already been placed in DMA mode
-// (e.g., by writing to register 0x82).
-
-bool AmpIO::WriteKSZ8851DMA(const AmpIO_UInt16 &data)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x0B000000 | data;
-    return port->WriteQuadlet(BoardId, 12, write_data);
-}
-
-bool AmpIO::ReadKSZ8851DMA(AmpIO_UInt16 &rdata)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    quadlet_t write_data = 0x09000000 | rdata;
-    if (!port->WriteQuadlet(BoardId, 12, write_data))
-        return false;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return false;
-    // Bit 31 indicates whether Ethernet is present
-    if (!(read_data&0x80000000)) return false;
-    // Bit 30 indicates whether last command had an error
-    if (read_data&0x40000000) return false;
-    rdata = static_cast<AmpIO_UInt16>(read_data);
-    return true;
-}
-
-AmpIO_UInt16 AmpIO::ReadKSZ8851ChipID()
-{
-    AmpIO_UInt16 data;
-    if (ReadKSZ8851Reg(0xC0, data))
-        return data;
-    else
-        return 0;
-}
-
-AmpIO_UInt16 AmpIO::ReadKSZ8851Status()
-{
-    if (GetFirmwareVersion() < 5) return 0;
-    quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, 12, read_data))
-        return 0;
-    return static_cast<AmpIO_UInt16>(read_data>>16);
-}
-
-bool AmpIO::ReadEthernetData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    // Firmware currently cannot read more than 64 quadlets
-    if (nquads > 64) return false;
-    nodeaddr_t address = 0x4000 + offset;   // ADDR_ETH = 0x4000
-    bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
-    if (ret) {
-        for (unsigned int i = 0; i < nquads; i++)
-            buffer[i] = bswap_32(buffer[i]);
-    }
-    return ret;
-}
-
-// Following not yet fully implemented in firmware
-bool AmpIO::ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads)
-{
-    if (GetFirmwareVersion() < 5) return false;
-    // Firmware currently cannot read more than 64 quadlets
-    if (nquads > 64) return false;
-    nodeaddr_t address = 0x5000 + offset;   // ADDR_FW = 0x5000
-    bool ret = port->ReadBlock(BoardId, address, buffer, nquads*sizeof(quadlet_t));
-    if (ret) {
-        for (unsigned int i = 0; i < nquads; i++)
-            buffer[i] = bswap_32(buffer[i]);
-    }
-    return ret;
-}
+// ************************************* Waveform methods ****************************************
 
 bool AmpIO::ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
 {
     if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() == dRA1_String) return false;
+
     if (nquads == 0) return true;
     if (nquads > (port->GetMaxReadDataSize()/sizeof(quadlet_t))) return false;
     if (offset > 1023) return false;
@@ -1709,6 +1734,8 @@ bool AmpIO::ReadWaveformTable(quadlet_t *buffer, unsigned short offset, unsigned
 bool AmpIO::WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, unsigned short nquads)
 {
     if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() == dRA1_String) return false;
+
     if (nquads == 0) return true;
     if (nquads > (port->GetMaxWriteDataSize()/sizeof(quadlet_t))) return false;
     if (offset > 1023) return false;
@@ -1720,10 +1747,16 @@ bool AmpIO::WriteWaveformTable(const quadlet_t *buffer, unsigned short offset, u
     return port->WriteBlock(BoardId, address, localBuffer, nquads*sizeof(quadlet_t));
 }
 
+// ********************************** Data collection methods ****************************************
+
 bool AmpIO::DataCollectionStart(unsigned char chan, CollectCallback collectCB)
 {
     if (GetFirmwareVersion() < 7) return false;
-    if ((chan < 1) || (chan > NUM_CHANNELS)) return false;
+    if (GetHardwareVersion() == DQLA_String) {
+        std::cerr << "AmpIO::DataCollectionStart not implemented for DQLA" << std::endl;
+        return false;
+    }
+    if ((chan < 1) || (chan > NumMotors)) return false;
     collect_state = true;
     collect_chan = chan;
     collect_rindex = 0;
@@ -1738,6 +1771,8 @@ void AmpIO::DataCollectionStop()
 
 bool AmpIO::IsCollecting() const
 {
+    if (GetHardwareVersion() == DQLA_String)
+        return false;
     // Collection active on both host and FPGA
     return (collect_state&&(ReadBuffer[TEMP_OFFSET]&0x80000000));
 }
@@ -1745,6 +1780,9 @@ bool AmpIO::IsCollecting() const
 bool AmpIO::GetCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const
 {
     if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() == DQLA_String)
+        return false;
+
     collecting = (ReadBuffer[TEMP_OFFSET]&0x80000000);
     chan = (ReadBuffer[TEMP_OFFSET]&0x3c000000)>>26;
     writeAddr = (ReadBuffer[TEMP_OFFSET]&0x03ff0000)>>16;;
@@ -1754,6 +1792,9 @@ bool AmpIO::GetCollectionStatus(bool &collecting, unsigned char &chan, unsigned 
 bool AmpIO::ReadCollectionStatus(bool &collecting, unsigned char &chan, unsigned short &writeAddr) const
 {
     if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() == DQLA_String)
+        return false;
+
     quadlet_t read_data;
     bool ret = port->ReadQuadlet(BoardId, 0x7800, read_data);
     if (ret) {
@@ -1767,6 +1808,9 @@ bool AmpIO::ReadCollectionStatus(bool &collecting, unsigned char &chan, unsigned
 bool AmpIO::ReadCollectedData(quadlet_t *buffer, unsigned short offset, unsigned short nquads)
 {
     if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() == DQLA_String)
+        return false;
+
     if (nquads > (port->GetMaxReadDataSize()/sizeof(quadlet_t))) return false;
     if (offset > 1023) return false;
     nodeaddr_t address = 0x7000 + offset;   // ADDR_DATA_BUF = 0x7000
@@ -1803,7 +1847,7 @@ void AmpIO::CheckCollectCallback()
                                                                  : (COLLECT_BUFSIZE +collect_windex-collect_rindex);
     if (numAvail > 0) {
         if (numAvail > (port->GetMaxReadDataSize()/sizeof(quadlet_t)))
-            numAvail = port->GetMaxReadDataSize()/sizeof(quadlet_t);
+            numAvail = static_cast<unsigned short>(port->GetMaxReadDataSize()/sizeof(quadlet_t));
         if (ReadCollectedData(collect_data, collect_rindex, numAvail)) {
             collect_rindex += numAvail;
             if (collect_rindex >= COLLECT_BUFSIZE)
@@ -1814,4 +1858,179 @@ void AmpIO::CheckCollectCallback()
     }
     if (!(*collect_cb)(collect_data, numAvail))
         DataCollectionStop();
+}
+
+//******* Following methods are for dRA1 ********
+
+std::string AmpIO::ExplainSiFault() const
+{
+    if (GetHardwareVersion() != dRA1_String) {
+        return "Not a Si controller";
+    }
+    std::stringstream ss;
+    const char* amp_fault_text[16] = {"-", "ADC saturated", "Current deviation", "HW overcurrent", "HW overtemp", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined"};
+    uint32_t status = GetStatus();
+    ss << "Explaining faults in the Si controller:" << std::endl;
+    ss << std::endl;
+    ss << "1. Interlocks that are preventing the axis from turning on:" << std::endl;
+    if (!(status & (1 << 0))) ss << "ESPM->dVRK communication failed. Robot not programmed? Cables?" << std::endl;
+    if ((status & (1 << 0)) && !(status & (1 << 1))) ss << "ESII/CC->ESPM communication failed. The problem is inside the robot." << std::endl;
+    if (!(status & (1 << 3))) ss << "Encoder preload is out of sync. You must preload encoder at least once." << std::endl;
+    if (!GetPowerStatus()) ss << "48V bad. E-stop pressed?" << std::endl;
+    if (GetWatchdogTimeoutStatus()) ss << "Watchdog timeout." << std::endl;
+    ss << "(end)" << std::endl;
+    ss << std::endl;
+    ss << "2. Amps that are in fault state:" << std::endl;
+    for (unsigned int i = 0; i < NumMotors; i++) {
+        // std::cout << NumMotors << std::endl;
+        uint32_t amp_fault = GetAmpFaultCode(i);
+        // std::cout << amp_fault << std::endl;
+        if (amp_fault) {
+            ss << "Amp " << i << ": " << amp_fault_text[amp_fault] << std::endl;
+        }
+    }
+    ss << "(end)" << std::endl;
+    ss << std::endl;
+    ss << std::endl;
+    return ss.str();
+}
+
+bool AmpIO::WriteSiCurrentLoopParams(unsigned int index, const SiCurrentLoopParams& params) const
+{
+    if (!port) return false;
+    if (GetFirmwareVersion() < 7) return false;
+    if (GetHardwareVersion() != dRA1_String) {
+        std::cerr << "AmpIO::WriteSiCurrentLoopParams not implemented for " << GetHardwareVersion() << std::endl;
+        return false;
+    }
+    if (index >= NumMotors) return false;
+    if (params.kp >= 1 << 18) return false;
+    if (params.ki >= 1 << 18) return false;
+    if (params.kd >= 1 << 18) return false;
+    if (params.iTermLimit > 1023) return false;
+    if (params.dutyCycleLimit > 1023) return false;
+
+    bool success = true;
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KP, params.kp);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KI, params.ki);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_KD, params.kd);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_FF_RESISTIVE, params.ff_resistive);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_CURRENT_I_TERM_LIMIT, params.iTermLimit);
+    success &= port->WriteQuadlet(BoardId,
+        ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 |
+        OFF_DUTY_CYCLE_LIMIT, params.dutyCycleLimit);
+    return success;
+}
+
+bool AmpIO::ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& params) const
+{
+    if (!port) return false;
+    uint32_t read_data = 0;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, read_data);
+    params.kp = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, read_data);
+    params.ki = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KD, read_data);
+    params.kd = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_FF_RESISTIVE, read_data);
+    params.ff_resistive = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, read_data);
+    params.iTermLimit = read_data;
+    port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, read_data);
+    params.dutyCycleLimit = read_data;
+    return true;
+}
+
+bool AmpIO::WriteMotorControlMode(unsigned int index, uint16_t mode) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_MOTOR_CONTROL_MODE, mode) : false);
+}
+
+bool AmpIO::WriteCurrentKpRaw(unsigned int index, uint32_t val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, val) : false);
+}
+
+bool AmpIO::WriteCurrentKiRaw(unsigned int index, uint32_t val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, val) : false);
+}
+
+bool AmpIO::WriteCurrentITermLimitRaw(unsigned int index, uint16_t val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, val) : false);
+}
+
+bool AmpIO::WriteDutyCycleLimit(unsigned int index, uint16_t val) {
+    return (port ? port->WriteQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, val) : false);
+}
+
+uint16_t AmpIO::ReadMotorControlMode(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_MOTOR_CONTROL_MODE, read_data);
+    return read_data;
+}
+
+uint32_t AmpIO::ReadCurrentKpRaw(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KP, read_data);
+    return read_data;
+}
+
+uint32_t AmpIO::ReadCurrentKiRaw(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_KI, read_data);
+    return read_data;
+}
+
+uint16_t AmpIO::ReadCurrentITermLimitRaw(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM_LIMIT, read_data);
+    return read_data;
+}
+
+uint16_t AmpIO::ReadDutyCycleLimit(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, read_data);
+    return read_data;
+}
+
+int16_t AmpIO::ReadDutyCycle(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE, read_data);
+    return static_cast<int16_t>(read_data);
+}
+
+int16_t AmpIO::ReadCurrentITerm(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_CURRENT_I_TERM, read_data);
+    return static_cast<int16_t>(read_data);
+}
+
+int16_t AmpIO::ReadFault(unsigned int index) const
+{
+    uint32_t read_data = 0;
+    if (port)
+        port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_FAULT, read_data);
+    return static_cast<int16_t>(read_data);
 }
