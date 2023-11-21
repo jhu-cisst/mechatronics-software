@@ -1,7 +1,7 @@
 Change log
 ==========
 
-2.0.0 (2023-11-xx)
+2.0.0 (2023-11-21)
 ==================
 * API changes:
   * New packet format for Firmware Rev 8
