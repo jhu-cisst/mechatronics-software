@@ -9,11 +9,9 @@
 #
 # --- end cisst license ---
 
-cmake_policy (SET CMP0048 NEW)
+cmake_minimum_required (VERSION 3.10)
 
 project (Amp1394 VERSION 2.0.0)
-
-cmake_minimum_required (VERSION 3.10)
 
 # Set the version number
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
