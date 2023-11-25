@@ -411,8 +411,13 @@ int main(int argc, char** argv)
     } else {
         console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
-    console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
-    console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
+    if (readOnly) {
+        console.Print(2, lm, "Press ESC to quit, r to reset port (READ ONLY)");
+    }
+    else {
+        console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
+        console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
+    }
 
     for (i = 1; i <= numAxes; i++) {
         unsigned int dx = lm+8+(i-1)*13;
