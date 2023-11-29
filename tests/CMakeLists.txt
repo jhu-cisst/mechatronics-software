@@ -68,8 +68,8 @@ install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth e
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
 
-if (ARM32)
-  message (STATUS "Skipping dvrktest for ARM32 build")
+if (ARM32 OR WIN32)
+  message (STATUS "Skipping dvrktest for ARM32 or WIN32 build")
 else ()
   add_executable(dvrktest dvrktest.cpp MotorVoltage.h MotorVoltage.cpp)
   target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
