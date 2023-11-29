@@ -19,7 +19,7 @@
 #include <thread>
 #include <array>
 #include <vector>
-#include <experimental/filesystem>
+#include <filesystem>
 #include <iomanip>
 
 #include <Amp1394/AmpIORevision.h>
@@ -662,7 +662,7 @@ int main(int argc, char **argv)
     std::stringstream filename;
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
-    std::experimental::filesystem::create_directory("dVRK_test_results");
+    std::filesystem::create_directory("dVRK_test_results");
     filename << "dVRK_test_results/dVRK_" << controller_sn << "_" << std::put_time(&tm, "%Y-%m-%d-%H-%M-%S") << ".txt";
     logfile.open(filename.str(), std::fstream::out);
 
