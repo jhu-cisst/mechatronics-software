@@ -73,7 +73,6 @@ if (ARM32)
 else ()
   add_executable(dvrktest dvrktest.cpp MotorVoltage.h MotorVoltage.cpp)
   target_link_libraries(dvrktest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
-  target_compile_features(dvrktest INTERFACE cxx_std_17)
   install (TARGETS dvrktest
            COMPONENT Amp1394-utils
            RUNTIME DESTINATION bin)

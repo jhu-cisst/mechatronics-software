@@ -13,6 +13,10 @@ cmake_minimum_required (VERSION 3.10)
 
 project (Amp1394 VERSION 2.0.0)
 
+if (NOT CMAKE_CXX_STANDARD)
+  set (CMAKE_CXX_STANDARD 17)
+endif ()
+
 # Set the version number
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")
 
