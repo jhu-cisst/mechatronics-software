@@ -509,12 +509,20 @@ Result TestDallas(AmpIO **Board, BasePort *Port) {
         board = Board[1];
     }
     unsigned char buffer[2048];
+    uint32_t status = 0;
     bool ret = board->DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
+    board->DallasReadStatus(status);
+    unsigned char family_code = static_cast<unsigned char>((status&0xFF000000)>>24);
     if (!ret) {
         std::cout << FAIL << std::endl;
-        std::cout << COLOR_ERROR << "(DallasReadMemory failed)" << COLOR_OFF << std::endl;
+        std::cout << COLOR_ERROR << "(Can't talk to DS2480B. Check SCSI cable.)" << COLOR_OFF << std::endl;
         logfile << "... FAIL" << std::endl;
         return fail;
+    } else if (family_code != 0x0B) {
+        std::cout << FAIL << std::endl;
+        std::cout << COLOR_ERROR << "(Can talk to DS2480B but not DS2505. Check dMIB jumper J42.)" << COLOR_OFF << std::endl;
+        logfile << "... FAIL" << std::endl;
+        return fail;        
     } else {
         std::cout << PASS << std::endl;
         logfile << "... PASS" << std::endl;
