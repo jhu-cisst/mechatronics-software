@@ -19,8 +19,13 @@
 #include <thread>
 #include <array>
 #include <vector>
-#include <filesystem>
 #include <iomanip>
+
+#ifdef _MSC_VER   // Windows
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 
 #include <Amp1394/AmpIORevision.h>
 
@@ -662,7 +667,11 @@ int main(int argc, char **argv)
     std::stringstream filename;
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
-    std::filesystem::create_directory("dVRK_test_results");
+    #ifdef _MSC_VER   // Windows
+        _mkdir("dVRK_test_results");
+    #else
+        mkdir("dVRK_test_results", 0777);
+    #endif
     filename << "dVRK_test_results/dVRK_" << controller_sn << "_" << std::put_time(&tm, "%Y-%m-%d-%H-%M-%S") << ".txt";
     logfile.open(filename.str(), std::fstream::out);
 
