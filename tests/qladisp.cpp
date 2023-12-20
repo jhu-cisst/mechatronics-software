@@ -22,7 +22,7 @@ http://www.cisst.org/cisst/license.txt.
  * and on the Amp1394Console library (which may depend on curses).
  *
  * Usage: qladisp [-pP] [-b<r|w>] [-v] <board num> [<board_num>]
- *        where P is the Firewire port number (default 0),
+ *        where P is the port number (default 0),
  *        or a string such as ethP and fwP, where P is the port number
  *        -br or -bw specify to use a broadcast protocol
  *        -v specifies to display full velocity feedback
@@ -907,7 +907,9 @@ int main(int argc, char** argv)
         console.Print(1, lm+100, "Err(r/w): %2d %2d", readErrors, writeErrors);
 
         console.Refresh();
-        Amp1394_Sleep(0.0005);  // 500 usec
+        // Skip sleep when using Zynq EMIO because it is already slow
+        if (Port->GetPortType() != BasePort::PORT_ZYNQ_EMIO)
+            Amp1394_Sleep(0.0005);  // 500 usec
     }
 
     if (!readOnly) {
