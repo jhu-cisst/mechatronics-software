@@ -103,7 +103,8 @@ public:
         HARDWARE_VERSION = 4,  // RO: Companion board type (e.g., "QLA1")
         FIRMWARE_VERSION = 7,  // RO: Firmware version number
         IP_ADDR = 11,          // RW: Ethernet IP address (Firmware V7+)
-        ETH_STATUS = 12        // RW: Ethernet status register (Firmware V5+)
+        ETH_STATUS = 12,       // RW: Ethernet status register (Firmware V5+)
+        GIT_DESC = 15          // RO: Git description (after Firmware V8 release)
     };
 
     BoardIO(unsigned char board_id) : BoardId(board_id), port(0), readValid(false), writeValid(false),

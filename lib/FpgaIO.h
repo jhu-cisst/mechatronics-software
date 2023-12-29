@@ -264,7 +264,7 @@ public:
         ETH_STAT_DEST_ERR      = 0x02000000,
         ETH_STAT_ACCESS_ERR    = 0x01000000,
         ETH_STAT_STATE_ERR_V2  = 0x00800000,
-        ETH_STAT_SENDST_ERR    = 0x00400000,
+        ETH_STAT_ETHST_ERR     = 0x00400000,
         ETH_STAT_CLK_OK_V3     = 0x00200000,
         ETH_STAT_UDP           = 0x00100000,   // 1 -> UDP mode, 0 -> Raw Ethernet
         ETH_STAT_LINK_STAT_V2  = 0x00080000,   // V2: link status (1 -> On)

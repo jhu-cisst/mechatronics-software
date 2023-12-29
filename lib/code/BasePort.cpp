@@ -294,10 +294,51 @@ bool BasePort::ScanNodes(void)
         FpgaVersion[board] = fpga_ver;
         HardwareVersion[board] = hver;
         FirmwareVersion[board] = fver;
+
+        // read git description (introduced after Rev 8 release)
+        uint32_t git_desc = 0;
+        if (!ReadQuadletNode(node, BoardIO::GIT_DESC, git_desc)) {
+            outStr << "BasePort::ScanNodes: unable to read git desc from node " << node << std::endl;
+        }
         outStr << "  Node " << node << ", BoardId = " << board
                << ", " << GetFpgaVersionMajorString(board)
                << ", Hardware = " << GetHardwareVersionString(board)
-               << ", Firmware Version = " << GetFirmwareVersion(board) << std::endl;
+               << ", Firmware Version = " << GetFirmwareVersion(board);
+
+        if (git_desc != 0) {
+            // git_dirty bit indicates that firmware was built with uncommitted changes;
+            // shown by appending * to the git SHA.
+            bool git_dirty = git_desc&0x00000008;
+            // git_commits bit indicates whether there were any commits since the last tag
+            bool git_commits = git_desc&0x00000004;
+            // git_flag is set by the firmware, based on comparing the firmware version (F) to
+            // the most recent git tag ("RevG", where G is the git tag version)
+            //    0:  F == G     actual release ("F") or update to last release ("F+"),
+            //                   depending on git_dirty and git_commits
+            //    1:  F == G+1   new firmware preview, shown as "F-"
+            //    2:  F > G+1    should not happen (missing git tag?), shown as "F?"
+            //    3:  F < G      should not happen, shown as "F?"
+            uint8_t git_flag = git_desc&0x00000003;
+            bool showSHA = true;
+            if (git_flag == 0) {
+                if (git_dirty|git_commits)
+                    outStr << "+";
+                else
+                    showSHA = false;
+            }
+            else if (git_flag == 1)
+                outStr << "-";
+            else
+                outStr << "?";
+            if (showSHA) {
+                outStr << " (git-" << std::hex << std::setw(7) << std::setfill('0')
+                       << (git_desc>>4) << std::dec;
+                if (git_dirty)
+                    outStr << "*";
+                outStr << ")";
+            }
+        }
+        outStr << std::endl;
 
         if (Node2Board[node] < BoardIO::MAX_BOARDS) {
             outStr << "    Duplicate entry, previous value = "

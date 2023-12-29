@@ -1,6 +1,18 @@
 Change log
 ==========
 
+2.1.0 (2023-12-29)
+==================
+* API changes:
+  * None
+* New features:
+  * Added `-r` (read-only) command line argument to `qladisp`
+  * Added check of FPGA register 15, which contains git description of FPGA firmware build (introduced after Firmware Rev 8 release)
+  * Added check for Dallas chip family code in `dvrktest`
+  * Support Zynq-EMIO interface in test programs (cross-compiled for FPGA V3 embedded ARM processor)
+* Bug fixes:
+  * Modified `drvktest` to compile on all supported platforms
+
 2.0.0 (2023-11-21)
 ==================
 * API changes:

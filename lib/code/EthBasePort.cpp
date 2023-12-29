@@ -241,7 +241,7 @@ void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
         if (status & FpgaIO::ETH_STAT_DEST_ERR)     debugStream << "DestErr ";
         if (status & FpgaIO::ETH_STAT_ACCESS_ERR)   debugStream << "AccessErr ";
         if (status & FpgaIO::ETH_STAT_STATE_ERR_V2) debugStream << ((ver == 2) ? "StateErr " : "Unused ");
-        if (status & FpgaIO::ETH_STAT_SENDST_ERR)   debugStream << "SendStateErr ";
+        if (status & FpgaIO::ETH_STAT_ETHST_ERR )   debugStream << "EthStateErr ";
         if (status & FpgaIO::ETH_STAT_CLK_OK_V3)    debugStream << ((ver == 3) ? "ClkOK " : "Unused ");
         if (status & FpgaIO::ETH_STAT_UDP)          debugStream << "UDP ";
         if (ver == 2) {
@@ -322,7 +322,10 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  numPacketError;   // Quad 8
         uint8_t  bwState;
         uint16_t bw_left;
-        uint32_t unused[7];        // Quads 9-15
+        uint8_t  recv_wait_cnt;    // Quad 9
+        uint8_t  fwState;
+        uint16_t fw_left;
+        uint32_t unused[6];        // Quads 10-15
     };
     if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
         debugStream << "PrintDebugData: structure packing problem" << std::endl;
@@ -380,6 +383,9 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState & 0x07);
     if (p->bwState & 0x80) debugStream << ", bw_err";
     debugStream << std::endl << "bw_left: " << std::dec << p->bw_left << std::endl;
+    debugStream << "fw_left: " << p->fw_left;
+    if (p->fwState & 0x80) debugStream << ", fw_err";
+    debugStream << std::endl << "fw_wait_cnt: " << static_cast<uint16_t>(p->recv_wait_cnt) << std::endl;
 }
 
 // Prints the debug data from the lower-level Ethernet module (KSZ8851 for Ethernet V2)

@@ -13,3 +13,8 @@ The following directories are included:
 * `util` -- low-level Firewire utility programs (do not depend on `lib`)
 
 Documentation for the software is on the [wiki](http://github.com/jhu-cisst/mechatronics-software/wiki).
+
+# Compilation status
+
+Linux gcc/clang and Windows cl for both Debug and Release configurations:<br>
+[![CMake on multiple platforms](https://github.com/jhu-cisst/mechatronics-software/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/jhu-cisst/mechatronics-software/actions/workflows/cmake-multi-platform.yml)

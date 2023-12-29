@@ -22,7 +22,7 @@ http://www.cisst.org/cisst/license.txt.
  * and on the Amp1394Console library (which may depend on curses).
  *
  * Usage: qladisp [-pP] [-b<r|w>] [-v] <board num> [<board_num>]
- *        where P is the Firewire port number (default 0),
+ *        where P is the port number (default 0),
  *        or a string such as ethP and fwP, where P is the port number
  *        -br or -bw specify to use a broadcast protocol
  *        -v specifies to display full velocity feedback
@@ -191,6 +191,7 @@ int main(int argc, char** argv)
     bool fullvel = false;  // whether to display full velocity feedback
     bool showTime = false; // whether to display time information
     bool useMaxAxis = false; // true --> use max(NumEncoders, NumMotors); false --> NumEncoders
+    bool readOnly = false;   // true --> program does not call WriteAllBoards
 
     std::vector<AmpIO*> BoardList;
     std::vector<uint32_t> BoardStatusList;
@@ -231,6 +232,8 @@ int main(int argc, char** argv)
                 showTime = true;
             else if (argv[i][1] == 'm')
                 useMaxAxis = true;
+            else if (argv[i][1] == 'r')
+                readOnly = true;
         }
         else {
             int bnum = atoi(argv[i]);
@@ -254,6 +257,7 @@ int main(int argc, char** argv)
                   << "            -v  displays full velocity feedback" << std::endl
                   << "            -t  displays time information" << std::endl
                   << "            -m  include motors without encoders (if any)" << std::endl
+                  << "            -r  read-only (does not write to boards)" << std::endl
                   << std::endl
                   << "Trying to detect boards on port:" << std::endl;
     }
@@ -278,7 +282,9 @@ int main(int argc, char** argv)
         // keys
         std::cerr << std::endl << "Keys:" << std::endl
                   << "'r': reset FireWire port" << std::endl
-                  << "'a': axis to address (1-N) or all (0, default)" << std::endl
+                  << "'a': axis to address (1-N) or all (0, default)" << std::endl;
+        if (!readOnly) {
+            std::cerr
                   << "'d': turn watchdog on/off (0.25 ms, this should be triggered immediately)" << std::endl
                   << "'D': turn watchdog on/off (25.0 ms, can be triggered by unplugging cable to PC)" << std::endl
                   << "'p': turn power on/off (board and axis)" << std::endl
@@ -292,6 +298,11 @@ int main(int argc, char** argv)
                   << "'c': start/stop data collection" << std::endl
                   << "'z': clear status events and r/w errors" << std::endl
                   << "'0'-'3': toggle digital output bit" << std::endl;
+        }
+        else {
+            std::cerr
+                  << "'z': clear status events and r/w errors" << std::endl;
+        }
         return 0;
     }
 
@@ -364,14 +375,19 @@ int main(int argc, char** argv)
         if (fver >= 8) someRev8plus = true;
     }
 
-    for (j = 0; j < numDisp; j++) {
-        for (i = 0; i < BoardList[j]->GetNumEncoders(); i++)
-            BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
+    if (!readOnly) {
+        for (j = 0; j < numDisp; j++) {
+            for (i = 0; i < BoardList[j]->GetNumEncoders(); i++)
+                BoardList[j]->WriteEncoderPreload(i, 0x1000*i + 0x1000);
+        }
+        for (j = 0; j < numDisp; j++) {
+            BoardList[j]->WriteSafetyRelay(false);
+            BoardList[j]->WritePowerEnable(false);
+            BoardList[j]->WriteAmpEnable(0x0f, 0);
+        }
     }
+
     for (j = 0; j < numDisp; j++) {
-        BoardList[j]->WriteSafetyRelay(false);
-        BoardList[j]->WritePowerEnable(false);
-        BoardList[j]->WriteAmpEnable(0x0f, 0);
         uint32_t bstat = BoardList[j]->ReadStatus();
         BoardStatusList.push_back(bstat);
     }
@@ -395,8 +411,13 @@ int main(int argc, char** argv)
     } else {
         console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
-    console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
-    console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
+    if (readOnly) {
+        console.Print(2, lm, "Press ESC to quit, r to reset port (READ ONLY)");
+    }
+    else {
+        console.Print(2, lm, "Press ESC to quit, r to reset port, 0-3 to toggle digital output bit, p to enable/disable power,");
+        console.Print(3, lm, "+/- to increase/decrease commanded current (DAC) by 0x100");
+    }
 
     for (i = 1; i <= numAxes; i++) {
         unsigned int dx = lm+8+(i-1)*13;
@@ -493,6 +514,22 @@ int main(int argc, char** argv)
                 curAxis = 0;
                 strcpy(axisString, "all");
             }
+        }
+        else if (c == 'z') {
+            for (j = 0; j < numDisp; j++) {
+                memset(statusStr1[j], ' ', STATUS_STR_LENGTH-1);
+                statusStr1[j][STATUS_STR_LENGTH-1] = 0;
+                memset(statusStr2[j], ' ', STATUS_STR_LENGTH-1);
+                statusStr2[j][STATUS_STR_LENGTH-1] = 0;
+                console.Print(STATUS_LINE+4, lm+45+58*j, "            ");
+            }
+            for (j = 0; j < BoardList.size(); j++) {
+                BoardList[j]->ClearReadErrors();
+                BoardList[j]->ClearWriteErrors();
+            }
+        }
+        else if (readOnly) {
+            // Options below not available in readOnly mode
         }
         else if ((c >= '0') && (c <= '3')) {
             // toggle digital output bit
@@ -664,19 +701,6 @@ int main(int argc, char** argv)
                     isCollecting = true;
                     console.Print(STATUS_LINE-1, lm, "Collecting %d:", collect_axis);
                 }
-            }
-        }
-        else if (c == 'z') {
-            for (j = 0; j < numDisp; j++) {
-                memset(statusStr1[j], ' ', STATUS_STR_LENGTH-1);
-                statusStr1[j][STATUS_STR_LENGTH-1] = 0;
-                memset(statusStr2[j], ' ', STATUS_STR_LENGTH-1);
-                statusStr2[j][STATUS_STR_LENGTH-1] = 0;
-                console.Print(STATUS_LINE+4, lm+45+58*j, "            ");
-            }
-            for (j = 0; j < BoardList.size(); j++) {
-                BoardList[j]->ClearReadErrors();
-                BoardList[j]->ClearWriteErrors();
             }
         }
 
@@ -866,7 +890,8 @@ int main(int argc, char** argv)
             console.Print(STATUS_LINE+5, lm+12, "%s   StateError: %3d   PacketError: %3d",
                           flagStr, fpgaStatus.numStateInvalid, fpgaStatus.numPacketError);
         }
-        Port->WriteAllBoards();
+        if (!readOnly)
+            Port->WriteAllBoards();
 
         unsigned int readErrors = 0;
         unsigned int writeErrors = 0;
@@ -882,21 +907,26 @@ int main(int argc, char** argv)
         console.Print(1, lm+100, "Err(r/w): %2d %2d", readErrors, writeErrors);
 
         console.Refresh();
-        Amp1394_Sleep(0.0005);  // 500 usec
+        // Skip sleep when using Zynq EMIO because it is already slow
+        if (Port->GetPortType() != BasePort::PORT_ZYNQ_EMIO)
+            Amp1394_Sleep(0.0005);  // 500 usec
     }
 
-    for (j = 0; j < numDisp; j++) {
-        BoardList[j]->WritePowerEnable(false);      // Turn power off
-        BoardList[j]->WriteAmpEnable(0x0f, 0x00);   // Turn power off
-        BoardList[j]->WriteSafetyRelay(false);
-    }
+    if (!readOnly) {
+        for (j = 0; j < numDisp; j++) {
+            BoardList[j]->WritePowerEnable(false);      // Turn power off
+            BoardList[j]->WriteAmpEnable(0x0f, 0x00);   // Turn power off
+            BoardList[j]->WriteSafetyRelay(false);
+        }
 
-    // Reset encoder preloads to default
-    for (j = 0; j < numDisp; j++) {
-        for (i = 0; i < BoardList[j]->GetNumEncoders(); i++) {
-            BoardList[j]->WriteEncoderPreload(i, 0);
+        // Reset encoder preloads to default
+        for (j = 0; j < numDisp; j++) {
+            for (i = 0; i < BoardList[j]->GetNumEncoders(); i++) {
+                BoardList[j]->WriteEncoderPreload(i, 0);
+            }
         }
     }
+
 
     console.End();
 

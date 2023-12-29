@@ -3,12 +3,16 @@
 
 /******************************************************************************
  *
- * (C) Copyright 2018-2021 Johns Hopkins University (JHU), All Rights Reserved.
+ * (C) Copyright 2018-2023 Johns Hopkins University (JHU), All Rights Reserved.
  *
  * This program is used to read the Dallas DS2505 chip inside a da Vinci instrument
  * via its 1-wire interface. The 1-wire interface is implemented in the FPGA,
- * using bi-redirection digital port DOUT3, available with QLA Rev 1.4+.
- * It depends on the AmpIO library (which depends on libraw1394 and/or pcap).
+ * using either the direct 1-wire interface or an external DS2480B driver chip.
+ * The direct 1-wire interface uses bi-redirectional digital port DOUT3,
+ * which is available with QLA Rev 1.4+. The external DS2480B driver chip is
+ * located either on the dMIB (Rev F+) or on an external dongle.
+ * This program depends on the AmpIO library (which may depend on libraw1394
+ * and/or pcap).
  *
  * Usage: instrument [-pP] <board num>
  *        where P is the Firewire port number (default 0),
@@ -22,13 +26,7 @@
 #include <fstream>
 
 #include <Amp1394/AmpIORevision.h>
-#if Amp1394_HAS_RAW1394
-#include "FirewirePort.h"
-#endif
-#if Amp1394_HAS_PCAP
-#include "EthRawPort.h"
-#endif
-#include "EthUdpPort.h"
+#include "PortFactory.h"
 #include "AmpIO.h"
 
 void PrintDebugStream(std::stringstream &debugStream)
@@ -43,28 +41,19 @@ void PrintDebugStream(std::stringstream &debugStream)
 int main(int argc, char** argv)
 {
     int i;
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
-#endif
-    int port = 0;
     int board = 0;
-    std::string IPaddr(ETH_UDP_DEFAULT_IP);
+
+    std::string portDescription = BasePort::DefaultPort();
 
     if (argc > 1) {
         int args_found = 0;
         for (i = 1; i < argc; i++) {
             if (argv[i][0] == '-') {
                 if (argv[i][1] == 'p') {
-                    if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                        std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                        return 0;
-                    }
-                    std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
+                    portDescription = argv[i]+2;
                 }
                 else {
-                    std::cerr << "Usage: instrument <board-num> [-pP] [-d]" << std::endl
+                    std::cerr << "Usage: instrument <board-num> [-pP]" << std::endl
                               << "       where <board-num> = rotary switch setting (0-15)" << std::endl
                               << "             P = port number (default 0)" << std::endl
                               << "       can also specify -pfwP, -pethP or -pudp" << std::endl;
@@ -80,31 +69,18 @@ int main(int argc, char** argv)
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    BasePort *Port = 0;
-    if (desiredPort == BasePort::PORT_FIREWIRE) {
-#if Amp1394_HAS_RAW1394
-        Port = new FirewirePort(port, debugStream);
-#else
-        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    else if (desiredPort == BasePort::PORT_ETH_UDP) {
-        Port = new EthUdpPort(port, IPaddr, debugStream);
-    }
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-#if Amp1394_HAS_PCAP
-        Port = new EthRawPort(port, debugStream);
-#else
-        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    if (!Port || !Port->IsOK()) {
+    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
+    if (!Port) {
         PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        std::cerr << "Failed to create port using: " << portDescription << std::endl;
         return -1;
     }
+    if (!Port->IsOK()) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
+        return -1;
+    }
+
     AmpIO Board(board);
     Port->AddBoard(&Board);
 

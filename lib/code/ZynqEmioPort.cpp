@@ -31,9 +31,6 @@ bool ZynqEmioPort::Init(void)
     // Initialize EMIO interface to FPGA
     emio = EMIO_Init();
 
-    // Turn off verbose output
-    // EMIO_SetVerbose(emio, false);
-
     bool ret = ScanNodes();
     if (ret)
         SetDefaultProtocol();

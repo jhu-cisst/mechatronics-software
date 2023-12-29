@@ -3,7 +3,7 @@
 
 /******************************************************************************
  *
- * Usage: dvrktest [-pP] <controller sn> <board num> [<board num2>]
+ * Usage: dvrktest [-pP]
  *        where P is the Firewire port number (default 0),
  *        or a string such as ethP and fwP, where P is the port number
  *
@@ -19,19 +19,16 @@
 #include <thread>
 #include <array>
 #include <vector>
-#include <experimental/filesystem>
 #include <iomanip>
 
+#ifdef _MSC_VER   // Windows
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
+
 #include <Amp1394/AmpIORevision.h>
-
-#if Amp1394_HAS_RAW1394
-#include "FirewirePort.h"
-#endif
-#if Amp1394_HAS_PCAP
-#include "EthRawPort.h"
-#endif
-#include "EthUdpPort.h"
-
+#include "PortFactory.h"
 #include "AmpIO.h"
 #include "MotorVoltage.h"
 
@@ -504,12 +501,20 @@ Result TestDallas(AmpIO **Board, BasePort *Port) {
         board = Board[1];
     }
     unsigned char buffer[2048];
+    uint32_t status = 0;
     bool ret = board->DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
+    board->DallasReadStatus(status);
+    unsigned char family_code = static_cast<unsigned char>((status&0xFF000000)>>24);
     if (!ret) {
         std::cout << FAIL << std::endl;
-        std::cout << COLOR_ERROR << "(DallasReadMemory failed)" << COLOR_OFF << std::endl;
+        std::cout << COLOR_ERROR << "(Can't talk to DS2480B. Check SCSI cable.)" << COLOR_OFF << std::endl;
         logfile << "... FAIL" << std::endl;
         return fail;
+    } else if (family_code != 0x0B) {
+        std::cout << FAIL << std::endl;
+        std::cout << COLOR_ERROR << "(Can talk to DS2480B but not DS2505. Check dMIB jumper J42.)" << COLOR_OFF << std::endl;
+        logfile << "... FAIL" << std::endl;
+        return fail;        
     } else {
         std::cout << PASS << std::endl;
         logfile << "... PASS" << std::endl;
@@ -528,53 +533,25 @@ void PrintDebugStream(std::stringstream &debugStream)
 
 int main(int argc, char **argv)
 {
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
-#endif
-    int port = 0;
     int board1 = BoardIO::MAX_BOARDS;
     int board2 = BoardIO::MAX_BOARDS;
-    std::string IPaddr(ETH_UDP_DEFAULT_IP);
+
+    std::string portDescription = BasePort::DefaultPort();
 
     for (int i = 1; i < argc; i++) {
         if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
             // -p option can be -pN, -pfwN, or -pethN, where N
             // is the port number. -pN is equivalent to -pfwN
             // for backward compatibility.
-            if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                return 0;
-            }
-            std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
+            portDescription = argv[i]+2;
         }
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    BasePort *Port = 0;
-    if (desiredPort == BasePort::PORT_FIREWIRE) {
-#if Amp1394_HAS_RAW1394
-        Port = new FirewirePort(port, debugStream);
-#else
-        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    else if (desiredPort == BasePort::PORT_ETH_UDP) {
-        Port = new EthUdpPort(port, IPaddr, debugStream);
-    }
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-#if Amp1394_HAS_PCAP
-        Port = new EthRawPort(port, debugStream);
-#else
-        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
-        return -1;
-#endif
-    }
+    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
     if (!Port || !Port->IsOK()) {
         PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
         std::cerr << "Press [Enter] to exit" << std::endl;
         std::cin.ignore();
         return -1;
@@ -583,7 +560,7 @@ int main(int argc, char **argv)
     // Now that Port is initialized, look for dVRK Controllers
     std::vector<ControllerInfo> ControllerList = GetControllerList(Port);
     if (ControllerList.size() > 0) {
-        std::cout << "Controllers on " << BasePort::PortTypeString(desiredPort) << ":" << std::endl;
+        std::cout << "Controllers on " << Port->GetPortTypeString() << ":" << std::endl;
         std::vector<ControllerInfo>::const_iterator it;
         for (it = ControllerList.begin(); it != ControllerList.end(); it++) {
             std::cout << "   " << ControllerTypeString[it->armType] << ", " << Port->GetHardwareVersionString(it->board_id);
@@ -595,7 +572,7 @@ int main(int argc, char **argv)
         std::cout << std::endl;
     }
     else {
-        std::cout << "No controllers found on " << BasePort::PortTypeString(desiredPort) << ", exiting" << std::endl;
+        std::cout << "No controllers found on " << Port->GetPortTypeString() << ", exiting" << std::endl;
         std::cout << "Press [Enter] to exit" << std::endl;
         std::cin.ignore();
         return -1;
@@ -630,11 +607,18 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    if (ControllerList[0].armType == ControllerInfo::UNSUPPORTED) {
+        std::cout << "Unsupported arm type -- check board id" << std::endl;
+        std::cout << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
+        return -1;
+    }
+
     std::cout << "*********** dVRK  Classic Controller Test ***********" << std::endl;
     std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
 
-    // If user did not specify board id, use the one obtained by scanning the bus.
-    // Perhaps we will remove ability to specify board id(s) on command line.
+    // If user did not specify board id, use the one obtained by scanning the bus
+    // (program no longer supports user specification of board id).
     if (board1 == BoardIO::MAX_BOARDS) {
         board1 = ControllerList[0].board_id;
         if (ControllerList[0].hwVersion == QLA1_String) {
@@ -662,7 +646,11 @@ int main(int argc, char **argv)
     std::stringstream filename;
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
-    std::experimental::filesystem::create_directory("dVRK_test_results");
+    #ifdef _MSC_VER   // Windows
+        _mkdir("dVRK_test_results");
+    #else
+        mkdir("dVRK_test_results", 0777);
+    #endif
     filename << "dVRK_test_results/dVRK_" << controller_sn << "_" << std::put_time(&tm, "%Y-%m-%d-%H-%M-%S") << ".txt";
     logfile.open(filename.str(), std::fstream::out);
 
