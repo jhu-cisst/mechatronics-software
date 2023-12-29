@@ -11,7 +11,7 @@
 
 # Backward compatibility
 cmake_minimum_required (VERSION 3.10)
-project (Amp1394Utils VERSION 2.0.0)
+project (Amp1394Utils VERSION 2.1.0)
 
 if (NOT EXECUTABLE_OUTPUT_PATH)
    set (EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})

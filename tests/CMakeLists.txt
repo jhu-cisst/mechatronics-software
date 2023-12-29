@@ -10,7 +10,7 @@
 # --- end cisst license ---
 
 cmake_minimum_required(VERSION 3.10)
-project(Amp1394Tests VERSION 2.0.0)
+project(Amp1394Tests VERSION 2.1.0)
 
 include_directories(${Amp1394_INCLUDE_DIR})
 link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
