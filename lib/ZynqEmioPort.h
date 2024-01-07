@@ -94,8 +94,8 @@ public:
 
     // Get the maximum number of data bytes that can be read
     // (via ReadBlock) or written (via WriteBlock).
-    unsigned int GetMaxReadDataSize(void) const  { return 128; }
-    unsigned int GetMaxWriteDataSize(void) const { return 128; }
+    unsigned int GetMaxReadDataSize(void) const  { return MAX_POSSIBLE_DATA_SIZE; }
+    unsigned int GetMaxWriteDataSize(void) const { return MAX_POSSIBLE_DATA_SIZE; }
 
     // Adds board(s)
     bool AddBoard(BoardIO *board);
