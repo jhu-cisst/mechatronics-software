@@ -586,9 +586,9 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
 {
     quadlet_t write_data = 0;
     quadlet_t read_data = 0;
-    if (!port->WriteQuadlet(boardNum, 1, write_data))
+    if (!port->WriteQuadlet(boardNum, BoardIO::FW_PHY_REQ, write_data))
         return false;
-    if (!port->ReadQuadlet(boardNum, 2, read_data))
+    if (!port->ReadQuadlet(boardNum, BoardIO::FW_PHY_RESP, read_data))
         return false;
     std::cout << "Node: " << std::dec << ((read_data >> 2) & 0x000003f);
     if (read_data & 0x02) std::cout << " (root)";
@@ -596,16 +596,16 @@ bool PrintFirewirePHY(BasePort *port, int boardNum)
     std::cout << std::endl;
     write_data = 1;
     read_data = 0;
-    if (!port->WriteQuadlet(boardNum, 1, write_data))
+    if (!port->WriteQuadlet(boardNum, BoardIO::FW_PHY_REQ, write_data))
         return false;
-    if (!port->ReadQuadlet(boardNum, 2, read_data))
+    if (!port->ReadQuadlet(boardNum, BoardIO::FW_PHY_RESP, read_data))
         return false;
     std::cout << "Gap count = " << (read_data&0x000003f) << " (default = 63)" << std::endl;
     write_data = 2;
     read_data = 0;
-    if (!port->WriteQuadlet(boardNum, 1, write_data))
+    if (!port->WriteQuadlet(boardNum, BoardIO::FW_PHY_REQ, write_data))
         return false;
-    if (!port->ReadQuadlet(boardNum, 2, read_data))
+    if (!port->ReadQuadlet(boardNum, BoardIO::FW_PHY_RESP, read_data))
         return false;
     int speed = (read_data >> 6)&0x00000003;
     std::cout << "Speed = " << speed << ", num_ports = " << (read_data&0x0000001f) << std::endl;

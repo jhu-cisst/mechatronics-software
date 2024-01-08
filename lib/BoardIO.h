@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -95,6 +95,7 @@ public:
     //   FIRMWARE_VERSION: Version of FPGA firmware
     //   IP_ADDR:          Ethernet IP address (written during Ethernet configuration)
     //   ETH_STATUS:       Ethernet status register (used to distinguish FPGA version)
+    //   GIT_DESC:         Git description
     //
     enum Registers {
         BOARD_STATUS = 0,      // RW: Board status/control register
