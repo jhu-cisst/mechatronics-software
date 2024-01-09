@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -28,7 +28,6 @@ http://www.cisst.org/cisst/license.txt.
 #endif
 
 // crc related
-uint32_t BitReverse32(uint32_t input);
 uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 
 
@@ -1049,7 +1048,7 @@ static const unsigned char BitReverseTable[] =
 };
 
 
-uint32_t BitReverse32(uint32_t input)
+uint32_t EthBasePort::BitReverse32(uint32_t input)
 {
     unsigned char inputs[4];
     inputs[0] = BitReverseTable[input & 0x000000ff];

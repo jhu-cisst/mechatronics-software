@@ -152,6 +152,51 @@ void ComputeMulticastHash(unsigned char *MulticastMAC, uint8_t &regAddr, uint16_
     regData = (1 << regBit);
 }
 
+// Compute the PHY ID1 and ID2 registers, given the OUI (or CID), model number and revision.
+// This is used in the FPGA V3 Virtual PHY, using the JHU LCSR CID (0xFA610E).
+// Unfortunately, there seems to be a discrepancy between different vendors, whether or not
+// the OUI is bit-reversed; based on the specification, it seems that it should be reversed
+// and byte-swapped. Likely the confusion is due to the difference between network transmission
+// order (where the LSB is transmitted first) and the data representation in memory.
+//
+// Parameters:
+//    oui      OUI or CID for vendor (24-bit number)
+//    model    Vendor's model number
+//    rev      Version revision number
+//    name     Descriptive name (e.g., vendor and part)
+//    ref_id1  Reference value for PHY ID1 (from chip datasheet)
+//    ref_id2  Reference value for PHY ID2 (from chip datasheet)
+//    reverse  Whether or not to reverse the OUI/CID bits
+//
+void ComputePhyId(uint32_t oui, uint32_t model, uint32_t rev,
+                  const std::string &name, uint32_t ref_id1, uint32_t ref_id2, bool reverse = true)
+{
+    bool show_ref = (ref_id1 != 0) && (ref_id2 != 0);
+
+    uint32_t oui_rev = bswap_32(EthBasePort::BitReverse32(oui));
+    uint32_t oui_final = reverse ? oui_rev : oui;
+    uint32_t phy_id1 = (oui_final>>6)&0x0000ffff;
+    uint32_t phy_id2 = ((oui_final<<10)&0x0000fc00) | ((model&0x3f) << 4) | (rev&0x0f);
+
+    // Reconstruct OUI/CID from PHY ID1 and ID2. Note that it may not be the same because
+    // the PHY IDs only include 22 of the 24 bits.
+    uint32_t oui_rec = (static_cast<uint32_t>(phy_id1)<<6) | (static_cast<uint32_t>(phy_id2&0xfc00)>>10);
+    if (!reverse)
+        oui_rec = bswap_32(EthBasePort::BitReverse32(oui_rec));
+
+    std::cout << name << (reverse ? " (reversed)" : " (not reversed)")
+              << ": OUI = " << std::hex << std::setfill('0') << std::setw(6)
+              << oui << " (reversed " << oui_rev << "): PHY ID1 = "
+              << std::setw(4) << phy_id1;
+    if (show_ref)
+        std::cout << " (should be " << std::setw(4) << ref_id1 << ")";
+    std::cout << ", PHY ID2 = " << std::setw(4) << phy_id2;
+    if (show_ref)
+        std::cout << " (should be " << std::setw(4) << ref_id2 << ")";
+    std::cout << ", OUI reconstructed = " << std::setw(6)
+              << bswap_32(EthBasePort::BitReverse32(oui_rec)) << std::dec << std::endl;
+}
+
 // Ethernet status from FPGA register 12
 void PrintEthernetStatus(AmpIO &Board)
 {
@@ -1283,6 +1328,7 @@ int main(int argc, char **argv)
         if (curBoard) {
             std::cout << "  m) Initialize and test I/O Expander (QLA 1.5+)" << std::endl;
         }
+        std::cout << "  P) Compute Ethernet PHY IDs" << std::endl;
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
 #if Amp1394_HAS_RAW1394
         if (curBoardFw)
@@ -1520,6 +1566,15 @@ int main(int argc, char **argv)
                     QLA_IOExp_Check(*curBoard);
                 }
             }
+            break;
+
+        case 'P':
+            ComputePhyId(0x00e04c, 0x11, 0x6, "RealTek RTL8211F", 0x001c, 0xc916);
+            ComputePhyId(0x001018, 0x1f, 0x0, "Broadcom BCM5214", 0x0040, 0x61f0, false);
+            ComputePhyId(0x00800F, 0x0e, 0x0, "Microchip LAN8810", 0x0007, 0xc0e0);
+            ComputePhyId(0x005043, 0x1d, 0x0, "Marvell 88E1510", 0x0141, 0x0dd0, false);
+            // For now, we will use the "reversed bits" convention
+            ComputePhyId(0xfa610e, 0x01, 0x0, "JHU LCSR", 0, 0);
             break;
 
         case 'r':
