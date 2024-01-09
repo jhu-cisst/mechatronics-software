@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -185,6 +185,9 @@ public:
     void PromDelay(void) const;
 
     //****************** Static methods ***************************
+
+    // Reverse the bits in the input
+    static uint32_t BitReverse32(uint32_t input);
 
     // Returns the destination MAC address (6 bytes)
     // The first 3 characters are FA:61:OE, which is the CID assigned to LCSR by IEEE
