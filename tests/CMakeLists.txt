@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2024 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -60,11 +60,15 @@ add_custom_command (TARGET block1394eth POST_BUILD
 add_executable(enctest enctest.cpp)
 target_link_libraries (enctest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
+add_executable(ethswitch ethswitch.cpp)
+target_link_libraries(ethswitch ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES}
+                                ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
+
 install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
          COMPONENT Amp1394-utils
          DESTINATION bin)
 
-install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest
+install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest ethswitch
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
 
