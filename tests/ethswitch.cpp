@@ -189,7 +189,7 @@ int main(int argc, char** argv)
         console.Print(10+NL*i, lm+2, "NumFwd:");
     }
     console.Print(36, lm, "MAC Addr:");
-    console.Print(37, lm, "FPGA Fwd");
+    console.Print(37, lm, "FPGA Fwd:");
     console.Refresh();
 
     // control loop
@@ -222,6 +222,14 @@ int main(int argc, char** argv)
         if (board->ReadEthernetData(buffer, 0x00a0, 32)) {
             EthSwitchData *data = reinterpret_cast<EthSwitchData *>(buffer);
             for (i = 0; i < NUM_PORTS; i++) {
+                bool portActive = data->PortAttr & (0x0001 << i);
+                bool portFast   = data->PortAttr & (0x0010 << i);
+                bool recvReady  = data->PortAttr & (0x0100 << i);
+                bool dataReady  = data->PortAttr & (0x1000 << i);
+                console.Print(4+NL*i, lm+18, portActive ? "on " : "off");
+                console.Print(4+NL*i, lm+23, !portActive ? "    " : portFast   ? "fast" : "slow");
+                console.Print(4+NL*i, lm+30, portActive&recvReady  ? "rr" : "  ");
+                console.Print(4+NL*i, lm+34, portActive&dataReady  ? "dr" : "  ");
                 console.Print(5+NL*i, lm+14, "%6d", data->numPacketRecv[i]);
                 console.Print(6+NL*i, lm+14, "%6d", data->numPacketSent[i]);
                 if (show_errors) {
