@@ -42,28 +42,31 @@ const unsigned int NUM_PORTS = 4;
 
 // Must match DebugData in EthSwitch.v
 struct EthSwitchData {
-    uint32_t unused0;
-    uint16_t numPacketRecv0;
-    uint16_t numPacketSent0;
-    uint16_t numPacketRecv1;
-    uint16_t numPacketSent1;
-    uint16_t numPacketRecv2;
-    uint16_t numPacketSent2;
-    uint16_t numPacketRecv3;
-    uint16_t numPacketSent3;
+    char     headerString[4];
+    uint16_t PortAttr;
+    uint16_t unused1;
+    uint16_t numPacketRecv[4];
+    uint16_t numPacketSent[4];
+    uint8_t  TxInfoReg[4];
+    uint8_t  numCrcErrorIn[4];
+    uint8_t  numCrcErrorOut[4];
+    uint8_t  numIPv4ErrorIn[4];
+    uint32_t unused10_11[2];
     uint16_t fifo_active;
     uint16_t fifo_underflow;
     uint16_t fifo_empty;
     uint16_t fifo_full;
-    uint32_t numCrcErrorInVec;
-    uint32_t numCrcErrorOutVec;
-    uint32_t TxInfoRegVec;
-    uint32_t MacAddrHost0;
-    uint32_t MacAddrHost1;
+    uint16_t data_avail;
+    uint16_t info_not_empty;
     uint16_t packet_dropped;
     uint16_t packet_truncated;
-    uint32_t numIPv4ErrorInVec;
-    uint32_t numPacketFwdVec;
+    uint8_t  numPacketFwd[4][4];
+    uint32_t unused20_23[4];
+    uint32_t MacAddrPrimary0High;
+    uint32_t MacAddrPrimary01;
+    uint32_t MacAddrPrimary1Low;
+    uint16_t PortForwardFpga[2];
+    uint32_t unused_28_31[4];
 };
 
 bool GetBit(uint16_t value, uint16_t inPort, uint16_t outPort)
@@ -85,6 +88,7 @@ int main(int argc, char** argv)
     unsigned int i, j;
     const int ESC_CHAR = 0x1b;
     int c;
+    bool show_errors = false;
 
     static const char *PortName[NUM_PORTS] = { "Eth1", "Eth2", "PS", "RT" };
     std::vector<AmpIO*> BoardList;
@@ -148,6 +152,17 @@ int main(int argc, char** argv)
 
     AmpIO *board = BoardList[0];
 
+    uint32_t debugString;
+    Port->ReadQuadlet(board->GetBoardId(), 0x40a0, debugString);
+    if (strncmp(reinterpret_cast<char *>(&debugString), "ESW0", 4) != 0) {
+        std::cerr << "Firmware does not support Ethernet switch data" << std::endl;
+        return -1;
+    }
+
+    uint64_t MacAddrPort[2];
+    MacAddrPort[0] = 0;
+    MacAddrPort[1] = 0;
+
     Amp1394Console console;
     console.Init();
     if (!console.IsOK()) {
@@ -156,81 +171,134 @@ int main(int argc, char** argv)
     }
 
     console.Print(1, lm, "Ethernet Switch status for Board %d", board->GetBoardId());
-    console.Print(2, lm, "Press ESC to quit, c to clear errors");
+    console.Print(2, lm, "Press ESC to quit, c to clear errors, e to show/hide CRC errors");
 
     const unsigned int NL = 8;   // Number of lines per port
 
     for (i = 0; i < NUM_PORTS; i++) {
         console.Print(4+NL*i, lm, "Port %d: %s", i, PortName[i]);
-        console.Print(5+NL*i, lm+2, "NumRecv: ");
+        console.Print(5+NL*i, lm+2, "NumRecv:");
         console.Print(6+NL*i, lm+2, "NumSent:");
+        if (show_errors) {
+            console.Print(5+NL*i, lm+26, "CRC/IPv4:");
+            console.Print(6+NL*i, lm+26, "CRC:");
+        }
         console.Print(7+NL*i, lm+2, "FIFOs -->");
         console.Print(8+NL*i, lm+2, "FIFOs <--");
         console.Print(9+NL*i, lm+2, "TxInfo:");
-        console.Print(10+NL*i, lm+2, "NumFwd: ");
+        console.Print(10+NL*i, lm+2, "NumFwd:");
     }
-    console.Print(32, lm, "Other:");
+    console.Print(36, lm, "MAC Addr:");
+    console.Print(37, lm, "FPGA Fwd");
     console.Refresh();
 
     // control loop
     while ((c = console.GetChar()) != ESC_CHAR)
     {
-        uint32_t buffer[15];
-        uint16_t numPacketRecv[NUM_PORTS];
-        uint16_t numPacketSent[NUM_PORTS];
+        uint32_t buffer[32];
 
         if (c == 'c') {
             board->WriteEthernetClearErrors(3);
         }
-
-        if (board->ReadEthernetData(buffer, 0x00a0, 15)) {
-            EthSwitchData *data = reinterpret_cast<EthSwitchData *>(buffer);
-            uint16_t *data16 = reinterpret_cast<uint16_t *>(buffer);
-            for (i = 0; i < NUM_PORTS; i++) {
-                numPacketSent[i] = data16[3+2*i];
-                numPacketRecv[i] = data16[2+2*i];
-                console.Print(5+NL*i, lm+14, "%6d", numPacketRecv[i]);
-                console.Print(6+NL*i, lm+14, "%6d", numPacketSent[i]);
-                uint8_t *txinfo = reinterpret_cast<uint8_t *>(&data->TxInfoRegVec);
-                uint8_t *numFwd = reinterpret_cast<uint8_t *>(&data->numPacketFwdVec);
-                for (j = 0; j < NUM_PORTS; j++) {      // out ports
-                    bool bit;
-                    bit = GetBit(data->fifo_empty, i, j);
-                    console.Print(7+NL*i, lm+16+14*j, bit ? "e" : " ");
-                    bit = GetBit(data->fifo_empty, j, i);
-                    console.Print(8+NL*i, lm+16+14*j, bit ? "e" : " ");
-                    bit = GetBit(data->fifo_full, i, j);
-                    console.Print(7+NL*i, lm+18+14*j, bit ? "f" : " ");
-                    bit = GetBit(data->fifo_full, j%4, i);
-                    console.Print(8+NL*i, lm+18+14*j, bit ? "f" : " ");
-                    bit = GetBit(data->fifo_active, i, j);
-                    console.Print(7+NL*i, lm+20+14*j, bit ? "a" : " ");
-                    bit = GetBit(data->fifo_active, j, i);
-                    console.Print(8+NL*i, lm+20+14*j, bit ? "a" : " ");
-                    bit = GetBit(data->fifo_underflow, i, j);
-                    console.Print(7+NL*i, lm+22+14*j, bit ? "u" : " ");
-                    bit = GetBit(data->fifo_underflow, j, i);
-                    console.Print(8+NL*i, lm+22+14*j, bit ? "u" : " ");
-                    bit = GetBit(data->packet_dropped, i, j);
-                    console.Print(7+NL*i, lm+24+14*j, bit ? "d" : " ");
-                    bit = GetBit(data->packet_dropped, j, i);
-                    console.Print(8+NL*i, lm+24+14*j, bit ? "d" : " ");
-                    bit = GetBit(data->packet_truncated, i, j);
-                    console.Print(7+NL*i, lm+28+14*j, bit ? "t" : " ");
-                    bit = GetBit(data->packet_truncated, j, i);
-                    console.Print(8+NL*i, lm+28+14*j, bit ? "t" : " ");
-                    uint8_t TxSt = (txinfo[j]&0xc0)>>6;
-                    uint8_t curIn = (txinfo[j]&0x30)>>4;
-                    uint8_t errBits = txinfo[j]&0x0f;
-                    console.Print(9+NL*i, lm+16+10*j, "[%1x  %1d  %1x]", TxSt, curIn, errBits);
-                    if (i == 0) console.Print(10+NL*i, lm+16+10*j, "%8d", numFwd[j]);
+        else if (c == 'e') {
+            show_errors = !show_errors;
+            if (show_errors) {
+                for (i = 0; i < NUM_PORTS; i++) {
+                    console.Print(5+NL*i, lm+26, "CRC/IPv4:");
+                    console.Print(6+NL*i, lm+26, "CRC:");
                 }
             }
-            if ((data->numCrcErrorInVec != 0) || (data->numCrcErrorOutVec != 0) ||
-                (data->numIPv4ErrorInVec != 0)) {
-                console.Print(32, lm+14, "%8x  %8x  %8x", data->numCrcErrorInVec, data->numCrcErrorOutVec,
-                                                          data->numIPv4ErrorInVec);
+            else {
+                for (i = 0; i < NUM_PORTS; i++) {
+                    console.Print(5+NL*i, lm+26, "         ");
+                    console.Print(6+NL*i, lm+26, "    ");
+                    console.Print(5+NL*i, lm+36, "      ");
+                    console.Print(5+NL*i, lm+44, "      ");
+                    console.Print(6+NL*i, lm+36, "      ");
+                }
             }
+        }
+
+        if (board->ReadEthernetData(buffer, 0x00a0, 32)) {
+            EthSwitchData *data = reinterpret_cast<EthSwitchData *>(buffer);
+            for (i = 0; i < NUM_PORTS; i++) {
+                console.Print(5+NL*i, lm+14, "%6d", data->numPacketRecv[i]);
+                console.Print(6+NL*i, lm+14, "%6d", data->numPacketSent[i]);
+                if (show_errors) {
+                    console.Print(5+NL*i, lm+36, "%6d", data->numCrcErrorIn[i]);
+                    console.Print(5+NL*i, lm+44, "%6d", data->numIPv4ErrorIn[i]);
+                    console.Print(6+NL*i, lm+36, "%6d", data->numCrcErrorOut[i]);
+                }
+                for (j = 0; j < NUM_PORTS; j++) {      // out ports
+                    bool bit, ebit, fbit;
+                    ebit = GetBit(data->fifo_empty, i, j);
+                    fbit = GetBit(data->fifo_full, i, j);
+                    if (ebit && fbit)
+                        console.Print(7+NL*i, lm+16+16*j, "?");
+                    else if (ebit)
+                        console.Print(7+NL*i, lm+16+16*j, "e");
+                    else if (fbit)
+                        console.Print(7+NL*i, lm+16+16*j, "f");
+                    else
+                        console.Print(7+NL*i, lm+16+16*j, " ");
+                    ebit = GetBit(data->fifo_empty, j, i);
+                    fbit = GetBit(data->fifo_full, j, i);
+                    if (ebit && fbit)
+                        console.Print(8+NL*i, lm+16+16*j, "?");
+                    else if (ebit)
+                        console.Print(8+NL*i, lm+16+16*j, "e");
+                    else if (fbit)
+                        console.Print(8+NL*i, lm+16+16*j, "f");
+                    else
+                        console.Print(8+NL*i, lm+16+16*j, " ");
+                    bit = GetBit(data->info_not_empty, i, j);
+                    console.Print(7+NL*i, lm+18+16*j, bit ? "i" : " ");
+                    bit = GetBit(data->info_not_empty, j, i);
+                    console.Print(8+NL*i, lm+18+16*j, bit ? "i" : " ");
+                    bit = GetBit(data->fifo_active, i, j);
+                    console.Print(7+NL*i, lm+20+16*j, bit ? "a" : " ");
+                    bit = GetBit(data->fifo_active, j, i);
+                    console.Print(8+NL*i, lm+20+16*j, bit ? "a" : " ");
+                    bit = GetBit(data->fifo_underflow, i, j);
+                    console.Print(7+NL*i, lm+22+16*j, bit ? "u" : " ");
+                    bit = GetBit(data->fifo_underflow, j, i);
+                    console.Print(8+NL*i, lm+22+16*j, bit ? "u" : " ");
+                    bit = GetBit(data->packet_dropped, i, j);
+                    console.Print(7+NL*i, lm+24+16*j, bit ? "d" : " ");
+                    bit = GetBit(data->packet_dropped, j, i);
+                    console.Print(8+NL*i, lm+24+16*j, bit ? "d" : " ");
+                    bit = GetBit(data->packet_truncated, i, j);
+                    console.Print(7+NL*i, lm+28+16*j, bit ? "t" : " ");
+                    bit = GetBit(data->packet_truncated, j, i);
+                    console.Print(8+NL*i, lm+28+16*j, bit ? "t" : " ");
+                    bit = GetBit(data->data_avail, i, j);
+                    console.Print(7+NL*i, lm+30+16*j, bit ? "x" : " ");
+                    bit = GetBit(data->data_avail, j, i);
+                    console.Print(8+NL*i, lm+30+16*j, bit ? "x" : " ");
+                    uint8_t TxSt = (data->TxInfoReg[j]&0xc0)>>6;
+                    uint8_t curIn = (data->TxInfoReg[j]&0x30)>>4;
+                    uint8_t errBits = data->TxInfoReg[j]&0x0f;
+                    console.Print(9+NL*i, lm+16+16*j, "[%1x  %1d  %1x]", TxSt, curIn, errBits);
+                    console.Print(10+NL*i, lm+16+16*j, "%4d", data->numPacketFwd[i][j]);
+                }
+            }
+            uint64_t newMacAddr[2];
+            newMacAddr[0] = data->MacAddrPrimary0High;
+            newMacAddr[0] <<= 16;
+            newMacAddr[0] |= (data->MacAddrPrimary01&0xffff0000)>>16;
+            newMacAddr[1] = data->MacAddrPrimary01&0x0000ffff;
+            newMacAddr[1] <<= 32;
+            newMacAddr[1] |= data->MacAddrPrimary1Low;
+            if (newMacAddr[0] != MacAddrPort[0]) {
+                MacAddrPort[0] = newMacAddr[0];
+                console.Print(36, lm+16, "%llx", MacAddrPort[0]);
+            }
+            if (newMacAddr[1] != MacAddrPort[1]) {
+                MacAddrPort[1] = newMacAddr[1];
+                console.Print(36, lm+32, "%llx", MacAddrPort[1]);
+            }
+            console.Print(37, lm+16, "%6x", data->PortForwardFpga[0]);
+            console.Print(37, lm+32, "%6x", data->PortForwardFpga[1]);
         }
     }
 
