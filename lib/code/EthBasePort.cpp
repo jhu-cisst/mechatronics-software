@@ -404,7 +404,7 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
         uint8_t  retState;
         uint8_t  state;
         uint16_t regISROther;      // Quad 3
-        uint16_t quad3_high;       // unused
+        uint16_t respBytes;
         uint8_t  numPacketSent;    // Quad 4
         uint8_t  frameCount;
         uint16_t bw_wait;
@@ -444,6 +444,7 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
     debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
     debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
+    debugStream << "respBytes: " << p->respBytes << std::endl;
     const double bits2uS = clockPeriod*1e6;
     debugStream << "timeReceive (us): " << p->timeReceive*bits2uS << std::endl;
     debugStream << "timeSend (us): " << p->timeSend*bits2uS << std::endl;
