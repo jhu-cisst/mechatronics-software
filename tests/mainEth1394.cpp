@@ -784,9 +784,6 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard, unsigned int 
     unsigned int debugVersion = 0;
     if (rboard->ReadEthernetData(waveform_read, (eth_port << 8) | 0x80, 16)) {
         char *cptr = reinterpret_cast<char *>(waveform_read);
-        if (strncmp(cptr, "DBG1", 4) == 0) {
-            debugVersion = 1;
-        }
         if (strncmp(cptr, "DBG2", 4) == 0) {
             debugVersion = 2;
         }
@@ -827,28 +824,22 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard, unsigned int 
         }
         Amp1394_Sleep(0.05);
         if (debugVersion) {
-            // Read 32 quadlets to get EthernetIO debug data (0x80-0x8f) and low-level
-            // (KSZ or RTL/ESW) debug data (0x90-0x9f) for debugVersion==2
-            if (!rboard->ReadEthernetData(waveform_read, (eth_port << 8) | 0x80, 32))
+            // Read 16 quadlets to get EthernetIO debug data (0x80-0x8f)
+            if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
+                break;
+            // Read next 5 quadlets to get low-level debug data:
+            // KSZ (0x90) or RTI (0xa0)
+            if (!rboard->ReadEthernetData(&waveform_read[16], (eth_port == 0) ? 0x90 : 0xa0, 5))
                 break;
             unsigned short bw_left = 0;
             unsigned short bw_wait = 0;
-            if (debugVersion == 1) {
-                unsigned short *ptr = reinterpret_cast<unsigned short *>(&waveform_read[14]);
-                bw_left = ptr[0];
-                bw_wait = ptr[1];
+            bw_left = static_cast<unsigned short>(waveform_read[8]>>16);
+            bool bw_err = (waveform_read[8] & 0x00008000);
+            if (bw_err) {
+                bw_err_cnt++;
             }
-            else if (debugVersion == 2) {
-                bw_left = static_cast<unsigned short>(waveform_read[8]>>16);
-                bool bw_err = (waveform_read[8] & 0x00008000);
-                if (bw_err) {
-                    bw_err_cnt++;
-                }
-                if (eth_port == 0)   // FPGA V2 (KSZ8851 DebugData)
-                    bw_wait = static_cast<unsigned short>(waveform_read[20]>>16);
-                else                 // FPGA V3 (EthSwitchRt DebugData)
-                    bw_wait = static_cast<unsigned short>(waveform_read[28]>>16);
-            }
+            // For both KSZ and RTI, bw_wait is upper word of DebugData[4]
+            bw_wait = static_cast<unsigned short>(waveform_read[20]>>16);
             if (bw_left < min_left) {
                 min_left = bw_left;
                 min_wlen = wlen;
@@ -861,6 +852,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard, unsigned int 
                 std::cout << "bw_left = " << bw_left << ", bw_wait = " << bw_wait;
                 if (bw_err_cnt > 0)
                     std::cout << ", bw_err_cnt = " << bw_err_cnt;
+                std::cout << ", ";
             }
         }
         if (!rboard->ReadWaveformTable(waveform_read, 0, wlen)) {
@@ -874,7 +866,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard, unsigned int 
                 allOK = false;
                 if (doOut) {
                     std::cout << "mismatch at quadlet " << std::dec << i << ", read "
-                              << waveform_read[i] << ", expected " << waveform[i];
+                              << std::hex << waveform_read[i] << ", expected " << waveform[i];
                     if (numSilentMismatch > 0) {
                         std::cout << std::endl << "There were " << numSilentMismatch
                                   << " additional lengths with mismatches";
@@ -1631,18 +1623,19 @@ int main(int argc, char **argv)
                     EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
                 if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0x80, 16))     // EthernetIO DebugData
                     EthBasePort::PrintDebugData(std::cout, buffer, clkPeriod);
-                if (curBoard->ReadEthernetData(buffer, (eth_port << 8) | 0x90, 16)) {   // Low-level DebugData
-                    if (fpgaVer == 2)
-                        EthBasePort::PrintDebugDataKSZ(std::cout, buffer, clkPeriod);  // KSZ8851 (FPGA V2)
-                    else {
-                        EthBasePort::PrintDebugDataRTL(std::cout, buffer, clkPeriod);  // RTL8211F (FPGA V3)
-                        uint32_t ethStatus;
-                        curBoard->ReadEthernetStatus(ethStatus);
-                        if (ethStatus & FpgaIO::ETH_STAT_CLK_OK_V3)
-                            std::cout << "200 MHz clock running" << std::endl;
-                        else
-                            std::cout << "**** 200 MHz clock not running -- initialize PS" << std::endl;
-                    }
+                if (fpgaVer == 2) {
+                    if (curBoard->ReadEthernetData(buffer, 0x90, 16))                   // Low-level DebugData
+                        EthBasePort::PrintDebugDataKSZ(std::cout, buffer, clkPeriod);   // KSZ8851 (FPGA V2)
+                }
+                else if (fpgaVer == 3) {
+                    if (curBoard->ReadEthernetData(buffer, 0x4a0, 16))                  // Low-level DebugData
+                        EthBasePort::PrintDebugDataRTI(std::cout, buffer, clkPeriod);   // EthRtInterface (FPGA V3)
+                    uint32_t ethStatus;
+                    curBoard->ReadEthernetStatus(ethStatus);
+                    if (ethStatus & FpgaIO::ETH_STAT_CLK_OK_V3)
+                        std::cout << "200 MHz clock running" << std::endl;
+                    else
+                        std::cout << "**** 200 MHz clock not running -- initialize PS" << std::endl;
                 }
 #if 0
                 if ((fpgaVer == 2) && (curBoard->ReadEthernetData(buffer, 0xa0, 32))) {
