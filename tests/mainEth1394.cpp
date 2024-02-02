@@ -868,7 +868,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard, unsigned int 
                     std::cout << "mismatch at quadlet " << std::dec << i << ", read "
                               << std::hex << waveform_read[i] << ", expected " << waveform[i];
                     if (numSilentMismatch > 0) {
-                        std::cout << std::endl << "There were " << numSilentMismatch
+                        std::cout << std::endl << "There were " << std::dec << numSilentMismatch
                                   << " additional lengths with mismatches";
                         numSilentMismatch = 0;
                     }
