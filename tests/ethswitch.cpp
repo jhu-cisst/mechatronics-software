@@ -279,10 +279,6 @@ int main(int argc, char** argv)
                     console.Print(7+NL*i, lm+28+16*j, bit ? "t" : " ");
                     bit = GetBit(data->packet_truncated, j, i);
                     console.Print(8+NL*i, lm+28+16*j, bit ? "t" : " ");
-                    bit = GetBit(data->data_avail, i, j);
-                    console.Print(7+NL*i, lm+30+16*j, bit ? "x" : " ");
-                    bit = GetBit(data->data_avail, j, i);
-                    console.Print(8+NL*i, lm+30+16*j, bit ? "x" : " ");
                     uint8_t TxSt = (data->TxInfoReg[j]&0xc0)>>6;
                     uint8_t curIn = (data->TxInfoReg[j]&0x30)>>4;
                     uint8_t errBits = data->TxInfoReg[j]&0x0f;
