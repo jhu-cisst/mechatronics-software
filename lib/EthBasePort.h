@@ -209,6 +209,10 @@ public:
     // Check Ethernet header (only for EthRawPort)
     virtual bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
 
+    // Byteswap Firewire header of received packet (quadlet or block read response) to make it easier to work with,
+    // and to be consistent with CheckFirewirePacket and PrintFirewirePacket.
+    void ByteswapFirewireHeader(unsigned char *packet, unsigned int nbytes);
+
     // Check if FireWire packet valid
     //   length:  length of data section (for BRESPONSE)
     //   node:    expected source node
