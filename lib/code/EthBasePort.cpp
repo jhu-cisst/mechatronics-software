@@ -116,31 +116,33 @@ bool EthBasePort::CheckEthernetHeader(const unsigned char *, bool)
     return true;
 }
 
-//TODO: fix for byteswapping
 bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl)
 {
     if (!checkCRC(packet)) {
         outStr << "CheckFirewirePacket: CRC error" << std::endl;
         return false;
     }
-    unsigned int tcode_recv = packet[3] >> 4;
+
+    const quadlet_t *qpacket = reinterpret_cast<const quadlet_t *>(packet);
+
+    unsigned int tcode_recv = (qpacket[0]&0x000000F0)>>4;
     if (tcode_recv != tcode) {
         outStr << "Unexpected tcode: received = " << tcode_recv << ", expected = " << tcode << std::endl;
         return false;
     }
-    nodeid_t src_node = packet[5]&FW_NODE_MASK;
+    nodeid_t src_node = (qpacket[1]>>16)&FW_NODE_MASK;
     if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
         outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
         return false;
     }
-    unsigned int tl_recv = packet[2] >> 2;
+    unsigned int tl_recv = (qpacket[0]>>10)&FW_TL_MASK;
     if (tl_recv != tl) {
         outStr << "WARNING: received tl = " << tl_recv
                << ", expected tl = " << tl << std::endl;
     }
     // TODO: could also check QRESPONSE length
     if (tcode == BRESPONSE) {
-        size_t length_recv = static_cast<size_t>((packet[12] << 8) | packet[13]);
+        size_t length_recv = (qpacket[3]&0xffff0000) >> 16;
         if (length_recv != length) {
             outStr << "Inconsistent length: received = " << length_recv << ", expected = " << length << std::endl;
             return false;
@@ -149,6 +151,7 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
     return true;
 }
 
+ // Assumes "normal" byte ordering
 void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
 {
     static const char *tcode_name[16] = { "qwrite", "bwrite", "wresponse", "", "qread", "bread",
@@ -165,7 +168,7 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     out << "Firewire Packet:" << std::endl;
     out << "  dest: " << std::hex << ((packet[0]&0xffc00000)>>20)
         << ", node: " << std::dec << ((packet[0]&0x003f0000)>>16)
-        << ", tl: " << std::hex << ((packet[0]&0x0000fc00)>>10)
+        << ", tl: " << std::hex << std::setw(2) << std::setfill('0') << ((packet[0]&0x0000fc00)>>10)
         << ", rt: " << ((packet[0]&0x00000300)>>8)
         << ", tcode: " << static_cast<unsigned int>(tcode) << " (" << tcode_name[tcode] << ")"
         << ", pri: " << (packet[0]&0x0000000F) << std::endl;
@@ -641,11 +644,13 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
 
     if (!CheckEthernetHeader(recvPacket, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
+    // Byteswap Firewire header (also swaps quadlet data)
+    ByteswapFirewireHeader(recvPacket, nRecv);
     if (!CheckFirewirePacket(recvPacket+GetPrefixOffset(RD_FW_HEADER), 0, node, EthBasePort::QRESPONSE, fw_tl))
         return false;
 
     const quadlet_t *packet_FW = reinterpret_cast<const quadlet_t *>(recvPacket+GetPrefixOffset(RD_FW_HEADER));
-    data = bswap_32(packet_FW[3]);
+    data = packet_FW[3];
     return true;
 }
 
@@ -727,6 +732,8 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 
     if (!CheckEthernetHeader(packet, false))
         return false;
+    // Byteswap Firewire header
+    ByteswapFirewireHeader(packet, nbytes);
     if (!CheckFirewirePacket(packet+GetPrefixOffset(RD_FW_HEADER), nbytes, node, EthBasePort::BRESPONSE, fw_tl))
         return false;
 
@@ -737,6 +744,24 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
     }
     return true;
 }
+
+
+void EthBasePort::ByteswapFirewireHeader(unsigned char *packet, unsigned int nbytes)
+{
+    // Number of bytes in Firewire header
+    unsigned int headerBytes = GetPrefixOffset(RD_FW_BDATA)-GetPrefixOffset(RD_FW_HEADER);
+    if (headerBytes <= nbytes) {
+        quadlet_t *qp = (quadlet_t *)(packet+GetPrefixOffset(RD_FW_HEADER));
+        unsigned int nQuads = headerBytes/sizeof(quadlet_t);
+        for (unsigned int i = 0; i < nQuads; i++)
+            qp[i] = bswap_32(qp[i]);
+    }
+    else {
+        // Should never happen
+        outStr << "Firewire packet too short, nbytes: " << nbytes << std::endl;
+    }
+}
+
 
 bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
                                  unsigned int nbytes, unsigned char flags)
