@@ -69,6 +69,7 @@ bool EthRawPort::Init(void)
     ReceiveTimeout = 0.1;
 
     // Ethernet initialization
+    outStr << pcap_lib_version() << std::endl;
     pcap_if_t* alldevs;
     char errbuf[PCAP_ERRBUF_SIZE];
     if ((pcap_findalldevs(&alldevs, errbuf)) == -1) {
@@ -230,15 +231,15 @@ bool EthRawPort::Init(void)
        << (int)eth_src[0] << ":" << (int)eth_src[1] << ":" << (int)eth_src[2] << ":"
        << (int)eth_src[3] << ":" << (int)eth_src[4] << ":" << (int)eth_src[5];
 
-    std::cout << "pcap filter = " << ss_filter.str() << "\n";
+    outStr << "pcap filter = " << ss_filter.str() << std::endl;
 
     if (pcap_compile(handle, &fp, ss_filter.str().c_str(), 0, PCAP_NETMASK_UNKNOWN) == -1) {
-        outStr << "ERROR: could not parse filter " << ss_filter.str() << "\n";
+        outStr << "ERROR: could not parse filter " << ss_filter.str() << std::endl;
         return false;
     }
 
     if (pcap_setfilter(handle, &fp) == -1) {
-        outStr << "ERROR: could not install filter " << ss_filter.str() << "\n";
+        outStr << "ERROR: could not install filter " << ss_filter.str() << std::endl;
         return false;
     }
 
