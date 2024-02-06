@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2024 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -110,6 +110,16 @@ if (Amp1394_HAS_PCAP)
   set (Amp1394_EXTRA_INCLUDE_DIR ${PCAP_INCLUDE_DIR})
   set (Amp1394_EXTRA_LIBRARY_DIR ${PCAP_LIBRARY_DIR})
   set (Amp1394_EXTRA_LIBRARIES ${Amp1394_EXTRA_LIBRARIES} ${PCAP_LIBRARIES})
+  # Now check if pcap_set_immediate_mode is available
+  include (CheckCXXSourceCompiles)
+  set (CMAKE_REQUIRED_LIBRARIES ${PCAP_LIBRARIES})
+  check_cxx_source_compiles ("#include <pcap.h>
+                              int main()
+                              { pcap_set_immediate_mode(0, 0); }"
+                              PCAP_HAS_IMMEDIATE_MODE)
+  if (PCAP_HAS_IMMEDIATE_MODE)
+    add_definitions (-DPCAP_HAS_IMMEDIATE_MODE)
+  endif ()
 endif (Amp1394_HAS_PCAP)
 if (WIN32)
   # for Windows, need WinSock, Iphlpapi (for getting interface info) and Ws2_32 (for WSAIoctl)
