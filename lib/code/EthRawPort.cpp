@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -100,16 +100,67 @@ bool EthRawPort::Init(void)
 
     // Open pcap handle
     handle = NULL;
+
+    // For pcap versions >= 1.5.0, need to set immediate mode;
+    // otherwise, code can hang waiting for packets (e.g., when
+    // trying to read from a board that does not exist on the bus).
+    // In this case, we manually call pcap_create, pcap_set_snaplen,
+    // pcap_set_promisc, pcap_set_timeout and pcap_activate rather
+    // than calling pcap_open_live, so we can include the call to
+    // pcap_set_immediate_mode.
+    //
+    // The PCAP_HAS_IMMEDIATE_MODE compiler definition is set by
+    // CMake (check_cxx_source_compiles).
+
+#ifdef PCAP_HAS_IMMEDIATE_MODE
+    handle = pcap_create(dev->name, errbuf);
+    if (handle == NULL)
+    {
+        outStr << "ERROR: Couldn't create device: "<< dev->name <<std::endl;
+        return false;
+    }
+    if (pcap_set_snaplen(handle, BUFSIZ) < 0) {
+        outStr << "ERRROR: Couldn't set pcap snaplen" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_set_promisc(handle, 0) < 0) {
+        outStr << "ERRROR: Couldn't set pcap promisc" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_set_timeout(handle, 1) < 0) {
+        outStr << "ERRROR: Couldn't set pcap timeout" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_set_immediate_mode(handle, 1) != 0) {
+        outStr << "ERROR: Could not set pcap immediate mode" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_activate(handle) < 0) {
+        outStr << "ERROR: Could not active pcap" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+#else
     handle = pcap_open_live(dev->name,
                             BUFSIZ,  // data buffer size
                             0,       // turn off promisc mode
                             1,       // read timeout 1 ms
                             errbuf); // error buffer
-    if(handle == NULL)
+    if (handle == NULL)
     {
         outStr << "ERROR: Couldn't open device: "<< dev->name <<std::endl;
         return false;
     }
+#endif
 
     // initialize ethernet header (FA-61-OE is CID assigned to LCSR by IEEE)
     uint8_t eth_dst[6];
