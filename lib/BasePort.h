@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -119,7 +119,7 @@ protected:
     bool IsAllBoardsRev4_6_;              // TRUE if all boards are Firmware Rev 4-6
     bool IsAllBoardsRev6_;                // TRUE if all boards are Firmware Rev 6 (shorter wait)
     bool IsAllBoardsRev7_;                // TRUE if all boards are Firmware Rev 7
-    bool IsAllBoardsRev8_;                // TRUE if all boards are Firmware Rev 8
+    bool IsAllBoardsRev8_9_;              // TRUE if all boards are Firmware Rev 8 or 9
 
     size_t ReadErrorCounter_;
 
@@ -179,11 +179,11 @@ protected:
 
     // Whether all boards support broadcast with shorter wait
     bool IsBroadcastShorterWait(void) const
-    { return (IsAllBoardsRev6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_); }
+    { return (IsAllBoardsRev6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_9_); }
 
     // Whether a valid mix of firmware for broadcast
     bool IsBroadcastFirmwareMixValid(void) const
-    { return (IsAllBoardsRev4_6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_); }
+    { return (IsAllBoardsRev4_6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_9_); }
 
     // Sets default protocol based on firmware
     void SetDefaultProtocol(void);
