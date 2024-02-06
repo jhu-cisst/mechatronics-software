@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -54,7 +54,7 @@ BasePort::BasePort(int portNum, std::ostream &ostr):
         IsAllBoardsRev4_6_(false),
         IsAllBoardsRev6_(false),
         IsAllBoardsRev7_(false),
-        IsAllBoardsRev8_(false),
+        IsAllBoardsRev8_9_(false),
         ReadErrorCounter_(0),
         PortNum(portNum),
         FwBusGeneration(0),
@@ -240,7 +240,7 @@ bool BasePort::ScanNodes(void)
     IsAllBoardsRev4_6_ = true;
     IsAllBoardsRev6_ = true;
     IsAllBoardsRev7_ = true;
-    IsAllBoardsRev8_ = true;
+    IsAllBoardsRev8_9_ = true;
     NumOfNodes_ = 0;
 
     nodeid_t max_nodes = InitNodes();
@@ -363,7 +363,7 @@ bool BasePort::ScanNodes(void)
         if (fver != 7) IsAllBoardsRev7_ = false;
         // Firmware Version 8, added header quadlet to block write; support larger entries in
         // block read (both changes to support dRAC).
-        if (fver != 8) IsAllBoardsRev8_ = false;
+        if ((fver != 8) && (fver != 9)) IsAllBoardsRev8_9_ = false;
         NumOfNodes_++;
     }
     outStr << "BasePort::ScanNodes: found " << NumOfNodes_ << " boards" << std::endl;
@@ -871,7 +871,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             unsigned int numAxes = (statusQuad&0xf0000000)>>28;
             unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
             bool thisOK = false;
-            if (!IsAllBoardsRev8_ && (numAxes != 4)) {
+            if (!IsAllBoardsRev8_9_ && (numAxes != 4)) {
                 outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
                        << std::dec << std::endl;
             }
@@ -881,7 +881,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             }
             else {
                 bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
-                if (IsAllBoardsRev8_) {
+                if (IsAllBoardsRev8_9_) {
                     // For Rev 8, only the LSB of the sequence is returned, but bit 14 also indicates
                     // whether the 16-bit sequence number did not match on the FPGA side.
                     bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
@@ -900,7 +900,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                     bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != bcReadInfo.readSequence);
                     bcReadInfo.boardInfo[boardNum].blockSize = readSize;
                 }
-                if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
+                if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
                     clkPeriod = board->GetFPGAClockPeriod();
                     bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
@@ -932,7 +932,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         }
     }
 
-    if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
+    if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
         quadlet_t timingInfo = bswap_32(curPtr[0]);
         bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
         bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
@@ -945,7 +945,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         outStr << "BasePort::ReadAllBoardsBroadcast: rtRead is false" << std::endl;
 
 #if 0
-    if (IsAllBoardsRev7_ || IsAllBoardsRev8_) {
+    if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
         bcReadInfo.PrintTiming(outStr);
     }
 #endif
