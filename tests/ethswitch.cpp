@@ -40,33 +40,34 @@ http://www.cisst.org/cisst/license.txt.
 
 const unsigned int NUM_PORTS = 4;
 
-// Must match DebugData in EthSwitch.v
+// Must match SwitchData in EthSwitch.v
 struct EthSwitchData {
     char     headerString[4];
-    uint16_t PortAttr;
+    uint16_t PortConfig;
     uint16_t unused1;
+    uint32_t MacAddrPrimary0High;
+    uint32_t MacAddrPrimary01;
+    uint32_t MacAddrPrimary1Low;
+    uint16_t PortForwardFpga[2];
+    uint16_t PortForwardFpgaNum[2];
+    uint16_t PortAttr;
+    uint16_t unused7;
     uint16_t numPacketRecv[4];
     uint16_t numPacketSent[4];
     uint8_t  TxInfoReg[4];
     uint8_t  numCrcErrorIn[4];
     uint8_t  numCrcErrorOut[4];
     uint8_t  numIPv4ErrorIn[4];
-    uint32_t unused10_11[2];
     uint16_t fifo_active;
     uint16_t fifo_underflow;
     uint16_t fifo_empty;
     uint16_t fifo_full;
-    uint16_t data_avail;
+    uint16_t unused18;
     uint16_t info_not_empty;
     uint16_t packet_dropped;
     uint16_t packet_truncated;
     uint8_t  numPacketFwd[4][4];
-    uint32_t unused20_23[4];
-    uint32_t MacAddrPrimary0High;
-    uint32_t MacAddrPrimary01;
-    uint32_t MacAddrPrimary1Low;
-    uint16_t PortForwardFpga[2];
-    uint32_t unused_28_31[4];
+    uint32_t unused24_31[8];
 };
 
 bool GetBit(uint16_t value, uint16_t inPort, uint16_t outPort)
@@ -219,13 +220,13 @@ int main(int argc, char** argv)
             }
         }
 
-        if (board->ReadEthernetData(buffer, 0x00a0, 32)) {
+        if (board->ReadEthernetData(buffer, 0x00a0, 24)) {
             EthSwitchData *data = reinterpret_cast<EthSwitchData *>(buffer);
             for (i = 0; i < NUM_PORTS; i++) {
-                bool portActive = data->PortAttr & (0x0001 << i);
-                bool portFast   = data->PortAttr & (0x0010 << i);
-                bool recvReady  = data->PortAttr & (0x0100 << i);
-                bool dataReady  = data->PortAttr & (0x1000 << i);
+                bool portActive = data->PortConfig & (0x0001 << i);
+                bool portFast   = data->PortConfig & (0x0010 << i);
+                bool recvReady  = data->PortAttr & (0x0001 << i);
+                bool dataReady  = data->PortAttr & (0x0010 << i);
                 console.Print(4+NL*i, lm+18, portActive ? "on " : "off");
                 console.Print(4+NL*i, lm+23, !portActive ? "    " : portFast   ? "fast" : "slow");
                 console.Print(4+NL*i, lm+30, portActive&recvReady  ? "rr" : "  ");
@@ -301,8 +302,8 @@ int main(int argc, char** argv)
                 MacAddrPort[1] = newMacAddr[1];
                 console.Print(36, lm+32, "%llx", MacAddrPort[1]);
             }
-            console.Print(37, lm+16, "%6x", data->PortForwardFpga[0]);
-            console.Print(37, lm+32, "%6x", data->PortForwardFpga[1]);
+            console.Print(37, lm+16, "%6x (%d)", data->PortForwardFpga[0], data->PortForwardFpgaNum[0]);
+            console.Print(37, lm+32, "%6x (%d)", data->PortForwardFpga[1], data->PortForwardFpgaNum[1]);
         }
     }
 
