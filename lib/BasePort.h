@@ -171,6 +171,11 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
 
+    // Returns true if Node2Board has a valid entry, which indicates that
+    // the node has been initialized.
+    bool isNodeValid(nodeid_t node) const
+    { return (Node2Board[node] < BoardIO::MAX_BOARDS); }
+
     // Initialize port (called by constructor and Reset)
     virtual bool Init(void) = 0;
 
@@ -379,12 +384,14 @@ public:
     // Helper function for parsing command line options.
     // In particular, this is typically called after a certain option, such as -p, is
     // recognized and it parses the rest of that option string:
-    // N                for FireWire, where N is the port number (backward compatibility)
-    // fw:N             for FireWire, where N is the port number
-    // eth:N            for raw Ethernet (PCAP), where N is the port number
-    // udp:xx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    // N                  for FireWire, where N is the port number (backward compatibility)
+    // fw:N               for FireWire, where N is the port number
+    // eth:N              for raw Ethernet (PCAP), where N is the port number
+    // ethfw:N            as above, forcing bridge to FireWire if possible
+    // udp:xx.xx.xx.xx    for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    // udpfw:xx.xx.xx.xx  as above, forcing bridge to FireWire if possible
     static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
-                             std::ostream &ostr = std::cerr);
+                             bool &fwBridge, std::ostream &ostr = std::cerr);
 
     static PortType DefaultPortType(void);
     static std::string DefaultPort(void);

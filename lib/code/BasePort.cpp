@@ -476,18 +476,20 @@ std::string BasePort::PortTypeString(PortType portType)
 // Helper function for parsing command line options.
 // In particular, this is typically called after a certain option, such as -p, is
 // recognized and it parses the rest of that option string:
-// N                for FireWire, where N is the port number (backward compatibility)
-// fw:N             for FireWire, where N is the port number
-// eth:N            for raw Ethernet (PCAP), where N is the port number
-// udp:xx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+// N                  for FireWire, where N is the port number (backward compatibility)
+// fw:N               for FireWire, where N is the port number
+// eth:N              for raw Ethernet (PCAP), where N is the port number
+// ethfw:N            as above, forcing bridge to FireWire if possible
+// udp:xx.xx.xx.xx    for UDP, where xx.xx.xx.xx is the (optional) server IP address
+// udpfw:xx.xx.xx.xx  as above, forcing bridge to FireWire if possible
 bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
-                            std::ostream &ostr)
+                            bool &fwBridge, std::ostream &ostr)
 {
     // no option, using default
     if ((arg == 0) || (strlen(arg) == 0)) {
         ostr << "ParseOptions: no option provided, using default "
              << DefaultPort() << std::endl;
-        return ParseOptions(DefaultPort().c_str(), portType, portNum, IPaddr);
+        return ParseOptions(DefaultPort().c_str(), portType, portNum, IPaddr, fwBridge);
     }
     // expecting proper options
     if (strncmp(arg, "fw", 2) == 0) {
@@ -511,25 +513,38 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     }
     else if (strncmp(arg, "eth", 3) == 0) {
         portType = PORT_ETH_RAW;
-        return (sscanf(arg+4, "%d", &portNum) == 1);
+        fwBridge = false;
+        unsigned int numOffset = 4;
+        if (strncmp(arg+3, "fw", 2) == 0) {
+            fwBridge = true;
+            numOffset += 2;
+        }
+        return (sscanf(arg+numOffset, "%d", &portNum) == 1);
     }
     else if (strncmp(arg, "udp", 3) == 0) {
         portType = PORT_ETH_UDP;
+        fwBridge = false;
+        unsigned int colonPos = 3;
+        if (strncmp(arg+3, "fw", 2) == 0) {
+            fwBridge = true;
+            colonPos += 2;
+        }
         // no option specified
-        if (strlen(arg) == 3) {
+        if (strlen(arg) == colonPos) {
             IPaddr = ETH_UDP_DEFAULT_IP;
             return true;
         }
         // make sure separator is here
-        if (arg[3] != ':') {
-            ostr << "ParseOptions: missing \":\" after \"udp\"" << std::endl;
+        if (arg[colonPos] != ':') {
+            if (colonPos == 3)
+                ostr << "ParseOptions: missing \":\" after \"udp\"" << std::endl;
+            else
+                ostr << "ParseOptions: missing \":\" after \"udpfw\"" << std::endl;
             return false;
         }
         // For now, if at least 8 characters, assume a valid IP address
-        if (strlen(arg+4) >= 8)
-            IPaddr.assign(arg+4);
-        else if (strlen(arg+4) > 0)
-            sscanf(arg+4, "%d", &portNum);  // TEMP: portNum==1 for UDP means set eth1394 mode
+        if (strlen(arg+colonPos+1) >= 8)
+            IPaddr.assign(arg+colonPos+1);
         return true;
     }
     else if (strncmp(arg, "emio", 4) == 0) {
