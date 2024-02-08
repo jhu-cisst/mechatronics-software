@@ -548,9 +548,9 @@ nodeid_t EthUdpPort::InitNodes(void)
                 GetFpgaStatus(status);
                 uint16_t numFpga = 0;
                 if (status.srcPort == 0)
-                    numFpga = buffer[6]&0x0000ffff;
-                else if (status.srcPort == 1)
                     numFpga = (buffer[6]&0xffff0000)>>16;
+                else if (status.srcPort == 1)
+                    numFpga = buffer[6]&0x0000ffff;
                 else if (status.srcPort == 2)
                     numFpga = 16;  // If PS, force it to be hub
                 outStr << "Node " << node << ", srcPort " << status.srcPort << ", numFpga " << numFpga << std::endl;
