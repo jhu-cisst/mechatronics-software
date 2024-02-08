@@ -845,7 +845,7 @@ void EthBasePort::make_write_header(unsigned char *packet, unsigned int, unsigne
 {
     unsigned int ctrlOffset = GetPrefixOffset(WR_CTRL);
     packet[ctrlOffset] = 0;
-    if (flags&FW_NODE_NOFORWARD_MASK) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
+    if ((flags&FW_NODE_NOFORWARD_MASK) || !useFwBridge) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
     packet[ctrlOffset+1] = FwBusGeneration;
 }
 
