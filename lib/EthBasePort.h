@@ -59,16 +59,21 @@ public:
         bool FwPacketDropped;
         bool EthInternalError;
         bool EthSummaryError;
+        bool noForwardFlag;
+        unsigned int srcPort;
         unsigned int numStateInvalid;   // Not used, except in debug builds of firmware
         unsigned int numPacketError;
         FPGA_Status() : FwBusReset(false), FwPacketDropped(false), EthInternalError(false), EthSummaryError(false),
-                        numStateInvalid(0), numPacketError(0) {}
+                        noForwardFlag(false), srcPort(0), numStateInvalid(0), numPacketError(0) {}
         ~FPGA_Status() {}
     };
 
     typedef bool (*EthCallbackType)(EthBasePort &port, unsigned char boardId, std::ostream &debugStream);
 
 protected:
+
+    // Whether to use Ethernet/Firewire bridge (if false, use Ethernet only)
+    bool useFwBridge;
 
     uint8_t fw_tl;          // FireWire transaction label (6 bits)
 
@@ -79,7 +84,10 @@ protected:
         FwBusReset = 0x01,          // Firewire bus reset is active
         FwPacketDropped = 0x02,     // Firewire packet dropped
         EthInternalError = 0x04,    // Internal FPGA error (bus access or invalid state)
-        EthSummaryError = 0x08      // Summary of Ethernet protocol errors (see Status)
+        EthSummaryError = 0x08,     // Summary of Ethernet protocol errors (see Status)
+        noForwardFlag = 0x10,       // 1 -> Ethernet only (no forward to Firewire)
+        srcPortMask   = 0x60,       // Mask for srcPort bits
+        srcPortShift  = 5           // Shift for srcPort bits
     };
 
     FPGA_Status FpgaStatus;     // FPGA status from extra data returned
@@ -101,7 +109,7 @@ protected:
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes, unsigned char flags = 0);
 
     // Send packet
-    virtual bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
+    virtual bool PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
 
     // Receive packet
     virtual int PacketReceive(unsigned char *packet, size_t nbytes) = 0;
@@ -130,7 +138,7 @@ protected:
 
 public:
 
-    EthBasePort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
+    EthBasePort(int portNum, bool forceFwBridge, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthBasePort();
 

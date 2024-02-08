@@ -1098,11 +1098,12 @@ int main(int argc, char **argv)
     BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
     int port = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
+    bool fwBridge = false;
 
     if (argc > 1) {
         for (int i = 1; i < argc; i++) {
             if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
+                if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr, fwBridge)) {
                     std::cerr << "Failed to parse option: " << argv[i] << std::endl;
                     return 0;
                 }
@@ -1182,12 +1183,12 @@ int main(int argc, char **argv)
     EthBasePort *EthPort = 0;
     if (desiredPort == BasePort::PORT_ETH_UDP) {
         std::cout << "Creating Ethernet UDP port, IP address = " << IPaddr << std::endl;
-        EthPort = new EthUdpPort(port, IPaddr, std::cout);
+        EthPort = new EthUdpPort(port, IPaddr, fwBridge, std::cout);
     }
 #if Amp1394_HAS_PCAP
     else if (desiredPort == BasePort::PORT_ETH_RAW) {
         std::cout << "Creating Ethernet raw (PCAP) port" << std::endl;
-        EthPort = new EthRawPort(port, std::cout);
+        EthPort = new EthRawPort(port, fwBridge, std::cout);
     }
 #endif
     if (!EthPort) {

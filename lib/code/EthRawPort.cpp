@@ -44,8 +44,8 @@ http://www.cisst.org/cisst/license.txt.
 #include <unistd.h>
 #endif
 
-EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, cb)
+EthRawPort::EthRawPort(int portNum, bool forceFwBridge, std::ostream &debugStream, EthCallbackType cb):
+    EthBasePort(portNum, forceFwBridge, debugStream, cb)
 {
     if (Init())
         outStr << "Initialization done" << std::endl;
@@ -335,10 +335,10 @@ unsigned int EthRawPort::GetMaxWriteDataSize(void) const
     return ETH_RAW_FRAME_MAX_SIZE - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
 }
 
-bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool)
+bool EthRawPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool)
 {
     if (pcap_sendpacket(handle, packet, nbytes) != 0)  {
-        outStr << "ERROR: PCAP send packet failed" << std::endl;
+        outStr << "ERROR: PCAP send packet failed to node " << node << std::endl;
         return false;
     }
     return true;

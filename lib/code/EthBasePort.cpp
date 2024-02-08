@@ -31,8 +31,9 @@ http://www.cisst.org/cisst/license.txt.
 uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 
 
-EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType cb):
+EthBasePort::EthBasePort(int portNum, bool forceFwBridge, std::ostream &debugStream, EthCallbackType cb):
     BasePort(portNum, debugStream),
+    useFwBridge(forceFwBridge),
     fw_tl(0),
     eth_read_callback(cb),
     ReceiveTimeout(0.02)
@@ -97,6 +98,8 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
     FpgaStatus.FwPacketDropped = (packet[0]&FwPacketDropped);
     FpgaStatus.EthInternalError = (packet[0]&EthInternalError);
     FpgaStatus.EthSummaryError = (packet[0]&EthSummaryError);
+    FpgaStatus.noForwardFlag = (packet[0]&EthSummaryError);
+    FpgaStatus.srcPort = (packet[0]&srcPortMask)>>srcPortShift;
     FpgaStatus.numStateInvalid = packet[2];
     FpgaStatus.numPacketError = packet[3];
     unsigned int FwBusGeneration_FPGA = packet[1];
@@ -615,7 +618,7 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
 
     // Build FireWire packet
     make_qread_packet(reinterpret_cast<quadlet_t *>(sendPacket+GetPrefixOffset(WR_FW_HEADER)), node, addr, fw_tl);
-    if (!PacketSend(sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
+    if (!PacketSend(node, sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
 
     // Invoke callback (if defined) between sending read request
@@ -672,7 +675,7 @@ bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t dat
     // Build FireWire packet (also byteswaps data)
     make_qwrite_packet(reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER)), node, addr, data, fw_tl);
 
-    return PacketSend(packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
+    return PacketSend(node, packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
@@ -698,7 +701,7 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 
     // Build FireWire packet
     make_bread_packet(reinterpret_cast<quadlet_t *>(sendPacket+GetPrefixOffset(WR_FW_HEADER)), node, addr, nbytes, fw_tl);
-    if (!PacketSend(sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
+    if (!PacketSend(node, sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
 
     // Invoke callback (if defined) between sending read request
@@ -789,7 +792,7 @@ bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdat
     make_bwrite_packet(reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER)), node, addr, wdata, nbytes, fw_tl);
 
     // Now, send the packet
-    return PacketSend(packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
+    return PacketSend(node, packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 void EthBasePort::OnNoneRead(void)

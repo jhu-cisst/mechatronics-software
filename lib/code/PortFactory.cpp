@@ -34,10 +34,11 @@ BasePort * PortFactory(const char * args, std::ostream & debugStream)
     BasePort * port = 0;
     int portNumber = 0;
     std::string IPaddr = ETH_UDP_DEFAULT_IP;
+    bool fwBridge = false;
 
     BasePort::PortType portType = BasePort::DefaultPortType();
 
-    if (!BasePort::ParseOptions(args, portType, portNumber, IPaddr)) {
+    if (!BasePort::ParseOptions(args, portType, portNumber, IPaddr, fwBridge)) {
         debugStream << "PortFactory: Failed to parse option: " << args << std::endl;
         return port;
     }
@@ -53,12 +54,12 @@ BasePort * PortFactory(const char * args, std::ostream & debugStream)
         break;
 
     case BasePort::PORT_ETH_UDP:
-        port = new EthUdpPort(portNumber, IPaddr, debugStream);
+        port = new EthUdpPort(portNumber, IPaddr, fwBridge, debugStream);
         break;
     
     case BasePort::PORT_ETH_RAW:
 #if Amp1394_HAS_PCAP
-        port = new EthRawPort(portNumber, debugStream);
+        port = new EthRawPort(portNumber, fwBridge, debugStream);
 #else
         debugStream << "PortFactory: Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
 #endif

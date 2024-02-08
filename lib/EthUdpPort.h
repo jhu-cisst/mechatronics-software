@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -48,7 +48,7 @@ protected:
     nodeid_t InitNodes(void);
 
     // Send packet via UDP
-    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
+    bool PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via UDP
     int PacketReceive(unsigned char *packet, size_t nbytes);
@@ -59,6 +59,7 @@ protected:
 public:
 
     EthUdpPort(int portNum, const std::string &serverIP = ETH_UDP_DEFAULT_IP,
+               bool forceFwBridge = false,
                std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthUdpPort();

@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -94,7 +94,7 @@ struct SocketInternals {
     bool Close();
 
     // Returns the number of bytes sent (-1 on error)
-    int Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast = false);
+    int Send(nodeid_t node, const unsigned char *bufsend, size_t msglen, bool useBroadcast = false);
 
     // Returns the number of bytes received (-1 on error)
     int Recv(unsigned char *bufrecv, size_t maxlen, const double timeoutSec);
@@ -210,7 +210,7 @@ bool SocketInternals::Close()
     return true;
 }
 
-int SocketInternals::Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast)
+int SocketInternals::Send(nodeid_t node, const unsigned char *bufsend, size_t msglen, bool useBroadcast)
 {
     int retval;
     if (useBroadcast)
@@ -425,8 +425,8 @@ bool SocketInternals::ExtractInterfaceInfo(MsgHeaderType *hdr)
     return false;
 }
 
-EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, cb),
+EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, bool forceFwBridge, std::ostream &debugStream, EthCallbackType cb):
+    EthBasePort(portNum, forceFwBridge, debugStream, cb),
     ServerIP(serverIP),
     UDP_port(1394)
 {
@@ -551,9 +551,9 @@ unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
             - FW_BWRITE_HEADER_SIZE - FW_CRC_SIZE);
 }
 
-bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
+bool EthUdpPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
-    int nSent = sockPtr->Send(packet, nbytes, useEthernetBroadcast);
+    int nSent = sockPtr->Send(node, packet, nbytes, useEthernetBroadcast);
 
     if (nSent != static_cast<int>(nbytes)) {
         outStr << "PacketSend: failed to send via UDP: return value = " << nSent
