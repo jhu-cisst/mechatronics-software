@@ -476,157 +476,83 @@ void EthUdpPort::Cleanup(void)
 nodeid_t EthUdpPort::InitNodes(void)
 {
     // First, set IP address by Ethernet and FireWire broadcast
+    // For Firmware Rev 9+, this also causes the FPGA to send a raw Ethernet multicast quadlet write packet
+    // so that the port forwarding database in the FPGA V3 Ethernet Switch gets updated
     if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::IP_ADDR, sockPtr->ServerAddr.sin_addr.s_addr, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to write IP address" << std::endl;
         return 0;
     }
     Amp1394_Sleep(0.2);
 
-    HubBoard = BoardIO::MAX_BOARDS;   // initialize to invalid value
-
     quadlet_t data = 0;
 
-    unsigned int first_board_fver = 0;
-    unsigned int max_node = BoardIO::MAX_BOARDS;
-
-    // Now, check if we can read from a board using the standard IP address. This should work
-    // for Firmware Rev 8 (or lower), but for Firmware Rev 9+, it will only get a response from
-    // Board 0 (if it is connected).
-    if (ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::FIRMWARE_VERSION, data, FW_NODE_NOFORWARD_MASK)) {
-        first_board_fver = data;
+    // Check hardware version of hub board
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
+        return 0;
+    }
+    if (!HardwareVersionValid(data)) {
+        outStr << "InitNodes: hub board is not a supported board, data = " << std::hex << data << std::endl;
+        return 0;
     }
 
-    if ((first_board_fver == 0) || (first_board_fver >= 9)) {
-        // If we did not get a response (fver == 0), or we got a response from a V9+ board (fver >= 9),
-        // we have to scan the bus for boards.
-        // Note that setting the FW_NODE_NOFORWARD_MASK will cause the SocketInternals::Send method to
-        // set the IP address based on the node number (0-15), which is consistent with Firmware Rev 9.
-        unsigned long fpga_ver[BoardIO::MAX_BOARDS];
-        unsigned int num_nodes = 0;
-        max_node = 0;
-        nodeid_t node;
-        for (node = 0; node < BoardIO::MAX_BOARDS; node++) {
-            fpga_ver[node] = 0;
-            // We read the hardware version first because it is a distinctive value and thus
-            // we can be sure it is a supported board.
-            if (ReadQuadletNode(node, BoardIO::HARDWARE_VERSION, data, FW_NODE_NOFORWARD_MASK)) {
-                if (HardwareVersionValid(data)) {
-                    // If hardware version is valid, then we get the FPGA version
-                    if (ReadQuadletNode(node, BoardIO::ETH_STATUS, data, FW_NODE_NOFORWARD_MASK)) {
-                        fpga_ver[node] = BoardIO::GetFpgaVersionMajorFromStatus(data);
-                        num_nodes++;
-                        max_node = node+1;
-                    }
-                }
-                else {
-                    outStr << "InitNodes: board " << node << ", unknown hardware version "
-                           << std::hex << data << std::dec << std::endl;
-                }
-            }
-        }
+    // ReadQuadletNode should have updated bus generation
+    FwBusGeneration = newFwBusGeneration;
+    outStr << "InitNodes: Firewire bus generation = " << FwBusGeneration << std::endl;
 
-        // Now, look for the Hub board (i.e., the one directly connected to the PC).
-        // We do this by finding the board that has the largest number of FPGA boards in its
-        // forwarding database for the other port. This relies on FPGA_Status::srcPort to
-        // indicate which port the message was received on. It also assumes that we have already
-        // polled all boards (as above), so that the switch forwarding database is populated.
-        unsigned int maxFpga = 0;
-        quadlet_t buffer[7];
-        for (node = 0; node < max_node; node++) {
-            if (fpga_ver[node] == 3) {
-                if (!ReadBlockNode(node, 0x40a0, buffer, sizeof(buffer), FW_NODE_NOFORWARD_MASK)) {
-                    outStr << "InitNodes: failed to read Ethernet switch data" << std::endl;
-                    return false;
-                }
-                if (buffer[0] != 0x45535730) {   // "ESW0"
-                    outStr << "InitNodes: invalid Ethernet switch data: " << std::hex << buffer[0]
-                           << std::dec << std::endl;
-                    return false;
-                }
-                buffer[6] = bswap_32(buffer[6]);
-                FPGA_Status status;
-                GetFpgaStatus(status);
-                uint16_t numFpga = 0;
-                if (status.srcPort == 0)
-                    numFpga = (buffer[6]&0xffff0000)>>16;
-                else if (status.srcPort == 1)
-                    numFpga = buffer[6]&0x0000ffff;
-                else if (status.srcPort == 2)
-                    numFpga = 16;  // If PS, force it to be hub
-                outStr << "Node " << node << ", srcPort " << status.srcPort << ", numFpga " << numFpga << std::endl;
-                if (numFpga >= maxFpga) {
-                    maxFpga = numFpga;
-                    HubBoard = node;
-                }
-            }
-            else if ((num_nodes == 1) && (fpga_ver[node] == 2)) {
-                // If there is only a single FPGA V2 board, we use that as the Hub Board
-                HubBoard = node;
-            }
-        }
-        if (HubBoard != BoardIO::MAX_BOARDS) {
-            outStr << "InitNodes: Rev 9+ hub board: " << static_cast<int>(HubBoard)
-                   << ", Num FPGA: " << maxFpga << std::endl;
-            if ((num_nodes == 1) && (!useFwBridge)) {
-                useFwBridge = true;
-                outStr << "InitNodes: only one connected Ethernet board, enabling FireWire bridge" << std::endl;
-            }
-        }
-        else {
-            outStr << "InitNodes: failed to find hub/bridge board (Rev 9+)" << std::endl;
-            return 0;
-        }
+    // Broadcast a command to initiate a read of Firewire PHY Register 0. In cases where there is no
+    // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
+    // to obtain its Firewire node id.
+
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
+        outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
+        return 0;
     }
-    else {
-        // This is the implementation for Firmware prior to Rev 9.
-        // Check hardware version of hub board
-        if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data, FW_NODE_NOFORWARD_MASK)) {
-            outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
-            return 0;
-        }
-        if (!HardwareVersionValid(data)) {
-            outStr << "InitNodes: hub board is not a supported board, data = " << std::hex << data << std::endl;
-            return 0;
-        }
+    Amp1394_Sleep(0.01);
+
+    // Find board id for first board (i.e., one connected by Ethernet) by FireWire and Ethernet broadcast
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
+        return 0;
+    }
+    // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
+    HubBoard = (data & BOARD_ID_MASK) >> 24;
+    outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
+
+    // read firmware version
+    unsigned long fver = 0;
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::FIRMWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: unable to read firmware version from hub/bridge board" << std::endl;
+        return 0;
+    }
+    fver = data;
+
+    // Get FPGA version of Hub board
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::ETH_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: failed to read Ethernet status from hub/bridge board" << std::endl;
+        return 0;
+    }
+    unsigned int fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+
+    if (!useFwBridge && ((fpga_ver != 3) || (fver < 9))) {
+        if (fpga_ver != 3)
+            outStr << "InitNodes: hub board is FPGA V" << fpga_ver;
+        else if (fver < 9)
+            outStr << "InitNodes: hub board has Firmware Rev " << fver;
+        outStr << ", using Ethernet/Firewire bridge" << std::endl;
         useFwBridge = true;
     }
-
-    if (useFwBridge) {
-        // ReadQuadletNode should have updated bus generation
-        FwBusGeneration = newFwBusGeneration;
-        outStr << "InitNodes: Firewire bus generation = " << FwBusGeneration << std::endl;
-
-        // Broadcast a command to initiate a read of Firewire PHY Register 0. In cases where there is no
-        // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
-        // to obtain its Firewire node id.
-
-        if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
-            outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
-            return 0;
-        }
-        Amp1394_Sleep(0.01);
-    }
-
-    if (HubBoard == BoardIO::MAX_BOARDS) {
-        // If HubBoard not already identified (i.e., Firmware prior to Rev 9),
-        // find board id for first board (i.e., one connected by Ethernet)
-        if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data, FW_NODE_NOFORWARD_MASK)) {
-            outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
-            return 0;
-        }
-
-        // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
-        HubBoard = (data & BOARD_ID_MASK) >> 24;
-        outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
-    }
-
-    if (useFwBridge)
+    else if (useFwBridge)
         outStr << "InitNodes: using Ethernet/Firewire bridge" << std::endl;
     else
         outStr << "InitNodes: using Ethernet network" << std::endl;
 
     // Scan for up to 16 nodes on bus
-    return max_node;
+    return BoardIO::MAX_BOARDS;
 }
 
 bool EthUdpPort::IsOK(void)

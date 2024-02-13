@@ -98,7 +98,7 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
     FpgaStatus.FwPacketDropped = (packet[0]&FwPacketDropped);
     FpgaStatus.EthInternalError = (packet[0]&EthInternalError);
     FpgaStatus.EthSummaryError = (packet[0]&EthSummaryError);
-    FpgaStatus.noForwardFlag = (packet[0]&EthSummaryError);
+    FpgaStatus.noForwardFlag = (packet[0]&noForwardFlag);
     FpgaStatus.srcPort = (packet[0]&srcPortMask)>>srcPortShift;
     FpgaStatus.numStateInvalid = packet[2];
     FpgaStatus.numPacketError = packet[3];
@@ -333,7 +333,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  fwState;
         uint16_t fw_left;
         uint16_t port_unknown;     // Quad 10
-        uint16_t quad10_high;
+        uint8_t  numIpWrite;
+        uint8_t  quad10_high;
         uint32_t unused[5];        // Quads 10-15
     };
     if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
@@ -358,7 +359,8 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << std::endl;
     if (p->statusbits & 0x00080000) debugStream << "recvBusy ";
     if (p->statusbits & 0x00040000) debugStream << "recvRequest ";
-    if (p->statusbits & 0x00020000) debugStream << "isLocal ";
+    if (p->statusbits & 0x00020000) debugStream << "isLocalWrite ";
+    if (p->statusbits & 0x00000020) debugStream << "isLocalRead ";
     if (p->statusbits & 0x00010000) debugStream << "isRemote ";
     if (p->statusbits & 0x00008000) debugStream << "fwPacketFresh ";
     if (p->statusbits & 0x00004000) debugStream << "isForward ";
@@ -369,6 +371,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     if (p->statusbits & 0x00000200) debugStream << "ipv4_long ";
     if (p->statusbits & 0x00000100) debugStream << "ipv4_short ";
     if (p->statusbits & 0x00000080) debugStream << "fw_bus_reset ";
+    if (p->statusbits & 0x00000040) debugStream << "ipWrite ";
     debugStream << std::endl;
     unsigned int node_id = (p->quad3_high&0xfc00) >> 10;    // node_is is upper 6 bits
     debugStream << "FireWire node_id: " << node_id << std::endl;
@@ -380,11 +383,14 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << std::endl;
     debugStream << "sendState: "   << std::dec << (p->quad5_high>>12)
                 << ", recvState: " << ((p->quad5_low&0x7000)>>12)
-                << ", nextRecv: "  << ((p->quad5_low&0x0700)>>8) << std::endl;
+                << ", nextRecv: "  << ((p->quad5_low&0x0700)>>8)
+                << ", recvCnt: " << (p->quad5_low&0x003f) << std::endl;
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
     debugStream << "numUDP: " << std::dec << p->numUDP << std::endl;
     debugStream << "numARP: " << std::dec << static_cast<uint16_t>(p->numARP) << std::endl;
     debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
+    debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
+    debugStream << "numIpWrite: " << std::dec << static_cast<uint16_t>(p->numIpWrite) << std::endl;
     debugStream << "br_wait: " << std::dec << static_cast<uint16_t>(p->br_wait_cnt) << std::endl;
     debugStream << "numPacketError: " << std::dec << static_cast<uint16_t>(p->numPacketError) << std::endl;
     debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState & 0x07);
