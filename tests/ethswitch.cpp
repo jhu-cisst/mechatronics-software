@@ -49,7 +49,7 @@ struct EthSwitchData {
     uint32_t MacAddrPrimary01;
     uint32_t MacAddrPrimary1Low;
     uint16_t PortForwardFpga[2];
-    uint16_t PortForwardFpgaNum[2];
+    uint32_t unused_6;
     uint16_t PortAttr;
     uint16_t unused7;
     uint16_t numPacketRecv[4];
@@ -302,8 +302,8 @@ int main(int argc, char** argv)
                 MacAddrPort[1] = newMacAddr[1];
                 console.Print(36, lm+32, "%llx", MacAddrPort[1]);
             }
-            console.Print(37, lm+16, "%6x (%d)", data->PortForwardFpga[0], data->PortForwardFpgaNum[0]);
-            console.Print(37, lm+32, "%6x (%d)", data->PortForwardFpga[1], data->PortForwardFpgaNum[1]);
+            console.Print(37, lm+16, "%6x", data->PortForwardFpga[0]);
+            console.Print(37, lm+32, "%6x", data->PortForwardFpga[1]);
         }
     }
 
