@@ -94,8 +94,8 @@ struct SocketInternals {
     bool Close();
 
     // Returns the number of bytes sent (-1 on error)
-    int Send(nodeid_t node, const unsigned char *bufsend, size_t msglen, bool useBroadcast = false,
-             bool useEthNetwork = false);
+    int Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast = false,
+             unsigned char ip_offset = 0);
 
     // Returns the number of bytes received (-1 on error)
     int Recv(unsigned char *bufrecv, size_t maxlen, const double timeoutSec);
@@ -211,7 +211,7 @@ bool SocketInternals::Close()
     return true;
 }
 
-int SocketInternals::Send(nodeid_t node, const unsigned char *bufsend, size_t msglen, bool useBroadcast, bool useEthNetwork)
+int SocketInternals::Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast, unsigned char ip_offset)
 {
     int retval;
     if (useBroadcast)
@@ -220,10 +220,9 @@ int SocketInternals::Send(nodeid_t node, const unsigned char *bufsend, size_t ms
     else {
         // Save base address (e.g., 169.254.0.100)
         uint32_t s_addr = ServerAddr.sin_addr.s_addr;
-        // Update IP address for specified node/board if we have an Ethernet network
-        // (e.g., FPGA V3 networked by Ethernet rather than Firewire)
-        if ((node < BoardIO::MAX_BOARDS) && useEthNetwork)
-            ServerAddr.sin_addr.s_addr = s_addr + (node<<24);
+        // Update IP address if needed (Firmware Rev 9+)
+        if (ip_offset > 0)
+            ServerAddr.sin_addr.s_addr = s_addr + (ip_offset<<24);
         retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
                         reinterpret_cast<struct sockaddr *>(&ServerAddr), sizeof(ServerAddr));
         // Restore base address
@@ -504,8 +503,8 @@ nodeid_t EthUdpPort::InitNodes(void)
     // Broadcast a command to initiate a read of Firewire PHY Register 0. In cases where there is no
     // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
     // to obtain its Firewire node id.
-
-    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
+    data = 0;
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
         return 0;
     }
@@ -522,13 +521,13 @@ nodeid_t EthUdpPort::InitNodes(void)
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
 
     // read firmware version
-    unsigned long fver = 0;
     if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::FIRMWARE_VERSION, data,
                          FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: unable to read firmware version from hub/bridge board" << std::endl;
         return 0;
     }
-    fver = data;
+    unsigned long fver = data;
+    FirmwareVersion[HubBoard] = data;
 
     // Get FPGA version of Hub board
     if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::ETH_STATUS, data,
@@ -536,7 +535,8 @@ nodeid_t EthUdpPort::InitNodes(void)
         outStr << "InitNodes: failed to read Ethernet status from hub/bridge board" << std::endl;
         return 0;
     }
-    unsigned int fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+    unsigned long fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+    FpgaVersion[HubBoard] = fpga_ver;
 
     if (!useFwBridge && ((fpga_ver != 3) || (fver < 9))) {
         if (fpga_ver != 3)
@@ -597,15 +597,26 @@ unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
 
 bool EthUdpPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
-    bool useEthernetNetwork = !useFwBridge;
-    if (!useEthernetNetwork) {
-        // Peek inside packet to check for NOFORWARD flag, which indicates that packet should not be
-        // forwarded to Firewire and thus should set useEthernetNetwork.
-        unsigned int ctrlOffset = GetPrefixOffset(WR_CTRL);
-        useEthernetNetwork = packet[ctrlOffset]&FW_CTRL_NOFORWARD;
+    unsigned char ip_offset = 0;
+    if (!useEthernetBroadcast) {
+        if (useFwBridge) {
+            // If using the Ethernet/Firewire bridge, then we only need to talk to the Hub board,
+            // which has ip_offset=0 for firmware prior to Rev 9
+            if (GetFirmwareVersion(HubBoard) >= 9)
+                ip_offset = HubBoard;
+        }
+        else {
+            // If not using Ethernet/Firewire bridge, then node id is equal to board id;
+            // Don't need to check firmware version because if we got here, it must be at
+            // least Rev 9.
+            if (node < BoardIO::MAX_BOARDS)
+                ip_offset = node;
+            else if (node == FW_NODE_BROADCAST)
+                useEthernetBroadcast = true;    // TODO: Change to Ethernet multicast
+        }
     }
 
-    int nSent = sockPtr->Send(node, packet, nbytes, useEthernetBroadcast, useEthernetNetwork);
+    int nSent = sockPtr->Send(packet, nbytes, useEthernetBroadcast, ip_offset);
 
     if (nSent != static_cast<int>(nbytes)) {
         outStr << "PacketSend: failed to send via UDP: return value = " << nSent
