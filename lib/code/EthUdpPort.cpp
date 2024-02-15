@@ -219,14 +219,14 @@ int SocketInternals::Send(const unsigned char *bufsend, size_t msglen, bool useB
                         reinterpret_cast<struct sockaddr *>(&ServerAddrBroadcast), sizeof(ServerAddrBroadcast));
     else {
         // Save base address (e.g., 169.254.0.100)
-        uint32_t s_addr = ServerAddr.sin_addr.s_addr;
+        uint32_t s_addr_saved = ServerAddr.sin_addr.s_addr;
         // Update IP address if needed (Firmware Rev 9+)
         if (ip_offset > 0)
-            ServerAddr.sin_addr.s_addr = s_addr + (ip_offset<<24);
+            ServerAddr.sin_addr.s_addr += (ip_offset<<24);
         retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
                         reinterpret_cast<struct sockaddr *>(&ServerAddr), sizeof(ServerAddr));
         // Restore base address
-        ServerAddr.sin_addr.s_addr = s_addr;
+        ServerAddr.sin_addr.s_addr = s_addr_saved;
     }
 
     if (retval == SOCKET_ERROR) {
@@ -610,7 +610,7 @@ bool EthUdpPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes,
             // Don't need to check firmware version because if we got here, it must be at
             // least Rev 9.
             if (node < BoardIO::MAX_BOARDS)
-                ip_offset = node;
+                ip_offset = static_cast<unsigned char>(node);
             else if (node == FW_NODE_BROADCAST)
                 useEthernetBroadcast = true;    // TODO: Change to Ethernet multicast
         }
