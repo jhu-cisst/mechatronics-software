@@ -34,9 +34,11 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <Amp1394/AmpIORevision.h>
 #include "PortFactory.h"
+#include "EthUdpPort.h"
 #include "AmpIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394Console.h"
+#include "Amp1394BSwap.h"
 
 const unsigned int NUM_PORTS = 4;
 
@@ -49,7 +51,7 @@ struct EthSwitchData {
     uint32_t MacAddrPrimary01;
     uint32_t MacAddrPrimary1Low;
     uint16_t PortForwardFpga[2];
-    uint32_t unused_6;
+    uint32_t UdpMulticastFpga;
     uint16_t PortAttr;
     uint16_t unused7;
     uint16_t numPacketRecv[4];
@@ -163,6 +165,9 @@ int main(int argc, char** argv)
     uint64_t MacAddrPort[2];
     MacAddrPort[0] = 0;
     MacAddrPort[1] = 0;
+
+    // IP address used for UDP Multicast (RT)
+    uint32_t UdpMulticastFpga = 0;
 
     Amp1394Console console;
     console.Init();
@@ -301,6 +306,10 @@ int main(int argc, char** argv)
             if (newMacAddr[1] != MacAddrPort[1]) {
                 MacAddrPort[1] = newMacAddr[1];
                 console.Print(36, lm+32, "%llx", MacAddrPort[1]);
+            }
+            if (data->UdpMulticastFpga != UdpMulticastFpga) {
+                UdpMulticastFpga = data->UdpMulticastFpga;
+                console.Print(36, lm+64, EthUdpPort::IP_String(bswap_32(UdpMulticastFpga)).c_str());
             }
             console.Print(37, lm+16, "%6x", data->PortForwardFpga[0]);
             console.Print(37, lm+32, "%6x", data->PortForwardFpga[1]);
