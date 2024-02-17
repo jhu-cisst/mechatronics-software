@@ -34,7 +34,7 @@ class EthUdpPort : public EthBasePort
 protected:
     SocketInternals *sockPtr;   // OS-specific internals
     std::string ServerIP;       // IP address of server (string)
-    unsigned long IP_addr;      // IP address of server (32-bit number)
+    std::string MulticastIP;    // IP address for multicast (string)
     unsigned short UDP_port;    // Port on server (FPGA)
 
     //! Initialize EthUdp port
@@ -63,6 +63,9 @@ public:
                std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthUdpPort();
+
+    std::string GetMultiCastIP() const { return MulticastIP; }
+    bool SetMulticastIP(const std::string &multicast);
 
     //****************** BasePort virtual methods ***********************
 

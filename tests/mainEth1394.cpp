@@ -1138,6 +1138,11 @@ int main(int argc, char **argv)
     uint16_t RegData;
     ComputeMulticastHash(MulticastMAC, RegAddr, RegData);
     std::cout << "Multicast hash table: register " << std::hex << (int)RegAddr << ", data = " << RegData << std::endl;
+    // Following would be needed to support UDP Multicast on FPGA V2, but we have instead decided not
+    // to use UDP Multicast with FPGA V2.
+    // unsigned char UdpMulticastMAC[6] = { 0x01, 0x00, 0x5e, 0x00, 0x00, 0x64 };  // Corresponds to 224.0.0.100
+    // ComputeMulticastHash(UdpMulticastMAC, RegAddr, RegData);
+    // std::cout << "UDP Multicast hash table: register " << std::hex << (int)RegAddr << ", data = " << RegData << std::endl;
 
     std::vector<AmpIO *> FwBoardList;
     std::vector<AmpIO *> EthBoardList;

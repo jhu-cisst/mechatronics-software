@@ -46,7 +46,8 @@ http://www.cisst.org/cisst/license.txt.
  */
 
 // Defined here for static methods ParseOptions and DefaultPort
-#define ETH_UDP_DEFAULT_IP "169.254.0.100"
+#define ETH_UDP_DEFAULT_IP           "169.254.0.100"
+#define ETH_UDP_MULTICAST_DEFAULT_IP "224.0.0.100"
 
 // Some useful constants
 const unsigned long BOARD_ID_MASK = 0x0f000000;  /* Mask for board_id */
@@ -62,9 +63,9 @@ const unsigned int MAX_POSSIBLE_DATA_SIZE = 2048;
 // The FireWire node number is represented by an unsigned char (8 bits), but only 6
 // bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
 // uses the upper two bits as flags to indicate whether the packet should be sent
-// via Ethernet broadcast (0x80) and whether the Ethernet/FireWire bridge should
+// via Ethernet broadcast/multicast (0x80) and whether the Ethernet/FireWire bridge should
 // not forward (0x40) the received packet to other boards via FireWire.
-const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast
+const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast or multicast
 const unsigned char FW_NODE_NOFORWARD_MASK     = 0x40;   // Mask to prevent forwarding by Ethernet/FireWire bridge
 const unsigned char FW_NODE_FLAGS_MASK         = 0xc0;   // Mask for above flags
 const unsigned char FW_NODE_MASK               = 0x3f;   // Mask for valid FireWire node numbers (0-63)
