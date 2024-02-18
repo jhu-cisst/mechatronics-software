@@ -333,7 +333,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
         uint8_t  fwState;
         uint16_t fw_left;
         uint16_t port_unknown;     // Quad 10
-        uint8_t  numIpWrite;
+        uint8_t  numMulticastWrite;
         uint8_t  quad10_high;
         uint32_t unused[5];        // Quads 10-15
     };
@@ -359,8 +359,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << std::endl;
     if (p->statusbits & 0x00080000) debugStream << "recvBusy ";
     if (p->statusbits & 0x00040000) debugStream << "recvRequest ";
-    if (p->statusbits & 0x00020000) debugStream << "isLocalWrite ";
-    if (p->statusbits & 0x00000020) debugStream << "isLocalRead ";
+    if (p->statusbits & 0x00020000) debugStream << "isLocal ";
     if (p->statusbits & 0x00010000) debugStream << "isRemote ";
     if (p->statusbits & 0x00008000) debugStream << "fwPacketFresh ";
     if (p->statusbits & 0x00004000) debugStream << "isForward ";
@@ -390,7 +389,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numARP: " << std::dec << static_cast<uint16_t>(p->numARP) << std::endl;
     debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
     debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
-    debugStream << "numIpWrite: " << std::dec << static_cast<uint16_t>(p->numIpWrite) << std::endl;
+    debugStream << "numMulticastWrite: " << std::dec << static_cast<uint16_t>(p->numMulticastWrite) << std::endl;
     debugStream << "br_wait: " << std::dec << static_cast<uint16_t>(p->br_wait_cnt) << std::endl;
     debugStream << "numPacketError: " << std::dec << static_cast<uint16_t>(p->numPacketError) << std::endl;
     debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState & 0x07);
