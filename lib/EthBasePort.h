@@ -171,6 +171,9 @@ public:
 
     void UpdateBusGeneration(unsigned int gen) { FwBusGeneration = gen; }
 
+    // virtual method in BasePort
+    bool CheckFwBusGeneration(const std::string &caller, bool doScan = false);
+
     /*!
      \brief Write the broadcast packet containing the DAC values and power control
     */

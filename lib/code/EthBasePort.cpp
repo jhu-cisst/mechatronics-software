@@ -109,7 +109,7 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
     FPGA_RecvTime = bswap_16(packetW[2])/(FPGA_sysclk_MHz*1.0e6);
     FPGA_TotalTime = bswap_16(packetW[3])/(FPGA_sysclk_MHz*1.0e6);
 
-    if (FwBusGeneration_FPGA != FwBusGeneration)
+    if ((FwBusGeneration_FPGA != FwBusGeneration) && !FpgaStatus.noForwardFlag)
         OnFwBusReset(FwBusGeneration_FPGA);
 }
 
@@ -371,6 +371,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     if (p->statusbits & 0x00000100) debugStream << "ipv4_short ";
     if (p->statusbits & 0x00000080) debugStream << "fw_bus_reset ";
     if (p->statusbits & 0x00000040) debugStream << "ipWrite ";
+    if (p->statusbits & 0x00000020) debugStream << "hubSend ";
     debugStream << std::endl;
     unsigned int node_id = (p->quad3_high&0xfc00) >> 10;    // node_is is upper 6 bits
     debugStream << "FireWire node_id: " << node_id << std::endl;
@@ -387,7 +388,6 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
     debugStream << "numUDP: " << std::dec << p->numUDP << std::endl;
     debugStream << "numARP: " << std::dec << static_cast<uint16_t>(p->numARP) << std::endl;
-    debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
     debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
     debugStream << "numMulticastWrite: " << std::dec << static_cast<uint16_t>(p->numMulticastWrite) << std::endl;
     debugStream << "br_wait: " << std::dec << static_cast<uint16_t>(p->br_wait_cnt) << std::endl;
@@ -814,6 +814,14 @@ void EthBasePort::OnFwBusReset(unsigned int FwBusGeneration_FPGA)
 {
     outStr << "Firewire bus reset, FPGA = " << std::dec << FwBusGeneration_FPGA << ", PC = " << FwBusGeneration << std::endl;
     newFwBusGeneration = FwBusGeneration_FPGA;
+}
+
+bool EthBasePort::CheckFwBusGeneration(const std::string &caller, bool doScan)
+{
+    bool ret = true;
+    if (useFwBridge)
+        ret = BasePort::CheckFwBusGeneration(caller, doScan);
+    return ret;
 }
 
 bool EthBasePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
