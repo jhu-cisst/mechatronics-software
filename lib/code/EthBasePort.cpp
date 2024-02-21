@@ -653,7 +653,7 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
     if (!CheckEthernetHeader(recvPacket, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
     // Byteswap Firewire header (also swaps quadlet data)
-    ByteswapFirewireHeader(recvPacket, nRecv);
+    ByteswapQuadlets(recvPacket + GetPrefixOffset(RD_FW_HEADER), FW_QRESPONSE_SIZE);
     if (!CheckFirewirePacket(recvPacket+GetPrefixOffset(RD_FW_HEADER), 0, node, EthBasePort::QRESPONSE, fw_tl))
         return false;
 
@@ -741,7 +741,7 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
     if (!CheckEthernetHeader(packet, false))
         return false;
     // Byteswap Firewire header
-    ByteswapFirewireHeader(packet, nbytes);
+    ByteswapQuadlets(packet + GetPrefixOffset(RD_FW_HEADER), FW_BRESPONSE_HEADER_SIZE);
     if (!CheckFirewirePacket(packet+GetPrefixOffset(RD_FW_HEADER), nbytes, node, EthBasePort::BRESPONSE, fw_tl))
         return false;
 
@@ -754,20 +754,12 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 }
 
 
-void EthBasePort::ByteswapFirewireHeader(unsigned char *packet, unsigned int nbytes)
+void EthBasePort::ByteswapQuadlets(unsigned char *packet, unsigned int nbytes)
 {
-    // Number of bytes in Firewire header
-    unsigned int headerBytes = GetPrefixOffset(RD_FW_BDATA)-GetPrefixOffset(RD_FW_HEADER);
-    if (headerBytes <= nbytes) {
-        quadlet_t *qp = (quadlet_t *)(packet+GetPrefixOffset(RD_FW_HEADER));
-        unsigned int nQuads = headerBytes/sizeof(quadlet_t);
-        for (unsigned int i = 0; i < nQuads; i++)
-            qp[i] = bswap_32(qp[i]);
-    }
-    else {
-        // Should never happen
-        outStr << "Firewire packet too short, nbytes: " << nbytes << std::endl;
-    }
+    quadlet_t *qp = (quadlet_t *)packet;
+    unsigned int nQuads = nbytes/sizeof(quadlet_t);
+    for (unsigned int i = 0; i < nQuads; i++)
+        qp[i] = bswap_32(qp[i]);
 }
 
 

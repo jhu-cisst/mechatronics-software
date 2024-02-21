@@ -478,14 +478,21 @@ AmpIO *SelectBoard(const std::string &portName, std::vector<AmpIO *> boardList, 
         size_t i;
         std::cout << "Select " << portName << " Board: ";
         for (i = 0; i < boardList.size(); i++)
-            std::cout << static_cast<unsigned int>(boardList[i]->GetBoardId()) << " ";
-        std::cout << "(any other key to keep current board " << static_cast<unsigned int>(curBoard->GetBoardId()) << ")" << std::endl;
-        int num = (getchar() - '0');
+            std::cout << std::hex << static_cast<unsigned int>(boardList[i]->GetBoardId()) << " ";
+        std::cout << "(any other key to keep current board " << std::hex << static_cast<unsigned int>(curBoard->GetBoardId())
+                  << std::dec << ")" << std::endl;
+        int num = getchar();
+        if ((num >= '0') && (num <= '9')) num -= '0';
+        else if ((num >= 'a') && (num <= 'f')) num = 10 + (num - 'a');
+        else if ((num >= 'A') && (num <= 'F')) num = 10 + (num - 'A');
+        else num = -1;
         std::cout << std::endl;
-        for (i = 0; i < boardList.size(); i++) {
-            if (num == boardList[i]->GetBoardId()) {
-                newBoard = boardList[i];
-                break;
+        if (num >= 0) {
+            for (i = 0; i < boardList.size(); i++) {
+                if (num == boardList[i]->GetBoardId()) {
+                    newBoard = boardList[i];
+                    break;
+                }
             }
         }
     }
@@ -836,8 +843,8 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             if (!rboard->ReadEthernetData(waveform_read, 0x80, 16))
                 break;
             // Read next 5 quadlets to get low-level debug data:
-            // KSZ (0x90) or RTI (0xa0)
-            if (!rboard->ReadEthernetData(&waveform_read[16], (fpgaVer == 2) ? 0x90 : 0xa0, 5))
+            // KSZ (0x90) or RTI (0x4a0)
+            if (!rboard->ReadEthernetData(&waveform_read[16], (fpgaVer == 2) ? 0x90 : 0x4a0, 5))
                 break;
             unsigned short bw_left = 0;
             unsigned short bw_wait = 0;
