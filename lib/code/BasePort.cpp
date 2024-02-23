@@ -879,12 +879,15 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     quadlet_t *curPtr = hubReadBuffer;
     // Loop through all boards, processing the boards in use.
     // Note that prior to Firmware Rev 7, we always read data for all 16 boards.
-    for (unsigned int boardNum = 0; boardNum < BoardIO::MAX_BOARDS; boardNum++) {
+    // Starting with Firmware Rev 9, the board data will generally not be in sequential order
+    // (i.e., isBroadcastReadOrdered will return false) for the Ethernet-only interface.
+    for (unsigned int index = 0; index < BoardIO::MAX_BOARDS; index++) {
+        quadlet_t statusQuad = bswap_32(curPtr[2]);
+        unsigned int numAxes = (statusQuad&0xf0000000)>>28;
+        unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
+        unsigned int boardNum = isBroadcastReadOrdered() ? index : thisBoard;
         BoardIO *board = BoardList[boardNum];
         if (bcReadInfo.boardInfo[boardNum].inUse && board) {
-            quadlet_t statusQuad = bswap_32(curPtr[2]);
-            unsigned int numAxes = (statusQuad&0xf0000000)>>28;
-            unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
             bool thisOK = false;
             if (!IsAllBoardsRev8_9_ && (numAxes != 4)) {
                 outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad

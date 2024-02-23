@@ -461,6 +461,10 @@ public:
     // Read all boards broadcasting
     virtual bool ReadAllBoardsBroadcast(void);
 
+    // Returns true if broadcast read packet contains boards in sequential order,
+    // starting with lowest numbered board
+    virtual bool isBroadcastReadOrdered(void) const { return true; }
+
     // Write to all boards
     virtual bool WriteAllBoards(void);
 
