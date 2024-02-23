@@ -109,6 +109,7 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
     FPGA_RecvTime = bswap_16(packetW[2])/(FPGA_sysclk_MHz*1.0e6);
     FPGA_TotalTime = bswap_16(packetW[3])/(FPGA_sysclk_MHz*1.0e6);
 
+    newFwBusGeneration = FwBusGeneration_FPGA;
     if ((FwBusGeneration_FPGA != FwBusGeneration) && !FpgaStatus.noForwardFlag)
         OnFwBusReset(FwBusGeneration_FPGA);
 }
@@ -805,7 +806,6 @@ void EthBasePort::OnNoneWritten(void)
 void EthBasePort::OnFwBusReset(unsigned int FwBusGeneration_FPGA)
 {
     outStr << "Firewire bus reset, FPGA = " << std::dec << FwBusGeneration_FPGA << ", PC = " << FwBusGeneration << std::endl;
-    newFwBusGeneration = FwBusGeneration_FPGA;
 }
 
 bool EthBasePort::CheckFwBusGeneration(const std::string &caller, bool doScan)
@@ -834,6 +834,11 @@ void EthBasePort::WaitBroadcastRead(void)
     // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
     double waitTime_uS = 10.0 + 5.0*NumOfBoards_;
     Amp1394_Sleep(waitTime_uS*1e-6);
+}
+
+bool EthBasePort::isBroadcastReadOrdered(void) const
+{
+    return useFwBridge;
 }
 
 void EthBasePort::PromDelay(void) const

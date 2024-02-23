@@ -189,6 +189,8 @@ public:
     */
     void WaitBroadcastRead(void);
 
+    bool isBroadcastReadOrdered(void) const;
+
     /*!
      \brief Add delay (if needed) for PROM I/O operations
      The delay is non-zero for Ethernet.
