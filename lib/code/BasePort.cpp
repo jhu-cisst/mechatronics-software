@@ -899,12 +899,14 @@ bool BasePort::ReadAllBoardsBroadcast(void)
             }
             else {
                 bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
+                unsigned int seq_expected = bcReadInfo.readSequence;
                 if (IsAllBoardsRev8_9_) {
-                    // For Rev 8, only the LSB of the sequence is returned, but bit 14 also indicates
+                    // For Rev 8+, only the LSB of the sequence is returned, but bit 14 also indicates
                     // whether the 16-bit sequence number did not match on the FPGA side.
+                    seq_expected &= 0x00ff;
                     bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
                     bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 14
-                    if (bcReadInfo.boardInfo[boardNum].sequence != (bcReadInfo.readSequence & 0x00ff))
+                    if (bcReadInfo.boardInfo[boardNum].sequence != seq_expected)
                         bcReadInfo.boardInfo[boardNum].seq_error = true;
                     bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
                     unsigned int bdReadSize = board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
@@ -915,7 +917,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                     }
                 }
                 else {
-                    bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != bcReadInfo.readSequence);
+                    bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != seq_expected);
                     bcReadInfo.boardInfo[boardNum].blockSize = readSize;
                 }
                 if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
@@ -929,8 +931,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 else {
                     outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
                            << ", seq = " << bcReadInfo.boardInfo[boardNum].sequence
-                           << ", expected = " << bcReadInfo.readSequence
-                           << ", diff = " << (bcReadInfo.readSequence-bcReadInfo.boardInfo[boardNum].sequence)
+                           << ", expected = " << seq_expected
+                           << ", diff = " << static_cast<int>(seq_expected-bcReadInfo.boardInfo[boardNum].sequence)
                            << std::endl;
                 }
             }
