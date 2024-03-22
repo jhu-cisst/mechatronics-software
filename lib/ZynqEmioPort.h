@@ -21,15 +21,13 @@ http://www.cisst.org/cisst/license.txt.
 #include <ostream>
 #include "BoardIO.h"
 #include "BasePort.h"
-
-// Forward declarations
-struct EMIO_Info;
+#include "fpgav3_emio.h"
 
 class ZynqEmioPort : public BasePort {
 public:
 protected:
 
-    EMIO_Info *emio;
+    EMIO_Interface *emio;
 
     // Internal method to check whether node id is valid
     // (should be 0 or FW_NODE_BROADCAST)
@@ -78,7 +76,7 @@ public:
 
     int NumberOfUsers(void) { return 1; }
 
-    bool IsOK(void) { return (emio != 0); }
+    bool IsOK(void) { return emio->IsOK(); }
 
     unsigned int GetBusGeneration(void) const;
 
