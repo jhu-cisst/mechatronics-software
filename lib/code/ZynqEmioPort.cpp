@@ -16,7 +16,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "ZynqEmioPort.h"
-#include "fpgav3_emio.h"
+#include "fpgav3_emio_gpiod.h"
 
 ZynqEmioPort::ZynqEmioPort(int portNum, std::ostream &debugStream):
     BasePort(portNum, debugStream), emio(0)
@@ -29,7 +29,7 @@ bool ZynqEmioPort::Init(void)
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
     // Initialize EMIO interface to FPGA
-    emio = EMIO_Init();
+    emio = new EMIO_Interface_Gpiod;
 
     bool ret = ScanNodes();
     if (ret)
@@ -44,7 +44,7 @@ ZynqEmioPort::~ZynqEmioPort()
 
 void ZynqEmioPort::Cleanup(void)
 {
-    EMIO_Release(emio);
+    delete emio;
     emio = 0;
 }
 
@@ -102,7 +102,7 @@ bool ZynqEmioPort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &da
         return false;
     }
 
-    return EMIO_ReadQuadlet(emio, addr, &data);
+    return emio->ReadQuadlet(addr, data);
 }
 
 bool ZynqEmioPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char)
@@ -112,7 +112,7 @@ bool ZynqEmioPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t da
         return false;
     }
 
-    return EMIO_WriteQuadlet(emio, addr, data);
+    return emio->WriteQuadlet(addr, data);
 }
 
 bool ZynqEmioPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
@@ -124,7 +124,7 @@ bool ZynqEmioPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdat
     }
 
     rtRead = true;   // for debugging
-    return EMIO_ReadBlock(emio, addr, rdata, nbytes);
+    return emio->ReadBlock(addr, rdata, nbytes);
 }
 
 bool ZynqEmioPort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
@@ -136,5 +136,5 @@ bool ZynqEmioPort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wda
     }
 
     rtWrite = true;   // for debugging
-    return EMIO_WriteBlock(emio, addr, wdata, nbytes);
+    return emio->WriteBlock(addr, wdata, nbytes);
 }
