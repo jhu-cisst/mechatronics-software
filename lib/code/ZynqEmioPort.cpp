@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2023-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -16,6 +16,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "ZynqEmioPort.h"
+#include "fpgav3_emio_mmap.h"
 #include "fpgav3_emio_gpiod.h"
 
 ZynqEmioPort::ZynqEmioPort(int portNum, std::ostream &debugStream):
@@ -29,7 +30,14 @@ bool ZynqEmioPort::Init(void)
     memset(Node2Board, BoardIO::MAX_BOARDS, sizeof(Node2Board));
 
     // Initialize EMIO interface to FPGA
-    emio = new EMIO_Interface_Gpiod;
+    if (PortNum == 1) {
+        outStr << "ZynqEmioPort: using EMIO gpiod interface" << std::endl;
+        emio = new EMIO_Interface_Gpiod;
+    }
+    else {
+        outStr << "ZynqEmioPort: using EMIO mmap interface" << std::endl;
+        emio = new EMIO_Interface_Mmap;
+    }
 
     bool ret = ScanNodes();
     if (ret)

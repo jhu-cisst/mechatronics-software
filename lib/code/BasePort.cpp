@@ -482,6 +482,7 @@ std::string BasePort::PortTypeString(PortType portType)
 // ethfw:N            as above, forcing bridge to FireWire if possible
 // udp:xx.xx.xx.xx    for UDP, where xx.xx.xx.xx is the (optional) server IP address
 // udpfw:xx.xx.xx.xx  as above, forcing bridge to FireWire if possible
+// emio:N             for Zynq EMIO (N=1 for gpiod interface; otherwise use mmap interface)
 bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
                             bool &fwBridge, std::ostream &ostr)
 {
@@ -549,8 +550,22 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     }
     else if (strncmp(arg, "emio", 4) == 0) {
         portType = PORT_ZYNQ_EMIO;
-        portNum = 0;
-        return true;
+        // no port specified
+        if (strlen(arg) == 4) {
+            portNum = 0;
+            return true;
+        }
+        // make sure separator is here
+        if (arg[4] != ':') {
+            ostr << "ParseOptions: missing \":\" after \"emio\"" << std::endl;
+            return false;
+        }
+        // scan port number
+        if (sscanf(arg+5, "%d", &portNum) == 1) {
+            return true;
+        }
+        ostr << "ParseOptions: failed to find a port number after \"emio:\" in " << arg+3 << std::endl;
+        return false;
     }
     // older default, fw and looking for port number
     portType = PORT_FIREWIRE;
