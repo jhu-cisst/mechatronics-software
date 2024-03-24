@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2023-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -67,6 +67,10 @@ protected:
 
 public:
     // Initialize Zynq EMIO port
+    //
+    // There are two available interfaces, one using mmap for direct register access,
+    // and one using the gpiod driver. The mmap interface is much faster and therefore
+    // is the default. To use the gpiod interface, set portNum to 1.
     ZynqEmioPort(int portNum = 0, std::ostream &debugStream = std::cerr);
     ~ZynqEmioPort();
 
