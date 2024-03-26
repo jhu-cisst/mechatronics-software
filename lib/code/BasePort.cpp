@@ -211,16 +211,24 @@ void BasePort::SetWriteBufferBroadcast(void)
     }
 }
 
-// Return expected size for broadcast read, in bytes
-unsigned int BasePort::GetBroadcastReadSize(void) const
+// Return expected size for broadcast read, in quadlets
+unsigned int BasePort::GetBroadcastReadSizeQuads(void) const
 {
-    unsigned int nBytes = 0;
-    for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
-        BoardIO *board = BoardList[boardNum];
-        if (board)
-            nBytes += (board->GetReadNumBytes()+sizeof(quadlet_t));
+    unsigned int bcReadSize;                    // Broadcast read size (depends on firmware version)
+    if (IsAllBoardsRev4_6_)
+        bcReadSize = 17*BoardIO::MAX_BOARDS;    // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
+    else if (IsAllBoardsRev7_)
+        bcReadSize = 29*NumOfBoards_+1;         // Rev 7: NumOfBoards * (1 seq + 28 data) + 1
+    else {                                      // Rev 8+
+        bcReadSize = 0;
+        for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
+            BoardIO *board = BoardList[boardNum];
+            if (board)
+                bcReadSize += board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
+        }
+        bcReadSize += 1;                       // Add one quadlet for timing info at end
     }
-    return nBytes;
+    return bcReadSize;
 }
 
 void BasePort::SetReadInvalid(void)
@@ -438,6 +446,8 @@ bool BasePort::AddBoard(BoardIO *board)
     bcReadInfo.boardInfo[id].inUse = true;
     NumOfBoards_++;   // increment board counts
 
+    bcReadInfo.readSizeQuads = GetBroadcastReadSizeQuads();
+
     return true;
 }
 
@@ -467,6 +477,9 @@ bool BasePort::RemoveBoard(unsigned char boardId)
         for (int bd = 0; bd < boardId; bd++)
             if (BoardList[bd]) max_board = bd+1;
     }
+
+    bcReadInfo.readSizeQuads = GetBroadcastReadSizeQuads();
+
     return true;
 }
 
@@ -881,27 +894,9 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     // Wait for broadcast read data
     WaitBroadcastRead();
 
-    unsigned int readSize;        // Block size per board (depends on firmware version)
-    if (IsAllBoardsRev4_6_)
-        readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
-    else if (IsAllBoardsRev7_)
-        readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
-    else
-        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8, QLA)
-
-    // Note that Rev 8 also supports dRAC, which has readSize = 60
-
-    unsigned int hubReadSize;        // Actual read size (depends on firmware version)
-    if (IsAllBoardsRev4_6_)
-        hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
-    else if (IsAllBoardsRev7_)
-        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7: NumOfBoards * readSize + 1
-    else
-        hubReadSize = (GetBroadcastReadSize()/sizeof(quadlet_t))+1; // Rev 8 (could call this once and save result)
-
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
-    memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
-    bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
+    memset(hubReadBuffer, 0, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
+    bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
     if (!ret) {
         SetReadInvalid();
         OnNoneRead();
@@ -951,7 +946,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 }
                 else {
                     bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != seq_expected);
-                    bcReadInfo.boardInfo[boardNum].blockSize = readSize;
+                    // Rev7 block size is 29 (1 + 28), Rev4_6 block size is 17 (should have been 21)
+                    bcReadInfo.boardInfo[boardNum].blockSize = IsAllBoardsRev7_ ? 29 : 17;
                 }
                 if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
@@ -993,7 +989,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         }
         else if (IsAllBoardsRev4_6_) {
             // Skip unused boards for firmware < 7
-            curPtr += readSize;
+            // Rev4_6 block size is 17 (should have been 21)
+            curPtr += 17;
         }
     }
 
