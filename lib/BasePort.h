@@ -104,12 +104,15 @@ public:
         double gapTimeMax;            // Maximum gap time
         struct BroadcastBoardInfo {   // For each board:
             bool inUse;               //   Whether board is participating in broadcast read
+            bool updated;             //   Whether successfully updated
+            unsigned int blockNum;    //   Block number that contained board data
             unsigned int blockSize;   //   Number of quadlets from this board
             unsigned int sequence;    //   The sequence number received (should be same as readSequence)
             bool seq_error;           //   Sequence error mismatch on FPGA
             double updateTime;        //   When the hub feedback data was updated
 
-            BroadcastBoardInfo() : inUse(false), blockSize(0), sequence(0), seq_error(false), updateTime(0.0) {}
+            BroadcastBoardInfo() : inUse(false), updated(false), blockNum(0), blockSize(0), sequence(0),
+                                   seq_error(false), updateTime(0.0) {}
             ~BroadcastBoardInfo() {}
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
@@ -118,6 +121,8 @@ public:
                               updateOverflow(false), readStartTime(0.0), readFinishTime(0.0), readOverflow(false),
                               gapTime(0.0) { Clear(); }
         ~BroadcastReadInfo() {}
+        unsigned int IncrementSequence();
+        void PrepareForRead();
         void PrintTiming(std::ostream &outStr) const;
         void Clear(void)
         { gapTimeMin = 1.0; gapTimeMax = 0.0; }

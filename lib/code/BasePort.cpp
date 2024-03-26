@@ -31,6 +31,28 @@ http://www.cisst.org/cisst/license.txt.
 // Currently, the supported hardware (e.g., QLA1) is added in the BasePort constructor.
 std::vector<unsigned long> BasePort::SupportedHardware;
 
+unsigned int BasePort::BroadcastReadInfo::IncrementSequence()
+{
+    readSequence++;
+    if (readSequence == 65536) {
+        readSequence = 1;
+    }
+    return readSequence;
+}
+
+// Prepare for broadcast read
+void BasePort::BroadcastReadInfo::PrepareForRead()
+{
+    // Initialize update Start/Finish times (i.e., start/end of data update on FPGA Hub)
+    // Units are seconds.
+    updateStartTime = 1.0;
+    updateFinishTime = 0.0;
+    updateOverflow = false;
+    readOverflow = false;
+    for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++)
+        boardInfo[bnum].updated = false;
+}
+
 void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr) const
 {
     unsigned int num_bds = 0;
@@ -51,8 +73,10 @@ void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr) const
     outStr << std::endl;
     outStr << "Read start: " << std::fixed << std::setprecision(2) << std::setw(6) << (readStartTime*1e6)
            << "  finish: " << std::setw(6) << (readFinishTime*1e6) << "  delta: " << ((readFinishTime-readStartTime)*1e6)
-           << "  gap: " << std::setw(6) << (gapTime*1e6)
-           << " (min " << std::setw(6) << (gapTimeMin*1e6) << ", max " << (gapTimeMax*1e6) << ") ";
+           << "  gap: " << std::setw(6) << (gapTime*1e6);
+    if ((gapTimeMin != 1.0) && (gapTimeMax != 0.0)) {
+        outStr << " (min " << std::setw(6) << (gapTimeMin*1e6) << ", max " << (gapTimeMax*1e6) << ") ";
+    }
     outStr << (readOverflow ? "OVF" : "   ");
     outStr << std::endl;
 }
@@ -871,11 +895,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     //--- send out broadcast read request -----
 
     bool rtRead = true;
-    // sequence number from 16 bits 0 to 65535
-    bcReadInfo.readSequence++;
-    if (bcReadInfo.readSequence == 65536) {
-        bcReadInfo.readSequence = 1;
-    }
+    bcReadInfo.IncrementSequence();
 
     if (!WriteBroadcastReadRequest(bcReadInfo.readSequence)) {
         outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = "
@@ -884,15 +904,10 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    // Initialize update Start/Finish times (i.e., start/end of data update on FPGA Hub)
-    // Units are seconds.
-    bcReadInfo.updateStartTime = 1.0;
-    bcReadInfo.updateFinishTime = 0.0;
-    bcReadInfo.updateOverflow = false;
-    bcReadInfo.readOverflow = false;
-
     // Wait for broadcast read data
     WaitBroadcastRead();
+
+    bcReadInfo.PrepareForRead();
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
     memset(hubReadBuffer, 0, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
@@ -905,53 +920,66 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 
     double clkPeriod = GetBroadcastReadClockPeriod();
     quadlet_t *curPtr = hubReadBuffer;
+    unsigned int bdCnt = 0;   // Number of board processed
     // Loop through all boards, processing the boards in use.
     // Note that prior to Firmware Rev 7, we always read data for all 16 boards.
     // Starting with Firmware Rev 9, the board data will generally not be in sequential order
     // (i.e., isBroadcastReadOrdered will return false) for the Ethernet-only interface.
-    for (unsigned int index = 0; index < BoardIO::MAX_BOARDS; index++) {
+    for (unsigned int index = 0; (index < BoardIO::MAX_BOARDS) && (bdCnt < NumOfBoards_); index++) {
+        if ((curPtr[0] == 0) || (curPtr[2] == 0)) {
+            outStr << "BasePort::ReadAllBoardsBroadcast: invalid block after reading "
+                   << bdCnt << " boards" << std::endl;
+            allOK = false;
+            break;
+        }
         quadlet_t statusQuad = bswap_32(curPtr[2]);
         unsigned int numAxes = (statusQuad&0xf0000000)>>28;
+        if (!IsAllBoardsRev8_9_ && (numAxes != 4)) {
+            outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
+                   << std::dec << std::endl;
+            allOK = false;
+            break;
+        }
         unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
         unsigned int boardNum = isBroadcastReadOrdered() ? index : thisBoard;
         BoardIO *board = BoardList[boardNum];
+        if (board && (boardNum != thisBoard)) {
+            outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting "
+                   << boardNum << ", found " << thisBoard << std::endl;
+            allOK = false;
+            break;
+        }
         if (bcReadInfo.boardInfo[boardNum].inUse && board) {
             bool thisOK = false;
-            if (!IsAllBoardsRev8_9_ && (numAxes != 4)) {
-                outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
-                       << std::dec << std::endl;
-            }
-            else if (boardNum != thisBoard) {
-                outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting "
-                       << boardNum << ", found " << thisBoard << std::endl;
+            bcReadInfo.boardInfo[boardNum].updated = true;
+            bcReadInfo.boardInfo[boardNum].blockNum = bdCnt++;
+            bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
+            unsigned int seq_expected = bcReadInfo.readSequence;
+            if (IsAllBoardsRev8_9_) {
+                // For Rev 8+, only the LSB of the sequence is returned, but bit 15 also indicates
+                // whether the 16-bit sequence number did not match on the FPGA side.
+                seq_expected &= 0x00ff;
+                bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
+                bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 15
+                if (bcReadInfo.boardInfo[boardNum].sequence != seq_expected)
+                    bcReadInfo.boardInfo[boardNum].seq_error = true;
+                bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
+                unsigned int bdReadSize = board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
+                if (bcReadInfo.boardInfo[boardNum].blockSize != bdReadSize) {
+                    outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
+                           << ", blockSize = " << bcReadInfo.boardInfo[boardNum].blockSize
+                           << ", expected = " << bdReadSize << std::endl;
+                }
             }
             else {
-                bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
-                unsigned int seq_expected = bcReadInfo.readSequence;
-                if (IsAllBoardsRev8_9_) {
-                    // For Rev 8+, only the LSB of the sequence is returned, but bit 15 also indicates
-                    // whether the 16-bit sequence number did not match on the FPGA side.
-                    seq_expected &= 0x00ff;
-                    bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
-                    bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 15
-                    if (bcReadInfo.boardInfo[boardNum].sequence != seq_expected)
-                        bcReadInfo.boardInfo[boardNum].seq_error = true;
-                    bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
-                    unsigned int bdReadSize = board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
-                    if (bcReadInfo.boardInfo[boardNum].blockSize != bdReadSize) {
-                        outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
-                               << ", blockSize = " << bcReadInfo.boardInfo[boardNum].blockSize
-                               << ", expected = " << bdReadSize << std::endl;
-                    }
-                }
-                else {
-                    bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != seq_expected);
-                    // Rev7 block size is 29 (1 + 28), Rev4_6 block size is 17 (should have been 21)
-                    bcReadInfo.boardInfo[boardNum].blockSize = IsAllBoardsRev7_ ? 29 : 17;
-                }
-                if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
-                    unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
-                    bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x7fff)*clkPeriod;
+                bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != seq_expected);
+                // Rev7 block size is 29 (1 + 28), Rev4_6 block size is 17 (should have been 21)
+                bcReadInfo.boardInfo[boardNum].blockSize = IsAllBoardsRev7_ ? 29 : 17;
+            }
+            if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
+                unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
+                bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x7fff)*clkPeriod;
+                if (!bcReadInfo.boardInfo[boardNum].seq_error) {
                     // Set the update Start/Finish times based on the minimum and maximum update times
                     // Note that update times should be increasing, so if our current updateTime is
                     // less than the previous max (updateFinishTime), then there must have been overflow
@@ -966,16 +994,16 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                     if (bcReadInfo.boardInfo[boardNum].updateTime > bcReadInfo.updateFinishTime)
                         bcReadInfo.updateFinishTime = bcReadInfo.boardInfo[boardNum].updateTime;
                 }
-                if (!bcReadInfo.boardInfo[boardNum].seq_error) {
-                    thisOK = true;
-                }
-                else {
-                    outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
-                           << ", seq = " << bcReadInfo.boardInfo[boardNum].sequence
-                           << ", expected = " << seq_expected
-                           << ", diff = " << static_cast<int>(seq_expected-bcReadInfo.boardInfo[boardNum].sequence)
-                           << std::endl;
-                }
+            }
+            if (!bcReadInfo.boardInfo[boardNum].seq_error) {
+                thisOK = true;
+            }
+            else {
+                outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
+                       << ", seq = " << bcReadInfo.boardInfo[boardNum].sequence
+                       << ", expected = " << seq_expected
+                       << ", diff = " << static_cast<int>(seq_expected-bcReadInfo.boardInfo[boardNum].sequence)
+                       << std::endl;
             }
             board->SetReadValid(thisOK);
             if (thisOK) {
@@ -994,29 +1022,48 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         }
     }
 
-    if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
+    if (!allOK) {
+        for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
+            BoardIO *board = BoardList[bnum];
+            if (board && bcReadInfo.boardInfo[bnum].inUse && !bcReadInfo.boardInfo[bnum].updated) {
+               board->SetReadValid(false);
+            }
+        }
+        bcReadInfo.readStartTime = 0.0;
+        bcReadInfo.readFinishTime = 0.0;
+        bcReadInfo.gapTime = 0.0;
+    }
+    else if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
         quadlet_t timingInfo = bswap_32(curPtr[0]);
         bcReadInfo.readStartTime = ((timingInfo&0xffff0000) >> 16)*clkPeriod;
-        if (bcReadInfo.readStartTime < bcReadInfo.updateFinishTime) {
-            // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
-            uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
-            bcReadInfo.readStartTime += overflow_val*clkPeriod;
-            bcReadInfo.readOverflow = true;
-        }
         bcReadInfo.readFinishTime = (timingInfo&0x0000ffff)*clkPeriod;
-        if (bcReadInfo.readFinishTime < bcReadInfo.readStartTime) {
-            // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
-            uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
-            bcReadInfo.readFinishTime += overflow_val*clkPeriod;
-            bcReadInfo.readOverflow = true;
+        if (timingInfo != 0) {
+            // timingInfo == 0 indicates invalid data
+            if (bcReadInfo.readStartTime < bcReadInfo.updateFinishTime) {
+                // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+                uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
+                bcReadInfo.readStartTime += overflow_val*clkPeriod;
+                bcReadInfo.readOverflow = true;
+            }
+            if (bcReadInfo.readFinishTime < bcReadInfo.readStartTime) {
+                // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+                uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
+                bcReadInfo.readFinishTime += overflow_val*clkPeriod;
+                bcReadInfo.readOverflow = true;
+            }
         }
         // Gap between end of update and start of read; this can be tuned to be as
         // close to 0 as possible.
-        bcReadInfo.gapTime = bcReadInfo.readStartTime - bcReadInfo.updateFinishTime;
-        if (bcReadInfo.gapTime < bcReadInfo.gapTimeMin)
-            bcReadInfo.gapTimeMin = bcReadInfo.gapTime;
-        if (bcReadInfo.gapTime > bcReadInfo.gapTimeMax)
-            bcReadInfo.gapTimeMax = bcReadInfo.gapTime;
+        if (timingInfo == 0) {
+            bcReadInfo.gapTime = 0.0;
+        }
+        else {
+            bcReadInfo.gapTime = bcReadInfo.readStartTime - bcReadInfo.updateFinishTime;
+            if (bcReadInfo.gapTime < bcReadInfo.gapTimeMin)
+                bcReadInfo.gapTimeMin = bcReadInfo.gapTime;
+            if (bcReadInfo.gapTime > bcReadInfo.gapTimeMax)
+                bcReadInfo.gapTimeMax = bcReadInfo.gapTime;
+        }
     }
 
     if (noneRead) {

@@ -831,8 +831,13 @@ void EthBasePort::WaitBroadcastRead(void)
 {
     // Wait for all boards to respond with data
     // Ethernet/Firewire bridge: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
-    // Ethernet-only: 3 + 38 * (Nb-1) us, based on measurements
+    // Ethernet-only: 3 + 38 * (Nb-1) us, based on measurements, assuming contiguous Ethernet chain
     double waitTime_uS = useFwBridge ? (10.0 + 5.0*NumOfBoards_) : (3.0 + 38.0*(NumOfBoards_-1));
+    // Check the most recent measured update time, and use that if it is longer than
+    // the computed waitTime_uS.
+    double bcUpdateTime_uS = (bcReadInfo.updateFinishTime-bcReadInfo.updateStartTime)*1e6;
+    if (bcUpdateTime_uS > waitTime_uS)
+        waitTime_uS = bcUpdateTime_uS;
     Amp1394_Sleep(waitTime_uS*1e-6);
 }
 
@@ -844,7 +849,7 @@ bool EthBasePort::isBroadcastReadOrdered(void) const
 double EthBasePort::GetBroadcastReadClockPeriod(void) const
 {
     return useFwBridge ? BasePort::GetBroadcastReadClockPeriod()  // 49.152 MHz for Ethernet/Firewire
-                       : (1.0e-6/125.0);                            // 125 MHz for Ethernet-only
+                       : (1.0e-6/125.0);                          // 125 MHz for Ethernet-only
 }
 
 void EthBasePort::PromDelay(void) const
