@@ -831,8 +831,8 @@ void EthBasePort::WaitBroadcastRead(void)
 {
     // Wait for all boards to respond with data
     // Ethernet/Firewire bridge: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
-    // Ethernet-only: TBD (200 us for now)
-    double waitTime_uS = useFwBridge ? (10.0 + 5.0*NumOfBoards_) : 200.0;
+    // Ethernet-only: 3 + 38 * (Nb-1) us, based on measurements
+    double waitTime_uS = useFwBridge ? (10.0 + 5.0*NumOfBoards_) : (3.0 + 38.0*(NumOfBoards_-1));
     Amp1394_Sleep(waitTime_uS*1e-6);
 }
 
