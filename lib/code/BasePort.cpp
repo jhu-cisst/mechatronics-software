@@ -31,19 +31,28 @@ http://www.cisst.org/cisst/license.txt.
 // Currently, the supported hardware (e.g., QLA1) is added in the BasePort constructor.
 std::vector<unsigned long> BasePort::SupportedHardware;
 
-void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr, bool newLine) const
+void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr) const
 {
+    unsigned int num_bds = 0;
     outStr << "Updates (usec): ";
     for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
         if (boardInfo[bnum].inUse) {
-            outStr << bnum << ": " << std::fixed << std::setprecision(2) << (boardInfo[bnum].updateTime*1e6)
+            double bdTime_us = boardInfo[bnum].updateTime*1e6;
+            outStr << bnum << ": " << std::fixed << std::setprecision(2) << bdTime_us
                    << "   ";
+            num_bds++;
         }
     }
-    outStr << "Read start: " << std::fixed << std::setprecision(2) << (readStartTime*1e6)
-           << "  finish: " << (readFinishTime*1e6) << "  delta: " << ((readFinishTime-readStartTime)*1e6);
-    if (newLine)
-        outStr << std::endl;
+    if (num_bds == 0) return;   // Should not happen
+    double bdTimeDiff_us = (updateFinishTime-updateStartTime)*1e6;
+    outStr << "Range: " << std::fixed << std::setprecision(2) << bdTimeDiff_us
+           << " (" << (bdTimeDiff_us/num_bds) << ")";
+    outStr << std::endl;
+    outStr << "Read start: " << std::fixed << std::setprecision(2) << std::setw(6) << (readStartTime*1e6)
+           << "  finish: " << std::setw(6) << (readFinishTime*1e6) << "  delta: " << ((readFinishTime-readStartTime)*1e6)
+           << "  gap: " << std::setw(6) << (gapTime*1e6)
+           << " (min " << std::setw(6) << (gapTimeMin*1e6) << ", max " << (gapTimeMax*1e6) << ")";
+    outStr << std::endl;
 }
 
 BasePort::BasePort(int portNum, std::ostream &ostr):
@@ -860,6 +869,11 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
+    // Initialize update Start/Finish times (i.e., start/end of data update on FPGA Hub)
+    // Units are seconds.
+    bcReadInfo.updateStartTime = 1.0;
+    bcReadInfo.updateFinishTime = 0.0;
+
     // Wait for broadcast read data
     WaitBroadcastRead();
 
@@ -890,7 +904,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         return false;
     }
 
-    double clkPeriod = 0.0;  // will be assigned below
+    double clkPeriod = GetBroadcastReadClockPeriod();
     quadlet_t *curPtr = hubReadBuffer;
     // Loop through all boards, processing the boards in use.
     // Note that prior to Firmware Rev 7, we always read data for all 16 boards.
@@ -916,11 +930,11 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
                 unsigned int seq_expected = bcReadInfo.readSequence;
                 if (IsAllBoardsRev8_9_) {
-                    // For Rev 8+, only the LSB of the sequence is returned, but bit 14 also indicates
+                    // For Rev 8+, only the LSB of the sequence is returned, but bit 15 also indicates
                     // whether the 16-bit sequence number did not match on the FPGA side.
                     seq_expected &= 0x00ff;
                     bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
-                    bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 14
+                    bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 15
                     if (bcReadInfo.boardInfo[boardNum].sequence != seq_expected)
                         bcReadInfo.boardInfo[boardNum].seq_error = true;
                     bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
@@ -937,8 +951,12 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 }
                 if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
-                    clkPeriod = board->GetFPGAClockPeriod();
                     bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
+                    // Set the update Start/Finish times based on the minimum and maximum update times
+                    if (bcReadInfo.boardInfo[boardNum].updateTime < bcReadInfo.updateStartTime)
+                        bcReadInfo.updateStartTime = bcReadInfo.boardInfo[boardNum].updateTime;
+                    if (bcReadInfo.boardInfo[boardNum].updateTime > bcReadInfo.updateFinishTime)
+                        bcReadInfo.updateFinishTime = bcReadInfo.boardInfo[boardNum].updateTime;
                 }
                 if (!bcReadInfo.boardInfo[boardNum].seq_error) {
                     thisOK = true;
@@ -971,6 +989,13 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         quadlet_t timingInfo = bswap_32(curPtr[0]);
         bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
         bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
+        // Gap between end of update and start of read; this can be tuned to be as
+        // close to 0 as possible.
+        bcReadInfo.gapTime = bcReadInfo.readStartTime - bcReadInfo.updateFinishTime;
+        if (bcReadInfo.gapTime < bcReadInfo.gapTimeMin)
+            bcReadInfo.gapTimeMin = bcReadInfo.gapTime;
+        if (bcReadInfo.gapTime > bcReadInfo.gapTimeMax)
+            bcReadInfo.gapTimeMax = bcReadInfo.gapTime;
     }
 
     if (noneRead) {
@@ -986,6 +1011,12 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 #endif
 
     return allOK;
+}
+
+double BasePort::GetBroadcastReadClockPeriod(void) const
+{
+    const double FPGA_sysclk_MHz = 49.152;      /* FPGA sysclk in MHz (from AmpIO.cpp) */
+    return (1.0e-6/FPGA_sysclk_MHz);
 }
 
 bool BasePort::WriteAllBoards(void)

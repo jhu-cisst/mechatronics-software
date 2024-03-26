@@ -191,6 +191,10 @@ public:
 
     bool isBroadcastReadOrdered(void) const;
 
+    // Return clock period used for broadcast read timing measurements
+    // 125 MHz for FPGA V3 Ethernet-only; otherwise 49.152 MHz
+    double GetBroadcastReadClockPeriod(void) const;
+
     /*!
      \brief Add delay (if needed) for PROM I/O operations
      The delay is non-zero for Ethernet.

@@ -92,8 +92,13 @@ public:
     // sent by the host PC. The following times are relative to this timer.
     struct BroadcastReadInfo {
         unsigned int readSequence;    // The sequence number sent with the broadcast query command
+        double updateStartTime;       // When the FPGA started updating the hub data
+        double updateFinishTime;      // When the FPGA finished updating the hub data
         double readStartTime;         // When the PC started reading the hub feedback data
         double readFinishTime;        // When the PC finished reading the hub feedback data
+        double gapTime;               // Time between update finish and read start
+        double gapTimeMin;            // Minimum gap time
+        double gapTimeMax;            // Maximum gap time
         struct BroadcastBoardInfo {   // For each board:
             bool inUse;               //   Whether board is participating in broadcast read
             unsigned int blockSize;   //   Number of quadlets from this board
@@ -106,9 +111,12 @@ public:
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
 
-        BroadcastReadInfo() : readSequence(0), readStartTime(0.0), readFinishTime(0.0) {}
+        BroadcastReadInfo() : readSequence(0), updateStartTime(0.0), updateFinishTime(0.0),
+                              readStartTime(0.0), readFinishTime(0.0), gapTime(0.0) { Clear(); }
         ~BroadcastReadInfo() {}
-        void PrintTiming(std::ostream &outStr, bool newLine = true) const;
+        void PrintTiming(std::ostream &outStr) const;
+        void Clear(void)
+        { gapTimeMin = 1.0; gapTimeMax = 0.0; }
     };
 
 protected:
@@ -379,6 +387,10 @@ public:
     BroadcastReadInfo GetBroadcastReadInfo(void) const
     { return bcReadInfo; }
 
+    // Clear gapTime min/max
+    void ClearBroadcastReadInfo(void)
+    {  bcReadInfo.Clear(); }
+
     // Return string version of PortType
     static std::string PortTypeString(PortType portType);
 
@@ -464,6 +476,10 @@ public:
     // Returns true if broadcast read packet contains boards in sequential order,
     // starting with lowest numbered board
     virtual bool isBroadcastReadOrdered(void) const { return true; }
+
+    // Return clock period used for broadcast read timing measurements
+    // 49.152 MHz, except 125 MHz when using FPGA V3 Ethernet-only
+    virtual double GetBroadcastReadClockPeriod(void) const;
 
     // Write to all boards
     virtual bool WriteAllBoards(void);
