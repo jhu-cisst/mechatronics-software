@@ -43,10 +43,10 @@ void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr) const
             num_bds++;
         }
     }
-    if (num_bds == 0) return;   // Should not happen
     double bdTimeDiff_us = (updateFinishTime-updateStartTime)*1e6;
-    outStr << "Range: " << std::fixed << std::setprecision(2) << bdTimeDiff_us
-           << " (" << (bdTimeDiff_us/num_bds) << ") ";
+    outStr << "Range: " << std::fixed << std::setprecision(2) << bdTimeDiff_us;
+    if (num_bds > 1)
+        outStr << " (" << (bdTimeDiff_us/(num_bds-1)) << ") ";
     outStr << (updateOverflow ? "OVF" : "   ");
     outStr << std::endl;
     outStr << "Read start: " << std::fixed << std::setprecision(2) << std::setw(6) << (readStartTime*1e6)
