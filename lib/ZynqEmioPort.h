@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2023-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -21,15 +21,13 @@ http://www.cisst.org/cisst/license.txt.
 #include <ostream>
 #include "BoardIO.h"
 #include "BasePort.h"
-
-// Forward declarations
-struct EMIO_Info;
+#include "fpgav3_emio.h"
 
 class ZynqEmioPort : public BasePort {
 public:
 protected:
 
-    EMIO_Info *emio;
+    EMIO_Interface *emio;
 
     // Internal method to check whether node id is valid
     // (should be 0 or FW_NODE_BROADCAST)
@@ -69,6 +67,10 @@ protected:
 
 public:
     // Initialize Zynq EMIO port
+    //
+    // There are two available interfaces, one using mmap for direct register access,
+    // and one using the gpiod driver. The mmap interface is much faster and therefore
+    // is the default. To use the gpiod interface, set portNum to 1.
     ZynqEmioPort(int portNum = 0, std::ostream &debugStream = std::cerr);
     ~ZynqEmioPort();
 
@@ -78,7 +80,7 @@ public:
 
     int NumberOfUsers(void) { return 1; }
 
-    bool IsOK(void) { return (emio != 0); }
+    bool IsOK(void) { return emio->IsOK(); }
 
     unsigned int GetBusGeneration(void) const;
 

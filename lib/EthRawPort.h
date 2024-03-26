@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -58,7 +58,7 @@ protected:
     nodeid_t InitNodes(void);
 
     // Send packet via PCAP
-    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
+    bool PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via PCAP
     int PacketReceive(unsigned char *packet, size_t nbytes);
@@ -67,7 +67,8 @@ protected:
     int PacketFlushAll(void);
 
 public:
-    EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
+    EthRawPort(int portNum, bool forceFwBridge = false,
+               std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthRawPort();
 

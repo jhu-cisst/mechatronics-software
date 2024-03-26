@@ -475,7 +475,7 @@ int main(int argc, char** argv)
     if (showTime) {
         timeLines++;
         if (protocol == BasePort::PROTOCOL_BC_QRW)
-            timeLines++;
+            timeLines += 2;
     }
     else if (ethPort)
         timeLines++;
@@ -526,6 +526,9 @@ int main(int argc, char** argv)
             for (j = 0; j < BoardList.size(); j++) {
                 BoardList[j]->ClearReadErrors();
                 BoardList[j]->ClearWriteErrors();
+            }
+            if (showTime && (protocol == BasePort::PROTOCOL_BC_QRW)) {
+                Port->ClearBroadcastReadInfo();
             }
         }
         else if (readOnly) {
@@ -870,9 +873,14 @@ int main(int argc, char** argv)
                 BasePort::BroadcastReadInfo bcReadInfo;
                 bcReadInfo = Port->GetBroadcastReadInfo();
                 std::stringstream timingStr;
-                bcReadInfo.PrintTiming(timingStr, false);  // false --> no std::endl
-                timingStr << "   ";
-                console.Print(STATUS_LINE+6, lm, timingStr.str().c_str());
+                bcReadInfo.PrintTiming(timingStr);
+                char bcBuf[256];
+                timingStr.getline(bcBuf, 256);
+                strcat(bcBuf, "   ");
+                console.Print(STATUS_LINE+6, lm, bcBuf);
+                timingStr.getline(bcBuf, 256);
+                strcat(bcBuf, "   ");
+                console.Print(STATUS_LINE+7, lm, bcBuf);
             }
         }
         else if (ethPort) {
