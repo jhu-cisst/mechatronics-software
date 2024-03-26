@@ -46,12 +46,14 @@ void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr) const
     if (num_bds == 0) return;   // Should not happen
     double bdTimeDiff_us = (updateFinishTime-updateStartTime)*1e6;
     outStr << "Range: " << std::fixed << std::setprecision(2) << bdTimeDiff_us
-           << " (" << (bdTimeDiff_us/num_bds) << ")";
+           << " (" << (bdTimeDiff_us/num_bds) << ") ";
+    outStr << (updateOverflow ? "OVF" : "   ");
     outStr << std::endl;
     outStr << "Read start: " << std::fixed << std::setprecision(2) << std::setw(6) << (readStartTime*1e6)
            << "  finish: " << std::setw(6) << (readFinishTime*1e6) << "  delta: " << ((readFinishTime-readStartTime)*1e6)
            << "  gap: " << std::setw(6) << (gapTime*1e6)
-           << " (min " << std::setw(6) << (gapTimeMin*1e6) << ", max " << (gapTimeMax*1e6) << ")";
+           << " (min " << std::setw(6) << (gapTimeMin*1e6) << ", max " << (gapTimeMax*1e6) << ") ";
+    outStr << (readOverflow ? "OVF" : "   ");
     outStr << std::endl;
 }
 
@@ -873,6 +875,8 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     // Units are seconds.
     bcReadInfo.updateStartTime = 1.0;
     bcReadInfo.updateFinishTime = 0.0;
+    bcReadInfo.updateOverflow = false;
+    bcReadInfo.readOverflow = false;
 
     // Wait for broadcast read data
     WaitBroadcastRead();
@@ -951,8 +955,16 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                 }
                 if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
                     unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
-                    bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
+                    bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x7fff)*clkPeriod;
                     // Set the update Start/Finish times based on the minimum and maximum update times
+                    // Note that update times should be increasing, so if our current updateTime is
+                    // less than the previous max (updateFinishTime), then there must have been overflow
+                    if (bcReadInfo.boardInfo[boardNum].updateTime < bcReadInfo.updateFinishTime) {
+                        // Firmware Rev 9 uses 15 bits; prior versions use 14 bits
+                        uint16_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x4000 : 0x8000;
+                        bcReadInfo.boardInfo[boardNum].updateTime += overflow_val*clkPeriod;
+                        bcReadInfo.updateOverflow = true;
+                    }
                     if (bcReadInfo.boardInfo[boardNum].updateTime < bcReadInfo.updateStartTime)
                         bcReadInfo.updateStartTime = bcReadInfo.boardInfo[boardNum].updateTime;
                     if (bcReadInfo.boardInfo[boardNum].updateTime > bcReadInfo.updateFinishTime)
@@ -987,8 +999,20 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 
     if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
         quadlet_t timingInfo = bswap_32(curPtr[0]);
-        bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
-        bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
+        bcReadInfo.readStartTime = ((timingInfo&0xffff0000) >> 16)*clkPeriod;
+        if (bcReadInfo.readStartTime < bcReadInfo.updateFinishTime) {
+            // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+            uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
+            bcReadInfo.readStartTime += overflow_val*clkPeriod;
+            bcReadInfo.readOverflow = true;
+        }
+        bcReadInfo.readFinishTime = (timingInfo&0x0000ffff)*clkPeriod;
+        if (bcReadInfo.readFinishTime < bcReadInfo.readStartTime) {
+            // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+            uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
+            bcReadInfo.readFinishTime += overflow_val*clkPeriod;
+            bcReadInfo.readOverflow = true;
+        }
         // Gap between end of update and start of read; this can be tuned to be as
         // close to 0 as possible.
         bcReadInfo.gapTime = bcReadInfo.readStartTime - bcReadInfo.updateFinishTime;

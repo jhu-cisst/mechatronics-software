@@ -94,8 +94,10 @@ public:
         unsigned int readSequence;    // The sequence number sent with the broadcast query command
         double updateStartTime;       // When the FPGA started updating the hub data
         double updateFinishTime;      // When the FPGA finished updating the hub data
+        bool   updateOverflow;        // Whether timer overflow was detected during data update
         double readStartTime;         // When the PC started reading the hub feedback data
         double readFinishTime;        // When the PC finished reading the hub feedback data
+        bool   readOverflow;          // Whether timer overflow was detected during gap or read
         double gapTime;               // Time between update finish and read start
         double gapTimeMin;            // Minimum gap time
         double gapTimeMax;            // Maximum gap time
@@ -111,8 +113,8 @@ public:
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
 
-        BroadcastReadInfo() : readSequence(0), updateStartTime(0.0), updateFinishTime(0.0),
-                              readStartTime(0.0), readFinishTime(0.0), gapTime(0.0) { Clear(); }
+        BroadcastReadInfo() : readSequence(0), updateStartTime(0.0), updateFinishTime(0.0), updateOverflow(false),
+                              readStartTime(0.0), readFinishTime(0.0), readOverflow(false), gapTime(0.0) { Clear(); }
         ~BroadcastReadInfo() {}
         void PrintTiming(std::ostream &outStr) const;
         void Clear(void)
