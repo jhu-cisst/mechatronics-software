@@ -91,6 +91,7 @@ public:
     // With Firmware V7+, each FPGA starts a timer when it receives the broadcast query command
     // sent by the host PC. The following times are relative to this timer.
     struct BroadcastReadInfo {
+        unsigned int readSizeQuads;   // Read size in quadlets
         unsigned int readSequence;    // The sequence number sent with the broadcast query command
         double updateStartTime;       // When the FPGA started updating the hub data
         double updateFinishTime;      // When the FPGA finished updating the hub data
@@ -113,8 +114,9 @@ public:
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
 
-        BroadcastReadInfo() : readSequence(0), updateStartTime(0.0), updateFinishTime(0.0), updateOverflow(false),
-                              readStartTime(0.0), readFinishTime(0.0), readOverflow(false), gapTime(0.0) { Clear(); }
+        BroadcastReadInfo() : readSizeQuads(0), readSequence(0), updateStartTime(0.0), updateFinishTime(0.0),
+                              updateOverflow(false), readStartTime(0.0), readFinishTime(0.0), readOverflow(false),
+                              gapTime(0.0) { Clear(); }
         ~BroadcastReadInfo() {}
         void PrintTiming(std::ostream &outStr) const;
         void Clear(void)
@@ -212,8 +214,8 @@ protected:
     void SetReadBufferBroadcast(void);
     void SetWriteBufferBroadcast(void);
 
-    // Return expected size for broadcast read, in bytes
-    unsigned int GetBroadcastReadSize(void) const;
+    // Return expected size for broadcast read, in quadlets
+    unsigned int GetBroadcastReadSizeQuads(void) const;
 
     // Convenience function
     void SetReadInvalid(void);
