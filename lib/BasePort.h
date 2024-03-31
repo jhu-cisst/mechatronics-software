@@ -531,6 +531,14 @@ public:
     virtual void WaitBroadcastRead(void) = 0;
 
     /*!
+     \brief Receive the broadcast read response. This is usually a block read from
+            address 0x1000 (Hub memory); in the case of Ethernet-only, it receives
+            a response from an FPGA board some time after WriteBroadcastReadRequest
+            is issued.
+    */
+    virtual bool ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes);
+
+    /*!
      \brief Add delay (if needed) for PROM I/O operations
      The delay is 0 for FireWire, and non-zero for Ethernet.
     */

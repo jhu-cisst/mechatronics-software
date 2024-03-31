@@ -373,6 +373,7 @@ void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *dat
     if (p->statusbits & 0x00000080) debugStream << "fw_bus_reset ";
     if (p->statusbits & 0x00000040) debugStream << "ipWrite ";
     if (p->statusbits & 0x00000020) debugStream << "hubSend ";
+    if (p->statusbits & 0x00000010) debugStream << "bcResp ";
     debugStream << std::endl;
     unsigned int node_id = (p->quad3_high&0xfc00) >> 10;    // node_is is upper 6 bits
     debugStream << "FireWire node_id: " << node_id << std::endl;
@@ -718,6 +719,12 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
         return false;
     }
 
+    return ReceiveResponseNode(node, rdata, nbytes, fw_tl);
+}
+
+bool EthBasePort::ReceiveResponseNode(nodeid_t node, quadlet_t *rdata,
+                                      unsigned int nbytes, uint8_t fw_tl)
+{
     // Packet to receive
     unsigned char *packet = GenericBuffer+GetReadQuadAlign();;
     unsigned int packetSize = GetPrefixOffset(RD_FW_BDATA) + nbytes + GetReadPostfixSize();
@@ -730,9 +737,11 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 
     int nRecv = PacketReceive(packet, packetSize);
     if (nRecv != static_cast<int>(packetSize)) {
+        outStr << "ReadBlock: failed to receive read response";
         unsigned char boardId = Node2Board[node];
-        outStr << "ReadBlock: failed to receive read response from board " << (boardId&FW_NODE_MASK)
-               << ": return value = " << nRecv
+        if (boardId < BoardIO::MAX_BOARDS)
+            outStr << " from board " << boardId;
+        outStr << ": return value = " << nRecv
                << ", expected = " << packetSize << std::endl;
         return false;
     }
@@ -832,6 +841,9 @@ void EthBasePort::WaitBroadcastRead(void)
     // Wait for all boards to respond with data
     // Ethernet/Firewire bridge: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
     // Ethernet-only: 3 + 38 * (Nb-1) us, based on measurements, assuming contiguous Ethernet chain
+    // Note that for Ethernet-only, it is not necessary to wait because the FPGA sends the broadcast read
+    // response packet when all data is ready. Thus, the only advantage to waiting here is that we avoid
+    // possible timeouts when receiving the response packet.
     double waitTime_uS = useFwBridge ? (10.0 + 5.0*NumOfBoards_) : (3.0 + 38.0*(NumOfBoards_-1));
     // Check the most recent measured update time, and use that if it is longer than
     // the computed waitTime_uS.
@@ -839,6 +851,19 @@ void EthBasePort::WaitBroadcastRead(void)
     if (bcUpdateTime_uS > waitTime_uS)
         waitTime_uS = bcUpdateTime_uS;
     Amp1394_Sleep(waitTime_uS*1e-6);
+}
+
+bool EthBasePort::ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes)
+{
+    bool ret;
+    if (useFwBridge) {
+        ret = BasePort::ReceiveBroadcastReadResponse(rdata, nbytes);
+    }
+    else {
+        // Use FW_NODE_BROADCAST because we do not care which board responds
+        ret = ReceiveResponseNode(FW_NODE_BROADCAST, rdata, nbytes, fw_tl);
+    }
+    return ret;
 }
 
 bool EthBasePort::isBroadcastReadOrdered(void) const
