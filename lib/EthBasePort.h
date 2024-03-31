@@ -101,8 +101,11 @@ protected:
     //! Write quadlet to node (internal method called by WriteQuadlet)
     bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
 
-    // Write a block to the specified node. Internal method called by ReadBlock.
+    // Read a block from the specified node (also calls ReceiveResponseNode). Internal method called by ReadBlock.
     bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes, unsigned char flags = 0);
+
+    // Receive the block data. Internal method called by ReadBlockNode.
+    bool ReceiveResponseNode(nodeid_t node, quadlet_t *rdata, unsigned int nbytes, uint8_t fw_tl);
 
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
@@ -194,6 +197,14 @@ public:
     // Return clock period used for broadcast read timing measurements
     // 125 MHz for FPGA V3 Ethernet-only; otherwise 49.152 MHz
     double GetBroadcastReadClockPeriod(void) const;
+
+    /*!
+     \brief Receive the broadcast read response. This is usually a block read from
+            address 0x1000 (Hub memory); in the case of Ethernet-only, it receives
+            a response from an FPGA board some time after WriteBroadcastReadRequest
+            is issued.
+    */
+    bool ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations

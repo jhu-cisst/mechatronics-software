@@ -911,7 +911,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
     memset(hubReadBuffer, 0, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
-    bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
+    bool ret = ReceiveBroadcastReadResponse(hubReadBuffer, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
     if (!ret) {
         SetReadInvalid();
         OnNoneRead();
@@ -1079,6 +1079,11 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 #endif
 
     return allOK;
+}
+
+bool BasePort::ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes)
+{
+    return ReadBlock(HubBoard, 0x1000, rdata, nbytes);
 }
 
 double BasePort::GetBroadcastReadClockPeriod(void) const
