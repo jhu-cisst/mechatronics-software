@@ -78,6 +78,28 @@ bool GetBit(uint16_t value, uint16_t inPort, uint16_t outPort)
     return value & (1 << offset);
 }
 
+// Convert bitmask to list of board numbers
+const char *PrintFpgaList(uint16_t fpgaList)
+{
+    static char buffer[128];
+    char *p = buffer;
+    for (size_t i = 0; i < 16; i++) {
+        if (fpgaList & (1<<i)) {
+            if (p != buffer)
+                *p++ = ' ';
+            if (i < 10) {
+                *p++ = '0'+i;
+            }
+            else {
+                *p++ = '1';
+                *p++ = '0'+(i-10);
+            }
+        }
+    }
+    *p = 0;
+    return buffer;
+}
+
 void PrintDebugStream(std::stringstream &debugStream)
 {
     std::cerr << debugStream.str() << std::endl;
@@ -311,8 +333,8 @@ int main(int argc, char** argv)
                 UdpMulticastFpga = data->UdpMulticastFpga;
                 console.Print(36, lm+64, EthUdpPort::IP_String(bswap_32(UdpMulticastFpga)).c_str());
             }
-            console.Print(37, lm+16, "%6x", data->PortForwardFpga[0]);
-            console.Print(37, lm+32, "%6x", data->PortForwardFpga[1]);
+            console.Print(37, lm+16, PrintFpgaList(data->PortForwardFpga[0]));
+            console.Print(37, lm+32, PrintFpgaList(data->PortForwardFpga[1]));
         }
     }
 
