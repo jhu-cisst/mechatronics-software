@@ -447,13 +447,7 @@ bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthern
     return true;
 }
 
-void EthRawPort::make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags)
-{
-    make_ethernet_header(packet, nBytes, flags);
-    EthBasePort::make_write_header(packet, nBytes, flags);
-}
-
-void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags)
+void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags)
 {
     memcpy(packet, frame_hdr, ETH_FRAME_LENGTH_OFFSET);  // Copy header except length field
     if (flags&FW_NODE_ETH_BROADCAST_MASK) {      // multicast
@@ -461,7 +455,9 @@ void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numByt
         packet[5] = 0xff;     // keep multicast address
     }
     else {
-        packet[5] = HubBoard;     // last byte of dest address is board id
+        // last byte of dest address is board id; when using Ethernet/Firewire bridge, this is the HubBoard;
+        // otherwise it is the node (in Ethernet-only network, node-id and board-id are identical)
+        packet[5] = useFwBridge ? HubBoard : node;
     }
     // length field (big endian 16-bit integer)
     *reinterpret_cast<uint16_t *>(packet+ETH_FRAME_LENGTH_OFFSET) = bswap_16(numBytes-ETH_FRAME_HEADER_SIZE);

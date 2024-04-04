@@ -620,6 +620,9 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
     unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
     unsigned int sendPacketSize = GetPrefixOffset(WR_FW_HEADER)+FW_QREAD_SIZE;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(sendPacket, sendPacketSize, node, flags);
+
     // Make control word
     make_write_header(sendPacket, sendPacketSize, flags);
 
@@ -677,6 +680,10 @@ bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t dat
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(packet, packetSize, node, flags);
+
+    // Make control word
     make_write_header(packet, packetSize, flags);
 
     // Build FireWire packet (also byteswaps data)
@@ -704,6 +711,10 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(sendPacket, sendPacketSize, node, flags);
+
+    // Make control word
     make_write_header(sendPacket, sendPacketSize, flags);
 
     // Build FireWire packet
@@ -793,6 +804,10 @@ bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdat
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(packet, packetSize, node, flags);
+
+    // Make control word
     make_write_header(packet, packetSize, flags);
 
     // Build FireWire packet
@@ -886,6 +901,10 @@ void EthBasePort::PromDelay(void) const
 // ---------------------------------------------------------
 // Protected
 // ---------------------------------------------------------
+
+void EthBasePort::make_ethernet_header(unsigned char *, unsigned int, nodeid_t, unsigned char)
+{
+}
 
 void EthBasePort::make_write_header(unsigned char *packet, unsigned int, unsigned char flags)
 {
