@@ -450,7 +450,7 @@ bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthern
 void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags)
 {
     memcpy(packet, frame_hdr, ETH_FRAME_LENGTH_OFFSET);  // Copy header except length field
-    if (flags&FW_NODE_ETH_BROADCAST_MASK) {      // multicast
+    if ((flags&FW_NODE_ETH_BROADCAST_MASK) || (!useFwBridge && (node == FW_NODE_BROADCAST))) {      // multicast
         packet[0] |= 0x01;    // set multicast destination address
         packet[5] = 0xff;     // keep multicast address
     }
