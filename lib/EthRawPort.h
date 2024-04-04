@@ -40,9 +40,8 @@ protected:
 
     bool headercheck(const unsigned char *header, bool toPC) const;
 
-    void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
-
-    void make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags);
+    // Make Ethernet header
+    void make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags);
 
     // Check Ethernet header
     bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);

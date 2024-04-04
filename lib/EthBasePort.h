@@ -130,7 +130,11 @@ protected:
     // to be different than the one on the PC.
     virtual void OnFwBusReset(unsigned int FwBusGeneration_FPGA);
 
-    virtual void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
+    // Make Ethernet header (only needed for raw Ethernet)
+    virtual void make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags);
+
+    // Make control word
+    void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
 
     void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
 
