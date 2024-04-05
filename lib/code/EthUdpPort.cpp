@@ -651,11 +651,11 @@ bool EthUdpPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes,
         //      class reads the Firmware and FPGA version), which is necessary for proper operation.
         unsigned long fver = GetFirmwareVersion(HubBoard);
         unsigned int fpga_ver = GetFpgaVersionMajor(HubBoard);
-        destType = ((fver < 9) || (fpga_ver < 3)) ? SocketInternals::EthDestType::DEST_BROADCAST
-                                                  : SocketInternals::EthDestType::DEST_MULTICAST;
+        destType = ((fver < 9) || (fpga_ver < 3)) ? SocketInternals::DEST_BROADCAST
+                                                  : SocketInternals::DEST_MULTICAST;
     }
     else {
-        destType = SocketInternals::EthDestType::DEST_UNICAST;
+        destType = SocketInternals::DEST_UNICAST;
         if (useFwBridge) {
             // If using the Ethernet/Firewire bridge, then we only need to talk to the Hub board,
             // which has ip_offset=0 for firmware prior to Rev 9
@@ -669,7 +669,7 @@ bool EthUdpPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes,
             if (node < BoardIO::MAX_BOARDS)
                 ip_offset = static_cast<unsigned char>(node);
             else if (node == FW_NODE_BROADCAST)
-                destType = SocketInternals::EthDestType::DEST_MULTICAST;
+                destType = SocketInternals::DEST_MULTICAST;
         }
     }
 
