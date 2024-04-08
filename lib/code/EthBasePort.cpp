@@ -141,8 +141,9 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
     }
     unsigned int tl_recv = (qpacket[0]>>10)&FW_TL_MASK;
     if (tl_recv != tl) {
-        outStr << "WARNING: received tl = " << tl_recv
-               << ", expected tl = " << tl << std::endl;
+        outStr << "Inconsistent Firewire TL: received = " << tl_recv
+               << ", expected = " << tl << std::endl;
+        return false;
     }
     // TODO: could also check QRESPONSE length
     if (tcode == BRESPONSE) {
@@ -751,7 +752,7 @@ bool EthBasePort::ReceiveResponseNode(nodeid_t node, quadlet_t *rdata,
         outStr << "ReadBlock: failed to receive read response";
         unsigned char boardId = Node2Board[node];
         if (boardId < BoardIO::MAX_BOARDS)
-            outStr << " from board " << boardId;
+            outStr << " from board " << static_cast<unsigned int>(boardId);
         outStr << ": return value = " << nRecv
                << ", expected = " << packetSize << std::endl;
         return false;
