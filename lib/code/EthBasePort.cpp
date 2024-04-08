@@ -862,6 +862,16 @@ bool EthBasePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
 
 bool EthBasePort::WriteBroadcastReadRequest(unsigned int seq)
 {
+    if (!useFwBridge) {
+        // Ethernet-only system automatically sends a response packet in response to
+        // the broadcast read request, so we first flush any existing packets.
+        // When using the Ethernet/Firewire bridge, the flush happens in ReadBlockNode,
+        // which is called by BasePort::ReceiveBroadcastReadResponse.
+        int numFlushed = PacketFlushAll();
+        if (numFlushed > 0)
+            outStr << "WriteBroadcastReadRequest: flushed " << numFlushed << " packets"
+                   << ", seq = " << seq << std::endl;
+    }
     quadlet_t bcReqData = (seq << 16) | BoardInUseMask_;
     return WriteQuadlet(FW_NODE_BROADCAST, 0x1800, bcReqData);
 }
@@ -893,17 +903,19 @@ bool EthBasePort::ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nb
         nodeid_t src_node;
         // Use FW_NODE_BROADCAST because we do not care which board responds
         ret = ReceiveResponseNode(FW_NODE_BROADCAST, rdata, nbytes, fw_tl, &src_node);
-        unsigned char newHubBoard = Node2Board[src_node];
-        if (newHubBoard >= BoardIO::MAX_BOARDS) {
-            // Should not happen
-            outStr << "ReceiveBroadcastReadResponse: invalid source node " << src_node << std::endl;
-        }
-        else if (newHubBoard != HubBoard) {
-            // Not printing message because current hub board is shown in qladisp
-            // outStr << "ReceiveBroadcastReadResponse: changing hub board from "
-            //        << static_cast<unsigned int>(HubBoard) << " to "
-            //        << static_cast<unsigned int>(newHubBoard) << std::endl;
-            HubBoard = newHubBoard;
+        if (ret) {
+            unsigned char newHubBoard = Node2Board[src_node];
+            if (newHubBoard >= BoardIO::MAX_BOARDS) {
+                // Should not happen
+                outStr << "ReceiveBroadcastReadResponse: invalid source node " << src_node << std::endl;
+            }
+            else if (newHubBoard != HubBoard) {
+                // Not printing message because current hub board is shown in qladisp
+                // outStr << "ReceiveBroadcastReadResponse: changing hub board from "
+                //        << static_cast<unsigned int>(HubBoard) << " to "
+                //        << static_cast<unsigned int>(newHubBoard) << std::endl;
+                HubBoard = newHubBoard;
+            }
         }
     }
     return ret;
