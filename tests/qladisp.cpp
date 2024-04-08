@@ -773,6 +773,7 @@ int main(int argc, char** argv)
                 }
             }
         }
+        bool allValid = true;
         for (unsigned int axisNum = 1; axisNum <= numAxes; axisNum++) {
             j = Axis2BoardNum[axisNum];
             unsigned int dx = (axisNum-1)*13;   // offset between columns
@@ -816,6 +817,9 @@ int main(int argc, char** argv)
                             console.Print(nextLine++, lm+6+dx, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
                     }
                 }
+            }
+            else {
+                allValid = false;
             }
         }
         unsigned int bdx = 0;
@@ -887,7 +891,7 @@ int main(int argc, char** argv)
         }
         if (showTime) {
             console.Print(STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
-            if (protocol == BasePort::PROTOCOL_BC_QRW) {
+            if ((protocol == BasePort::PROTOCOL_BC_QRW) && allValid) {
                 BasePort::BroadcastReadInfo bcReadInfo;
                 bcReadInfo = Port->GetBroadcastReadInfo();
                 std::stringstream timingStr;
