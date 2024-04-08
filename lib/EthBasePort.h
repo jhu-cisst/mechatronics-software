@@ -105,7 +105,7 @@ protected:
     bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes, unsigned char flags = 0);
 
     // Receive the block data. Internal method called by ReadBlockNode.
-    bool ReceiveResponseNode(nodeid_t node, quadlet_t *rdata, unsigned int nbytes, uint8_t fw_tl);
+    bool ReceiveResponseNode(nodeid_t node, quadlet_t *rdata, unsigned int nbytes, uint8_t fw_tl, nodeid_t *src_node = 0);
 
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
@@ -246,12 +246,18 @@ public:
     // byteswap the Firewire header quadlets.
     void ByteswapQuadlets(unsigned char *packet, unsigned int nbytes);
 
+    // Get information from Firewire packet header
+    // Can specify 0 (null pointer) for fields to ignore
+    static void GetFirewireHeaderInfo(const unsigned char *packet, nodeid_t *src_node, unsigned int *tcode,
+                                      unsigned int *tl);
+
     // Check if FireWire packet valid
     //   length:  length of data section (for BRESPONSE)
     //   node:    expected source node
     //   tcode:   expected tcode (e.g., QRESPONSE or BRESPONSE)
     //   tl:      transaction label
-    bool CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl);
+    bool CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode,
+                             unsigned int tl);
 
     // Process extra data received from FPGA
     void ProcessExtraData(const unsigned char *packet);
