@@ -120,26 +120,36 @@ bool EthBasePort::CheckEthernetHeader(const unsigned char *, bool)
     return true;
 }
 
-bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl)
+void EthBasePort::GetFirewireHeaderInfo(const unsigned char *packet, nodeid_t *src_node, unsigned int *tcode,
+                                        unsigned int *tl)
+{
+    const quadlet_t *qpacket = reinterpret_cast<const quadlet_t *>(packet);
+    if (tcode) *tcode = (qpacket[0]&0x000000F0)>>4;
+    if (src_node) *src_node = (qpacket[1]>>16)&FW_NODE_MASK;
+    if (tl) *tl = (qpacket[0]>>10)&FW_TL_MASK;
+}
+
+bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode,
+                                      unsigned int tl)
 {
     if (!checkCRC(packet)) {
         outStr << "CheckFirewirePacket: CRC error" << std::endl;
         return false;
     }
 
-    const quadlet_t *qpacket = reinterpret_cast<const quadlet_t *>(packet);
+    nodeid_t src_node;
+    unsigned int tcode_recv;
+    unsigned int tl_recv;
+    GetFirewireHeaderInfo(packet, &src_node, &tcode_recv, &tl_recv);
 
-    unsigned int tcode_recv = (qpacket[0]&0x000000F0)>>4;
     if (tcode_recv != tcode) {
         outStr << "Unexpected tcode: received = " << tcode_recv << ", expected = " << tcode << std::endl;
         return false;
     }
-    nodeid_t src_node = (qpacket[1]>>16)&FW_NODE_MASK;
     if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
         outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
         return false;
     }
-    unsigned int tl_recv = (qpacket[0]>>10)&FW_TL_MASK;
     if (tl_recv != tl) {
         outStr << "Inconsistent Firewire TL: received = " << tl_recv
                << ", expected = " << tl << std::endl;
@@ -147,6 +157,7 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
     }
     // TODO: could also check QRESPONSE length
     if (tcode == BRESPONSE) {
+        const quadlet_t *qpacket = reinterpret_cast<const quadlet_t *>(packet);
         size_t length_recv = (qpacket[3]&0xffff0000) >> 16;
         if (length_recv != length) {
             outStr << "Inconsistent length: received = " << length_recv << ", expected = " << length << std::endl;
@@ -735,7 +746,7 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 }
 
 bool EthBasePort::ReceiveResponseNode(nodeid_t node, quadlet_t *rdata,
-                                      unsigned int nbytes, uint8_t fw_tl)
+                                      unsigned int nbytes, uint8_t fw_tl, nodeid_t *src_node)
 {
     // Packet to receive
     unsigned char *packet = GenericBuffer+GetReadQuadAlign();;
@@ -763,9 +774,12 @@ bool EthBasePort::ReceiveResponseNode(nodeid_t node, quadlet_t *rdata,
     if (!CheckEthernetHeader(packet, false))
         return false;
     // Byteswap Firewire header
-    ByteswapQuadlets(packet + GetPrefixOffset(RD_FW_HEADER), FW_BRESPONSE_HEADER_SIZE);
-    if (!CheckFirewirePacket(packet+GetPrefixOffset(RD_FW_HEADER), nbytes, node, EthBasePort::BRESPONSE, fw_tl))
+    unsigned char *packetFw = packet + GetPrefixOffset(RD_FW_HEADER);
+    ByteswapQuadlets(packetFw, FW_BRESPONSE_HEADER_SIZE);
+    if (!CheckFirewirePacket(packetFw, nbytes, node, EthBasePort::BRESPONSE, fw_tl))
         return false;
+    if (src_node)
+        GetFirewireHeaderInfo(packetFw, src_node, 0, 0);
 
     const quadlet_t *packet_data = reinterpret_cast<const quadlet_t *>(packet+GetPrefixOffset(RD_FW_BDATA));
     if (rdata != packet_data) {
@@ -876,8 +890,21 @@ bool EthBasePort::ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nb
         ret = BasePort::ReceiveBroadcastReadResponse(rdata, nbytes);
     }
     else {
+        nodeid_t src_node;
         // Use FW_NODE_BROADCAST because we do not care which board responds
-        ret = ReceiveResponseNode(FW_NODE_BROADCAST, rdata, nbytes, fw_tl);
+        ret = ReceiveResponseNode(FW_NODE_BROADCAST, rdata, nbytes, fw_tl, &src_node);
+        unsigned char newHubBoard = Node2Board[src_node];
+        if (newHubBoard >= BoardIO::MAX_BOARDS) {
+            // Should not happen
+            outStr << "ReceiveBroadcastReadResponse: invalid source node " << src_node << std::endl;
+        }
+        else if (newHubBoard != HubBoard) {
+            // Not printing message because current hub board is shown in qladisp
+            // outStr << "ReceiveBroadcastReadResponse: changing hub board from "
+            //        << static_cast<unsigned int>(HubBoard) << " to "
+            //        << static_cast<unsigned int>(newHubBoard) << std::endl;
+            HubBoard = newHubBoard;
+        }
     }
     return ret;
 }

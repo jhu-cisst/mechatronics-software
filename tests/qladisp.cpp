@@ -402,14 +402,18 @@ int main(int argc, char** argv)
     }
 
     int board1 = BoardList[0]->GetBoardId();
+    unsigned int hub_board = Port->GetHubBoardId();
     if (numDisp > 1) {
-       int board2 = BoardList[1]->GetBoardId();
-       if (protocol == BasePort::PROTOCOL_BC_QRW)
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
-       else
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+        int board2 = BoardList[1]->GetBoardId();
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, hub_board);
+        else
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
     } else {
-        console.Print(1, lm, "Sensor Feedback for Board %d", board1);
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            console.Print(1, lm, "Sensor Feedback for Board %d (hub %d)", board1, hub_board);
+        else
+            console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
     if (readOnly) {
         console.Print(2, lm, "Press ESC to quit, r to reset port (READ ONLY)");
@@ -753,6 +757,20 @@ int main(int argc, char** argv)
             }
             else {
                 pcTime = Amp1394_GetTime()-startTime;
+            }
+        }
+        // Check if hub board may have been updated
+        if (protocol == BasePort::PROTOCOL_BC_QRW) {
+            unsigned int new_hub_board = Port->GetHubBoardId();
+            if (new_hub_board != hub_board) {
+                hub_board = new_hub_board;
+                if (numDisp > 1) {
+                    int board2 = BoardList[1]->GetBoardId();
+                    console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, hub_board);
+                }
+                else {
+                    console.Print(1, lm, "Sensor Feedback for Board %d (hub %d)", board1, hub_board);
+                }
             }
         }
         for (unsigned int axisNum = 1; axisNum <= numAxes; axisNum++) {
