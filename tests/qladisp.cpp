@@ -402,14 +402,18 @@ int main(int argc, char** argv)
     }
 
     int board1 = BoardList[0]->GetBoardId();
+    unsigned int hub_board = Port->GetHubBoardId();
     if (numDisp > 1) {
-       int board2 = BoardList[1]->GetBoardId();
-       if (protocol == BasePort::PROTOCOL_BC_QRW)
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, Port->GetHubBoardId());
-       else
-           console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
+        int board2 = BoardList[1]->GetBoardId();
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, hub_board);
+        else
+            console.Print(1, lm, "Sensor Feedback for Boards %d, %d", board1, board2);
     } else {
-        console.Print(1, lm, "Sensor Feedback for Board %d", board1);
+        if (protocol == BasePort::PROTOCOL_BC_QRW)
+            console.Print(1, lm, "Sensor Feedback for Board %d (hub %d)", board1, hub_board);
+        else
+            console.Print(1, lm, "Sensor Feedback for Board %d", board1);
     }
     if (readOnly) {
         console.Print(2, lm, "Press ESC to quit, r to reset port (READ ONLY)");
@@ -475,7 +479,7 @@ int main(int argc, char** argv)
     if (showTime) {
         timeLines++;
         if (protocol == BasePort::PROTOCOL_BC_QRW)
-            timeLines++;
+            timeLines += 2;
     }
     else if (ethPort)
         timeLines++;
@@ -526,6 +530,9 @@ int main(int argc, char** argv)
             for (j = 0; j < BoardList.size(); j++) {
                 BoardList[j]->ClearReadErrors();
                 BoardList[j]->ClearWriteErrors();
+            }
+            if (showTime && (protocol == BasePort::PROTOCOL_BC_QRW)) {
+                Port->ClearBroadcastReadInfo();
             }
         }
         else if (readOnly) {
@@ -752,6 +759,21 @@ int main(int argc, char** argv)
                 pcTime = Amp1394_GetTime()-startTime;
             }
         }
+        // Check if hub board may have been updated
+        if (protocol == BasePort::PROTOCOL_BC_QRW) {
+            unsigned int new_hub_board = Port->GetHubBoardId();
+            if (new_hub_board != hub_board) {
+                hub_board = new_hub_board;
+                if (numDisp > 1) {
+                    int board2 = BoardList[1]->GetBoardId();
+                    console.Print(1, lm, "Sensor Feedback for Boards %d, %d (hub %d)", board1, board2, hub_board);
+                }
+                else {
+                    console.Print(1, lm, "Sensor Feedback for Board %d (hub %d)", board1, hub_board);
+                }
+            }
+        }
+        bool allValid = true;
         for (unsigned int axisNum = 1; axisNum <= numAxes; axisNum++) {
             j = Axis2BoardNum[axisNum];
             unsigned int dx = (axisNum-1)*13;   // offset between columns
@@ -795,6 +817,9 @@ int main(int argc, char** argv)
                             console.Print(nextLine++, lm+6+dx, "%08X", BoardList[j]->GetEncoderAccelerationRaw(i));
                     }
                 }
+            }
+            else {
+                allValid = false;
             }
         }
         unsigned int bdx = 0;
@@ -866,13 +891,18 @@ int main(int argc, char** argv)
         }
         if (showTime) {
             console.Print(STATUS_LINE+5, lm+53, "%8.3lf", pcTime);
-            if (protocol == BasePort::PROTOCOL_BC_QRW) {
+            if ((protocol == BasePort::PROTOCOL_BC_QRW) && allValid) {
                 BasePort::BroadcastReadInfo bcReadInfo;
                 bcReadInfo = Port->GetBroadcastReadInfo();
                 std::stringstream timingStr;
-                bcReadInfo.PrintTiming(timingStr, false);  // false --> no std::endl
-                timingStr << "   ";
-                console.Print(STATUS_LINE+6, lm, timingStr.str().c_str());
+                bcReadInfo.PrintTiming(timingStr);
+                char bcBuf[256];
+                timingStr.getline(bcBuf, 256);
+                strcat(bcBuf, "   ");
+                console.Print(STATUS_LINE+6, lm, bcBuf);
+                timingStr.getline(bcBuf, 256);
+                strcat(bcBuf, "   ");
+                console.Print(STATUS_LINE+7, lm, bcBuf);
             }
         }
         else if (ethPort) {

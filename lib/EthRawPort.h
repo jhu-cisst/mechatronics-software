@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -40,9 +40,8 @@ protected:
 
     bool headercheck(const unsigned char *header, bool toPC) const;
 
-    void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
-
-    void make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags);
+    // Make Ethernet header
+    void make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags);
 
     // Check Ethernet header
     bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
@@ -58,7 +57,7 @@ protected:
     nodeid_t InitNodes(void);
 
     // Send packet via PCAP
-    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
+    bool PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via PCAP
     int PacketReceive(unsigned char *packet, size_t nbytes);
@@ -67,7 +66,8 @@ protected:
     int PacketFlushAll(void);
 
 public:
-    EthRawPort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
+    EthRawPort(int portNum, bool forceFwBridge = false,
+               std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthRawPort();
 

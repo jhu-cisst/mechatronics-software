@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -84,17 +84,24 @@ struct SocketInternals {
 
     struct sockaddr_in ServerAddr;
     struct sockaddr_in ServerAddrBroadcast;
+    struct sockaddr_in ServerAddrMulticast;
 
     bool FirstRun;
+
+    enum EthDestType { DEST_UNICAST, DEST_MULTICAST, DEST_BROADCAST };
 
     SocketInternals(std::ostream &ostr);
     ~SocketInternals();
 
-    bool Open(const std::string &host, unsigned short port);
+    bool Open(const std::string &host, const std::string &multicast, unsigned short port);
     bool Close();
 
+    // Set multicast address
+    bool SetMulticastIP(const std::string &multicast);
+
     // Returns the number of bytes sent (-1 on error)
-    int Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast = false);
+    int Send(const unsigned char *bufsend, size_t msglen, EthDestType destType = DEST_UNICAST,
+             unsigned char ip_offset = 0);
 
     // Returns the number of bytes received (-1 on error)
     int Recv(unsigned char *bufrecv, size_t maxlen, const double timeoutSec);
@@ -111,6 +118,7 @@ SocketInternals::SocketInternals(std::ostream &ostr) : outStr(ostr), SocketFD(IN
 {
     memset(&ServerAddr, 0, sizeof(ServerAddr));
     memset(&ServerAddrBroadcast, 0, sizeof(ServerAddrBroadcast));
+    memset(&ServerAddrMulticast, 0, sizeof(ServerAddrMulticast));
 }
 
 SocketInternals::~SocketInternals()
@@ -118,7 +126,7 @@ SocketInternals::~SocketInternals()
     Close();
 }
 
-bool SocketInternals::Open(const std::string &host, unsigned short port)
+bool SocketInternals::Open(const std::string &host, const std::string &multicast, unsigned short port)
 {
 #ifdef _MSC_VER
     WSADATA wsaData;
@@ -184,9 +192,15 @@ bool SocketInternals::Open(const std::string &host, unsigned short port)
         ServerAddrBroadcast.sin_addr.s_addr = ServerAddr.sin_addr.s_addr|0xff000000;
     else
         ServerAddrBroadcast.sin_addr.s_addr = 0xffffffff;
+
+    // UDP Multicast address
+    ServerAddrMulticast.sin_family = AF_INET;
+    ServerAddrMulticast.sin_port = htons(port);
+    ServerAddrMulticast.sin_addr.s_addr = EthUdpPort::IP_ULong(multicast);
+
     outStr << "Server IP: " << host << ", Port: " << std::dec << port << std::endl;
-    outStr << "Broadcast IP: " << EthUdpPort::IP_String(ServerAddrBroadcast.sin_addr.s_addr)
-           << ", Port: " << std::dec << port << std::endl;
+    outStr << "Broadcast IP: " << EthUdpPort::IP_String(ServerAddrBroadcast.sin_addr.s_addr) << std::endl;
+    outStr << "Multicast IP: " << EthUdpPort::IP_String(ServerAddrMulticast.sin_addr.s_addr) << std::endl;
     return true;
 }
 
@@ -210,15 +224,43 @@ bool SocketInternals::Close()
     return true;
 }
 
-int SocketInternals::Send(const unsigned char *bufsend, size_t msglen, bool useBroadcast)
+// UDP multicast address must be between 224.0.0.0 and 239.255.255.255. Some addresses in this
+// range are assigned for specific purposes. The default value for FPGA V3 is 224.0.0.100
+// (ETH_UDP_MULTICAST_DEFAULT_IP), which is unassigned.
+
+bool SocketInternals::SetMulticastIP(const std::string &multicast)
+{
+    unsigned long s_addr_new = EthUdpPort::IP_ULong(multicast);
+    unsigned long first_byte = s_addr_new & 0x000000ff;
+    if ((first_byte >= 224) && (first_byte <= 239)) {
+        ServerAddrBroadcast.sin_addr.s_addr = s_addr_new;
+        return true;
+    }
+    return false;
+}
+
+int SocketInternals::Send(const unsigned char *bufsend, size_t msglen, EthDestType destType, unsigned char ip_offset)
 {
     int retval;
-    if (useBroadcast)
+    if (destType == DEST_BROADCAST) {
         retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
                         reinterpret_cast<struct sockaddr *>(&ServerAddrBroadcast), sizeof(ServerAddrBroadcast));
-    else
+    }
+    else if (destType == DEST_MULTICAST) {
+        retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
+                        reinterpret_cast<struct sockaddr *>(&ServerAddrMulticast), sizeof(ServerAddrMulticast));
+    }
+    else {
+        // Save base address (e.g., 169.254.0.100)
+        uint32_t s_addr_saved = ServerAddr.sin_addr.s_addr;
+        // Update IP address if needed (Firmware Rev 9+)
+        if (ip_offset > 0)
+            ServerAddr.sin_addr.s_addr += (ip_offset<<24);
         retval = sendto(SocketFD, reinterpret_cast<const char *>(bufsend), msglen, 0,
                         reinterpret_cast<struct sockaddr *>(&ServerAddr), sizeof(ServerAddr));
+        // Restore base address
+        ServerAddr.sin_addr.s_addr = s_addr_saved;
+    }
 
     if (retval == SOCKET_ERROR) {
 #ifdef _MSC_VER
@@ -425,9 +467,10 @@ bool SocketInternals::ExtractInterfaceInfo(MsgHeaderType *hdr)
     return false;
 }
 
-EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, std::ostream &debugStream, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, cb),
+EthUdpPort::EthUdpPort(int portNum, const std::string &serverIP, bool forceFwBridge, std::ostream &debugStream, EthCallbackType cb):
+    EthBasePort(portNum, forceFwBridge, debugStream, cb),
     ServerIP(serverIP),
+    MulticastIP(ETH_UDP_MULTICAST_DEFAULT_IP),
     UDP_port(1394)
 {
     sockPtr = new SocketInternals(debugStream);
@@ -443,9 +486,20 @@ EthUdpPort::~EthUdpPort()
     delete sockPtr;
 }
 
+// Set UDP multicast address (must be between 224.0.0.0 and 239.255.255.255).
+bool EthUdpPort::SetMulticastIP(const std::string &multicast)
+{
+    if (!sockPtr)
+        return false;
+    bool ret = sockPtr->SetMulticastIP(multicast);
+    if (ret)
+        MulticastIP = multicast;
+    return ret;
+}
+
 bool EthUdpPort::Init(void)
 {
-    if (!sockPtr->Open(ServerIP, UDP_port))
+    if (!sockPtr->Open(ServerIP, MulticastIP, UDP_port))
         return false;
 
     bool ret = ScanNodes();
@@ -466,16 +520,19 @@ void EthUdpPort::Cleanup(void)
 nodeid_t EthUdpPort::InitNodes(void)
 {
     // First, set IP address by Ethernet and FireWire broadcast
+    // For Firmware Rev 9+, this also causes the FPGA to send a raw Ethernet multicast quadlet write packet
+    // so that the port forwarding database in the FPGA V3 Ethernet Switch gets updated
     if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::IP_ADDR, sockPtr->ServerAddr.sin_addr.s_addr, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to write IP address" << std::endl;
         return 0;
     }
     Amp1394_Sleep(0.2);
 
-    quadlet_t data = 0x0;   // initialize data to 0
+    quadlet_t data = 0;
 
     // Check hardware version of hub board
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data, FW_NODE_NOFORWARD_MASK)) {
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
         return 0;
     }
@@ -492,20 +549,52 @@ nodeid_t EthUdpPort::InitNodes(void)
     // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
     // to obtain its Firewire node id.
     data = 0;
-    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
         return 0;
     }
     Amp1394_Sleep(0.01);
 
-    // Find board id for first board (i.e., one connected by Ethernet) by FireWire broadcast
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data, FW_NODE_NOFORWARD_MASK)) {
+    // Find board id for first board (i.e., one connected by Ethernet) by FireWire and Ethernet broadcast
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
         return 0;
     }
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
+
+    // read firmware version
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::FIRMWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: unable to read firmware version from hub/bridge board" << std::endl;
+        return 0;
+    }
+    unsigned long fver = data;
+    FirmwareVersion[HubBoard] = data;
+
+    // Get FPGA version of Hub board
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::ETH_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: failed to read Ethernet status from hub/bridge board" << std::endl;
+        return 0;
+    }
+    unsigned long fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+    FpgaVersion[HubBoard] = fpga_ver;
+
+    if (!useFwBridge && ((fpga_ver != 3) || (fver < 9))) {
+        if (fpga_ver != 3)
+            outStr << "InitNodes: hub board is FPGA V" << fpga_ver;
+        else if (fver < 9)
+            outStr << "InitNodes: hub board has Firmware Rev " << fver;
+        outStr << ", using Ethernet/Firewire bridge" << std::endl;
+        useFwBridge = true;
+    }
+    else if (useFwBridge)
+        outStr << "InitNodes: using Ethernet/Firewire bridge" << std::endl;
+    else
+        outStr << "InitNodes: using Ethernet network" << std::endl;
 
     // Scan for up to 16 nodes on bus
     return BoardIO::MAX_BOARDS;
@@ -551,9 +640,40 @@ unsigned int EthUdpPort::GetMaxWriteDataSize(void) const
             - FW_BWRITE_HEADER_SIZE - FW_CRC_SIZE);
 }
 
-bool EthUdpPort::PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
+bool EthUdpPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast)
 {
-    int nSent = sockPtr->Send(packet, nbytes, useEthernetBroadcast);
+    unsigned char ip_offset = 0;
+    SocketInternals::EthDestType destType;
+    if (useEthernetBroadcast) {
+        // Checking the firmware version and FPGA version of HubBoard covers two cases:
+        //   1) Supports FPGA V2 and firmware prior to Rev 9, which does not respond to UDP multicast.
+        //   2) Ensures that BROADCAST is used for the first few packets (i.e., before this
+        //      class reads the Firmware and FPGA version), which is necessary for proper operation.
+        unsigned long fver = GetFirmwareVersion(HubBoard);
+        unsigned int fpga_ver = GetFpgaVersionMajor(HubBoard);
+        destType = ((fver < 9) || (fpga_ver < 3)) ? SocketInternals::DEST_BROADCAST
+                                                  : SocketInternals::DEST_MULTICAST;
+    }
+    else {
+        destType = SocketInternals::DEST_UNICAST;
+        if (useFwBridge) {
+            // If using the Ethernet/Firewire bridge, then we only need to talk to the Hub board,
+            // which has ip_offset=0 for firmware prior to Rev 9
+            if (GetFirmwareVersion(HubBoard) >= 9)
+                ip_offset = HubBoard;
+        }
+        else {
+            // If not using Ethernet/Firewire bridge, then node id is equal to board id;
+            // Don't need to check firmware version because if we got here, it must be at
+            // least Rev 9.
+            if (node < BoardIO::MAX_BOARDS)
+                ip_offset = static_cast<unsigned char>(node);
+            else if (node == FW_NODE_BROADCAST)
+                destType = SocketInternals::DEST_MULTICAST;
+        }
+    }
+
+    int nSent = sockPtr->Send(packet, nbytes, destType, ip_offset);
 
     if (nSent != static_cast<int>(nbytes)) {
         outStr << "PacketSend: failed to send via UDP: return value = " << nSent

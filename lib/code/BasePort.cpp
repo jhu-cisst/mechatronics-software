@@ -31,19 +31,54 @@ http://www.cisst.org/cisst/license.txt.
 // Currently, the supported hardware (e.g., QLA1) is added in the BasePort constructor.
 std::vector<unsigned long> BasePort::SupportedHardware;
 
-void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr, bool newLine) const
+unsigned int BasePort::BroadcastReadInfo::IncrementSequence()
 {
+    readSequence++;
+    if (readSequence == 65536) {
+        readSequence = 1;
+    }
+    return readSequence;
+}
+
+// Prepare for broadcast read
+void BasePort::BroadcastReadInfo::PrepareForRead()
+{
+    // Initialize update Start/Finish times (i.e., start/end of data update on FPGA Hub)
+    // Units are seconds.
+    updateStartTime = 1.0;
+    updateFinishTime = 0.0;
+    updateOverflow = false;
+    readOverflow = false;
+    for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++)
+        boardInfo[bnum].updated = false;
+}
+
+void BasePort::BroadcastReadInfo::PrintTiming(std::ostream &outStr) const
+{
+    unsigned int num_bds = 0;
     outStr << "Updates (usec): ";
     for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
         if (boardInfo[bnum].inUse) {
-            outStr << bnum << ": " << std::fixed << std::setprecision(2) << (boardInfo[bnum].updateTime*1e6)
+            double bdTime_us = boardInfo[bnum].updateTime*1e6;
+            outStr << bnum << ": " << std::fixed << std::setprecision(2) << bdTime_us
                    << "   ";
+            num_bds++;
         }
     }
-    outStr << "Read start: " << std::fixed << std::setprecision(2) << (readStartTime*1e6)
-           << "  finish: " << (readFinishTime*1e6) << "  delta: " << ((readFinishTime-readStartTime)*1e6);
-    if (newLine)
-        outStr << std::endl;
+    double bdTimeDiff_us = (updateFinishTime-updateStartTime)*1e6;
+    outStr << "Range: " << std::fixed << std::setprecision(2) << bdTimeDiff_us;
+    if (num_bds > 1)
+        outStr << " (" << (bdTimeDiff_us/(num_bds-1)) << ") ";
+    outStr << (updateOverflow ? "OVF" : "   ");
+    outStr << std::endl;
+    outStr << "Read start: " << std::fixed << std::setprecision(2) << std::setw(6) << (readStartTime*1e6)
+           << "  finish: " << std::setw(6) << (readFinishTime*1e6) << "  delta: " << ((readFinishTime-readStartTime)*1e6)
+           << "  gap: " << std::setw(6) << (gapTime*1e6);
+    if ((gapTimeMin != 1.0) && (gapTimeMax != 0.0)) {
+        outStr << " (min " << std::setw(6) << (gapTimeMin*1e6) << ", max " << (gapTimeMax*1e6) << ") ";
+    }
+    outStr << (readOverflow ? "OVF" : "   ");
+    outStr << std::endl;
 }
 
 BasePort::BasePort(int portNum, std::ostream &ostr):
@@ -200,16 +235,24 @@ void BasePort::SetWriteBufferBroadcast(void)
     }
 }
 
-// Return expected size for broadcast read, in bytes
-unsigned int BasePort::GetBroadcastReadSize(void) const
+// Return expected size for broadcast read, in quadlets
+unsigned int BasePort::GetBroadcastReadSizeQuads(void) const
 {
-    unsigned int nBytes = 0;
-    for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
-        BoardIO *board = BoardList[boardNum];
-        if (board)
-            nBytes += (board->GetReadNumBytes()+sizeof(quadlet_t));
+    unsigned int bcReadSize;                    // Broadcast read size (depends on firmware version)
+    if (IsAllBoardsRev4_6_)
+        bcReadSize = 17*BoardIO::MAX_BOARDS;    // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
+    else if (IsAllBoardsRev7_)
+        bcReadSize = 29*NumOfBoards_+1;         // Rev 7: NumOfBoards * (1 seq + 28 data) + 1
+    else {                                      // Rev 8+
+        bcReadSize = 0;
+        for (unsigned int boardNum = 0; boardNum < max_board; boardNum++) {
+            BoardIO *board = BoardList[boardNum];
+            if (board)
+                bcReadSize += board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
+        }
+        bcReadSize += 1;                       // Add one quadlet for timing info at end
     }
-    return nBytes;
+    return bcReadSize;
 }
 
 void BasePort::SetReadInvalid(void)
@@ -427,6 +470,8 @@ bool BasePort::AddBoard(BoardIO *board)
     bcReadInfo.boardInfo[id].inUse = true;
     NumOfBoards_++;   // increment board counts
 
+    bcReadInfo.readSizeQuads = GetBroadcastReadSizeQuads();
+
     return true;
 }
 
@@ -456,6 +501,9 @@ bool BasePort::RemoveBoard(unsigned char boardId)
         for (int bd = 0; bd < boardId; bd++)
             if (BoardList[bd]) max_board = bd+1;
     }
+
+    bcReadInfo.readSizeQuads = GetBroadcastReadSizeQuads();
+
     return true;
 }
 
@@ -476,18 +524,21 @@ std::string BasePort::PortTypeString(PortType portType)
 // Helper function for parsing command line options.
 // In particular, this is typically called after a certain option, such as -p, is
 // recognized and it parses the rest of that option string:
-// N                for FireWire, where N is the port number (backward compatibility)
-// fw:N             for FireWire, where N is the port number
-// eth:N            for raw Ethernet (PCAP), where N is the port number
-// udp:xx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+// N                  for FireWire, where N is the port number (backward compatibility)
+// fw:N               for FireWire, where N is the port number
+// eth:N              for raw Ethernet (PCAP), where N is the port number
+// ethfw:N            as above, forcing bridge to FireWire if possible
+// udp:xx.xx.xx.xx    for UDP, where xx.xx.xx.xx is the (optional) server IP address
+// udpfw:xx.xx.xx.xx  as above, forcing bridge to FireWire if possible
+// emio:N             for Zynq EMIO (N=1 for gpiod interface; otherwise use mmap interface)
 bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
-                            std::ostream &ostr)
+                            bool &fwBridge, std::ostream &ostr)
 {
     // no option, using default
     if ((arg == 0) || (strlen(arg) == 0)) {
         ostr << "ParseOptions: no option provided, using default "
              << DefaultPort() << std::endl;
-        return ParseOptions(DefaultPort().c_str(), portType, portNum, IPaddr);
+        return ParseOptions(DefaultPort().c_str(), portType, portNum, IPaddr, fwBridge);
     }
     // expecting proper options
     if (strncmp(arg, "fw", 2) == 0) {
@@ -511,31 +562,58 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
     }
     else if (strncmp(arg, "eth", 3) == 0) {
         portType = PORT_ETH_RAW;
-        return (sscanf(arg+4, "%d", &portNum) == 1);
+        fwBridge = false;
+        unsigned int numOffset = 4;
+        if (strncmp(arg+3, "fw", 2) == 0) {
+            fwBridge = true;
+            numOffset += 2;
+        }
+        return (sscanf(arg+numOffset, "%d", &portNum) == 1);
     }
     else if (strncmp(arg, "udp", 3) == 0) {
         portType = PORT_ETH_UDP;
+        fwBridge = false;
+        unsigned int colonPos = 3;
+        if (strncmp(arg+3, "fw", 2) == 0) {
+            fwBridge = true;
+            colonPos += 2;
+        }
         // no option specified
-        if (strlen(arg) == 3) {
+        if (strlen(arg) == colonPos) {
             IPaddr = ETH_UDP_DEFAULT_IP;
             return true;
         }
         // make sure separator is here
-        if (arg[3] != ':') {
-            ostr << "ParseOptions: missing \":\" after \"udp\"" << std::endl;
+        if (arg[colonPos] != ':') {
+            if (colonPos == 3)
+                ostr << "ParseOptions: missing \":\" after \"udp\"" << std::endl;
+            else
+                ostr << "ParseOptions: missing \":\" after \"udpfw\"" << std::endl;
             return false;
         }
         // For now, if at least 8 characters, assume a valid IP address
-        if (strlen(arg+4) >= 8)
-            IPaddr.assign(arg+4);
-        else if (strlen(arg+4) > 0)
-            sscanf(arg+4, "%d", &portNum);  // TEMP: portNum==1 for UDP means set eth1394 mode
+        if (strlen(arg+colonPos+1) >= 8)
+            IPaddr.assign(arg+colonPos+1);
         return true;
     }
     else if (strncmp(arg, "emio", 4) == 0) {
         portType = PORT_ZYNQ_EMIO;
-        portNum = 0;
-        return true;
+        // no port specified
+        if (strlen(arg) == 4) {
+            portNum = 0;
+            return true;
+        }
+        // make sure separator is here
+        if (arg[4] != ':') {
+            ostr << "ParseOptions: missing \":\" after \"emio\"" << std::endl;
+            return false;
+        }
+        // scan port number
+        if (sscanf(arg+5, "%d", &portNum) == 1) {
+            return true;
+        }
+        ostr << "ParseOptions: failed to find a port number after \"emio:\" in " << arg+3 << std::endl;
+        return false;
     }
     // older default, fw and looking for port number
     portType = PORT_FIREWIRE;
@@ -817,11 +895,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     //--- send out broadcast read request -----
 
     bool rtRead = true;
-    // sequence number from 16 bits 0 to 65535
-    bcReadInfo.readSequence++;
-    if (bcReadInfo.readSequence == 65536) {
-        bcReadInfo.readSequence = 1;
-    }
+    bcReadInfo.IncrementSequence();
 
     if (!WriteBroadcastReadRequest(bcReadInfo.readSequence)) {
         outStr << "BasePort::ReadAllBoardsBroadcast: failed to send broadcast read request, seq = "
@@ -833,88 +907,103 @@ bool BasePort::ReadAllBoardsBroadcast(void)
     // Wait for broadcast read data
     WaitBroadcastRead();
 
-    unsigned int readSize;        // Block size per board (depends on firmware version)
-    if (IsAllBoardsRev4_6_)
-        readSize = 17;   // Rev 1-6: 1 seq + 16 data, unit quadlet (should actually be 1 seq + 20 data)
-    else if (IsAllBoardsRev7_)
-        readSize = 29;   // Rev 7: 1 seq + 28 data, unit quadlet (Rev 7)
-    else
-        readSize = 33;   // Rev 8: 1 seq + 32 data, unit quadlet (Rev 8, QLA)
-
-    // Note that Rev 8 also supports dRAC, which has readSize = 60
-
-    unsigned int hubReadSize;        // Actual read size (depends on firmware version)
-    if (IsAllBoardsRev4_6_)
-        hubReadSize = BoardIO::MAX_BOARDS*readSize;  // Rev 1-6: 16 * 17 = 272 max (though really should have been 16*21)
-    else if (IsAllBoardsRev7_)
-        hubReadSize = readSize*NumOfBoards_+1;       // Rev 7: NumOfBoards * readSize + 1
-    else
-        hubReadSize = (GetBroadcastReadSize()/sizeof(quadlet_t))+1; // Rev 8 (could call this once and save result)
+    bcReadInfo.PrepareForRead();
 
     quadlet_t *hubReadBuffer = reinterpret_cast<quadlet_t *>(ReadBufferBroadcast + GetReadQuadAlign() + GetPrefixOffset(RD_FW_BDATA));
-    memset(hubReadBuffer, 0, hubReadSize*sizeof(quadlet_t));
-    bool ret = ReadBlock(HubBoard, 0x1000, hubReadBuffer, hubReadSize*sizeof(quadlet_t));
+    memset(hubReadBuffer, 0, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
+    bool ret = ReceiveBroadcastReadResponse(hubReadBuffer, bcReadInfo.readSizeQuads*sizeof(quadlet_t));
     if (!ret) {
         SetReadInvalid();
         OnNoneRead();
         return false;
     }
 
-    double clkPeriod = 0.0;  // will be assigned below
+    double clkPeriod = GetBroadcastReadClockPeriod();
     quadlet_t *curPtr = hubReadBuffer;
+    unsigned int bdCnt = 0;   // Number of board processed
     // Loop through all boards, processing the boards in use.
     // Note that prior to Firmware Rev 7, we always read data for all 16 boards.
-    for (unsigned int boardNum = 0; boardNum < BoardIO::MAX_BOARDS; boardNum++) {
+    // Starting with Firmware Rev 9, the board data will generally not be in sequential order
+    // (i.e., isBroadcastReadOrdered will return false) for the Ethernet-only interface.
+    for (unsigned int index = 0; (index < BoardIO::MAX_BOARDS) && (bdCnt < NumOfBoards_); index++) {
+        if ((curPtr[0] == 0) || (curPtr[2] == 0)) {
+            outStr << "BasePort::ReadAllBoardsBroadcast: invalid block after reading "
+                   << bdCnt << " boards" << std::endl;
+            allOK = false;
+            break;
+        }
+        quadlet_t statusQuad = bswap_32(curPtr[2]);
+        unsigned int numAxes = (statusQuad&0xf0000000)>>28;
+        if (!IsAllBoardsRev8_9_ && (numAxes != 4)) {
+            outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
+                   << std::dec << std::endl;
+            allOK = false;
+            break;
+        }
+        unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
+        unsigned int boardNum = isBroadcastReadOrdered() ? index : thisBoard;
         BoardIO *board = BoardList[boardNum];
+        if (board && (boardNum != thisBoard)) {
+            outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting "
+                   << boardNum << ", found " << thisBoard << std::endl;
+            allOK = false;
+            break;
+        }
         if (bcReadInfo.boardInfo[boardNum].inUse && board) {
-            quadlet_t statusQuad = bswap_32(curPtr[2]);
-            unsigned int numAxes = (statusQuad&0xf0000000)>>28;
-            unsigned int thisBoard = (statusQuad&0x0f000000)>>24;
             bool thisOK = false;
-            if (!IsAllBoardsRev8_9_ && (numAxes != 4)) {
-                outStr << "BasePort::ReadAllBoardsBroadcast: invalid status (not a 4 axis board): " << std::hex << statusQuad
-                       << std::dec << std::endl;
-            }
-            else if (boardNum != thisBoard) {
-                outStr << "BasePort::ReadAllBoardsBroadcast: board mismatch, expecting "
-                       << boardNum << ", found " << thisBoard << std::endl;
+            bcReadInfo.boardInfo[boardNum].updated = true;
+            bcReadInfo.boardInfo[boardNum].blockNum = bdCnt++;
+            bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
+            unsigned int seq_expected = bcReadInfo.readSequence;
+            if (IsAllBoardsRev8_9_) {
+                // For Rev 8+, only the LSB of the sequence is returned, but bit 15 also indicates
+                // whether the 16-bit sequence number did not match on the FPGA side.
+                seq_expected &= 0x00ff;
+                bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
+                bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 15
+                if (bcReadInfo.boardInfo[boardNum].sequence != seq_expected)
+                    bcReadInfo.boardInfo[boardNum].seq_error = true;
+                bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
+                unsigned int bdReadSize = board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
+                if (bcReadInfo.boardInfo[boardNum].blockSize != bdReadSize) {
+                    outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
+                           << ", blockSize = " << bcReadInfo.boardInfo[boardNum].blockSize
+                           << ", expected = " << bdReadSize << std::endl;
+                }
             }
             else {
-                bcReadInfo.boardInfo[boardNum].sequence = bswap_32(curPtr[0]) >> 16;
-                if (IsAllBoardsRev8_9_) {
-                    // For Rev 8, only the LSB of the sequence is returned, but bit 14 also indicates
-                    // whether the 16-bit sequence number did not match on the FPGA side.
-                    bcReadInfo.boardInfo[boardNum].sequence &= 0x00ff;  // lowest byte only
-                    bcReadInfo.boardInfo[boardNum].seq_error = bswap_32(curPtr[0]) & 0x00008000;  // bit 14
-                    if (bcReadInfo.boardInfo[boardNum].sequence != (bcReadInfo.readSequence & 0x00ff))
-                        bcReadInfo.boardInfo[boardNum].seq_error = true;
-                    bcReadInfo.boardInfo[boardNum].blockSize = (bswap_32(curPtr[0]) & 0xff000000) >> 24;
-                    unsigned int bdReadSize = board->GetReadNumBytes()/sizeof(quadlet_t) + 1;
-                    if (bcReadInfo.boardInfo[boardNum].blockSize != bdReadSize) {
-                        outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
-                               << ", blockSize = " << bcReadInfo.boardInfo[boardNum].blockSize
-                               << ", expected = " << bdReadSize << std::endl;
-                    }
-                }
-                else {
-                    bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != bcReadInfo.readSequence);
-                    bcReadInfo.boardInfo[boardNum].blockSize = readSize;
-                }
-                if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
-                    unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
-                    clkPeriod = board->GetFPGAClockPeriod();
-                    bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x3fff)*clkPeriod;
-                }
+                bcReadInfo.boardInfo[boardNum].seq_error = (bcReadInfo.boardInfo[boardNum].sequence != seq_expected);
+                // Rev7 block size is 29 (1 + 28), Rev4_6 block size is 17 (should have been 21)
+                bcReadInfo.boardInfo[boardNum].blockSize = IsAllBoardsRev7_ ? 29 : 17;
+            }
+            if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
+                unsigned int quad0_lsb = bswap_32(curPtr[0])&0x0000ffff;
+                bcReadInfo.boardInfo[boardNum].updateTime = (quad0_lsb&0x7fff)*clkPeriod;
                 if (!bcReadInfo.boardInfo[boardNum].seq_error) {
-                    thisOK = true;
+                    // Set the update Start/Finish times based on the minimum and maximum update times
+                    // Note that update times should be increasing, so if our current updateTime is
+                    // less than the previous max (updateFinishTime), then there must have been overflow
+                    if (bcReadInfo.boardInfo[boardNum].updateTime < bcReadInfo.updateFinishTime) {
+                        // Firmware Rev 9 uses 15 bits; prior versions use 14 bits
+                        uint16_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x4000 : 0x8000;
+                        bcReadInfo.boardInfo[boardNum].updateTime += overflow_val*clkPeriod;
+                        bcReadInfo.updateOverflow = true;
+                    }
+                    if (bcReadInfo.boardInfo[boardNum].updateTime < bcReadInfo.updateStartTime)
+                        bcReadInfo.updateStartTime = bcReadInfo.boardInfo[boardNum].updateTime;
+                    if (bcReadInfo.boardInfo[boardNum].updateTime > bcReadInfo.updateFinishTime)
+                        bcReadInfo.updateFinishTime = bcReadInfo.boardInfo[boardNum].updateTime;
                 }
-                else {
-                    outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
-                           << ", seq = " << bcReadInfo.boardInfo[boardNum].sequence
-                           << ", expected = " << bcReadInfo.readSequence
-                           << ", diff = " << (bcReadInfo.readSequence-bcReadInfo.boardInfo[boardNum].sequence)
-                           << std::endl;
-                }
+            }
+            if (!bcReadInfo.boardInfo[boardNum].seq_error) {
+                thisOK = true;
+            }
+            else {
+                outStr << "BasePort::ReadAllBoardsBroadcast: board " << boardNum
+                       << ", seq = " << bcReadInfo.boardInfo[boardNum].sequence
+                       << ", expected = " << seq_expected
+                       << ", diff = " << static_cast<int>(seq_expected-bcReadInfo.boardInfo[boardNum].sequence)
+                       << std::endl;
             }
             board->SetReadValid(thisOK);
             if (thisOK) {
@@ -928,14 +1017,53 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         }
         else if (IsAllBoardsRev4_6_) {
             // Skip unused boards for firmware < 7
-            curPtr += readSize;
+            // Rev4_6 block size is 17 (should have been 21)
+            curPtr += 17;
         }
     }
 
-    if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
+    if (!allOK) {
+        for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
+            BoardIO *board = BoardList[bnum];
+            if (board && bcReadInfo.boardInfo[bnum].inUse && !bcReadInfo.boardInfo[bnum].updated) {
+               board->SetReadValid(false);
+            }
+        }
+        bcReadInfo.readStartTime = 0.0;
+        bcReadInfo.readFinishTime = 0.0;
+        bcReadInfo.gapTime = 0.0;
+    }
+    else if (IsAllBoardsRev7_ || IsAllBoardsRev8_9_) {
         quadlet_t timingInfo = bswap_32(curPtr[0]);
-        bcReadInfo.readStartTime = ((timingInfo&0x3fff0000) >> 16)*clkPeriod;
-        bcReadInfo.readFinishTime = (timingInfo&0x00003fff)*clkPeriod;
+        bcReadInfo.readStartTime = ((timingInfo&0xffff0000) >> 16)*clkPeriod;
+        bcReadInfo.readFinishTime = (timingInfo&0x0000ffff)*clkPeriod;
+        if (timingInfo != 0) {
+            // timingInfo == 0 indicates invalid data
+            if (bcReadInfo.readStartTime < bcReadInfo.updateFinishTime) {
+                // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+                uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
+                bcReadInfo.readStartTime += overflow_val*clkPeriod;
+                bcReadInfo.readOverflow = true;
+            }
+            if (bcReadInfo.readFinishTime < bcReadInfo.readStartTime) {
+                // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+                uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
+                bcReadInfo.readFinishTime += overflow_val*clkPeriod;
+                bcReadInfo.readOverflow = true;
+            }
+        }
+        // Gap between end of update and start of read; this can be tuned to be as
+        // close to 0 as possible.
+        if (timingInfo == 0) {
+            bcReadInfo.gapTime = 0.0;
+        }
+        else {
+            bcReadInfo.gapTime = bcReadInfo.readStartTime - bcReadInfo.updateFinishTime;
+            if (bcReadInfo.gapTime < bcReadInfo.gapTimeMin)
+                bcReadInfo.gapTimeMin = bcReadInfo.gapTime;
+            if (bcReadInfo.gapTime > bcReadInfo.gapTimeMax)
+                bcReadInfo.gapTimeMax = bcReadInfo.gapTime;
+        }
     }
 
     if (noneRead) {
@@ -951,6 +1079,17 @@ bool BasePort::ReadAllBoardsBroadcast(void)
 #endif
 
     return allOK;
+}
+
+bool BasePort::ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes)
+{
+    return ReadBlock(HubBoard, 0x1000, rdata, nbytes);
+}
+
+double BasePort::GetBroadcastReadClockPeriod(void) const
+{
+    const double FPGA_sysclk_MHz = 49.152;      /* FPGA sysclk in MHz (from AmpIO.cpp) */
+    return (1.0e-6/FPGA_sysclk_MHz);
 }
 
 bool BasePort::WriteAllBoards(void)

@@ -257,7 +257,7 @@ public:
     enum EthStatus {
         ETH_STAT_PRESENT_V2    = 0x80000000,   // Indicates FPGA V2
         ETH_STAT_REQ_ERR_V2    = 0x40000000,   // V2: Request error (V3: 1)
-        ETH_STAT_INIT_OK_V2    = 0x20000000,   // V2: Init OK (V3: current port)
+        ETH_STAT_INIT_OK_V2    = 0x20000000,   // V2: Init OK
         ETH_STAT_FRAME_ERR     = 0x10000000,
         ETH_STAT_IPV4_ERR      = 0x08000000,
         ETH_STAT_UDP_ERR       = 0x04000000,
@@ -270,6 +270,7 @@ public:
         ETH_STAT_LINK_STAT_V2  = 0x00080000,   // V2: link status (1 -> On)
         ETH_STAT_IDLE_V2       = 0x00040000,
         ETH_STAT_WAIT_MASK_V2  = 0x00030000,   // V2: Mask for waitInfo
+        ETH_STAT_PSETH_EN_V3   = 0x00010000,   // V3: PS Ethernet enabled (Rev 9+)
         ETH_STAT_DATA_MASK_V2  = 0x0000ffff,   // V2: Mask for register read result
         ETH_STAT_PORT2_MASK_V3 = 0x0000ff00,   // V3: Mask for Eth2 status (see EthPortV3Status)
         ETH_STAT_PORT1_MASK_V3 = 0x000000ff    // V3: Mask for Eth1 status (see EthPortV3Status)
@@ -290,9 +291,9 @@ public:
         ETH_PORT_STAT_HAS_IRQ    = 0x40,
         ETH_PORT_STAT_LINK_STAT  = 0x20,
         ETH_PORT_STAT_SPEED_MASK = 0x18,
-        ETH_PORT_STAT_RECV_ERR   = 0x04,
-        ETH_PORT_STAT_SEND_OVF   = 0x02,
-        ETH_PORT_STAT_PS_ETH     = 0x01
+        ETH_PORT_STAT_RECV_ERR   = 0x04,     // Rev 8 only
+        ETH_PORT_STAT_SEND_OVF   = 0x02,     // Rev 8 only
+        ETH_PORT_STAT_PS_ETH     = 0x01      // Rev 8 only
     };
     static uint8_t GetEthernetPortStatusV3(uint32_t status, unsigned int chan);
 
@@ -308,6 +309,7 @@ public:
         ETH_CTRL_EN_PS_ETH_V3 = 0x02000000,     // V3: Mask for enabling PS ethernet
         ETH_CTRL_WB_V2        = 0x01000000,     // V2: Byte(0) or word(1) access
         ETH_CTRL_ADDR_MASK_V2 = 0x00ff0000,     // V2: Register address (8 bits)
+        ETH_CTRL_PS_ETH_V3    = 0x00010000,     // V3: Enable PS ethernet
         ETH_CTRL_DATA_MASK_V2 = 0x0000ffff      // V2: Register data (16 bits)
     };
     // Offsets for Ethernet port control (FPGA V3)
@@ -337,6 +339,7 @@ public:
     // Enable/Disable PS Ethernet (FPGA V3)
     //    chan    1 -> PHY1, 2 -> PHY2, 3 -> both
     //    state   true to enable PS ethernet; false to disable
+    // Firmware Rev 8 only
     bool WritePsEthernetEnable(unsigned int chan, bool state);
 
     // Read Ethernet data

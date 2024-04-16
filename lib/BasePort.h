@@ -46,7 +46,8 @@ http://www.cisst.org/cisst/license.txt.
  */
 
 // Defined here for static methods ParseOptions and DefaultPort
-#define ETH_UDP_DEFAULT_IP "169.254.0.100"
+#define ETH_UDP_DEFAULT_IP           "169.254.0.100"
+#define ETH_UDP_MULTICAST_DEFAULT_IP "224.0.0.100"
 
 // Some useful constants
 const unsigned long BOARD_ID_MASK = 0x0f000000;  /* Mask for board_id */
@@ -62,9 +63,9 @@ const unsigned int MAX_POSSIBLE_DATA_SIZE = 2048;
 // The FireWire node number is represented by an unsigned char (8 bits), but only 6
 // bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
 // uses the upper two bits as flags to indicate whether the packet should be sent
-// via Ethernet broadcast (0x80) and whether the Ethernet/FireWire bridge should
+// via Ethernet broadcast/multicast (0x80) and whether the Ethernet/FireWire bridge should
 // not forward (0x40) the received packet to other boards via FireWire.
-const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast
+const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast or multicast
 const unsigned char FW_NODE_NOFORWARD_MASK     = 0x40;   // Mask to prevent forwarding by Ethernet/FireWire bridge
 const unsigned char FW_NODE_FLAGS_MASK         = 0xc0;   // Mask for above flags
 const unsigned char FW_NODE_MASK               = 0x3f;   // Mask for valid FireWire node numbers (0-63)
@@ -90,24 +91,41 @@ public:
     // With Firmware V7+, each FPGA starts a timer when it receives the broadcast query command
     // sent by the host PC. The following times are relative to this timer.
     struct BroadcastReadInfo {
+        unsigned int readSizeQuads;   // Read size in quadlets
         unsigned int readSequence;    // The sequence number sent with the broadcast query command
+        double updateStartTime;       // When the FPGA started updating the hub data
+        double updateFinishTime;      // When the FPGA finished updating the hub data
+        bool   updateOverflow;        // Whether timer overflow was detected during data update
         double readStartTime;         // When the PC started reading the hub feedback data
         double readFinishTime;        // When the PC finished reading the hub feedback data
+        bool   readOverflow;          // Whether timer overflow was detected during gap or read
+        double gapTime;               // Time between update finish and read start
+        double gapTimeMin;            // Minimum gap time
+        double gapTimeMax;            // Maximum gap time
         struct BroadcastBoardInfo {   // For each board:
             bool inUse;               //   Whether board is participating in broadcast read
+            bool updated;             //   Whether successfully updated
+            unsigned int blockNum;    //   Block number that contained board data
             unsigned int blockSize;   //   Number of quadlets from this board
             unsigned int sequence;    //   The sequence number received (should be same as readSequence)
             bool seq_error;           //   Sequence error mismatch on FPGA
             double updateTime;        //   When the hub feedback data was updated
 
-            BroadcastBoardInfo() : inUse(false), blockSize(0), sequence(0), seq_error(false), updateTime(0.0) {}
+            BroadcastBoardInfo() : inUse(false), updated(false), blockNum(0), blockSize(0), sequence(0),
+                                   seq_error(false), updateTime(0.0) {}
             ~BroadcastBoardInfo() {}
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
 
-        BroadcastReadInfo() : readSequence(0), readStartTime(0.0), readFinishTime(0.0) {}
+        BroadcastReadInfo() : readSizeQuads(0), readSequence(0), updateStartTime(0.0), updateFinishTime(0.0),
+                              updateOverflow(false), readStartTime(0.0), readFinishTime(0.0), readOverflow(false),
+                              gapTime(0.0) { Clear(); }
         ~BroadcastReadInfo() {}
-        void PrintTiming(std::ostream &outStr, bool newLine = true) const;
+        unsigned int IncrementSequence();
+        void PrepareForRead();
+        void PrintTiming(std::ostream &outStr) const;
+        void Clear(void)
+        { gapTimeMin = 1.0; gapTimeMax = 0.0; }
     };
 
 protected:
@@ -171,6 +189,11 @@ protected:
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
 
+    // Returns true if Node2Board has a valid entry, which indicates that
+    // the node has been initialized.
+    bool isNodeValid(nodeid_t node) const
+    { return (Node2Board[node] < BoardIO::MAX_BOARDS); }
+
     // Initialize port (called by constructor and Reset)
     virtual bool Init(void) = 0;
 
@@ -196,8 +219,8 @@ protected:
     void SetReadBufferBroadcast(void);
     void SetWriteBufferBroadcast(void);
 
-    // Return expected size for broadcast read, in bytes
-    unsigned int GetBroadcastReadSize(void) const;
+    // Return expected size for broadcast read, in quadlets
+    unsigned int GetBroadcastReadSizeQuads(void) const;
 
     // Convenience function
     void SetReadInvalid(void);
@@ -373,18 +396,24 @@ public:
     BroadcastReadInfo GetBroadcastReadInfo(void) const
     { return bcReadInfo; }
 
+    // Clear gapTime min/max
+    void ClearBroadcastReadInfo(void)
+    {  bcReadInfo.Clear(); }
+
     // Return string version of PortType
     static std::string PortTypeString(PortType portType);
 
     // Helper function for parsing command line options.
     // In particular, this is typically called after a certain option, such as -p, is
     // recognized and it parses the rest of that option string:
-    // N                for FireWire, where N is the port number (backward compatibility)
-    // fw:N             for FireWire, where N is the port number
-    // eth:N            for raw Ethernet (PCAP), where N is the port number
-    // udp:xx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    // N                  for FireWire, where N is the port number (backward compatibility)
+    // fw:N               for FireWire, where N is the port number
+    // eth:N              for raw Ethernet (PCAP), where N is the port number
+    // ethfw:N            as above, forcing bridge to FireWire if possible
+    // udp:xx.xx.xx.xx    for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    // udpfw:xx.xx.xx.xx  as above, forcing bridge to FireWire if possible
     static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
-                             std::ostream &ostr = std::cerr);
+                             bool &fwBridge, std::ostream &ostr = std::cerr);
 
     static PortType DefaultPortType(void);
     static std::string DefaultPort(void);
@@ -453,6 +482,14 @@ public:
     // Read all boards broadcasting
     virtual bool ReadAllBoardsBroadcast(void);
 
+    // Returns true if broadcast read packet contains boards in sequential order,
+    // starting with lowest numbered board
+    virtual bool isBroadcastReadOrdered(void) const { return true; }
+
+    // Return clock period used for broadcast read timing measurements
+    // 49.152 MHz, except 125 MHz when using FPGA V3 Ethernet-only
+    virtual double GetBroadcastReadClockPeriod(void) const;
+
     // Write to all boards
     virtual bool WriteAllBoards(void);
 
@@ -492,6 +529,14 @@ public:
      \brief Wait for broadcast read data to be available
     */
     virtual void WaitBroadcastRead(void) = 0;
+
+    /*!
+     \brief Receive the broadcast read response. This is usually a block read from
+            address 0x1000 (Hub memory); in the case of Ethernet-only, it receives
+            a response from an FPGA board some time after WriteBroadcastReadRequest
+            is issued.
+    */
+    virtual bool ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations

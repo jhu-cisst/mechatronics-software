@@ -59,16 +59,21 @@ public:
         bool FwPacketDropped;
         bool EthInternalError;
         bool EthSummaryError;
+        bool noForwardFlag;
+        unsigned int srcPort;
         unsigned int numStateInvalid;   // Not used, except in debug builds of firmware
         unsigned int numPacketError;
         FPGA_Status() : FwBusReset(false), FwPacketDropped(false), EthInternalError(false), EthSummaryError(false),
-                        numStateInvalid(0), numPacketError(0) {}
+                        noForwardFlag(false), srcPort(0), numStateInvalid(0), numPacketError(0) {}
         ~FPGA_Status() {}
     };
 
     typedef bool (*EthCallbackType)(EthBasePort &port, unsigned char boardId, std::ostream &debugStream);
 
 protected:
+
+    // Whether to use Ethernet/Firewire bridge (if false, use Ethernet only)
+    bool useFwBridge;
 
     uint8_t fw_tl;          // FireWire transaction label (6 bits)
 
@@ -79,7 +84,10 @@ protected:
         FwBusReset = 0x01,          // Firewire bus reset is active
         FwPacketDropped = 0x02,     // Firewire packet dropped
         EthInternalError = 0x04,    // Internal FPGA error (bus access or invalid state)
-        EthSummaryError = 0x08      // Summary of Ethernet protocol errors (see Status)
+        EthSummaryError = 0x08,     // Summary of Ethernet protocol errors (see Status)
+        noForwardFlag = 0x10,       // 1 -> Ethernet only (no forward to Firewire)
+        srcPortMask   = 0x60,       // Mask for srcPort bits
+        srcPortShift  = 5           // Shift for srcPort bits
     };
 
     FPGA_Status FpgaStatus;     // FPGA status from extra data returned
@@ -93,15 +101,18 @@ protected:
     //! Write quadlet to node (internal method called by WriteQuadlet)
     bool WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t data, unsigned char flags = 0);
 
-    // Write a block to the specified node. Internal method called by ReadBlock.
+    // Read a block from the specified node (also calls ReceiveResponseNode). Internal method called by ReadBlock.
     bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes, unsigned char flags = 0);
+
+    // Receive the block data. Internal method called by ReadBlockNode.
+    bool ReceiveResponseNode(nodeid_t node, quadlet_t *rdata, unsigned int nbytes, uint8_t fw_tl, nodeid_t *src_node = 0);
 
     // Write a block to the specified node. Internal method called by WriteBlock and
     // WriteAllBoardsBroadcast.
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes, unsigned char flags = 0);
 
     // Send packet
-    virtual bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
+    virtual bool PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast) = 0;
 
     // Receive packet
     virtual int PacketReceive(unsigned char *packet, size_t nbytes) = 0;
@@ -119,7 +130,11 @@ protected:
     // to be different than the one on the PC.
     virtual void OnFwBusReset(unsigned int FwBusGeneration_FPGA);
 
-    virtual void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
+    // Make Ethernet header (only needed for raw Ethernet)
+    virtual void make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags);
+
+    // Make control word
+    void make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags);
 
     void make_1394_header(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int tcode, unsigned int tl);
 
@@ -130,7 +145,7 @@ protected:
 
 public:
 
-    EthBasePort(int portNum, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
+    EthBasePort(int portNum, bool forceFwBridge, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthBasePort();
 
@@ -163,6 +178,9 @@ public:
 
     void UpdateBusGeneration(unsigned int gen) { FwBusGeneration = gen; }
 
+    // virtual method in BasePort
+    bool CheckFwBusGeneration(const std::string &caller, bool doScan = false);
+
     /*!
      \brief Write the broadcast packet containing the DAC values and power control
     */
@@ -177,6 +195,20 @@ public:
      \brief Wait for broadcast read data to be available
     */
     void WaitBroadcastRead(void);
+
+    bool isBroadcastReadOrdered(void) const;
+
+    // Return clock period used for broadcast read timing measurements
+    // 125 MHz for FPGA V3 Ethernet-only; otherwise 49.152 MHz
+    double GetBroadcastReadClockPeriod(void) const;
+
+    /*!
+     \brief Receive the broadcast read response. This is usually a block read from
+            address 0x1000 (Hub memory); in the case of Ethernet-only, it receives
+            a response from an FPGA board some time after WriteBroadcastReadRequest
+            is issued.
+    */
+    bool ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations
@@ -209,16 +241,23 @@ public:
     // Check Ethernet header (only for EthRawPort)
     virtual bool CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast);
 
-    // Byteswap Firewire header of received packet (quadlet or block read response) to make it easier to work with,
-    // and to be consistent with CheckFirewirePacket and PrintFirewirePacket.
-    void ByteswapFirewireHeader(unsigned char *packet, unsigned int nbytes);
+    // Byteswap quadlets received packet (quadlet or block read response) to make it easier to work with,
+    // and to be consistent with CheckFirewirePacket and PrintFirewirePacket. This is typically used to
+    // byteswap the Firewire header quadlets.
+    void ByteswapQuadlets(unsigned char *packet, unsigned int nbytes);
+
+    // Get information from Firewire packet header
+    // Can specify 0 (null pointer) for fields to ignore
+    static void GetFirewireHeaderInfo(const unsigned char *packet, nodeid_t *src_node, unsigned int *tcode,
+                                      unsigned int *tl);
 
     // Check if FireWire packet valid
     //   length:  length of data section (for BRESPONSE)
     //   node:    expected source node
     //   tcode:   expected tcode (e.g., QRESPONSE or BRESPONSE)
     //   tl:      transaction label
-    bool CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl);
+    bool CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode,
+                             unsigned int tl);
 
     // Process extra data received from FPGA
     void ProcessExtraData(const unsigned char *packet);

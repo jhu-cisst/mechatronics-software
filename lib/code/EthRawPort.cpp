@@ -44,8 +44,8 @@ http://www.cisst.org/cisst/license.txt.
 #include <unistd.h>
 #endif
 
-EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, cb)
+EthRawPort::EthRawPort(int portNum, bool forceFwBridge, std::ostream &debugStream, EthCallbackType cb):
+    EthBasePort(portNum, forceFwBridge, debugStream, cb)
 {
     if (Init())
         outStr << "Initialization done" << std::endl;
@@ -272,12 +272,13 @@ nodeid_t EthRawPort::InitNodes(void)
     quadlet_t data = 0x0;   // initialize data to 0
 
     // Check hardware version of hub board
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK))) {
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
         return 0;
     }
-    if (data != QLA1_String) {
-        outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
+    if (!HardwareVersionValid(data)) {
+        outStr << "InitNodes: hub board is not a supported board, data = " << std::hex << data << std::endl;
         return 0;
     }
 
@@ -293,15 +294,48 @@ nodeid_t EthRawPort::InitNodes(void)
         outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
         return 0;
     }
+    Amp1394_Sleep(0.01);
 
-    // Find board id for first board (i.e., one connected by Ethernet)
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK)))  {
+    // Find board id for first board (i.e., one connected by Ethernet) by FireWire and Ethernet broadcast
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
         return 0;
     }
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
+
+    // read firmware version
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::FIRMWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: unable to read firmware version from hub/bridge board" << std::endl;
+        return 0;
+    }
+    unsigned long fver = data;
+    FirmwareVersion[HubBoard] = data;
+
+    // Get FPGA version of Hub board
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::ETH_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: failed to read Ethernet status from hub/bridge board" << std::endl;
+        return 0;
+    }
+    unsigned long fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+    FpgaVersion[HubBoard] = fpga_ver;
+
+    if (!useFwBridge && ((fpga_ver != 3) || (fver < 9))) {
+        if (fpga_ver != 3)
+            outStr << "InitNodes: hub board is FPGA V" << fpga_ver;
+        else if (fver < 9)
+            outStr << "InitNodes: hub board has Firmware Rev " << fver;
+        outStr << ", using Ethernet/Firewire bridge" << std::endl;
+        useFwBridge = true;
+    }
+    else if (useFwBridge)
+        outStr << "InitNodes: using Ethernet/Firewire bridge" << std::endl;
+    else
+        outStr << "InitNodes: using Ethernet network" << std::endl;
 
     // Scan for up to 16 nodes on bus
     return BoardIO::MAX_BOARDS;
@@ -335,10 +369,10 @@ unsigned int EthRawPort::GetMaxWriteDataSize(void) const
     return ETH_RAW_FRAME_MAX_SIZE - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
 }
 
-bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool)
+bool EthRawPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool)
 {
     if (pcap_sendpacket(handle, packet, nbytes) != 0)  {
-        outStr << "ERROR: PCAP send packet failed" << std::endl;
+        outStr << "ERROR: PCAP send packet failed to node " << node << std::endl;
         return false;
     }
     return true;
@@ -405,7 +439,7 @@ int EthRawPort::PacketFlushAll(void)
 
 bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast)
 {
-    if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
+    if (!useEthernetBroadcast && useFwBridge && (packet[11] != HubBoard)) {
         outStr << "WARNING: Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
                << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
         return false;
@@ -413,21 +447,17 @@ bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthern
     return true;
 }
 
-void EthRawPort::make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags)
-{
-    make_ethernet_header(packet, nBytes, flags);
-    EthBasePort::make_write_header(packet, nBytes, flags);
-}
-
-void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags)
+void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags)
 {
     memcpy(packet, frame_hdr, ETH_FRAME_LENGTH_OFFSET);  // Copy header except length field
-    if (flags&FW_NODE_ETH_BROADCAST_MASK) {      // multicast
+    if ((flags&FW_NODE_ETH_BROADCAST_MASK) || (!useFwBridge && (node == FW_NODE_BROADCAST))) {      // multicast
         packet[0] |= 0x01;    // set multicast destination address
         packet[5] = 0xff;     // keep multicast address
     }
     else {
-        packet[5] = HubBoard;     // last byte of dest address is board id
+        // last byte of dest address is board id; when using Ethernet/Firewire bridge, this is the HubBoard;
+        // otherwise it is the node (in Ethernet-only network, node-id and board-id are identical)
+        packet[5] = useFwBridge ? HubBoard : node;
     }
     // length field (big endian 16-bit integer)
     *reinterpret_cast<uint16_t *>(packet+ETH_FRAME_LENGTH_OFFSET) = bswap_16(numBytes-ETH_FRAME_HEADER_SIZE);
