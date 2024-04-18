@@ -879,12 +879,12 @@ bool EthBasePort::WriteBroadcastReadRequest(unsigned int seq)
 void EthBasePort::WaitBroadcastRead(void)
 {
     // Wait for all boards to respond with data
-    // Ethernet/Firewire bridge: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
+    // Ethernet/Firewire bridge: 10 + 10 * (Nb-1) us, where Nb is number of boards used in this configuration
     // Ethernet-only: 3 + 38 * (Nb-1) us, based on measurements, assuming contiguous Ethernet chain
     // Note that for Ethernet-only, it is not necessary to wait because the FPGA sends the broadcast read
     // response packet when all data is ready. Thus, the only advantage to waiting here is that we avoid
     // possible timeouts when receiving the response packet.
-    double waitTime_uS = useFwBridge ? (10.0 + 5.0*NumOfBoards_) : (3.0 + 38.0*(NumOfBoards_-1));
+    double waitTime_uS = useFwBridge ? (10.0 + 10.0*(NumOfBoards_-1)) : (3.0 + 38.0*(NumOfBoards_-1));
     // Check the most recent measured update time, and use that if it is longer than
     // the computed waitTime_uS.
     double bcUpdateTime_uS = (bcReadInfo.updateFinishTime-bcReadInfo.updateStartTime)*1e6;
