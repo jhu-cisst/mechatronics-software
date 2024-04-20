@@ -226,7 +226,7 @@ int main(int argc, char** argv)
         uint32_t buffer[32];
 
         if (c == 'c') {
-            board->WriteEthernetClearErrors(3);
+            board->WriteEthernetClearErrors();
         }
         else if (c == 'e') {
             show_errors = !show_errors;
