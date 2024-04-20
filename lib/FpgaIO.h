@@ -258,17 +258,18 @@ public:
         ETH_STAT_PRESENT_V2    = 0x80000000,   // Indicates FPGA V2
         ETH_STAT_REQ_ERR_V2    = 0x40000000,   // V2: Request error (V3: 1)
         ETH_STAT_INIT_OK_V2    = 0x20000000,   // V2: Init OK
-        ETH_STAT_FRAME_ERR     = 0x10000000,
-        ETH_STAT_IPV4_ERR      = 0x08000000,
-        ETH_STAT_UDP_ERR       = 0x04000000,
-        ETH_STAT_DEST_ERR      = 0x02000000,
-        ETH_STAT_ACCESS_ERR    = 0x01000000,
-        ETH_STAT_STATE_ERR_V2  = 0x00800000,
-        ETH_STAT_ETHST_ERR     = 0x00400000,
-        ETH_STAT_CLK_OK_V3     = 0x00200000,
+        ETH_STAT_FRAME_ERR     = 0x10000000,   // Unsupported Ethernet frame (not Raw, IPv4, or ARP)
+        ETH_STAT_IPV4_ERR      = 0x08000000,   // IPv4 header error (e.g., not UDP or ICMP)
+        ETH_STAT_UDP_ERR       = 0x04000000,   // Unsupported UDP port (not 1394)
+        ETH_STAT_DEST_ERR      = 0x02000000,   // Incorrect Firewire packet destination address
+        ETH_STAT_ACCESS_ERR    = 0x01000000,   // Internal bus access error (0 for Rev 9+)
+        ETH_STAT_STATE_ERR_V2  = 0x00800000,   // V2: KSZ8851 state machine error
+        ETH_STAT_CLK125_OK_V3  = 0x00800000,   // V3: 125 MHz clock ok
+        ETH_STAT_ETHST_ERR     = 0x00400000,   // EthernetIO state machine error
+        ETH_STAT_CLK200_OK_V3  = 0x00200000,   // V3: 200 MHz clock ok (V2: 0)
         ETH_STAT_UDP           = 0x00100000,   // 1 -> UDP mode, 0 -> Raw Ethernet
         ETH_STAT_LINK_STAT_V2  = 0x00080000,   // V2: link status (1 -> On)
-        ETH_STAT_IDLE_V2       = 0x00040000,
+        ETH_STAT_IDLE_V2       = 0x00040000,   // V2: KSZ8851 state machine is idle
         ETH_STAT_WAIT_MASK_V2  = 0x00030000,   // V2: Mask for waitInfo
         ETH_STAT_PSETH_EN_V3   = 0x00010000,   // V3: PS Ethernet enabled (Rev 9+)
         ETH_STAT_DATA_MASK_V2  = 0x0000ffff,   // V2: Mask for register read result
@@ -276,11 +277,6 @@ public:
         ETH_STAT_PORT1_MASK_V3 = 0x000000ff    // V3: Mask for Eth1 status (see EthPortV3Status)
     };
     bool ReadEthernetStatus(uint32_t &status);
-
-    // Get Ethernet port currently in use by FPGA V3 from specified status value
-    //    status  Status value from ReadEthernetStatus
-    // Returns the current port (1 or 2) if FPGA V3; otherwise, returns 0
-    static unsigned int GetEthernetPortCurrent(uint32_t status);
 
     // Get Ethernet port status (for FPGA V3) from specified status value
     //    status  Status value from ReadEthernetStatus
@@ -299,9 +295,10 @@ public:
 
     // Write Ethernet control register
     enum EthControl {
+        ETH_CTRL_CLR_ERR_SW_V3 = 0x40000000,    // V3: Clear switch errors
         ETH_CTRL_CLR_ERR_NET  = 0x20000000,     // Clear network layer errors
-        ETH_CTRL_CLR_ERR_LINK = 0x10000000,     // Clear link layer errors
-        ETH_CTRL_CLR_ERR      = 0x30000000,     // Clear all errors
+        ETH_CTRL_CLR_ERR_LINK_V2 = 0x10000000,  // V2: Clear link layer errors
+        ETH_CTRL_IRQ_GEN_V3   = 0x10000000,     // V3: Mask for generating software IRQ (MaskL)
         ETH_CTRL_DMA_V2       = 0x08000000,     // V2: DMA register access
         ETH_CTRL_IRQ_DIS_V3   = 0x08000000,     // V3: Mask for disabling interrupts
         ETH_CTRL_RESET_PHY    = 0x04000000,     // Reset PHY
@@ -318,11 +315,7 @@ public:
     enum EthPortV3Control {
         ETH_PORT_CTRL_RESET_PHY = 0x80,     // Reset RTL8211F PHY (if ETH_CTRL_RESET_PHY)
         ETH_PORT_CTRL_IRQ_DIS   = 0x40,     // Disable interrupts
-        ETH_PORT_CTRL_IRQ_GEN   = 0x20,     // Generate interrupt (from software)
-        ETH_PORT_CTRL_CLR_ERR   = 0x10,     // Clear link layer errors (if ETH_CTRL_CLR_ERR_LINK)
-        ETH_PORT_CTRL_RESET_RF  = 0x04,     // Reset receive FIFO
-        ETH_PORT_CTRL_RESET_SF  = 0x02,     // Reset send FIFO
-        ETH_PORT_CTRL_EN_PS_ETH = 0x01      // Enable PS ethernet access to PHY
+        ETH_PORT_CTRL_IRQ_GEN   = 0x20      // Generate interrupt from software (if ETH_CTRL_IRQ_GEN_V3)
     };
     bool WriteEthernetControl(uint32_t write_data);
 
@@ -332,15 +325,9 @@ public:
     bool WriteEthernetPhyReset(unsigned int chan = 0);
 
     // Clear Ethernet errors
-    //    chan    FPGA V2: 0
-    //            FPGA V3: 1 -> PHY1, 2 -> PHY2, 3-> both
-    bool WriteEthernetClearErrors(unsigned int chan = 0);
-
-    // Enable/Disable PS Ethernet (FPGA V3)
-    //    chan    1 -> PHY1, 2 -> PHY2, 3 -> both
-    //    state   true to enable PS ethernet; false to disable
-    // Firmware Rev 8 only
-    bool WritePsEthernetEnable(unsigned int chan, bool state);
+    //   For V2, clears EthernetIO and KSZ8851 errors
+    //   For V3, clears EthernetIO and EthSwitch errors
+    bool WriteEthernetClearErrors();
 
     // Read Ethernet data
     //    buffer  buffer for storing data

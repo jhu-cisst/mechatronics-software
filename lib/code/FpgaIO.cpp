@@ -604,14 +604,6 @@ bool FpgaIO::ReadEthernetStatus(uint32_t &status)
     return port->ReadQuadlet(BoardId, BoardIO::ETH_STATUS, status);
 }
 
-unsigned int FpgaIO::GetEthernetPortCurrent(uint32_t status)
-{
-    unsigned int curPort = 0;
-    if (GetFpgaVersionMajorFromStatus(status) == 3)
-        curPort = (status&0x20000000) ? 2 : 1;
-    return curPort;
-}
-
 uint8_t FpgaIO::GetEthernetPortStatusV3(uint32_t status, unsigned int chan)
 {
     uint8_t pstat = 0;
@@ -640,23 +632,16 @@ bool FpgaIO::WriteEthernetPhyReset(unsigned int chan)
     return WriteEthernetControl(write_data);
 }
 
-bool FpgaIO::WriteEthernetClearErrors(unsigned int chan)
+bool FpgaIO::WriteEthernetClearErrors()
 {
-    quadlet_t write_data = ETH_CTRL_CLR_ERR;
-    if (chan&1)
-        write_data |= ETH_PORT_CTRL_CLR_ERR;
-    if (chan&2)
-        write_data |= (ETH_PORT_CTRL_CLR_ERR<<8);
-    return WriteEthernetControl(write_data);
-}
-
-bool FpgaIO::WritePsEthernetEnable(unsigned int chan, bool state)
-{
-    quadlet_t write_data = ETH_CTRL_EN_PS_ETH_V3;
-    if (state && (chan&1))
-        write_data |= ETH_PORT_CTRL_EN_PS_ETH;
-    if (state && (chan&2))
-        write_data |= (ETH_PORT_CTRL_EN_PS_ETH<<8);
+    quadlet_t write_data = ETH_CTRL_CLR_ERR_NET;
+    unsigned int fpga_ver = GetFpgaVersionMajor();
+    if (fpga_ver== 2) {
+        write_data |= ETH_CTRL_CLR_ERR_LINK_V2;
+    }
+    else if ((fpga_ver == 3) && (GetFirmwareVersion() > 8)) {
+        write_data |= ETH_CTRL_CLR_ERR_SW_V3;
+    }
     return WriteEthernetControl(write_data);
 }
 

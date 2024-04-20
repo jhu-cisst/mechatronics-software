@@ -1636,10 +1636,14 @@ int main(int argc, char **argv)
                         EthBasePort::PrintDebugDataRTI(std::cout, buffer, clkPeriod);   // EthRtInterface (FPGA V3)
                     uint32_t ethStatus;
                     curBoard->ReadEthernetStatus(ethStatus);
-                    if (ethStatus & FpgaIO::ETH_STAT_CLK_OK_V3)
+                    if (ethStatus & FpgaIO::ETH_STAT_CLK200_OK_V3)
                         std::cout << "200 MHz clock running" << std::endl;
                     else
                         std::cout << "**** 200 MHz clock not running -- initialize PS" << std::endl;
+                    if (ethStatus & FpgaIO::ETH_STAT_CLK125_OK_V3)
+                        std::cout << "125 MHz clock running" << std::endl;
+                    else
+                        std::cout << "**** 125 MHz clock not running -- initialize PS" << std::endl;
                 }
 #if 0
                 if ((fpgaVer == 2) && (curBoard->ReadEthernetData(buffer, 0xa0, 32))) {
@@ -1671,7 +1675,7 @@ int main(int argc, char **argv)
 
         case 'X':
             if (curBoard) {
-                curBoard->WriteEthernetClearErrors(3);  // TODO
+                curBoard->WriteEthernetClearErrors();
             }
             break;
 

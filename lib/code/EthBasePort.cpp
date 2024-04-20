@@ -250,17 +250,15 @@ void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
             if (status&FpgaIO::ETH_STAT_REQ_ERR_V2) debugStream << "error ";
             if (status&FpgaIO::ETH_STAT_INIT_OK_V2) debugStream << "initOK ";
         }
-        else {   // ver == 3
-            debugStream << "Eth" << FpgaIO::GetEthernetPortCurrent(status) << " ";
-        }
         if (status & FpgaIO::ETH_STAT_FRAME_ERR)    debugStream << "FrameErr ";
         if (status & FpgaIO::ETH_STAT_IPV4_ERR)     debugStream << "IPv4Err ";
         if (status & FpgaIO::ETH_STAT_UDP_ERR)      debugStream << "UDPErr ";
         if (status & FpgaIO::ETH_STAT_DEST_ERR)     debugStream << "DestErr ";
         if (status & FpgaIO::ETH_STAT_ACCESS_ERR)   debugStream << "AccessErr ";
-        if (status & FpgaIO::ETH_STAT_STATE_ERR_V2) debugStream << ((ver == 2) ? "StateErr " : "Unused ");
+        if ((ver == 2) && (status & FpgaIO::ETH_STAT_STATE_ERR_V2)) debugStream << "StateErr ";
+        if ((ver == 3) && (status & FpgaIO::ETH_STAT_CLK125_OK_V3)) debugStream << "Clk125 ";
         if (status & FpgaIO::ETH_STAT_ETHST_ERR )   debugStream << "EthStateErr ";
-        if (status & FpgaIO::ETH_STAT_CLK_OK_V3)    debugStream << ((ver == 3) ? "ClkOK " : "Unused ");
+        if ((ver == 3) && (status & FpgaIO::ETH_STAT_CLK200_OK_V3)) debugStream << "Clk200 ";
         if (status & FpgaIO::ETH_STAT_UDP)          debugStream << "UDP ";
         if (ver == 2) {
             if (status & FpgaIO::ETH_STAT_LINK_STAT_V2) debugStream << "Link-On ";
@@ -274,7 +272,8 @@ void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
             debugStream << std::endl;
         }
         else {   // ver == 3
-            if (status & 0x000f0000) debugStream << "Unused4 ";
+            // Following bit introduced in Firmware Rev 9, but was previously 0
+            if (status & FpgaIO::ETH_STAT_PSETH_EN_V3) debugStream << "PS-Eth ";
             debugStream << std::endl;
             for (unsigned int port = 1; port <= 2; port++) {
                 debugStream << "Port " << port << ": ";
@@ -287,6 +286,7 @@ void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
                 if (linkSpeed == 0)                               debugStream << "10 Mbps ";
                 else if (linkSpeed == 1)                          debugStream << "100 Mbps ";
                 else if (linkSpeed == 2)                          debugStream << "1000 Mbps ";
+                // Following are only for Firmware Rev 8
                 if (portStatus & FpgaIO::ETH_PORT_STAT_RECV_ERR)  debugStream << "RecvErr ";
                 if (portStatus & FpgaIO::ETH_PORT_STAT_SEND_OVF)  debugStream << "SendOvf ";
                 if (portStatus & FpgaIO::ETH_PORT_STAT_PS_ETH)    debugStream << "PS-Eth ";
