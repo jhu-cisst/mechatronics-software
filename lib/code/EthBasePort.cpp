@@ -476,6 +476,18 @@ void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *
     debugStream << "bw_wait: " << std::dec << p->bw_wait << " (" << p->bw_wait*bits2uS << " us)" << std::endl;
 }
 
+void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *data, const char *portName)
+{
+    struct DebugData {
+        uint32_t mdio_result;
+        uint16_t numIRQ;
+        uint16_t numReset;
+    };
+    const DebugData *p = reinterpret_cast<const DebugData *>(data);
+    debugStream << "*** " << portName << " (RTL8211F): " << std::endl;
+    debugStream << "numReset: " << p->numReset << ", numIRQ: " << p->numIRQ << std::endl;
+}
+
 // Prints the debug data from the lower-level real-time Ethernet interface (EthRtInterface for FPGA V3)
 void EthBasePort::PrintDebugDataRTI(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
 {

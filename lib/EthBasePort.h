@@ -280,6 +280,7 @@ public:
                                  unsigned int version);
     static void PrintDebugData(std::ostream &debugStream, const quadlet_t *data, double clockPeriod);
     static void PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *data, double clockPeriod);
+    static void PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *data, const char *portName);
     static void PrintDebugDataRTI(std::ostream &debugStream, const quadlet_t *data, double clockPeriod);
 };
 
