@@ -645,14 +645,13 @@ bool EthUdpPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes,
     unsigned char ip_offset = 0;
     SocketInternals::EthDestType destType;
     if (useEthernetBroadcast) {
-        // Checking the firmware version and FPGA version of HubBoard covers two cases:
-        //   1) Supports FPGA V2 and firmware prior to Rev 9, which does not respond to UDP multicast.
+        // Checking the firmware version of HubBoard covers two cases:
+        //   1) Supports firmware prior to Rev 9, which does not respond to UDP multicast.
         //   2) Ensures that BROADCAST is used for the first few packets (i.e., before this
-        //      class reads the Firmware and FPGA version), which is necessary for proper operation.
+        //      class reads the Firmware version), which is necessary for proper operation.
         unsigned long fver = GetFirmwareVersion(HubBoard);
-        unsigned int fpga_ver = GetFpgaVersionMajor(HubBoard);
-        destType = ((fver < 9) || (fpga_ver < 3)) ? SocketInternals::DEST_BROADCAST
-                                                  : SocketInternals::DEST_MULTICAST;
+        destType = (fver < 9) ? SocketInternals::DEST_BROADCAST
+                              : SocketInternals::DEST_MULTICAST;
     }
     else {
         destType = SocketInternals::DEST_UNICAST;
