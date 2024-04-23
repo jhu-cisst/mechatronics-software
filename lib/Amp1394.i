@@ -5,6 +5,7 @@
     
 /*Put headers and other declarations here*/
 #include "AmpIORevision.h"
+#include "Amp1394Time.h"
 #include "AmpIO.h"
 #include "EthUdpPort.h"
 
@@ -15,6 +16,12 @@
 #if Amp1394_HAS_PCAP
   #include "EthRawPort.h"
 #endif
+
+#if Amp1394_HAS_EMIO
+  #include "ZynqEmioPort.h"
+#endif
+
+#include "PortFactory.h"
 
 #ifdef _MSC_VER
 #include <stdlib.h>
@@ -158,6 +165,7 @@ uint32_t bswap32(uint32_t in);
 %constant std::string VERSION = Amp1394_VERSION;
 
 %include "Amp1394Types.h"
+%include "Amp1394Time.h"
 %include "EncoderVelocity.h"
 %include "BoardIO.h"
 %include "FpgaIO.h"
@@ -176,3 +184,7 @@ uint32_t bswap32(uint32_t in);
 #if Amp1394_HAS_PCAP
   %include "EthRawPort.h"
 #endif
+#if Amp1394_HAS_EMIO
+  %include "ZynqEmioPort.h"
+#endif
+%include "PortFactory.h"
