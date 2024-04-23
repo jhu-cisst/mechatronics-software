@@ -19,9 +19,10 @@ set (Amp1394_LIBRARY_DIR "@CONF_LIBRARY_DIR@")
 set (Amp1394_LIBRARIES "@CONF_LIBRARIES@")
 set (Amp1394Console_LIBRARIES "@CONF_CONSOLE_LIBRARIES@")
 
-# FireWire/Ethernet support
+# FireWire/Ethernet/Zynq-EMIO support
 set (Amp1394_HAS_RAW1394 "@Amp1394_HAS_RAW1394@")
 set (Amp1394_HAS_PCAP    "@Amp1394_HAS_PCAP@")
+set (Amp1394_HAS_EMIO    "@Amp1394_HAS_EMIO@")
 
 # Whether using curses for console
 set (Amp1394Console_HAS_CURSES "@Amp1394Console_HAS_CURSES@")
