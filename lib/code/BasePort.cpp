@@ -929,6 +929,12 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         if ((curPtr[0] == 0) || (curPtr[2] == 0)) {
             outStr << "BasePort::ReadAllBoardsBroadcast: invalid block after reading "
                    << bdCnt << " boards" << std::endl;
+            outStr << "Failed to read from board(s) ";
+            for (size_t i = 0; i < BoardIO::MAX_BOARDS; i++) {
+                if (bcReadInfo.boardInfo[i].inUse && !bcReadInfo.boardInfo[i].updated)
+                    outStr << i << " ";
+            }
+            outStr << std::endl;
             allOK = false;
             break;
         }
