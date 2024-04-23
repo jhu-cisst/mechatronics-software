@@ -929,6 +929,10 @@ bool EthBasePort::ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nb
                 HubBoard = newHubBoard;
             }
         }
+        else {
+            outStr << "ReceiveBroadcastReadResponse failed -- reading from board" << std::endl;
+            ret = BasePort::ReceiveBroadcastReadResponse(rdata, nbytes);
+        }
     }
     return ret;
 }
