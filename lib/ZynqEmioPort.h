@@ -117,9 +117,8 @@ public:
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations
-     The delay is 0 for EMIO.
     */
-    void PromDelay(void) const {}
+    void PromDelay(void) const;
 
 };
 
