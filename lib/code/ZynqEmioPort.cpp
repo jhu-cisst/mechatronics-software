@@ -16,6 +16,7 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "ZynqEmioPort.h"
+#include "Amp1394Time.h"
 #include "fpgav3_emio_mmap.h"
 #include "fpgav3_emio_gpiod.h"
 
@@ -89,6 +90,12 @@ bool ZynqEmioPort::RemoveBoard(unsigned char boardId)
 bool ZynqEmioPort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
 {
     return WriteBlockNode(FW_NODE_BROADCAST, 0, buffer, size);
+}
+
+void ZynqEmioPort::PromDelay(void) const
+{
+    // Wait 2 msec
+    Amp1394_Sleep(0.002);
 }
 
 bool ZynqEmioPort::WriteBroadcastReadRequest(unsigned int seq)
