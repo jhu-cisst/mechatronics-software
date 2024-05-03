@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -568,30 +568,80 @@ uint16_t FpgaIO::ReadKSZ8851Status()
 
 // ************************** RTL8211F Ethernet PHY Methods *************************************
 
+// Wait for FPGA mdio interface to return to idle state
+bool FpgaIO::WaitRTL8211F_Idle(const char *callerName, unsigned int chan, unsigned int loop_cnt)
+{
+    // Should have firmware/hardware checks
+    // First, wait 1 millisecond
+    Amp1394_Sleep(0.001);
+    // Now, check up to loop_cnt iterations
+    nodeaddr_t address = 0x40a0 | (chan << 8);
+    quadlet_t read_data;
+    bool isIdle = false;
+    unsigned int i = 0;
+    while (!isIdle && (i++ < loop_cnt)) {
+        if (port->ReadQuadlet(BoardId, address, read_data))
+            isIdle = ((read_data&0x07000000) == 0);
+    }
+    if (!isIdle) {
+        std::cout << callerName << " timeout waiting for idle, cnt " << i << ", read " << std::hex
+                  << read_data << std::dec << std::endl;
+    }
+    return isIdle;
+}
+
 bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, uint16_t &data)
 {
     // Should have firmware/hardware checks
+    // Wait for FPGA mdio interface to be idle
+    if (!WaitRTL8211F_Idle("ReadRTL8211F_Register", chan, 20))
+        return false;
     nodeaddr_t address = 0x40a0 | (chan << 8);
     // Format: 0110 PPPP PRRR RRXX X(16), where P indicates phyAddr, R indicates regAddr, X is don't care (0)
     uint32_t write_data = 0x60000000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18);
     if (!port->WriteQuadlet(BoardId, address, write_data))
         return false;
+    // Read data is not valid unless FPGA mdio interface is in idle state. For most interfaces (e.g., Firewire,
+    // Ethernet), this will already be the case, but the Zynq EMIO mmap interface is fast so some waiting is needed.
+    // First, wait 1 millisecond
+    Amp1394_Sleep(0.001);
+    // Now, loop up to 20 times until mdio interface is idle and register address matches
     quadlet_t read_data;
-    if (!port->ReadQuadlet(BoardId, address, read_data))
-        return false;
+    unsigned int regAddrRead;
+    bool isIdle = false;
+    bool regAddrMatch = false;
+    unsigned int i = 0;
+    while (!(isIdle && regAddrMatch) && (i++ < 20)) {
+        if (port->ReadQuadlet(BoardId, address, read_data)) {
+            isIdle = ((read_data&0x07000000) == 0);
+            if (isIdle) {
+                regAddrRead = (read_data & 0x001f0000)>>16;
+                regAddrMatch = (regAddrRead == regAddr);
+            }
+        }
+    }
+    if (!isIdle) {
+        std::cout << "ReadRTL8211F_Register timeout waiting for data, read " << std::hex
+                  << read_data << std::dec << std::endl;
+    }
+    else if (!regAddrMatch) {
+        std::cout << "ReadRTL8211F_Register regAddr mismatch, expected " << std::hex
+                  << regAddr << ", received " << regAddrRead << std::dec << std::endl;
+    }
+    // Set data even if error, since it could be correct and caller may not check return value
     data = static_cast<uint16_t>(read_data & 0x0000ffff);
-    unsigned int regAddrRead = (read_data & 0x001f0000)>>16;
-    unsigned int curState = (read_data&0x07000000) >> 24;
-    return (regAddrRead == regAddr) && (curState == 0);
+    return (isIdle & regAddrMatch);
 }
 
 bool FpgaIO::WriteRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsigned int regAddr, uint16_t data)
 {
     // Should have firmware/hardware checks
+    // Wait for FPGA mdio interface to be idle
+    if (!WaitRTL8211F_Idle("WriteRTL8211F_Register", chan, 20))
+        return false;
     nodeaddr_t address = 0x40a0 | (chan << 8);
     // Format: 0101 PPPP PRRR RR10 D(16), where P indicates phyAddr, R indicates regAddr, D indicates data
     uint32_t write_data = 0x50020000 | ((phyAddr&0x1f) << 23) | ((regAddr&0x1f) << 18) | data;
-    // Could check whether FPGA has returned to idle state
     return port->WriteQuadlet(BoardId, address, write_data);
 }
 

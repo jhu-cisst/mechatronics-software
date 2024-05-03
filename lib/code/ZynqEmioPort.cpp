@@ -94,8 +94,8 @@ bool ZynqEmioPort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
 
 void ZynqEmioPort::PromDelay(void) const
 {
-    // Wait 2 msec
-    Amp1394_Sleep(0.002);
+    // Wait 5 msec
+    Amp1394_Sleep(0.005);
 }
 
 bool ZynqEmioPort::WriteBroadcastReadRequest(unsigned int seq)

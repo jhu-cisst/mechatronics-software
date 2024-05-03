@@ -1110,6 +1110,7 @@ bool QuadletReadCallback(EthBasePort &, unsigned char boardId, std::ostream &deb
 
 int main(int argc, char **argv)
 {
+    bool useEthernet = true;
     BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
     int port = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
@@ -1122,9 +1123,8 @@ int main(int argc, char **argv)
                     std::cerr << "Failed to parse option: " << argv[i] << std::endl;
                     return 0;
                 }
-                if (desiredPort == BasePort::PORT_FIREWIRE) {
-                    std::cerr << "Please select Ethernet raw (-pethP) or UDP (-pudp[xx.xx.xx.xx])" << std::endl;
-                    return 0;
+                if ((desiredPort != BasePort::PORT_ETH_UDP) && (desiredPort != BasePort::PORT_ETH_RAW)) {
+                    useEthernet = false;
                 }
             }
             else {
@@ -1165,7 +1165,7 @@ int main(int argc, char **argv)
     std::string FwPortString;
 
 #if Amp1394_HAS_RAW1394
-    FwPort = new FirewirePort(0, std::cout);
+    FwPort = new FirewirePort(port, std::cout);
     if (!FwPort->IsOK()) {
         std::cout << "Failed to initialize firewire port" << std::endl;
         return 0;
@@ -1179,7 +1179,7 @@ int main(int argc, char **argv)
         }
     }
 #elif Amp1394_HAS_EMIO
-    FwPort = new ZynqEmioPort(0, std::cout);
+    FwPort = new ZynqEmioPort(port, std::cout);
     if (!FwPort->IsOK()) {
         std::cout << "Failed to initialize Zynq EMIO port" << std::endl;
         return 0;
@@ -1199,43 +1199,53 @@ int main(int argc, char **argv)
     }
 
     EthBasePort *EthPort = 0;
-    if (desiredPort == BasePort::PORT_ETH_UDP) {
-        std::cout << "Creating Ethernet UDP port, IP address = " << IPaddr << std::endl;
-        EthPort = new EthUdpPort(port, IPaddr, fwBridge, std::cout);
-    }
-#if Amp1394_HAS_PCAP
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-        std::cout << "Creating Ethernet raw (PCAP) port" << std::endl;
-        EthPort = new EthRawPort(port, fwBridge, std::cout);
-    }
-#endif
-    if (!EthPort) {
-        std::cout << "Failed to create Ethernet port" << std::endl;
-        return 0;
-    }
-    if (EthPort->IsOK()) {
-        EthPortString = EthPort->GetPortTypeString();
-        for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
-            if (EthPort->GetNodeId(bnum) != BasePort::MAX_NODES) {
-                std::cout << "Found Ethernet board: " << bnum << std::endl;
-                AmpIO *board = new AmpIO(bnum);
-                EthPort->AddBoard(board);
-                EthBoardList.push_back(board);
-             }
+    if (useEthernet) {
+        if (desiredPort == BasePort::PORT_ETH_UDP) {
+            std::cout << "Creating Ethernet UDP port, IP address = " << IPaddr << std::endl;
+            EthPort = new EthUdpPort(port, IPaddr, fwBridge, std::cout);
         }
-        if (EthBoardList.size() > 0)
-            curBoardEth = EthBoardList[0];
-        // Find Firewire board corresponding to Ethernet hub
-        unsigned int hub_num = EthPort->GetHubBoardId();
-        for (size_t i = 0; i < FwBoardList.size(); i++) {
-            if (FwBoardList[i]->GetBoardId() == hub_num) {
-                HubFw = FwBoardList[i];
-                break;
+#if Amp1394_HAS_PCAP
+        else if (desiredPort == BasePort::PORT_ETH_RAW) {
+            std::cout << "Creating Ethernet raw (PCAP) port" << std::endl;
+            EthPort = new EthRawPort(port, fwBridge, std::cout);
+        }
+#endif
+        if (!EthPort) {
+            std::cout << "Failed to create Ethernet port" << std::endl;
+            return 0;
+        }
+        if (EthPort->IsOK()) {
+            EthPortString = EthPort->GetPortTypeString();
+            for (unsigned int bnum = 0; bnum < BoardIO::MAX_BOARDS; bnum++) {
+                if (EthPort->GetNodeId(bnum) != BasePort::MAX_NODES) {
+                    std::cout << "Found Ethernet board: " << bnum << std::endl;
+                    AmpIO *board = new AmpIO(bnum);
+                    EthPort->AddBoard(board);
+                    EthBoardList.push_back(board);
+                 }
+            }
+            if (EthBoardList.size() > 0)
+                curBoardEth = EthBoardList[0];
+            // Find Firewire board corresponding to Ethernet hub
+            unsigned int hub_num = EthPort->GetHubBoardId();
+            for (size_t i = 0; i < FwBoardList.size(); i++) {
+                if (FwBoardList[i]->GetBoardId() == hub_num) {
+                    HubFw = FwBoardList[i];
+                    break;
+                }
             }
         }
+        else
+            std::cout << "Failed to initialize Ethernet port" << std::endl;
     }
-    else
-        std::cout << "Failed to initialize Ethernet port" << std::endl;
+    else {
+        std::cout << "Skipping Ethernet port" << std::endl;
+    }
+
+    if (!EthPort && !FwPort) {
+        std::cout << "No ports created - existing" << std::endl;
+        return -1;
+    }
 
 #ifndef _MSC_VER
     // Turn off buffered I/O for keyboard
@@ -1308,7 +1318,8 @@ int main(int argc, char **argv)
         }
         if (curBoard)
             std::cout << "  7) Ethernet status info" << std::endl;
-        std::cout << "  8) Multicast quadlet read via " << EthPortString << std::endl;
+        if (EthPort)
+            std::cout << "  8) Multicast quadlet read via " << EthPortString << std::endl;
         if (curBoardEth) {
             std::cout << "  a) WriteAllBoards test" << std::endl;
             std::cout << "  B) BlockWrite test (Waveform table)" << std::endl;
@@ -1465,12 +1476,14 @@ int main(int argc, char **argv)
             break;
 
         case '8':   // Read request via Ethernet multicast
-            read_data = 0;
-            addr = 0;  // Return status register
-            if (EthPort->ReadQuadlet(FW_NODE_BROADCAST, addr, read_data))
-                std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
-            else
-                std::cout << "Failed to read quadlet via " << EthPortString << " port" << std::endl;
+            if (EthPort) {
+                read_data = 0;
+                addr = 0;  // Return status register
+                if (EthPort->ReadQuadlet(FW_NODE_BROADCAST, addr, read_data))
+                    std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
+                else
+                    std::cout << "Failed to read quadlet via " << EthPortString << " port" << std::endl;
+            }
             break;
 
         case 'a':
@@ -1572,7 +1585,7 @@ int main(int argc, char **argv)
             break;
 
         case 'r':
-            if (EthPort->IsOK())
+            if (EthPort && EthPort->IsOK())
                 EthPort->CheckFwBusGeneration("EthPort", true);
             if (FwPort && (FwPort->IsOK()))
                 FwPort->CheckFwBusGeneration("FwPort", true);
