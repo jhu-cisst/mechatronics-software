@@ -38,8 +38,11 @@ void EncUp(AmpIO &bd, unsigned int qlaNum)
     uint8_t dout_mask = (qlaNum == 2) ? 0x30 : 0x03;
     bd.WriteDigitalOutput(dout_mask, 0x33);
     bd.WriteDigitalOutput(dout_mask, 0x22);
+    Amp1394_Sleep(0.00001);
     bd.WriteDigitalOutput(dout_mask, 0x00);
+    Amp1394_Sleep(0.00001);
     bd.WriteDigitalOutput(dout_mask, 0x11);
+    Amp1394_Sleep(0.00001);
     bd.WriteDigitalOutput(dout_mask, 0x33);
 }
 
@@ -52,8 +55,11 @@ void EncDown(AmpIO &bd, unsigned int qlaNum)
     uint8_t dout_mask = (qlaNum == 2) ? 0x30 : 0x03;
     bd.WriteDigitalOutput(dout_mask, 0x33);
     bd.WriteDigitalOutput(dout_mask, 0x11);
+    Amp1394_Sleep(0.00001);
     bd.WriteDigitalOutput(dout_mask, 0x00);
+    Amp1394_Sleep(0.00001);
     bd.WriteDigitalOutput(dout_mask, 0x22);
+    Amp1394_Sleep(0.00001);
     bd.WriteDigitalOutput(dout_mask, 0x33);
 }
 

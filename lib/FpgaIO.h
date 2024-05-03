@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -228,6 +228,14 @@ public:
     //    FPGAV3 is designed so that the RTL8211F PHY has a default address of 1.
     //    The GMII to RGMII core uses the default PHY address of 8.
     enum PHY_ADDR { PHY_BROADCAST = 0, PHY_RTL8211F = 1, PHY_GMII_CORE = 8 };
+
+    // Wait for FPGA mdio interface to return to idle state, using specified number of loops
+    // (loop_cnt) as timeout. This method is necessary for the Zynq EMIO mmap interface,
+    // which is faster than the FPGA mdio state machine.
+    //    callerName  name of calling routine (used if printing timeout message)
+    //    chan        1 or 2 for PHY1 or PHY2
+    //    loop_cnt    number of read loops for checking mdio state
+    bool WaitRTL8211F_Idle(const char *callerName, unsigned int chan, unsigned int loop_cnt);
 
     // Read PHY register
     //    chan    1 or 2 for PHY1 or PHY2
