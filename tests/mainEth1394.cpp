@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <string>
 #include <vector>
+#include <algorithm>   // for std::min
 #include <stdio.h>
 
 #include <Amp1394/AmpIORevision.h>
@@ -775,16 +776,15 @@ bool RunTiming(const std::string &portName, AmpIO *boardTest, EthBasePort *ethPo
     return true;
 }
 
-void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
+void TestBlockWrite(unsigned int wlen_max, AmpIO *wboard, AmpIO *rboard)
 {
     quadlet_t waveform[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
     quadlet_t waveform_read[MAX_POSSIBLE_DATA_SIZE/sizeof(quadlet_t)];
-    const unsigned int WLEN_MAX = (wport->GetMaxWriteDataSize()/sizeof(quadlet_t));
     unsigned int i;
-    unsigned int min_left = WLEN_MAX;
-    unsigned int min_wlen = WLEN_MAX;
+    unsigned int min_left = wlen_max;
+    unsigned int min_wlen = wlen_max;
     unsigned int max_wait = 0;
-    unsigned int max_wlen = WLEN_MAX;
+    unsigned int max_wlen = wlen_max;
     unsigned int numSilentMismatch = 0;
 
     // Get FPGA Version
@@ -807,8 +807,8 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
         }
     }
 
-    for (unsigned int wlen = 2; wlen < WLEN_MAX; wlen++) {
-        bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==WLEN_MAX-1));
+    for (unsigned int wlen = 2; wlen < wlen_max; wlen++) {
+        bool doOut = ((wlen<10)||(wlen%20 == 0)||(wlen==wlen_max-1));
         unsigned int len16 = 2*wlen;  // length in words
         double trigger;               // actual trigger value
         unsigned int trigger_comp;    // trigger computation on FPGA
@@ -1157,7 +1157,6 @@ int main(int argc, char **argv)
     AmpIO *curBoard = 0;     // Current board via Ethernet or Firewire / Zynq-EMIO
     AmpIO *curBoardFw = 0;   // Current board via Firewire / Zynq-EMIO, sets boardNumFw
     AmpIO *curBoardEth = 0;  // Current board via Ethernet, sets boardNumEth
-    AmpIO *HubFw = 0;        // Ethernet Hub board via Firewire
 
     BasePort *curPort = 0;   // Current port (Ethernet, Firewire or Zynq-EMIO)
 
@@ -1228,14 +1227,6 @@ int main(int argc, char **argv)
             }
             if (EthBoardList.size() > 0)
                 curBoardEth = EthBoardList[0];
-            // Find Firewire board corresponding to Ethernet hub
-            unsigned int hub_num = EthPort->GetHubBoardId();
-            for (size_t i = 0; i < FwBoardList.size(); i++) {
-                if (FwBoardList[i]->GetBoardId() == hub_num) {
-                    HubFw = FwBoardList[i];
-                    break;
-                }
-            }
         }
         else
             std::cout << "Failed to initialize Ethernet port" << std::endl;
@@ -1322,10 +1313,10 @@ int main(int argc, char **argv)
             std::cout << "  7) Ethernet status info" << std::endl;
         if (EthPort)
             std::cout << "  8) Multicast quadlet read via " << EthPortString << std::endl;
-        if (curBoardEth) {
+        if (curBoardEth)
             std::cout << "  a) WriteAllBoards test" << std::endl;
+        if (curBoardEth || curBoardFw)
             std::cout << "  B) BlockWrite test (Waveform table)" << std::endl;
-        }
         if ((EthBoardList.size() > 1) || (FwBoardList.size() > 1))
             std::cout << "  b) Change board" << std::endl;
         std::cout << "  C) Compute Configuration ROM CRC" << std::endl;
@@ -1495,18 +1486,24 @@ int main(int argc, char **argv)
 
         case 'B':
             if (curBoardEth && curBoardFw) {
+                unsigned int wlen_max_eth = (EthPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
+                unsigned int wlen_max_fw = (FwPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
+                unsigned int wlen_max = std::min(wlen_max_eth, wlen_max_fw);
                 std::cout << "Write via " << EthPortString << ", read via " << FwPortString << std::endl;
-                TestBlockWrite(EthPort, curBoardEth, curBoardFw);
-                std::cout << "Write via " << FwPortString << ", read via " << EthPortString << std::endl;
-                TestBlockWrite(FwPort, curBoardFw, curBoardEth);
+                TestBlockWrite(wlen_max, curBoardEth, curBoardFw);
+                std::cout << std::endl
+                          <<"Write via " << FwPortString << ", read via " << EthPortString << std::endl;
+                TestBlockWrite(wlen_max, curBoardFw, curBoardEth);
             }
             else if (curBoardFw) {
+                unsigned int wlen_max = (FwPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 std::cout << "Testing via " << FwPortString << std::endl;
-                TestBlockWrite(FwPort, curBoardFw, curBoardFw);
+                TestBlockWrite(wlen_max, curBoardFw, curBoardFw);
             }
             else if (curBoardEth) {
+                unsigned int wlen_max = (EthPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 std::cout << "Testing via " << EthPortString << std::endl;
-                TestBlockWrite(EthPort, curBoardEth, curBoardEth);
+                TestBlockWrite(wlen_max, curBoardEth, curBoardEth);
             }
             break;
 
