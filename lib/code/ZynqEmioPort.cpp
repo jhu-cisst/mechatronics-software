@@ -19,6 +19,7 @@ http://www.cisst.org/cisst/license.txt.
 #include "Amp1394Time.h"
 #include "fpgav3_emio_mmap.h"
 #include "fpgav3_emio_gpiod.h"
+#include "fpgav3_lib.h"
 
 ZynqEmioPort::ZynqEmioPort(int portNum, std::ostream &debugStream):
     BasePort(portNum, debugStream), emio(0)
@@ -39,6 +40,8 @@ bool ZynqEmioPort::Init(void)
         outStr << "ZynqEmioPort: using EMIO mmap interface" << std::endl;
         emio = new EMIO_Interface_Mmap;
     }
+    // Print version info for this program and (if different) libfgpav3
+    print_fpgav3_versions(outStr);
 
     bool ret = ScanNodes();
     if (ret)
