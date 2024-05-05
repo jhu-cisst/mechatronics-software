@@ -785,7 +785,6 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
     unsigned int min_wlen = WLEN_MAX;
     unsigned int max_wait = 0;
     unsigned int max_wlen = WLEN_MAX;
-    unsigned int bw_err_cnt = 0;
     unsigned int numSilentMismatch = 0;
 
     // Get FPGA Version
@@ -848,6 +847,7 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
                 break;
             unsigned short bw_left = 0;
             unsigned short bw_wait = 0;
+            unsigned int bw_err_cnt = 0;
             bw_left = static_cast<unsigned short>(waveform_read[8]>>16);
             bool bw_err = (waveform_read[8] & 0x00008000);
             if (bw_err) {
@@ -865,8 +865,10 @@ void TestBlockWrite(BasePort *wport, AmpIO *wboard, AmpIO *rboard)
             }
             if (doOut) {
                 std::cout << "bw_left = " << bw_left << ", bw_wait = " << bw_wait;
-                if (bw_err_cnt > 0)
+                if (bw_err_cnt > 0) {
                     std::cout << ", bw_err_cnt = " << bw_err_cnt;
+                    bw_err_cnt = 0;
+                }
                 std::cout << ", ";
             }
         }
@@ -1492,8 +1494,20 @@ int main(int argc, char **argv)
             break;
 
         case 'B':
-            if (curBoardEth)
-                TestBlockWrite(EthPort, curBoardEth, curBoard);
+            if (curBoardEth && curBoardFw) {
+                std::cout << "Write via " << EthPortString << ", read via " << FwPortString << std::endl;
+                TestBlockWrite(EthPort, curBoardEth, curBoardFw);
+                std::cout << "Write via " << FwPortString << ", read via " << EthPortString << std::endl;
+                TestBlockWrite(FwPort, curBoardFw, curBoardEth);
+            }
+            else if (curBoardFw) {
+                std::cout << "Testing via " << FwPortString << std::endl;
+                TestBlockWrite(FwPort, curBoardFw, curBoardFw);
+            }
+            else if (curBoardEth) {
+                std::cout << "Testing via " << EthPortString << std::endl;
+                TestBlockWrite(EthPort, curBoardEth, curBoardEth);
+            }
             break;
 
         case 'b':
