@@ -504,8 +504,11 @@ bool EthUdpPort::Init(void)
 
     bool ret = ScanNodes();
 
-    if (ret)
+    if (ret) {
         SetDefaultProtocol();
+        if (useFwBridge)
+            OptimizeFirewireGapCount();
+    }
 
     //if (!ret)
     //    sockPtr->Close();
