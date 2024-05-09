@@ -636,33 +636,52 @@ void  ContinuousWriteTest(BasePort *ethPort, unsigned char boardNum)
 }
 
 
-bool PrintFirewirePHY(BasePort *port, int boardNum)
+bool PrintFirewirePHY(AmpIO *board)
 {
-    quadlet_t write_data = 0;
-    quadlet_t read_data = 0;
-    if (!port->WriteQuadlet(boardNum, BoardIO::FW_PHY_REQ, write_data))
+    unsigned char data;
+    if (!board->ReadFirewirePhy(0, data))
         return false;
-    if (!port->ReadQuadlet(boardNum, BoardIO::FW_PHY_RESP, read_data))
-        return false;
-    std::cout << "Node: " << std::dec << ((read_data >> 2) & 0x000003f);
-    if (read_data & 0x02) std::cout << " (root)";
-    if (read_data & 0x01) std::cout << " (power)";
+    std::cout << "Node: " << ((data >> 2) & 0x3f);
+    if (data & 0x02) std::cout << " (root)";
+    if (data & 0x01) std::cout << " (power)";
     std::cout << std::endl;
-    write_data = 1;
-    read_data = 0;
-    if (!port->WriteQuadlet(boardNum, BoardIO::FW_PHY_REQ, write_data))
+    if (!board->ReadFirewirePhy(1, data))
         return false;
-    if (!port->ReadQuadlet(boardNum, BoardIO::FW_PHY_RESP, read_data))
+    std::cout << "Gap count = " << (data & 0x3f) << " (default = 63)" << std::endl;
+    // Registers 2-3 contain known values, so we can just check them
+    if (!board->ReadFirewirePhy(2, data))
         return false;
-    std::cout << "Gap count = " << (read_data&0x000003f) << " (default = 63)" << std::endl;
-    write_data = 2;
-    read_data = 0;
-    if (!port->WriteQuadlet(boardNum, BoardIO::FW_PHY_REQ, write_data))
+    unsigned int num_ports = data & 0x1f;
+    if (num_ports != 2) {
+        std::cout << "Unexpected num_ports " << num_ports << " (should be 2)" << std::endl;
         return false;
-    if (!port->ReadQuadlet(boardNum, BoardIO::FW_PHY_RESP, read_data))
+    }
+    bool extended = ((data & 0xe0) == 0xe0);
+    if (!extended) {
+        std::cout << "Should have extended register set" << std::endl;
         return false;
-    int speed = (read_data >> 6)&0x00000003;
-    std::cout << "Speed = " << speed << ", num_ports = " << (read_data&0x0000001f) << std::endl;
+    }
+    // Read register 3 for speed and repeater delay
+    if (!board->ReadFirewirePhy(3, data))
+        return false;
+    // Speed codes:
+    //   000 (0)  100 MBits
+    //   001 (1)  200 MBits
+    //   010 (2)  400 Mbits
+    // Other values are reserved or for speeds not supported by 1394a
+    unsigned short speed = (data >> 5) & 0x07;
+    if (speed != 2) {
+        std::cout << "Unexpected speed " << speed
+                  << " (should be 2 for 400 MBits)" << std::endl;
+        return false;
+    }
+    unsigned short repeater_delay = data & 0x0f;
+    if (repeater_delay != 0) {
+        std::cout << "Unexpected repeater_delay " << repeater_delay
+                  << " (should be 0)" << std::endl;
+        return false;
+    }
+    std::cout << "All queried register data is correct" << std::endl;
     return true;
 }
 
@@ -1546,12 +1565,12 @@ int main(int argc, char **argv)
             if (curBoardFw) {
                 std::cout << "Firewire PHY data via " << FwPortString << " (board "
                           << static_cast<unsigned int>(boardNumFw) << "):" << std::endl;
-                PrintFirewirePHY(FwPort, boardNumFw);
+                PrintFirewirePHY(curBoardFw);
             }
             if (curBoardEth) {
                 std::cout << "Firewire PHY data via " << EthPortString << " (board "
                           << static_cast<unsigned int>(boardNumEth) << "):" << std::endl;
-                PrintFirewirePHY(EthPort, boardNumEth);
+                PrintFirewirePHY(curBoardEth);
             }
             break;
 

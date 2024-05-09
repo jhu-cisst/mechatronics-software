@@ -723,3 +723,40 @@ bool FpgaIO::ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned i
     }
     return ret;
 }
+
+bool FpgaIO::ReadFirewirePhy(unsigned char addr, unsigned char &data)
+{
+    if (addr > 15) {
+        std::cout << "ReadFirewirePhy: invalid addr "
+                  << static_cast<unsigned int>(addr) << std::endl;
+        return false;
+    }
+    quadlet_t write_data = addr;
+    quadlet_t read_data = 0;
+    if (!port->WriteQuadlet(BoardId, BoardIO::FW_PHY_REQ, write_data))
+        return false;
+    if (!port->ReadQuadlet(BoardId, BoardIO::FW_PHY_RESP, read_data))
+        return false;
+    // Register address in read response is bits 11-8
+    unsigned char read_addr = static_cast<unsigned char>(read_data>>8) & 0x0f;
+    // Check that it matches the request address
+    if (read_addr != addr) {
+        std::cout << "ReadFirewirePhy: read addr " << static_cast<unsigned int>(read_addr)
+                  << ", expected " << static_cast<unsigned int>(addr) << std::endl;
+        return false;
+    }
+    data = static_cast<unsigned char>(read_data);
+    return true;
+}
+
+bool FpgaIO::WriteFirewirePhy(unsigned char addr, unsigned char data)
+{
+    if (addr > 15) {
+        std::cout << "WriteFirewirePhy: invalid addr "
+                  << static_cast<unsigned int>(addr) << std::endl;
+        return false;
+    }
+    // Set bit 12 to indicate write; addr in bits 11-8, data in bits 7-0
+    quadlet_t write_data = 0x00001000 | static_cast<quadlet_t>(addr) << 8 | static_cast<quadlet_t>(data);
+    return port->WriteQuadlet(BoardId, BoardIO::FW_PHY_REQ, write_data);
+}

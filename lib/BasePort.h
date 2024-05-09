@@ -39,10 +39,11 @@ http://www.cisst.org/cisst/license.txt.
  * should not be more than MAX_BOARDS+1 nodes on the bus (+1 for PC) unless other
  * FireWire device are connected.
  *
- * There are three concrete derived classes:
+ * There are four concrete derived classes:
  *     FirewirePort:  sends FireWire packets via FireWire
  *     EthUdpPort:    sends FireWire packets via Ethernet UDP
  *     EthRawPort:    sends FireWire packets via raw Ethernet frames (using PCAP)
+ *     ZynqEmioPort:  sends FireWire packets via Zynq EMIO interface
  */
 
 // Defined here for static methods ParseOptions and DefaultPort
