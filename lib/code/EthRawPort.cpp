@@ -250,8 +250,11 @@ bool EthRawPort::Init(void)
 
     bool ret = ScanNodes();
 
-    if (ret)
+    if (ret) {
         SetDefaultProtocol();
+        if (useFwBridge)
+            OptimizeFirewireGapCount();
+    }
 
 #if 0
     if (!ret) {

@@ -1050,6 +1050,61 @@ void EthBasePort::make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_
 #endif
 }
 
+// Default gap_count (also the maximum)
+const unsigned char gap_count_default = 63;
+
+// Hard-coded gap_counts based on number of nodes on bus, assuming worst case (i.e., a single long chain)
+static unsigned char gap_counts[25] = { 63,                 // 0 nodes (should not happen)
+                                         5,  7,  8, 10, 13, 16, 18, 21,     // 1-8  nodes
+                                        24, 26, 29, 32, 35, 37, 40, 43,     // 9-16 nodes
+                                        46, 48, 51, 54, 57, 59, 62, 63 };   // 17-24 nodes
+
+bool EthBasePort::OptimizeFirewireGapCount()
+{
+    // Broadcast to all boards to initiate read of PHY register 1
+    quadlet_t data = 1;
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
+        outStr << "OptimizeFirewireGapCount: failed to broadcast PHY command" << std::endl;
+        return false;
+    }
+    // Now, read each node to get the gap count
+    unsigned char gap_count_min = gap_count_default;
+    unsigned char gap_count_max = 0;
+    for (unsigned int node = 0; node < NumOfNodes_; node++) {
+        if (!ReadQuadletNode(node, BoardIO::FW_PHY_RESP, data))
+            return false;
+        unsigned char gap_count = static_cast<unsigned char>(data) & 0x3f;
+        if (gap_count < gap_count_min)
+            gap_count_min = gap_count;
+        if (gap_count > gap_count_max)
+            gap_count_max = gap_count;
+    }
+    if (gap_count_min == gap_count_max) {
+        std::cout << "OptimizeFirewireGapCount: current gap count is "
+                  << static_cast<unsigned int>(gap_count_min) << std::endl;
+    }
+    else if (gap_count_min != gap_count_max)
+        std::cout << "OptimizeFirewireGapCount: inconsistent gap counts ("
+                  << static_cast<unsigned int>(gap_count_min) << "-"
+                  << static_cast<unsigned int>(gap_count_max) << ")" << std::endl;
+    // Update the gap count if it is inconsistent, or if the gap count is the default value of 63,
+    // which would indicate that it has not yet been set (e.g., there is PC connected via Firewire).
+    if ((gap_count_min != gap_count_max) || (gap_count_min == gap_count_default)) {
+        unsigned char gap_count_new = gap_count_default;
+        if (NumOfNodes_ < 25)
+            gap_count_new = gap_counts[NumOfNodes_];
+        std::cout << "OptimizeFirewireGapCount: updating gap count to "
+                  << static_cast<unsigned int>(gap_count_new) << std::endl;
+        // Set bit 12 to indicate write; addr (1) in bits 11-8, data (gap_count) in bits 7-0
+        data = 0x00001100 | static_cast<quadlet_t>(gap_count_new);
+        if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
+            outStr << "OptimizeFirewireGapCount: failed to broadcast PHY command" << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
 bool EthBasePort::checkCRC(const unsigned char *packet)
 {
     // Eliminate CRC checking of FireWire packets received via Ethernet

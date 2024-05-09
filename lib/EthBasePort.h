@@ -143,6 +143,9 @@ protected:
     void make_bread_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, unsigned int nBytes, unsigned int tl);
     void make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_t addr, quadlet_t *data, unsigned int nBytes, unsigned int tl);
 
+    // Optimize Firewire gap count if needed
+    bool OptimizeFirewireGapCount();
+
 public:
 
     EthBasePort(int portNum, bool forceFwBridge, std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
