@@ -36,6 +36,7 @@ http://www.cisst.org/cisst/license.txt.
 //   - Query whether FPGA board has Ethernet interface
 //   - Query FPGA clock period
 //   - Read Ethernet/Firewire buffers from FPGA board (for debugging)
+//   - Read/Write Firewire PHY register
 //
 // This class also contains a firmwareTime member (and accessor methods), which is
 // updated by the derived class to keep a running timer based on the FPGA clock.
@@ -224,7 +225,7 @@ public:
         RTL8211F_PAGSR = 31              // Page Select Register, 0xa43
     };
 
-    // Some useful PHY addresses:
+    // Some useful Ethernet PHY addresses:
     //    FPGAV3 is designed so that the RTL8211F PHY has a default address of 1.
     //    The GMII to RGMII core uses the default PHY address of 8.
     enum PHY_ADDR { PHY_BROADCAST = 0, PHY_RTL8211F = 1, PHY_GMII_CORE = 8 };
@@ -349,6 +350,16 @@ public:
     //    offset  address offset (in quadlets)
     //    nquads  number of quadlets to read (not more than 64)
     bool ReadFirewireData(quadlet_t *buffer, unsigned int offset, unsigned int nquads);
+
+    // Read FireWire PHY register
+    //    addr    FireWire PHY register number (0-15)
+    //    data    Data read from register
+    bool ReadFirewirePhy(unsigned char addr, unsigned char &data);
+
+    // Write FireWire PHY register
+    //    addr    FireWire PHY register number (0-15)
+    //    data    Data to write to register
+    bool WriteFirewirePhy(unsigned char addr, unsigned char data);
 
 protected:
 
