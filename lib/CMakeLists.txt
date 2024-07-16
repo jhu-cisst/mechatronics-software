@@ -101,6 +101,18 @@ if (Amp1394_BUILD_SWIG)
                              ${Amp1394_SOURCE_DIR}/python/test_amp1394.py
                              ${LIBRARY_OUTPUT_PATH}/${CMAKE_CFG_INTDIR}/
                      COMMENT "Copying Python files to ${LIBRARY_OUTPUT_PATH}" )
+
+  # install library and python file
+  install (
+    TARGETS _Amp1394Python
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    COMPONENT Amp1394)
+  install (
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/Amp1394Python.py
+    DESTINATION lib
+    COMPONENT Amp1394)
+
 endif (Amp1394_BUILD_SWIG)
 
 # Create Amp1394 console library
