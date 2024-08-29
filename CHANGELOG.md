@@ -1,6 +1,24 @@
 Change log
 ==========
 
+2.2.0 (2024-08-30)
+==================
+* API changes:
+  * The `udp` port type (`eth` for raw Ethernet) now means to use Ethernet-only if first connected board is FPGA V3 with Firmware Rev 9+; otherwise, use Ethernet/Firewire bridge; to force use of Ethernet/Firewire bridge, specify `udpfw` port type (`ethfw` for raw Ethernet)
+  * Changed Ethernet status/control register format for Firmware Rev 9
+* New features:
+  * Support Firmware Rev 9, which implements the same protocols as Firmware Rev 8, but adds the Ethernet-only configuration
+  * Support Ethernet-only network configuration
+    * The "broadcast write" feature (PC to FPGAs) is implemented using UDP multicast to 224.0.0.100
+    * The "broadcast read" feature (FPGAs to PC) is implemented similar to Firewire, where PC sends "query" command and FPGAs exchange data (using raw multicast) amongst themselves. The primary difference is that the participating FPGA closest to the PC automatically sends a UDP packet when FPGA data exchange is completed (i.e., the PC does not need to read data, as in the Firewire protocol)
+  * Set Firewire gap count via Ethernet when PC not directly connected to Firewire (i.e., Ethernet/Firewire bridge configuration); this improves Ethernet/Firewire bridge timing
+  * Changed Zynq EMIO interface (FPGA V3) to use faster `mmap` interface by default; to use slower `gpiod` interface, set port number to 1 (i.e., `emio:1`)
+  * Increased Zynq EMIO port maximum data size from 128 bytes to 2048 bytes
+  * Added methods to read/write Firewire PHY registers
+  * Added `ethswitch` application that displays status of Ethernet switch implemented in FPGA V3 (also some relevant data from FPGA V2)
+* Bug fixes:
+  * Call `pcap_set_immediate_mode` for newer versions of pcap (raw Ethernet) to prevent interface from hanging
+
 2.1.0 (2023-12-29)
 ==================
 * API changes:
