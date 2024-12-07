@@ -74,6 +74,14 @@ public:
     ZynqEmioPort(int portNum = 0, std::ostream &debugStream = std::cerr);
     ~ZynqEmioPort();
 
+    // Get/set EMIO timeout in microseconds
+    double GetTimeout_us(void) const { return emio->GetTimeout_us(); }
+    void SetTimeout_us(double time_uSec) { emio->SetTimeout_us(time_uSec); }
+
+    // Get/set EMIO verbose flag
+    bool GetVerbose() const { return emio->GetVerbose(); }
+    void SetVerbose(bool newState) { emio->SetVerbose(newState); }
+
     //****************** BasePort pure virtual methods ***********************
 
     PortType GetPortType(void) const { return PORT_ZYNQ_EMIO; }
