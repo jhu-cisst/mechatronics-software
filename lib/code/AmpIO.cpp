@@ -266,23 +266,27 @@ std::string AmpIO::GetQLASerialNumber(unsigned char chan)
     // Format: QLA 1234-56 or QLA 1234-567.
     // String is terminated by 0 or 0xff.
     uint16_t address = 0x0000;
-    uint8_t data[20];
+    // QLASNSize must be a multiple of 4
     const size_t QLASNSize = 12;
+    uint8_t data[QLASNSize+1];
     std::string sn;
 
     data[QLASNSize] = 0;  // make sure null-terminated
-    for (size_t i = 0; i < QLASNSize; i++) {
-        if (!PromReadByte25AA128(address, data[i], chan)) {
-            if (chan == 0)
-                std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
-            else
-                std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA " << static_cast<unsigned int>(chan)
-                          << " Serial Number" << std::endl;
-            break;
+    if (!PromReadBlock25AA128(address, reinterpret_cast<quadlet_t *>(data), QLASNSize/sizeof(quadlet_t), chan)) {
+        if (chan == 0)
+            std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA Serial Number" << std::endl;
+        else
+            std::cerr << "AmpIO::GetQLASerialNumber: failed to get QLA " << static_cast<unsigned int>(chan)
+                      << " Serial Number" << std::endl;
+    }
+    else {
+        // Convert any trailing 0xff characters to null (0)
+        for (int i = QLASNSize-1; i >= 0; i--) {
+            if (data[i] == 0xff)
+                data[i] = 0;
+            else if (data[i] != 0)
+                break;
         }
-        if (data[i] == 0xff)
-            data[i] = 0;
-        address += 1;
     }
     if (strncmp((char *)data, "QLA ", 4) == 0 || strncmp((char *)data, "dRA ", 4) == 0)
         sn.assign((char *)data+4);

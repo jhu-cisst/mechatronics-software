@@ -435,6 +435,10 @@ bool FpgaIO::PromReadBlock25AA128(uint16_t addr, quadlet_t *data, unsigned int n
     if (!port->WriteQuadlet(BoardId, address, write_data))
         return false;
 
+    // TODO: rather than PromDelay, can implement WaitProm25AA128, which can check
+    //       the lowest 3 bits of the status register (0 -> IDLE)
+    port->PromDelay();
+
     // get result
     if (!port->ReadBlock(BoardId, (address|0x0100), data, nquads * 4))
         return false;
