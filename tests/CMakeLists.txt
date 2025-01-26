@@ -41,8 +41,8 @@ target_link_libraries(qlacloserelays ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRAR
 add_executable(qlacommand qlacommand.cpp)
 target_link_libraries(qlacommand ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
-add_executable(eth1394Test mainEth1394.cpp MotorVoltage.h MotorVoltage.cpp)
-target_link_libraries(eth1394Test ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+add_executable(fpgatest fpgatest.cpp MotorVoltage.h MotorVoltage.cpp)
+target_link_libraries(fpgatest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
 add_executable(instrument instrument.cpp)
 target_link_libraries(instrument ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
@@ -67,7 +67,7 @@ install (PROGRAMS ${EXECUTABLE_OUTPUT_PATH}/quad1394eth
          COMPONENT Amp1394-utils
          DESTINATION bin)
 
-install (TARGETS qlacloserelays qlacommand eth1394Test instrument block1394eth enctest ethswitch
+install (TARGETS qlacloserelays qlacommand fpgatest instrument block1394eth enctest ethswitch
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
 
