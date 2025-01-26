@@ -929,7 +929,7 @@ void TestBlockWrite(unsigned int wlen_max, AmpIO *wboard, AmpIO *rboard)
     }
 }
 
-void TestWaveform(AmpIO *board)
+void TestWaveform(AmpIO *board, size_t numReads = 1)
 {
     const unsigned int WLEN = 256;
     quadlet_t waveform[WLEN];
@@ -961,20 +961,25 @@ void TestWaveform(AmpIO *board)
         return;
     }
     Amp1394_Sleep(0.05);
-    std::cout << "Reading data" << std::endl;
-    if (!board->ReadWaveformTable(waveform_read, 0, WLEN)) {
-        std::cout << "ReadWaveformTable failed" << std::endl;
-        return;
-    }
-    for (i = 0; i < WLEN; i++) {
-        if (waveform_read[i] != waveform[i]) {
-            std::cout << "Mismatch at quadlet " << i << ", read " << std::hex
-                      << waveform_read[i] << ", expected " << waveform[i]
-                      << std::dec << std::endl;
+    for (size_t n = 0; n < numReads; n++) {
+        std::cout << "Reading data";
+        if (numReads > 1)
+            std::cout << ": iteration " << n;
+        std::cout << std::endl;
+        if (!board->ReadWaveformTable(waveform_read, 0, WLEN)) {
+            std::cout << "ReadWaveformTable failed" << std::endl;
             return;
         }
+        for (i = 0; i < WLEN; i++) {
+            if (waveform_read[i] != waveform[i]) {
+                std::cout << "Mismatch at quadlet " << i << ", read " << std::hex
+                          << waveform_read[i] << ", expected " << waveform[i]
+                          << std::dec << std::endl;
+                return;
+            }
+        }
+        std::cout << "Pattern verified!" << std::endl;
     }
-    std::cout << "Pattern verified!" << std::endl;
 #if 0
     // Following code will actually generate waveform on DOUT lines
     board->WriteDigitalOutput(0x0f,0x00);
@@ -1137,6 +1142,7 @@ int main(int argc, char **argv)
     int port = 0;
     std::string IPaddr(ETH_UDP_DEFAULT_IP);
     bool fwBridge = false;
+    bool isVerbose = false;
 
     if (argc > 1) {
         for (int i = 1; i < argc; i++) {
@@ -1149,10 +1155,14 @@ int main(int argc, char **argv)
                     useEthernet = false;
                 }
             }
+            else if ((argv[i][0] == '-') && (argv[i][1] == 'v')) {
+                isVerbose = true;
+            }
             else {
-                    std::cerr << "Usage: eth1394test [-pP]" << std::endl
+                    std::cerr << "Usage: eth1394test [-pP] [-v]" << std::endl
                     << "       where P = port number (default 0)" << std::endl
-                    << "                 can also specify -pethP or -pudp" << std::endl;
+                    << "                 can also specify -pethP or -pudp" << std::endl
+                    << "            -v   verbose output (ZynqEmioPort)" << std::endl;
                     return 0;
             }
 
@@ -1202,11 +1212,14 @@ int main(int argc, char **argv)
         }
     }
 #elif Amp1394_HAS_EMIO
-    FwPort = new ZynqEmioPort(port, std::cout);
-    if (!FwPort->IsOK()) {
+    ZynqEmioPort *ZynqPort;
+    ZynqPort = new ZynqEmioPort(port, std::cout);
+    if (!ZynqPort->IsOK()) {
         std::cout << "Failed to initialize Zynq EMIO port" << std::endl;
         return 0;
     }
+    ZynqPort->SetVerbose(isVerbose);
+    FwPort = ZynqPort;
     FwPortIsZynq = true;
     // Zynq EMIO port always has one node (0)
     unsigned int bnum = FwPort->GetBoardId(0);
@@ -1625,7 +1638,7 @@ int main(int argc, char **argv)
             break;
 
         case 'w':
-            TestWaveform(curBoard);
+            TestWaveform(curBoard, 10);
             break;
 
         case 'x':
