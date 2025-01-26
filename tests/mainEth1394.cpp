@@ -1186,6 +1186,7 @@ int main(int argc, char **argv)
     std::string FwPortString;
     std::string curPortString;
 
+    bool FwPortIsZynq = false;
 #if Amp1394_HAS_RAW1394
     FwPort = new FirewirePort(port, std::cout);
     if (!FwPort->IsOK()) {
@@ -1206,6 +1207,7 @@ int main(int argc, char **argv)
         std::cout << "Failed to initialize Zynq EMIO port" << std::endl;
         return 0;
     }
+    FwPortIsZynq = true;
     // Zynq EMIO port always has one node (0)
     unsigned int bnum = FwPort->GetBoardId(0);
     if (bnum < BoardIO::MAX_BOARDS) {
@@ -1271,6 +1273,11 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    if (!curBoardEth && !curBoardFw) {
+        std::cout << "No boards found - exiting" << std::endl;
+        return -1;
+    }
+
 #ifndef _MSC_VER
     // Turn off buffered I/O for keyboard
     struct termios oldTerm, newTerm;
@@ -1321,7 +1328,8 @@ int main(int argc, char **argv)
         if (curPort == FwPort)
             std::cout << "  6) Initialize Ethernet port" << std::endl;
         std::cout << "  7) Ethernet status info" << std::endl;
-        std::cout << "  8) Multicast quadlet read" << std::endl;
+        if (FwPortIsZynq || (curPort == EthPort))
+            std::cout << "  8) Multicast quadlet read" << std::endl;
         std::cout << "  a) WriteAllBoards test" << std::endl;
         std::cout << "  B) BlockWrite test (Waveform table)" << std::endl;
         if (((curPort == EthPort) && (EthBoardList.size() > 1)) ||
@@ -1336,14 +1344,12 @@ int main(int argc, char **argv)
         std::cout << "  i) Read IPv4 address" << std::endl;
         std::cout << "  I) Clear IPv4 address" << std::endl;
         std::cout << "  m) Initialize and test I/O Expander (QLA 1.5+)" << std::endl;
-        if (FwPort && EthPort)
+        if (curBoardFw && curBoardEth)
             std::cout << "  p) Toggle port (" << FwPortString << " or " << EthPortString << ")" << std::endl;
         std::cout << "  P) Compute Ethernet PHY IDs" << std::endl;
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
-#if Amp1394_HAS_RAW1394
-        if (curPort == FwPort)
+        if (!FwPortIsZynq && (curPort == FwPort))
             std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
-#endif
         std::cout << "  t) Run timing analysis" << std::endl;
         std::cout << "  v) Measure motor power supply voltage (QLA 1.5+)" << std::endl;
         std::cout << "  w) Test waveform buffer" << std::endl;
@@ -1450,13 +1456,15 @@ int main(int argc, char **argv)
             PrintEthernetStatus(*curBoard);
             break;
 
-        case '8':   // Multicast quadlet read
-            read_data = 0;
-            addr = 0;  // Return status register
-            if (curPort->ReadQuadlet(FW_NODE_BROADCAST, addr, read_data))
-                std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
-            else
-                std::cout << "Failed to read quadlet via " << curPortString << " port" << std::endl;
+        case '8':   // Multicast quadlet read (not supported on Firewire)
+            if (FwPortIsZynq || (curPort == EthPort)) {
+                read_data = 0;
+                addr = 0;  // Return status register
+                if (curPort->ReadQuadlet(FW_NODE_BROADCAST, addr, read_data))
+                    std::cout << "Read quadlet data: " << std::hex << read_data << std::endl;
+                else
+                    std::cout << "Failed to read quadlet via " << curPortString << " port" << std::endl;
+            }
             break;
 
         case 'a':
@@ -1467,11 +1475,11 @@ int main(int argc, char **argv)
             break;
 
         case 'B':
-            if (curBoardEth && curBoardFw) {
+            if (curBoardEth && curBoardFw && (EthBoardNum == FwBoardNum)) {
                 unsigned int wlen_max_eth = (EthPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 unsigned int wlen_max_fw = (FwPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 unsigned int wlen_max = std::min(wlen_max_eth, wlen_max_fw);
-                if (curPort == EthPort) {
+                if (curBoard == curBoardEth) {
                     std::cout << "Write via " << EthPortString << ", read via " << FwPortString << std::endl;
                     TestBlockWrite(wlen_max, curBoardEth, curBoardFw);
                 }
@@ -1481,12 +1489,12 @@ int main(int argc, char **argv)
                     TestBlockWrite(wlen_max, curBoardFw, curBoardEth);
                 }
             }
-            else if (curPort == FwPort) {
+            else if (curBoard == curBoardFw) {
                 unsigned int wlen_max = (FwPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 std::cout << "Testing via " << FwPortString << std::endl;
                 TestBlockWrite(wlen_max, curBoardFw, curBoardFw);
             }
-            else if (curPort == EthPort) {
+            else if (curBoard == curBoardEth) {
                 unsigned int wlen_max = (EthPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 std::cout << "Testing via " << EthPortString << std::endl;
                 TestBlockWrite(wlen_max, curBoardEth, curBoardEth);
@@ -1561,7 +1569,7 @@ int main(int argc, char **argv)
             break;
 
         case 'p':    // Select Ethernet or Firewire/Zynq-EMIO
-            if (FwPort && EthPort) {
+            if (curBoardFw && curBoardEth) {
                 if (curPort == FwPort) {
                     curPort = EthPort;
                     curPortString = EthPortString;
@@ -1587,16 +1595,20 @@ int main(int argc, char **argv)
                 curPort->CheckFwBusGeneration(curPortString, true);
             break;
 
-#if Amp1394_HAS_RAW1394
         case 'R':
-            if (curPort == FwPort)
+            if (!FwPortIsZynq && (curPort == FwPort))
                 ReadConfigROM(curPort, curBoardNum);
             break;
-#endif
 
         case 't':
-            RunTiming(curPortString, curBoard, (curPort == EthPort) ? EthPort : 0, "quadlet read");
-            RunTiming(curPortString, curBoard, (curPort == EthPort) ? EthPort : 0, "quadlet write");
+            if (EthPort && (curBoardNum == EthBoardNum)) {
+                RunTiming(curPortString, curBoard, EthPort, "quadlet read");
+                RunTiming(curPortString, curBoard, EthPort, "quadlet write");
+            }
+            else {
+                RunTiming(curPortString, curBoard, 0, "quadlet read");
+                RunTiming(curPortString, curBoard, 0, "quadlet write");
+            }
             break;
 
         case 'v':
