@@ -361,6 +361,9 @@ public:
     //    data    Data to write to register
     bool WriteFirewirePhy(unsigned char addr, unsigned char data);
 
+    // Print FireWire debug data
+    static void PrintFirewireDebug(std::ostream &debugStream, const quadlet_t *data);
+
 protected:
 
     // Accumulated firmware time

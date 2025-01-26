@@ -764,3 +764,59 @@ bool FpgaIO::WriteFirewirePhy(unsigned char addr, unsigned char data)
     quadlet_t write_data = 0x00001000 | static_cast<quadlet_t>(addr) << 8 | static_cast<quadlet_t>(data);
     return port->WriteQuadlet(BoardId, BoardIO::FW_PHY_REQ, write_data);
 }
+
+
+void FpgaIO::PrintFirewireDebug(std::ostream &debugStream, const quadlet_t *data)
+{
+    // Following structure must match DebugData in Firewire.v
+    struct DebugData {
+        char     header[4];        // Quad 0
+        uint8_t  misc_info;        // Quad 1
+        uint8_t  bus_info;
+        uint8_t  lreq_info;
+        uint8_t  state;
+        uint8_t  numPhyStatus;     // Quad 2
+        uint8_t  numTxGrant;
+        uint8_t  numRecv;
+        uint8_t  numHubSendReq;
+        uint16_t stcount;          // Quad 3
+        uint8_t  numPktRecv;
+        uint8_t  numEthSendReq;
+    };
+    const DebugData *p = reinterpret_cast<const DebugData *>(data);
+    if (strncmp(p->header, "DBG", 3) != 0) {
+        debugStream << "  PrintFirewireDebug: Unexpected header string: " << p->header[0]
+                    << p->header[1] << p->header[2] << " (should be DBG)" << std::endl;
+        return;
+    }
+    debugStream << "  State: " << static_cast<uint16_t>(p->state >> 4)
+                << ", Next: " << static_cast<uint16_t>(p->state & 0xf0) << std::endl;
+    if (p->lreq_info & 0x80)
+        debugStream << "  lreq_type: " << static_cast<uint16_t>((p->lreq_info & 0x70) >> 4) << std::endl;
+    if (p->lreq_info & 0x08)
+        debugStream << "  lreq_busy" << std::endl;
+    debugStream << "  tx_type: " << static_cast<uint16_t>(p->lreq_info & 0x07) << std::endl;
+    debugStream << "  ";
+    if (p->bus_info & 0x80)
+        debugStream << "req_write_bus ";
+    if (p->bus_info & 0x40)
+        debugStream << "grant_write_bus ";
+    debugStream << "node_id: " << static_cast<uint16_t>(p->bus_info & 0x3f) << std::endl;
+    debugStream << "  ";
+    if (p->misc_info & 0x80)
+        debugStream << "data_block ";
+    if (p->misc_info & 0x08)
+        debugStream << "recvCtlInvalid ";
+    if (p->misc_info & 0x04)
+        debugStream << "recvPktNull ";
+    if (p->misc_info & 0x02)
+        debugStream << "link_active ";
+    debugStream << "  rx_speed: " << static_cast<uint16_t>((p->misc_info & 0x70)>>4) << std::endl;
+    debugStream << "  numHubSendReq: " << static_cast<uint16_t>(p->numHubSendReq) << std::endl;
+    debugStream << "  numRecv: " << static_cast<uint16_t>(p->numRecv) << std::endl;
+    debugStream << "  numPktRecv: " << static_cast<uint16_t>(p->numPktRecv) << std::endl;
+    debugStream << "  numTxGrant: " << static_cast<uint16_t>(p->numTxGrant) << std::endl;
+    debugStream << "  numPhyStatus: " << static_cast<uint16_t>(p->numPhyStatus) << std::endl;
+    debugStream << "  numEthSendReq: " << static_cast<uint16_t>(p->numEthSendReq) << std::endl;
+    debugStream << "  stcount: " << p->stcount << std::endl;
+}

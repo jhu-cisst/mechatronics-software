@@ -1368,8 +1368,7 @@ int main(int argc, char **argv)
             std::cout << "  x) Read Ethernet debug data" << std::endl;
             std::cout << "  X) Clear Ethernet errors" << std::endl;
         }
-        if (curBoardEth)
-            std::cout << "  y) Read Firewire data via Ethernet" << std::endl;
+        std::cout << "  y) Read Firewire debug data" << std::endl;
         if (curBoardFw)
             std::cout << "  z) Check Ethernet initialization" << std::endl;
         std::cout << "Select option: ";
@@ -1725,8 +1724,21 @@ int main(int argc, char **argv)
             break;
 
         case 'y':
-            if (curBoardEth && (curBoardEth->ReadFirewireData(buffer, 0, 64)))
-                EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
+            if (curBoardEth) {
+                if (curBoardEth->ReadFirewireData(buffer, 0, 64)) {
+                    EthBasePort::PrintFirewirePacket(std::cout, buffer, 64);
+                }
+                if (curBoardEth->ReadFirewireData(buffer, 0x200, 4)) {
+                    std::cout << "Firewire debug data (via " << EthPortString << "):" << std::endl;
+                    FpgaIO::PrintFirewireDebug(std::cout, buffer);
+                }
+            }
+            if (curBoardFw) {
+                if (curBoardEth->ReadFirewireData(buffer, 0x200, 4)) {
+                    std::cout << "Firewire debug data (via " << FwPortString << "):" << std::endl;
+                    FpgaIO::PrintFirewireDebug(std::cout, buffer);
+                }
+            }
             break;
 
         case 'z':
