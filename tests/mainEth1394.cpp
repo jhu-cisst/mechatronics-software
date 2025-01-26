@@ -1471,11 +1471,15 @@ int main(int argc, char **argv)
                 unsigned int wlen_max_eth = (EthPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 unsigned int wlen_max_fw = (FwPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
                 unsigned int wlen_max = std::min(wlen_max_eth, wlen_max_fw);
-                std::cout << "Write via " << EthPortString << ", read via " << FwPortString << std::endl;
-                TestBlockWrite(wlen_max, curBoardEth, curBoardFw);
-                std::cout << std::endl
-                          <<"Write via " << FwPortString << ", read via " << EthPortString << std::endl;
-                TestBlockWrite(wlen_max, curBoardFw, curBoardEth);
+                if (curPort == EthPort) {
+                    std::cout << "Write via " << EthPortString << ", read via " << FwPortString << std::endl;
+                    TestBlockWrite(wlen_max, curBoardEth, curBoardFw);
+                }
+                else {
+                    std::cout << std::endl
+                              <<"Write via " << FwPortString << ", read via " << EthPortString << std::endl;
+                    TestBlockWrite(wlen_max, curBoardFw, curBoardEth);
+                }
             }
             else if (curPort == FwPort) {
                 unsigned int wlen_max = (FwPort->GetMaxWriteDataSize()/sizeof(quadlet_t));
