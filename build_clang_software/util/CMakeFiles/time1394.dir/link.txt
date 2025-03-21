@@ -1,0 +1,1 @@
+/mnt/c/Users/kiggz/research/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/clang -O3 -DNDEBUG -Xlinker --dependency-file=CMakeFiles/time1394.dir/link.d CMakeFiles/time1394.dir/time1394.c.o -o ../bin/time1394  -lraw1394

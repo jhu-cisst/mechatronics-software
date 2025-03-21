@@ -1,0 +1,2 @@
+/mnt/c/Users/kiggz/research/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/llvm-ar qc libAmp1394Console.a CMakeFiles/Amp1394Console.dir/code/Amp1394Console.cpp.o
+/mnt/c/Users/kiggz/research/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/llvm-ranlib libAmp1394Console.a
