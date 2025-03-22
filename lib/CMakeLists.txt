@@ -65,21 +65,21 @@ if (Amp1394_BUILD_SWIG)
   find_package(SWIG REQUIRED)
   include(${SWIG_USE_FILE})
 
-  find_package(PythonLibs)
-  include_directories(${PYTHON_INCLUDE_PATH})
+  # Find Python and NumPy
+  set (AMP1394_PYTHON_VERSION_REQUIRED "" CACHE STRING "Required Python version (if not empty)")
+  if (AMP1394_PYTHON_VERSION_REQUIRED)
+    message (STATUS "Looking for Python ${AMP1394_PYTHON_VERSION_REQUIRED}")
+    find_package (Python ${AMP1394_PYTHON_VERSION_REQUIRED} EXACT REQUIRED COMPONENTS Development NumPy)
+  else ()
+    find_package (Python REQUIRED COMPONENTS Interpreter Development NumPy)
+  endif ()
 
-  find_package(PythonInterp)
-  if (PYTHON_EXECUTABLE)
-    execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import numpy; print(numpy.get_include())"
-                    ERROR_QUIET
-                    OUTPUT_VARIABLE Amp1394_NUMPY_INCLUDE_DIR
-                    OUTPUT_STRIP_TRAILING_WHITESPACE)
-    include_directories(${Amp1394_NUMPY_INCLUDE_DIR} "${Amp1394_BINARY_DIR}/Amp1394")
-  endif()
+  include_directories(${Python_INCLUDE_DIRS} ${Python_NumPy_INCLUDE_DIRS})
+  include_directories("${Amp1394_BINARY_DIR}/Amp1394")
 
   set_source_files_properties(Amp1394.i PROPERTIES CPLUSPLUS ON)
   swig_add_module(Amp1394Python python Amp1394.i ${HEADERS} ${SOURCE_FILES})
-  swig_link_libraries(Amp1394Python ${PYTHON_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
+  swig_link_libraries(Amp1394Python ${Python_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
   if (WIN32)
     set_target_properties (_Amp1394Python PROPERTIES SUFFIX .pyd)
