@@ -276,7 +276,7 @@ Result TestSerialNumberAndVersion(AmpIO **Board, BasePort *Port) {
 *   @brief: Function to test analog inputs of the dVRK.
 *
 *   @details: This function tests each channel on each FPGA board to ensure the analog
-*   inputs (potentiameters) from the dVRK have their expected values (within a specified
+*   inputs (potentiometers) from the dVRK have their expected values (within a specified
 *   tolerance) when the motors are adjusted.
 *   
 *   @param AmpIO  (**Board): Array of board objects to have this function performed on
@@ -286,8 +286,8 @@ Result TestSerialNumberAndVersion(AmpIO **Board, BasePort *Port) {
 *   @return testResult (Result): result object indicating pass, fail, or fatal_fail 
 *                                status of the test
 *
-*   @note: This function outputs debug information to standand out and the logfile; it
-*   outputs the board, potentiameter channel, the expected and actual measrued inputs.
+*   @note: This function outputs debug information to standard out and the logfile; it
+*   outputs the board, potentiometer channel, the expected and actual measured inputs.
 *   @note: This test also outputs debugging info if one of the measured potentiometer
 *   values match the expected value for a different potentiometer. It output that there
 *   a DB68 SCSI cable is potentially crossed.
@@ -337,10 +337,10 @@ Result TestAnalogInputs(AmpIO **Board, BasePort *Port) {
 *   @return testResult (Result): result object indicating pass, fail, or fatal_fail 
 *                                status of the test
 *
-*   @note: This function outputs debug information to standand out and the logfile; it
+*   @note: This function outputs debug information to standard out and the logfile; it
 *   outputs the digital inputs.
 *   @note: This test also notes that false positive readings can cause failure and might
-*   need to have to the test run again.
+*   need to run the test again.
 ****************************************************************/
 Result TestDigitalInputs(AmpIO **Board, BasePort *Port) {
     Result result = pass;
@@ -395,7 +395,7 @@ Result TestDigitalInputs(AmpIO **Board, BasePort *Port) {
 *   
 *   @details: This function tests if the encoders properly measure the expected change in
 *   position after a set amount of time has passed (1000 milliseconds). It also outputs
-*   the results to standand out and the logfile. 
+*   the results to standard out and the logfile. 
 *
 *   @param AmpIO  (**Board): Array of board objects to have this function performed on
 *   @param BasePort (*Port): Communication interface object that provides access to the 
@@ -404,10 +404,10 @@ Result TestDigitalInputs(AmpIO **Board, BasePort *Port) {
 *   @return testResult (Result): result object indicating pass, fail, or fatal_fail 
 *                                status of the test
 *
-*   @note: This function outputs debug information to standand out and the logfile; it
-*   primaily outputs the measured difference in position and the expected difference.
+*   @note: This function outputs debug information to standard out and the logfile; it
+*   primarily outputs the measured difference in position and the expected difference.
 *   @note: This test also outputs debugging info if specific patterns of encoders fail, 
-*   such as encoders 0 through 3 working but 4 though 6 are not, which might indicate 
+*   such as encoders 0 through 3 working but 4 through 6 are not, which might indicate 
 *   an issue with a cable.
 ****************************************************************/
 Result TestEncoders(AmpIO **Board, BasePort *Port) {
@@ -446,7 +446,7 @@ Result TestEncoders(AmpIO **Board, BasePort *Port) {
 
         logDebugInfo(std::dec, "encoder ", i, " increment - expected=10 measured=",increment);
         if (std::fabs((long) increment - (long) ENCODER_TEST_INCREMENT) < ENCODER_TEST_INCREMENT_TOLERANCE) {
-            logPass()
+            logPass();
             each_encoder_result |= 1 << i;
         } else {
             logFail(result, fatal_fail);
@@ -469,7 +469,7 @@ Result TestEncoders(AmpIO **Board, BasePort *Port) {
 }
 
 /****************************************************************
-*   @brief: Function to power supplies of boards and channels in the dVRK.
+*   @brief: Function to test power supplies of boards and channels in the dVRK.
 *   
 *   @details: This function goes through each board and checks its motor power 
 *   supply/voltage. Then, it proceeds to check each of the channels on the board for 
@@ -484,8 +484,8 @@ Result TestEncoders(AmpIO **Board, BasePort *Port) {
 *
 *   @note: This function outputs debug information to standard out and the logfile. It
 *   outputs if the issue is the board's power supply or one of the amplifiers.
-*   @note: This function first relay's status on the board to ensure that there is a 
-*   connection for the power supplies to flow. If there is not, the function will fail 
+*   @note: This function first checks the relay status on the board to ensure that there 
+*   is a connection for the power supplies to flow. If there is not, the function will fail 
 *   and note that none of the board has power and output debug information to standard 
 *   out accordingly.
 ****************************************************************/
@@ -561,19 +561,19 @@ Result TestMotorPowerControl(AmpIO **Board, BasePort *Port) {
 *   tests the motor current operation. It first tests that the motor has no current
 *   when it is meant to be off. It then sets the motor current and reads that the 
 *   motor current is as expected. Then it tests if the current drives the actual
-*   analog devices (the analog device performance is read from the potentiameters)
+*   analog devices (the analog device performance is read from the potentiometers)
 *   as expected.
 *
 *   @param AmpIO  (**Board): Array of board objects to have this function performed on
 *   @param BasePort (*Port): Communication interface object that provides access to the 
-*                            physical connection to the controller boards     
+*                            physical connection to the controller boards      
 *
 *   @return testResult (Result): result object indicating pass, fail, or fatal_fail 
 *                                status of the test
 *
 *   @note: This function outputs debug information to standard out and the logfile. It
-*   outputs the board, amplifier channel, expectd and actual motor current values.
-*   @note: This function has extra logic to test if the db9 cables might be crossed or
+*   outputs the board, amplifier channel, expected and actual motor current values.
+*   @note: This function has extra logic to test if the DB9 cables might be crossed or
 *   even not plugged in.
 *   
 ****************************************************************/
@@ -663,12 +663,12 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
 *
 *   @param AmpIO  (**Board): Array of board objects to have this function performed on
 *   @param BasePort (*Port): Communication interface object that provides access to the 
-*                            physical connection to the controller boards     
+*                            physical connection to the controller boards  
 *
 *   @return testResult (Result): result object indicating pass, fail, or fatal_fail 
 *                                status of the test
 *
-*   @note: This function outputs debug information to standand out and the logfile, but 
+*   @note: This function outputs debug information to standard out and the logfile, but 
 *   only what the test failed on.
 ****************************************************************/
 Result TestDallas(AmpIO **Board, BasePort *Port) {
@@ -711,53 +711,22 @@ void PrintDebugStream(std::stringstream &debugStream)
     debugStream.str("");
 }
 
-int main(int argc, char **argv)
-{
-    int board1 = BoardIO::MAX_BOARDS;
-    int board2 = BoardIO::MAX_BOARDS;
-
-    std::string portDescription = BasePort::DefaultPort();
-
-    for (int i = 1; i < argc; i++) {
-        if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
-            // -p option can be -pN, -pfwN, or -pethN, where N
-            // is the port number. -pN is equivalent to -pfwN
-            // for backward compatibility.
-            portDescription = argv[i]+2;
-        }
-    }
-
-    std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
-    if (!Port || !Port->IsOK()) {
-        PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
-        std::cerr << "Press [Enter] to exit" << std::endl;
-        std::cin.ignore();
-        return -1;
-    }
-
-    // Now that Port is initialized, look for dVRK Controllers
-    std::vector<ControllerInfo> ControllerList = GetControllerList(Port);
-    if (ControllerList.size() > 0) {
-        std::cout << "Controllers on " << Port->GetPortTypeString() << ":" << std::endl;
-        std::vector<ControllerInfo>::const_iterator it;
-        for (it = ControllerList.begin(); it != ControllerList.end(); it++) {
-            std::cout << "   " << ControllerTypeString[it->armType] << ", " << Port->GetHardwareVersionString(it->board_id);
-            if (it->hwVersion == QLA1_String)
-                std::cout << ", boards " << it->board_id << ", " << it->board_id+1 << std::endl;
-            else
-                std::cout << ", board " << it->board_id << std::endl;
-        }
-        std::cout << std::endl;
-    }
-    else {
-        std::cout << "No controllers found on " << Port->GetPortTypeString() << ", exiting" << std::endl;
-        std::cout << "Press [Enter] to exit" << std::endl;
-        std::cin.ignore();
-        return -1;
-    }
-
+/****************************************************************
+*   @brief: Function to check for problems with controllers.
+*
+*   @details: This function checks for any issues with the controllers in the dVRK 
+*   before running the tests.
+*
+*   @param ControllerList (std::vector<ControllerInfo>): A vector of the controllers
+*                         that were found in the dVRK and information about them (The 
+*                         ControllerInfo struct can be found in this file).
+*                           
+*   @return int: this int indicates if there was an error found. -1 indicates that an 
+*           error was found with the controllers and 0 indicates no error
+*
+*   @note: This function also outputs to standard out what the issue found was.
+****************************************************************/
+int controllerErrorCheck(std::vector<ControllerInfo> &ControllerList) {
     if (ControllerList.size() != 1) {
         std::cout << "More than one controller found, please remove all controllers except unit under test" << std::endl;
         std::cout << "Press [Enter] to exit" << std::endl;
@@ -794,11 +763,187 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    std::cout << "*********** dVRK  Classic Controller Test ***********" << std::endl;
-    std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
+    return 0;
+}
 
-    // If user did not specify board id, use the one obtained by scanning the bus
-    // (program no longer supports user specification of board id).
+/****************************************************************
+*   @brief: Function to setup the port and controllers.
+*
+*   @details: This function does the initial setup of the port and controllers in
+*   the dVRK, including calling the function to check for any errors with the
+*   controllers.
+*
+*   @param argc (int): number of command line arguments in the terminal.
+*   @param argv (char**): pointer to array of strings of the command line arguments
+*                         provided in the terminal.
+*   @param BasePort (*Port): Communication interface object that provides access to the 
+*                            physical connection to the controller boards 
+*   @param ControllerList (std::vector<ControllerInfo>): A vector of the controllers
+*                         that were found in the dVRK and information about them.
+*                   
+*   @return int: this int indicates if there was an error found in the setup. -1 
+*                indicates that an error was found and 0 indicates no error.
+*
+*   @note: This function also outputs to standard out or standard error some debug
+*   information on if the port failed to initialize or no controllers are found.
+****************************************************************/
+int portAndControllerSetup(int argc, char **argv, BasePort **Port, std::vector<ControllerInfo> &ControllerList) {
+    std::string portDescription = BasePort::DefaultPort();
+
+    for (int i = 1; i < argc; i++) {
+        if ((argv[i][0] == '-') && (argv[i][1] == 'p')) {
+            portDescription = argv[i]+2;
+        }
+    }
+
+    std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
+    *Port = PortFactory(portDescription.c_str(), debugStream);
+    if (!(*Port) || !(*Port)->IsOK()) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to initialize " << (*Port)->GetPortTypeString() << std::endl;
+        std::cerr << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
+        return -1;
+    }
+
+    // Now that Port is initialized, look for dVRK Controllers
+    ControllerList = GetControllerList(*Port);
+    if (ControllerList.size() > 0) {
+        std::cout << "Controllers on " << (*Port)->GetPortTypeString() << ":" << std::endl;
+        std::vector<ControllerInfo>::const_iterator it;
+        for (it = ControllerList.begin(); it != ControllerList.end(); it++) {
+            std::cout << "   " << ControllerTypeString[it->armType] << ", " << (*Port)->GetHardwareVersionString(it->board_id);
+            if (it->hwVersion == QLA1_String)
+                std::cout << ", boards " << it->board_id << ", " << it->board_id+1 << std::endl;
+            else
+                std::cout << ", board " << it->board_id << std::endl;
+        }
+        std::cout << std::endl;
+    }
+    else {
+        std::cout << "No controllers found on " << (*Port)->GetPortTypeString() << ", exiting" << std::endl;
+        std::cout << "Press [Enter] to exit" << std::endl;
+        std::cin.ignore();
+        return -1;
+    }
+
+    return controllerErrorCheck(ControllerList);
+}
+
+/****************************************************************
+*   @brief: Function to check motor supply voltages of the dVRK.
+*
+*   @details: This function measures the motor supply voltages on the connected
+*   QLA boards and compares them against the expected nominal values based on the
+*   controller type. It handles both DQLA (dual QLA) and standard QLA configurations.
+*
+*   @param BasePort (*Port): Communication interface object that provides access to the 
+*                           physical connection to the controller boards 
+*   @param BoardList (std::vector<AmpIO *>): Vector of AmpIO board objects 
+*                       representing the hardware interface to the controller boards
+*   @param board1 (int): The board ID of the primary FPGA board
+*
+*   @return none
+*
+*   @note: This function outputs the measured voltage and expected nominal voltage to
+*   standard out and the logfile. 
+****************************************************************/
+void checkMotorSupplyVoltage(BasePort *Port, std::vector<AmpIO *> BoardList, int board1) {
+    double V[2] = { 0.0, 0.0};   // QLA 1,2 measured motor supply voltage
+    if (is_dqla) {
+        V[0] = MeasureMotorSupplyVoltage(Port, BoardList[0], 1);
+        V[1] = MeasureMotorSupplyVoltage(Port, BoardList[0], 2);
+    } else {
+        V[0] = MeasureMotorSupplyVoltage(Port, BoardList[0]);
+        V[1] = MeasureMotorSupplyVoltage(Port, BoardList[1]);
+    }
+    // Nominal motor supply voltages
+    double VNom[2];
+    VNom[0] = ControllerMotorSupplyVoltage[board1];
+    VNom[1] = ControllerMotorSupplyVoltage[board1+1];
+    // Check that measured supply voltage (if non-zero) is not more than
+    // 10% different from nominal voltage. If measured supply voltage is 0,
+    // we assume that hardware cannot measure motor supply voltage.
+    bool V_mismatch = false;
+    for (int v = 0; v < 2; v++) {
+        if (V[v] > 0.0) {
+            logDebugInfo("QLA ", (v+1), " Motor Supply Voltage: ", V[v], " (should be ", VNom[v], ")", std::endl);
+            if (fabs(V[v]-VNom[v]) > 0.1*VNom[v])
+                V_mismatch = true;
+        }
+    }
+    if (V_mismatch) {
+        logDebugInfo("WARNING: Motor supply voltages do not match controller type", std::endl);
+        std::cout << "Press [Enter] to continue. Press [Ctrl-C] to exit." << std::endl;
+        std::cin.ignore();
+    }
+}
+
+/****************************************************************
+*   @brief: Function to execute all test functions in sequence.
+*
+*   @details: This function creates a vector of test function pointers and runs each
+*   test in order. It records the results of each test and handles fatal failures by
+*   immediately terminating the test sequence.
+*
+*   @param Port (*BasePort): Communication interface object that provides access to the 
+*                            physical connection to the controller boards
+*   @param BoardList (std::vector<AmpIO *>): Vector of AmpIO board objects representing
+*                            the hardware interface to the controller boards
+*
+*   @return all_pass (bool): Returns true if all tests passed, false if any test failed
+*
+*   @note: This function logs the result of each test section to the logfile.
+*   @note: If any test results in a fatal failure, the function returns immediately without
+*   running the remaining tests.
+****************************************************************/
+bool runTests(BasePort *Port, std::vector<AmpIO *> BoardList) {
+    std::vector<Result (*)(AmpIO **, BasePort *)> test_functions;
+    test_functions.push_back(TestSerialNumberAndVersion);
+    test_functions.push_back(TestEncoders);
+    test_functions.push_back(TestAnalogInputs);
+    test_functions.push_back(TestDigitalInputs);
+    test_functions.push_back(TestDallas);
+    test_functions.push_back(TestMotorPowerControl);
+    test_functions.push_back(TestPowerAmplifier);
+
+    bool all_pass = true;
+
+    for (auto test_function : test_functions) {
+        auto result = test_function(&BoardList[0], Port);
+        logfile << "Section result: " << (result == pass ? "PASS" : "FAIL") << std::endl;
+        logDebugInfo(std::endl);
+        if (result == fatal_fail) {
+            return false;
+        } else if (result == fail) {
+            all_pass = false;
+        }
+    }
+
+    return all_pass;
+}
+
+/****************************************************************
+*   @brief: Function to set up the AmpIO board objects based on controller configuration.
+*
+*   @details: This function creates and initializes the AmpIO board objects based on
+*   the detected controller type (DQLA or standard QLA). For standard QLA, it sets up
+*   two separate board objects, while for DQLA it sets up a single board object.
+*
+*   @param Port (BasePort**): Pointer to Communication interface object that provides 
+*                           access to the physical connection to the controller boards
+*   @param board1 (int&): Reference to the board ID of the primary FPGA board
+*   @param board2 (int&): Reference to the board ID of the secondary FPGA board (used only
+*                         for standard QLA configuration)
+*
+*   @return BoardList (std::vector<AmpIO *>): Vector of initialized AmpIO board objects
+*
+*   @note: If board1 is set to MAX_BOARDS, indicating that the user did not specify a
+*   board ID, this function uses the board ID obtained from scanning the bus.
+*   @note: The function also updates global variables is_dqla, NUM_FPGA, and 
+*   NUM_CHANNEL_PER_FPGA based on the detected controller type.
+****************************************************************/
+std::vector<AmpIO *> boardSetUp(BasePort **Port, int &board1, int &board2) {
     if (board1 == BoardIO::MAX_BOARDS) {
         board1 = ControllerList[0].board_id;
         if (ControllerList[0].hwVersion == QLA1_String) {
@@ -811,11 +956,31 @@ int main(int argc, char **argv)
 
     std::vector<AmpIO *> BoardList;
     BoardList.push_back(new AmpIO(board1));
-    Port->AddBoard(BoardList[0]);
+    (*Port)->AddBoard(BoardList[0]);
     if (!is_dqla) {
         BoardList.push_back(new AmpIO(board2));
-        Port->AddBoard(BoardList[1]);
+        (*Port)->AddBoard(BoardList[1]);
     }
+
+    return BoardList;
+}
+
+int main(int argc, char **argv) {
+    int board1 = BoardIO::MAX_BOARDS;
+    int board2 = BoardIO::MAX_BOARDS;
+    BasePort *Port;
+    std::vector<ControllerInfo> ControllerList;
+    
+    int setup_result = portAndControllerSetup(argc, argv, &Port, ControllerList);
+    if (setup_result != 0) {
+        std::cout << "Error in port and controller setup" << std::endl;
+        return setup_result;
+    }
+   
+    std::cout << "*********** dVRK  Classic Controller Test ***********" << std::endl;
+    std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
+
+    std::vector<AmpIO *> BoardList = boardSetUp(Port, board1, board2);
 
     Port->ReadAllBoards();
     auto controller_sn = BoardList[0]->GetFPGASerialNumber();
@@ -834,77 +999,21 @@ int main(int argc, char **argv)
     filename << "dVRK_test_results/dVRK_" << controller_sn << "_" << std::put_time(&tm, "%Y-%m-%d-%H-%M-%S") << ".txt";
     logfile.open(filename.str(), std::fstream::out);
 
-
     // Check motor supply voltage
-    double V[2] = { 0.0, 0.0};   // QLA 1,2 measured motor supply voltage
-    if (is_dqla) {
-        V[0] = MeasureMotorSupplyVoltage(Port, BoardList[0], 1);
-        V[1] = MeasureMotorSupplyVoltage(Port, BoardList[0], 2);
-    }
-    else {
-        V[0] = MeasureMotorSupplyVoltage(Port, BoardList[0]);
-        V[1] = MeasureMotorSupplyVoltage(Port, BoardList[1]);
-    }
-    // Nominal motor supply voltages
-    double VNom[2];
-    VNom[0] = ControllerMotorSupplyVoltage[board1];
-    VNom[1] = ControllerMotorSupplyVoltage[board1+1];
-    // Check that measured supply voltage (if non-zero) is not more than
-    // 10% different from nominal voltage. If measured supply voltage is 0,
-    // we assume that hardware cannot measure motor supply voltage.
-    bool V_mismatch = false;
-    for (int v = 0; v < 2; v++) {
-        if (V[v] > 0.0) {
-            std::cout << "QLA " << (v+1) << " Motor Supply Voltage: " << V[v]
-                      << " (should be " << VNom[v] << ")" << std::endl;
-            logfile << "QLA " << (v+1) << " Motor Supply Voltage: " << V[v]
-                      << " (should be " << VNom[v] << ")" << std::endl;
-            if (fabs(V[v]-VNom[v]) > 0.1*VNom[v])
-                V_mismatch = true;
-        }
-    }
-    if (V_mismatch) {
-        std::cout << "WARNING: Motor supply voltages do not match controller type" << std::endl;
-        logfile << "WARNING: Motor supply voltages do not match controller type" << std::endl;
-        std::cout << "Press [Enter] to continue. Press [Ctrl-C] to exit." << std::endl;
-        std::cin.ignore();
-    }
+    checkMotorSupplyVoltage(Port, BoardList, board1);
 
     for (int i = 0; i < NUM_CHANNEL_PER_FPGA; i++) {
         for (auto &j : BoardList)
             j->WriteEncoderPreload(i, 0x1000 * i + 0x1000);
     }
 
-    std::cout << "Board ID selected: Board 0=" << board1;
-    if (!is_dqla) std::cout << " Board 1=" << board2;
-    std::cout << std::endl;
-    logfile << "Board ID selected: Board 0=" << board1;
-    if (!is_dqla) logfile << " Board 1=" << board2;
-    logfile << std::endl;
-
-    bool all_pass = true;
-
-    std::vector<Result (*)(AmpIO **, BasePort *)> test_functions;
-    test_functions.push_back(TestSerialNumberAndVersion);
-    test_functions.push_back(TestEncoders);
-    test_functions.push_back(TestAnalogInputs);
-    test_functions.push_back(TestDigitalInputs);
-    test_functions.push_back(TestDallas);
-    test_functions.push_back(TestMotorPowerControl);
-    test_functions.push_back(TestPowerAmplifier);
-
-    for (auto test_function : test_functions) {
-        auto result = test_function(&BoardList[0], Port);
-        std::cout << std::endl;
-        logfile << "Section result: " << (result == pass ? "PASS" : "FAIL") << std::endl;
-        logfile << std::endl;
-        if (result == fatal_fail) {
-            all_pass = false;
-            break;
-        } else if (result == fail) {
-            all_pass = false;
-        }
+    logDebugInfo("Board ID selected: Board 0=", board1);
+    if (!is_dqla) {
+        logDebugInfo(" Board 1=", board2);
     }
+    logDebugInfo(std::endl);
+
+    bool all_pass = runTests(Port, BoardList);
 
     if (all_pass) {
         std::cout << COLOR_GOOD << "PASS" << COLOR_OFF << ": all tests passed." <<std::endl;
@@ -912,7 +1021,6 @@ int main(int argc, char **argv)
         std::cout << COLOR_ERROR << "FAIL" << COLOR_OFF << ": one or more tests failed." << std::endl;
     }
     logfile << "Final result: " << (all_pass ? "PASS" : "FAIL") << std::endl;
-
 
     for (auto &j : BoardList) {
         j->WritePowerEnable(false);
@@ -924,5 +1032,4 @@ int main(int argc, char **argv)
     std::cin.ignore();
 
     return all_pass ? 0 : -1;
-
 }
