@@ -276,8 +276,8 @@ Result TestSerialNumberAndVersion(AmpIO **Board, BasePort *Port) {
 *   @brief: Function to test analog inputs of the dVRK.
 *
 *   @details: This function tests each channel on each FPGA board to ensure the analog
-*   inputs (potentiometers) from the dVRK have their expected values (within a specified
-*   tolerance) when the motors are adjusted.
+*   inputs (potentiometers that measure the positions of the robotic arms) from the dVRK 
+*   have their expected values (within a specified tolerance) when the motors are adjusted.
 *   
 *   @param AmpIO  (**Board): Array of board objects to have this function performed on
 *   @param BasePort (*Port): Communication interface object that provides access to the 
@@ -328,7 +328,12 @@ Result TestAnalogInputs(AmpIO **Board, BasePort *Port) {
 *   @brief: Function to test digital inputs of the dVRK.
 *
 *   @details: This function tests the home switches of the dVRK device by checking 
-*   that they switch when they are adjusted.
+*   that they switch when they are adjusted. It checks that if it was in its default
+*   position initially (the home position), it is no longer there, and if it was not 
+*   in default position initially, it now is in its default position. It also checks 
+*   that if an arm is at a limit (i.e. where it's not allowed to move any further in 
+*   some direction), it is no longer at a limit after being moved, and that if it was 
+*   not at a limit, it is at a limit after being moved.
 *
 *   @param AmpIO  (**Board): Array of board objects to have this function performed on
 *   @param BasePort (*Port): Communication interface object that provides access to the 
@@ -348,7 +353,7 @@ Result TestDigitalInputs(AmpIO **Board, BasePort *Port) {
     std::array<uint8_t, 3> after;
     Port->ReadAllBoards();
 
-    // read initial home switch values
+    // read all initial switch values
     before[0] = Board[0]->GetHomeSwitches() & 0xf;
     if (is_dqla) {
         before[1] = Board[0]->GetNegativeLimitSwitches() >> 4;
@@ -361,7 +366,7 @@ Result TestDigitalInputs(AmpIO **Board, BasePort *Port) {
     std::this_thread::sleep_for(std::chrono::milliseconds(DIGITAL_IN_TEST_WAIT_TIME_MS));
     Port->ReadAllBoards();
 
-    // read home switch values after waiting
+    // read all switch values after waiting
     after[0] = Board[0]->GetHomeSwitches() & 0xf;
     if (is_dqla) {
         after[1] = Board[0]->GetNegativeLimitSwitches() >> 4;
@@ -376,7 +381,7 @@ Result TestDigitalInputs(AmpIO **Board, BasePort *Port) {
         logDebugInfo(std::hex, (int) before[i], "->", (int) after[i], " ");
     }
 
-    // check home switches changed after waiting
+    // check all switches changed after waiting
     if ((before == DIGITAL_IN_TEST_HIGH_STATE && after == DIGITAL_IN_TEST_LOW_STATE) ||
         (before == DIGITAL_IN_TEST_LOW_STATE && after == DIGITAL_IN_TEST_HIGH_STATE)) {
         logPass();
@@ -494,7 +499,7 @@ Result TestMotorPowerControl(AmpIO **Board, BasePort *Port) {
     Result result = pass;
     int mv_good_fail_count = 0;
 
-    // set intial conditions (enable relays, shutdown watchdog, allow power control)
+    // set initial conditions (enable relays, shutdown watchdog, allow power control)
     for (int board_index = 0; board_index < NUM_FPGA; board_index++) {
         Board[board_index]->WriteSafetyRelay(true);
         Board[board_index]->WriteWatchdogPeriod(0x0000);
