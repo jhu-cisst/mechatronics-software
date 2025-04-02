@@ -80,7 +80,7 @@ if (Amp1394_BUILD_SWIG)
   set_source_files_properties(Amp1394.i PROPERTIES CPLUSPLUS ON)
   swig_add_library(Amp1394Python
                    LANGUAGE python
-		   SOURCES Amp1394.i ${HEADERS} ${SOURCE_FILES})
+                   SOURCES Amp1394.i ${HEADERS} ${SOURCE_FILES})
   target_link_libraries(Amp1394Python ${Python_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES})
 
   if (WIN32)
