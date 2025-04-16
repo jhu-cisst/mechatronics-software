@@ -169,8 +169,8 @@ void logDebugInfo(Args&&... args) {
     
     (void) std::initializer_list<int> { (ss << std::forward<Args>(args), 0)...};
     
-    std::cout << ss.str() << std::endl;
-    logfile << ss.str() << std::endl;
+    std::cout << ss.str();
+    logfile << ss.str();
 }
 
 /****************************************************************
@@ -872,13 +872,13 @@ void checkMotorSupplyVoltage(BasePort *Port, std::vector<AmpIO *> BoardList, int
     bool V_mismatch = false;
     for (int v = 0; v < 2; v++) {
         if (V[v] > 0.0) {
-            logDebugInfo("QLA ", (v+1), " Motor Supply Voltage: ", V[v], " (should be ", VNom[v], ")", std::endl);
+            logDebugInfo("QLA ", (v+1), " Motor Supply Voltage: ", V[v], " (should be ", VNom[v], ")", "\n");
             if (fabs(V[v]-VNom[v]) > 0.1*VNom[v])
                 V_mismatch = true;
         }
     }
     if (V_mismatch) {
-        logDebugInfo("WARNING: Motor supply voltages do not match controller type", std::endl);
+        logDebugInfo("WARNING: Motor supply voltages do not match controller type", "\n");
         std::cout << "Press [Enter] to continue. Press [Ctrl-C] to exit." << std::endl;
         std::cin.ignore();
     }
@@ -917,7 +917,7 @@ bool runTests(BasePort *Port, std::vector<AmpIO *> BoardList) {
     for (auto test_function : test_functions) {
         auto result = test_function(&BoardList[0], Port);
         logfile << "Section result: " << (result == pass ? "PASS" : "FAIL") << std::endl;
-        logDebugInfo(std::endl);
+        logDebugInfo("\n");
         if (result == fatal_fail) {
             return false;
         } else if (result == fail) {
@@ -948,8 +948,9 @@ bool runTests(BasePort *Port, std::vector<AmpIO *> BoardList) {
 *   @note: The function also updates global variables is_dqla, NUM_FPGA, and 
 *   NUM_CHANNEL_PER_FPGA based on the detected controller type.
 ****************************************************************/
-std::vector<AmpIO *> boardSetUp(BasePort **Port, int &board1, int &board2) {
+std::vector<AmpIO *> boardSetUp(BasePort **Port, int &board1, int &board2, std::vector<AmpIO *> BoardList) {
     if (board1 == BoardIO::MAX_BOARDS) {
+        auto ControllerList = GetControllerList(*Port);
         board1 = ControllerList[0].board_id;
         if (ControllerList[0].hwVersion == QLA1_String) {
             board2 = board1+1;
@@ -985,7 +986,7 @@ int main(int argc, char **argv) {
     std::cout << "*********** dVRK  Classic Controller Test ***********" << std::endl;
     std::cout << "This program tests dVRK Classic controllers using a special test board." << std::endl;
 
-    std::vector<AmpIO *> BoardList = boardSetUp(Port, board1, board2);
+    std::vector<AmpIO *> BoardList = boardSetUp(&Port, board1, board2);
 
     Port->ReadAllBoards();
     auto controller_sn = BoardList[0]->GetFPGASerialNumber();
@@ -1016,7 +1017,7 @@ int main(int argc, char **argv) {
     if (!is_dqla) {
         logDebugInfo(" Board 1=", board2);
     }
-    logDebugInfo(std::endl);
+    logDebugInfo("\n");
 
     bool all_pass = runTests(Port, BoardList);
 
