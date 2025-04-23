@@ -948,7 +948,7 @@ bool runTests(BasePort *Port, std::vector<AmpIO *> BoardList) {
 *   @note: The function also updates global variables is_dqla, NUM_FPGA, and 
 *   NUM_CHANNEL_PER_FPGA based on the detected controller type.
 ****************************************************************/
-std::vector<AmpIO *> boardSetUp(BasePort **Port, int &board1, int &board2, std::vector<AmpIO *> BoardList) {
+std::vector<AmpIO *> boardSetUp(BasePort **Port, int &board1, int &board2) {
     if (board1 == BoardIO::MAX_BOARDS) {
         auto ControllerList = GetControllerList(*Port);
         board1 = ControllerList[0].board_id;
