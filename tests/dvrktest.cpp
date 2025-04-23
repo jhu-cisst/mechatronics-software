@@ -506,7 +506,7 @@ Result TestMotorPowerControl(AmpIO **Board, BasePort *Port) {
         Board[board_index]->WritePowerEnable(true);
         Board[board_index]->WriteAmpEnable(0xff, 0xff);
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
     Port->ReadAllBoards();
 
     // check power status and amp status on each board
