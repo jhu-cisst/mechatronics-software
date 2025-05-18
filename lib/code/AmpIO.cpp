@@ -1866,10 +1866,10 @@ void AmpIO::CheckCollectCallback()
 
 //******* Following methods are for dRA1 ********
 
-std::string AmpIO::ExplainSiFault() const
+std::string AmpIO::ExplainSiFault(void) const
 {
     if (GetHardwareVersion() != dRA1_String) {
-        return "Not a Si controller";
+        return "Sorry, no detailed error code available for QLA based controllers.";
     }
     std::stringstream ss;
     const char* amp_fault_text[16] = {"-", "ADC saturated", "Current deviation", "HW overcurrent", "HW overtemp", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined", "Undefined"};
@@ -1880,7 +1880,7 @@ std::string AmpIO::ExplainSiFault() const
     if (!(status & (1 << 0))) ss << "ESPM->dVRK communication failed. Robot not programmed? Cables?" << std::endl;
     if ((status & (1 << 0)) && !(status & (1 << 1))) ss << "ESII/CC->ESPM communication failed. The problem is inside the robot." << std::endl;
     if (!(status & (1 << 3))) ss << "Encoder preload is out of sync. You must preload encoder at least once." << std::endl;
-    if (!GetPowerStatus()) ss << "48V bad. E-stop pressed?" << std::endl;
+    if (!GetPowerStatus()) ss << "48V bad. E-stop disconnected or button pressed?" << std::endl;
     if (GetWatchdogTimeoutStatus()) ss << "Watchdog timeout." << std::endl;
     ss << "(end)" << std::endl;
     ss << std::endl;
