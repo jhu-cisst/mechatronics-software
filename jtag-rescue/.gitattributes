@@ -1,0 +1,2 @@
+FPGA1394EthQLA.bit filter=lfs diff=lfs merge=lfs -text
+FPGA1394QLA.bit filter=lfs diff=lfs merge=lfs -text

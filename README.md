@@ -11,6 +11,7 @@ The following directories are included:
 * `python` -- Python test programs
 * `tests` -- example programs (qladisp, qlatest, etc.)
 * `util` -- low-level Firewire utility programs (do not depend on `lib`)
+* `jtag-rescue` -- script to rescue a hosed FPGA V1 or V2 using a jtag adapter and openocd
 
 Documentation for the software is on the [wiki](http://github.com/jhu-cisst/mechatronics-software/wiki).
 
