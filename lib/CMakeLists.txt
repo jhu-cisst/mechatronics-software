@@ -22,6 +22,7 @@ set (HEADERS
      BasePort.h
      EthBasePort.h
      EthUdpPort.h
+     SimulationPort.h
      PortFactory.h)
 
 set (SOURCE_FILES
@@ -33,6 +34,7 @@ set (SOURCE_FILES
      code/BasePort.cpp
      code/EthBasePort.cpp
      code/EthUdpPort.cpp
+     code/SimulationPort.cpp
      code/PortFactory.cpp)
 
 
@@ -58,7 +60,7 @@ link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 add_library(Amp1394 STATIC
             ${HEADERS} ${SOURCE_FILES})
 
-target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES})
+target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES} pthread)
 
 option (Amp1394_BUILD_SWIG  "Build Amp1394 with Python wrapper" OFF)
 if (Amp1394_BUILD_SWIG)

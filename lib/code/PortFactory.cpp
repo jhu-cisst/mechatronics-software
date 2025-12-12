@@ -29,6 +29,8 @@ http://www.cisst.org/cisst/license.txt.
 #endif
 #include "EthUdpPort.h"
 
+#include "SimulationPort.h"
+
 BasePort * PortFactory(const char * args, std::ostream & debugStream)
 {
     BasePort * port = 0;
@@ -73,6 +75,10 @@ BasePort * PortFactory(const char * args, std::ostream & debugStream)
 #endif
         break;
 
+    case BasePort::PORT_SIMULATION:
+        port = new SimulationPort(-1, debugStream);
+        break;
+        
     default:
         debugStream << "PortFactory: Unsupported port type" << std::endl;
         break;
