@@ -73,7 +73,7 @@ private:
         double viscous_damping = 0.1;
         // this must coincide with the NmToAmps scale in the XML config
         // where you will find the scale computed as 1/torque_constant
-        double torque_constant = 1.0;
+        double torque_constant = 0.1;
         // this must coincide with the BitsToPosSI scale in the XML config
         // where you will find the scale computed as 360/counts_per_turn
         double counts_per_turn = 100000.0;

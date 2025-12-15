@@ -615,7 +615,7 @@ bool BasePort::ParseOptions(const char *arg, PortType &portType, int &portNum, s
         ostr << "ParseOptions: failed to find a port number after \"emio:\" in " << arg+3 << std::endl;
         return false;
     }
-    else if (arg == std::string("simulation"))
+    else if (arg == std::string("sim"))
     {
         portType = PORT_SIMULATION;
         portNum = 0;
