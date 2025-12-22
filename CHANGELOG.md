@@ -1,6 +1,26 @@
 Change log
 ==========
 
+2.3.0 (2025-12-22)
+==================
+* API changes:
+  * Require CMake 3.16+
+  * CMake changes for Python:
+    * Use `find_package(Python)` to find all required components, including `numpy`
+    * Introduced CMake option `AMP1394_PYTHON_VERSION_REQUIRED` to allow specification of required version (use default version if not specified)
+    * Use `swig_add_library` (introduced in CMake 3.8) instead of `swig_add_module`; no need to manually prepend underscore to library name on Windows
+* New features:
+  * Created test program `fpgatest` based on major rewrite of `eth1394Test` (`mainEth1394.cpp`); program displays a menu of available tests
+  * Changes to `dvrktest`:
+    * Added function header documentation
+    * Consolidated logging code
+    * Increased timeout when testing motor power control
+  * Added methods to get/set verbose flag and timeout for Zynq EMIO interface (FPGA V3)
+  * Use block read for QLA S/N instead of multiple quadlet reads
+  * Implemented `_kbhit` for non-Windows systems (used by test programs)
+* Bug fixes:
+  * None
+
 2.2.0 (2024-08-30)
 ==================
 * API changes:
