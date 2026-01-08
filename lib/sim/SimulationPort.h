@@ -11,18 +11,6 @@
 #include "BoardIO.h"
 #include "BasePort.h"
 
-class WriteRequest
-{
-public:
-    nodeid_t node;
-    nodeaddr_t addr;
-    quadlet_t data;
-    unsigned char flags;
-
-    WriteRequest(nodeid_t n, nodeaddr_t a, quadlet_t d, unsigned char f)
-        : node(n), addr(a), data(d), flags(f) {}
-};
-
 class SimulationPort : public BasePort
 {
 public:
@@ -64,7 +52,6 @@ protected:
     bool WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata, unsigned int nbytes, unsigned char flags = 0);
     bool ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata, unsigned int nbytes, unsigned char flags = 0);
 
-
 private:
     struct DynamicsParams {
         // 2.0e-5 kg m^2 (approx Maxon RE40 rotor + gearhead)
@@ -83,33 +70,37 @@ private:
         double dynamics_dt_sec = 0.001;
         // let's use multi-step integration for better stability
         unsigned int integration_steps = 5;
-        // Thermal model parameters
-        double ambient_temp_c = 25.0;           // [C]
-        // Reduce heating effect (less aggressive temperature rise)
-        double thermal_heating_coeff = 0.05;    // [C/s per A^2]
-        // Increase cooling (stronger dissipation)
-        double thermal_cooling_coeff = 0.02;    // [1/s]
+        // Thermal model parameters [C]
+        double ambient_temp_c = 25.0;
+        // Reduce heating effect (less aggressive temperature rise) [C/s per A^2]
+        double thermal_heating_coeff = 0.05;
+        // Increase cooling (stronger dissipation) [1/s]
+        double thermal_cooling_coeff = 0.02;
     };
 
     struct AxisState
     {
         // ENC_MIDRANGE
         int32_t EncoderPos = 0x800000;
-        // 0x800000 represents zero position
-        double EncoderPos_d = 8388608.0;
+        
         double EncoderVel = 0.0;
         double SimPosition = 0.0;
         double SimVelocity = 0.0;
+        
         int32_t EncoderQtr1 = 0;
         int32_t EncoderQtr5 = 0;
         int32_t EncoderRun = 0;
+        
         // ENC_MIDRANGE
         int32_t EncoderPreload = 0x800000;
         int32_t EncoderOffset = 0;
+        
         // zero current
         uint32_t MotorCurrent = 32768;
+        
         // Default to OFF
         uint32_t MotorStatus = 0x00000000;
+        
         // Simple temperature state [C]
         double TemperatureC = 25.0;
         
@@ -123,6 +114,7 @@ private:
         uint32_t Status = 0;
         uint32_t DigitalIO = 0;
         uint32_t Temperature = 0;
+
         AxisState Axes[4];
 
         // Simulation behavior: require a power-off after startup before granting amp enable
@@ -131,16 +123,28 @@ private:
         bool HasSeenPowerOff = false;
     };
 
+    class WriteRequest
+    {
+    public:
+        nodeid_t node;
+        nodeaddr_t addr;
+        quadlet_t data;
+        unsigned char flags;
+
+        WriteRequest(nodeid_t n, nodeaddr_t a, quadlet_t d, unsigned char f)
+            : node(n), addr(a), data(d), flags(f) {}
+    };
+
     const uint32_t PERIOD_MASK = 0x03FFFFFFu;
     const uint32_t DIR_BIT = 0x40000000u;
     const uint32_t OVF_BIT = 0x80000000u;
 
+    const char kSimQLASN[12] = "QLA 1234-56";
+    const std::string SimFPGASerialString = "FPGA 1234-56";
+
     // i want a queue to store request for every board id or node id separately
     std::map<nodeid_t, std::queue<WriteRequest>> WriteRequestQueues;
     std::map<nodeid_t, BoardState> mBoardStates;
-
-    const char kSimQLASN[12] = "QLA 1234-56";
-    const std::string SimFPGASerialString = "FPGA 1234-56";
     
     // Simulated FPGA PROM state
     uint32_t SimPromCurrentAddr;

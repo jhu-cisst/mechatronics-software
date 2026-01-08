@@ -83,8 +83,11 @@ void SimulationPort::Cleanup()
     if (dynamicsRun.load())
     {
         dynamicsRun = false;
+
         if (dynamicsThread.joinable())
+        {
             dynamicsThread.join();
+        }
     }
 }
 
@@ -167,13 +170,24 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
         }
 
         if (numQuads > 0)
+        {
             rdata[0] = bswap_32(state.Timestamp);
+        }
+
         if (numQuads > 1)
+        {
             rdata[1] = bswap_32(state.Status);
+        }
+
         if (numQuads > 2)
+        {
             rdata[2] = bswap_32(state.DigitalIO);
+        }
+
         if (numQuads > 3)
+        {
             rdata[3] = bswap_32(state.Temperature);
+        }
 
         // 4-7: Motor Current
         for (int i = 0; i < 4; ++i)
@@ -205,6 +219,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                 rdata[4 + i] = bswap_32(packed);
             }
         }
+
         // 8-11: Encoder Position
         for (int i = 0; i < 4; ++i)
         {
@@ -213,6 +228,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                 rdata[8 + i] = bswap_32(state.Axes[i].EncoderPos);
             }
         }
+
         // 12-15: Encoder Velocity
         for (int i = 0; i < 4; ++i)
         {
@@ -222,6 +238,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                 // Period for 4 counts (quadrature cycle)
                 int32_t vel = state.Axes[i].EncoderVel;
                 uint32_t regVal = 0;
+
                 if (vel == 0)
                 {
                     regVal = OVF_BIT; // Zero velocity -> overflow
@@ -232,6 +249,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                     constexpr double CLK_HZ = 49152000.0;
                     double period = (4.0 * CLK_HZ) / absVel;
                     uint32_t ticks = static_cast<uint32_t>(period);
+
                     if (ticks > PERIOD_MASK)
                     {
                         regVal = OVF_BIT | PERIOD_MASK; // Saturate and flag overflow
@@ -246,9 +264,11 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                         regVal |= DIR_BIT; // Direction bit
                     }
                 }
+
                 rdata[12 + i] = bswap_32(regVal);
             }
         }
+
         // 16-19: QTR1
         for (int i = 0; i < 4; ++i)
         {
@@ -257,6 +277,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                 // QTR1 is quarter cycle period (1 count)
                 int32_t vel = state.Axes[i].EncoderVel;
                 uint32_t regVal = 0;
+
                 if (vel == 0)
                 {
                     regVal = OVF_BIT; // Overflow
@@ -267,6 +288,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                     constexpr double CLK_HZ = 49152000.0;
                     double period = (1.0 * CLK_HZ) / absVel;
                     uint32_t ticks = static_cast<uint32_t>(period);
+
                     if (ticks > PERIOD_MASK)
                     {
                         regVal = OVF_BIT | PERIOD_MASK; // Saturate and flag overflow
@@ -281,9 +303,11 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                         regVal |= DIR_BIT; // Direction bit
                     }
                 }
+
                 rdata[16 + i] = bswap_32(regVal);
             }
         }
+
         // 20-23: QTR5
         for (int i = 0; i < 4; ++i)
         {
@@ -292,6 +316,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                 // QTR5 is previous quarter cycle period (same as QTR1 for constant vel)
                 int32_t vel = state.Axes[i].EncoderVel;
                 uint32_t regVal = 0;
+
                 if (vel == 0)
                 {
                     regVal = OVF_BIT; // Overflow
@@ -316,9 +341,11 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                         regVal |= DIR_BIT; // Direction bit
                     }
                 }
+
                 rdata[20 + i] = bswap_32(regVal);
             }
         }
+
         // 24-27: Running Counter
         for (int i = 0; i < 4; ++i)
         {
@@ -328,11 +355,16 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
                 double runUs = (double)state.Axes[i].EncoderRun;
                 double runTicks = runUs * 49.152;
                 uint32_t regVal = static_cast<uint32_t>(runTicks);
+
                 if (regVal > 0x03FFFFFF)
+                {
                     regVal = 0x03FFFFFF; // Cap at max 26 bits
+                }
+
                 rdata[24 + i] = bswap_32(regVal);
             }
         }
+
         // 28-31: Motor Status
         for (int i = 0; i < 4; ++i)
         {
@@ -356,6 +388,7 @@ bool SimulationPort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rd
         {
             tmp[i] = GetSimPromByte(0x00000000u + (SimPromCurrentAddr + i));
         }
+
         memcpy(reinterpret_cast<void *>(rdata), tmp.data(), nbytes);
         return true;
     }
@@ -388,6 +421,7 @@ bool SimulationPort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *w
         // [5] Control/Status
 
         unsigned int numQuads = nbytes / 4;
+
         // We expect at least 4 motors + 2 quadlets = 6 quadlets
         if (numQuads < 6)
         {
@@ -398,6 +432,7 @@ bool SimulationPort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *w
         // Take the board id from the header for verification
         quadlet_t header = bswap_32(wdata[0]);
         unsigned char boardId = (header >> 8) & 0x0F;
+
         if (boardId != static_cast<unsigned char>(node))
         {
             std::cerr << "[Simulation Port] WriteBlockNode: boardId/header mismatch: "
@@ -610,7 +645,7 @@ bool SimulationPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t 
             std::cout << "  Updated EncoderOffset to " << mBoardStates[node].Axes[axisIndex].EncoderOffset;
             std::cout << "  Current Pos is " << currentPos << std::endl;
             std::cout << "  Current Offset is " << currentOffset << std::endl;
-            
+
             return true;
         }
         else if (reg == 1)
@@ -746,7 +781,6 @@ bool SimulationPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t 
 
         return true;
     }
-
     case 0x0003:
     { // Setting the watchdog period
         std::cout << "[Simulation Port] WriteWatchdogPeriod: " << std::hex << data << std::dec << std::endl;
@@ -770,13 +804,11 @@ bool SimulationPort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t 
         // Other commands can be ignored for now
         return true;
     }
-
     case 0x3000:
     { // Enqueue the write request for the PROM commands for PROM_25AA128 to be processed later
         WriteRequestQueues[node].emplace(node, addr, data, flags);
         return true;
     }
-
     default:
     {
         printBacktrace();
