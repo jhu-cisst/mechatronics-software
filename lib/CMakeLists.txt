@@ -22,7 +22,6 @@ set (HEADERS
      BasePort.h
      EthBasePort.h
      EthUdpPort.h
-     SimulationPort.h
      PortFactory.h)
 
 set (SOURCE_FILES
@@ -34,9 +33,7 @@ set (SOURCE_FILES
      code/BasePort.cpp
      code/EthBasePort.cpp
      code/EthUdpPort.cpp
-     code/SimulationPort.cpp
      code/PortFactory.cpp)
-
 
 if (Amp1394_HAS_RAW1394)
   set (HEADERS ${HEADERS} FirewirePort.h)
@@ -60,7 +57,14 @@ link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 add_library(Amp1394 STATIC
             ${HEADERS} ${SOURCE_FILES})
 
-target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES} pthread)
+target_link_libraries(Amp1394 ${Amp1394_EXTRA_LIBRARIES})
+
+option (Amp1394_HAS_SIM "Build Amp1394 with dynamic simulation" OFF)
+if (Amp1394_HAS_SIM)
+  message (STATUS "Building Amp1394 with dynamic simulation")
+  add_subdirectory(sim)
+  target_link_libraries(Amp1394 Amp1394Simulation pthread)
+endif (Amp1394_HAS_SIM)
 
 option (Amp1394_BUILD_SWIG  "Build Amp1394 with Python wrapper" OFF)
 if (Amp1394_BUILD_SWIG)

@@ -27,9 +27,12 @@ http://www.cisst.org/cisst/license.txt.
 #if Amp1394_HAS_EMIO
 #include "ZynqEmioPort.h"
 #endif
+#if Amp1394_HAS_SIM
+#include "sim/SimulationPort.h"
+#endif
+
 #include "EthUdpPort.h"
 
-#include "SimulationPort.h"
 
 BasePort * PortFactory(const char * args, std::ostream & debugStream)
 {
@@ -76,7 +79,11 @@ BasePort * PortFactory(const char * args, std::ostream & debugStream)
         break;
 
     case BasePort::PORT_SIMULATION:
+#if Amp1394_HAS_SIM
         port = new SimulationPort(-1, debugStream);
+#else
+        debugStream << "PortFactory: Simulation port not available (set Amp1394_HAS_SIM in CMake)" << std::endl;
+#endif
         break;
         
     default:

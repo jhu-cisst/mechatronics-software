@@ -26,3 +26,6 @@ set (Amp1394_HAS_EMIO    "@Amp1394_HAS_EMIO@")
 
 # Whether using curses for console
 set (Amp1394Console_HAS_CURSES "@Amp1394Console_HAS_CURSES@")
+
+# Whether building with dynamic simulation
+set (Amp1394_HAS_SIM    "@Amp1394_HAS_SIM@")
