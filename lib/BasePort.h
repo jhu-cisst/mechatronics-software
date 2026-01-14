@@ -80,7 +80,7 @@ public:
 
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
 
-    enum PortType { PORT_FIREWIRE, PORT_ETH_UDP, PORT_ETH_RAW, PORT_ZYNQ_EMIO };
+    enum PortType { PORT_FIREWIRE, PORT_ETH_UDP, PORT_ETH_RAW, PORT_ZYNQ_EMIO, PORT_SIMULATION };
 
     // Protocol types:
     //   PROTOCOL_SEQ_RW      sequential (individual) read and write to each board

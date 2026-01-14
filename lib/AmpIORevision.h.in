@@ -30,4 +30,6 @@ http://www.cisst.org/cisst/license.txt.
 
 #cmakedefine01 Amp1394Console_HAS_CURSES
 
+#cmakedefine01 Amp1394_HAS_SIM
+
 #endif // _AmpIORevision_h
