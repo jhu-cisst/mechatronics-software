@@ -1976,7 +1976,7 @@ bool AmpIO::ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& par
     return true;
 }
 
-bool AmpIO::GetSiSUJPositions(std::array<int16_t, 10> &positions) const
+bool AmpIO::ReadSiSUJPositions(std::array<int16_t, 10> &positions) const
 {
     positions.fill(-1);
 
@@ -2013,7 +2013,7 @@ bool AmpIO::GetSiSUJPositions(std::array<int16_t, 10> &positions) const
     return true;
 }
 
-bool AmpIO::ReadSiSUJPresense(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZSiPresent) const
+bool AmpIO::ReadSiSUJPresence(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZSiPresent) const
 {
     ESSJPresent = false;
     dSIBSiPresent = false;
