@@ -47,12 +47,20 @@ const unsigned int NUM_SISUJ_POTS = 10;
 const nodeaddr_t SISUJ_Z_STATUS_ADDR = 0xb030;
 const nodeaddr_t SISUJ_ESSJ_ADC0_ADDR = 0xa039;
 const nodeaddr_t SISUJ_ESSJ_STATUS_ADDR = 0xa03c;
+const nodeaddr_t SISUJ_ESPM_CRC_ERROR_COUNT_ADDR = 0xb000;
+const nodeaddr_t SISUJ_ESPM_CRC_GOOD_COUNT_ADDR = 0xb001;
+const nodeaddr_t SISUJ_DRAC_STATUS_ADDR = 0xb003;
 const uint32_t SISUJ_POT_MASK = 0x00000fff;
 const uint32_t SISUJ_DSIB_SI_PRESENT = 0x00001000;
 const uint32_t SISUJ_DSIB_Z_SI_PRESENT = 0x00002000;
 const uint32_t SISUJ_ESSJ_PRESENT = 0x00000001;
 const uint32_t SISUJ_ESSJ_ADC_VALID = 0x00000002;
 const uint32_t SISUJ_ESSJ_ESPM_PRESENT = 0x00000004;
+const uint32_t SISUJ_DRAC_ESPMV_GOOD = 0x00000001;
+const uint32_t SISUJ_DRAC_SAFETY_CHAIN_READ = 0x00000002;
+const uint32_t SISUJ_DRAC_ESPM_COMM_GOOD = 0x00000004;
+const uint32_t SISUJ_DRAC_ESII_CC_COMM_GOOD = 0x00000008;
+const uint32_t SISUJ_DRAC_IS_ECM = 0x00000010;
 
 class SiSUJData {
 public:
@@ -69,6 +77,10 @@ public:
     bool espm_present = false;
     bool essj_adc_valid = false;
     bool essj_present = false;
+    bool espmHealthReadOk = false;
+    uint32_t espmCrcGoodCount = 0;
+    uint32_t espmCrcErrorCount = 0;
+    uint32_t dracStatus = 0;
     std::array<int16_t, NUM_SISUJ_POTS> positions;
 };
 
@@ -127,6 +139,17 @@ bool ReadSiSUJData(BasePort *port, AmpIO *board, SiSUJData &data)
     uint32_t sujZStatus = 0;
     uint32_t essjStatus = 0;
     std::array<uint32_t, 3> adcData = {{0, 0, 0}};
+
+    bool espmHealthSuccess = port->ReadQuadlet(board->GetBoardId(),
+                                               SISUJ_ESPM_CRC_ERROR_COUNT_ADDR,
+                                               data.espmCrcErrorCount);
+    espmHealthSuccess &= port->ReadQuadlet(board->GetBoardId(),
+                                           SISUJ_ESPM_CRC_GOOD_COUNT_ADDR,
+                                           data.espmCrcGoodCount);
+    espmHealthSuccess &= port->ReadQuadlet(board->GetBoardId(),
+                                           SISUJ_DRAC_STATUS_ADDR,
+                                           data.dracStatus);
+    data.espmHealthReadOk = espmHealthSuccess;
 
     bool success = port->ReadQuadlet(board->GetBoardId(), SISUJ_Z_STATUS_ADDR, sujZStatus);
     for (unsigned int i = 0; i < adcData.size(); i++) {
@@ -210,6 +233,19 @@ void PrintBoardData(int startLine, unsigned int leftMargin, AmpIO *board, const 
                           "Err(r/w): %2d %2d     ",
                           board->GetReadErrors(),
                           board->GetWriteErrors());
+    Amp1394Console::Print(startLine + 13, leftMargin,
+                          "ESPM:  Read %s  crc_good %10u  crc_err %10u  dRAC 0x%08X     ",
+                          data.espmHealthReadOk ? "ok " : "err",
+                          static_cast<unsigned int>(data.espmCrcGoodCount),
+                          static_cast<unsigned int>(data.espmCrcErrorCount),
+                          static_cast<unsigned int>(data.dracStatus));
+    Amp1394Console::Print(startLine + 14, leftMargin,
+                          "       espmv_good %s  safety_chain_read %s  espm_comm_good %s  esii_cc_comm_good %s  is_ecm %s     ",
+                          BoolString((data.dracStatus & SISUJ_DRAC_ESPMV_GOOD) != 0),
+                          BoolString((data.dracStatus & SISUJ_DRAC_SAFETY_CHAIN_READ) != 0),
+                          BoolString((data.dracStatus & SISUJ_DRAC_ESPM_COMM_GOOD) != 0),
+                          BoolString((data.dracStatus & SISUJ_DRAC_ESII_CC_COMM_GOOD) != 0),
+                          BoolString((data.dracStatus & SISUJ_DRAC_IS_ECM) != 0));
 }
 
 int main(int argc, char** argv)
@@ -398,7 +434,7 @@ int main(int argc, char** argv)
             SiSUJData data;
             ReadSiSUJData(Port, BoardList[j], data);
             PrintBoardData(line, lm, BoardList[j], data);
-            line += 15;
+            line += 17;
         }
 
         console.Print(line, lm, "Message: %-80s", message.c_str());
