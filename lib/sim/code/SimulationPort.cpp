@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string.h>
-#include <byteswap.h>
+#include "Amp1394BSwap.h"
 #include <sys/select.h>
 #include <errno.h> // errno
 

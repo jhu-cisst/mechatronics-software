@@ -23,13 +23,7 @@
 
 #include "PortFactory.h"
 
-#ifdef _MSC_VER
-#include <stdlib.h>
-inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
-#include <byteswap.h>
-#endif
+#include "Amp1394BSwap.h"
 
 uint16_t bswap16(uint16_t in) {
     return bswap_16(in);
