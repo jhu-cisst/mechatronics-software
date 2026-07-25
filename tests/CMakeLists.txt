@@ -18,11 +18,15 @@ add_executable(qladisp qladisp.cpp)
 target_link_libraries(qladisp ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES}
                               ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
 
+add_executable(sujsi sujsi.cpp)
+target_link_libraries(sujsi ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES}
+                            ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
+
 add_executable(qlatest qlatest.cpp)
 target_link_libraries(qlatest ${Amp1394_LIBRARIES} ${Amp1394_EXTRA_LIBRARIES}
                               ${Amp1394Console_LIBRARIES} ${Amp1394Console_EXTRA_LIBRARIES})
 
-install (TARGETS qladisp qlatest
+install (TARGETS qladisp sujsi qlatest
          COMPONENT Amp1394-utils
          RUNTIME DESTINATION bin)
 

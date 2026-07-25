@@ -24,6 +24,7 @@ http://www.cisst.org/cisst/license.txt.
 #include "FpgaIO.h"
 #include "EncoderVelocity.h"
 #include <iostream>
+#include <array>
 
 class ostream;
 
@@ -629,6 +630,15 @@ public:
 
     bool WriteSiCurrentLoopParams(unsigned int index, const SiCurrentLoopParams& params) const;
     bool ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& params) const;
+
+    /*! \brief Read Si SUJ potentiometer positions.
+        \param positions Potentiometer values in the order:
+        Z_pot1, Z_pot2, rot1_pot1, rot1_pot2, rot2_pot1, rot2_pot2,
+        rot3_pot1, rot3_pot2, rot4_pot1, rot4_pot2.
+        Values from 0 to 4095 are valid ADC counts; -1 indicates invalid data or absent hardware.
+    */
+    bool ReadSiSUJPositions(std::array<int16_t, 10> &positions) const;
+    bool ReadSiSUJPresence(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZSiPresent) const;
 
     bool WriteMotorControlMode(unsigned int index, uint16_t val);
     bool WriteCurrentKpRaw(unsigned int index, uint32_t val);
