@@ -141,6 +141,9 @@ public:
     uint32_t GetHardwareVersion(void) const;
     std::string GetHardwareVersionString(void) const;
 
+    // Return whether dVRK-Si controller has SUJ support
+    bool GetSiHasSUJ() const;
+
     // Returns FPGA clock period in seconds
     virtual double GetFPGAClockPeriod(void) const = 0;
 

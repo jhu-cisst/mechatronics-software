@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen, Anton Deguet
 
-  (C) Copyright 2012-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2012-2026 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -368,11 +368,14 @@ int main(int argc, char** argv)
 
     bool someRev7plus = false;
     bool someRev8plus = false;
+    bool someSiSUJ = false;
     BoardStatusList.clear();
     for (j = 0; j < BoardList.size(); j++) {
         uint32_t fver = BoardList[j]->GetFirmwareVersion();
         if (fver >= 7) someRev7plus = true;
         if (fver >= 8) someRev8plus = true;
+        if (BoardList[j]->GetSiHasSUJ())
+            someSiSUJ = true;
     }
 
     if (!readOnly) {
@@ -454,6 +457,12 @@ int main(int argc, char** argv)
             console.Print(nextLine++, lm, "Acc:");
         }
     }
+    const int SI_SUJ_LINE = nextLine;
+    if (someSiSUJ) {
+        console.Print(nextLine++, lm, "SUJ-P1:");   // Pot1
+        console.Print(nextLine++, lm, "SUJ-P2:");   // Pot2
+    }
+    const int STATUS_LINE = nextLine+2;
 
     console.Refresh();
 
@@ -474,7 +483,6 @@ int main(int argc, char** argv)
     statusStr2[1][STATUS_STR_LENGTH-1] = 0;
 
     unsigned int loop_cnt = 0;
-    const int STATUS_LINE = fullvel ? 17 : 14;
     int timeLines = 0;   // how many lines for timing info
     if (showTime) {
         timeLines++;
@@ -483,7 +491,7 @@ int main(int argc, char** argv)
     }
     else if (ethPort)
         timeLines++;
-    const int DEBUG_START_LINE = fullvel ? (23+timeLines) : (20+timeLines);
+    const int DEBUG_START_LINE = STATUS_LINE + 6 + timeLines;
     unsigned int last_debug_line = DEBUG_START_LINE;
     const int ESC_CHAR = 0x1b;
     int c;
@@ -871,6 +879,19 @@ int main(int argc, char** argv)
                     lastTime = BoardList[j]->GetTimestamp();
                     if (lastTime > maxTime) {
                         maxTime = lastTime;
+                    }
+                }
+                if (BoardList[j]->GetSiHasSUJ()) {
+                    for (i = 0; i < BoardList[j]->GetNumExtraIn(); i++) {
+                        uint16_t pot1, pot2;
+                        if (BoardList[j]->GetSiSUJPots(i, pot1, pot2)) {
+                            console.Print(SI_SUJ_LINE, lm+14+16*i, "%03hX", pot1);
+                            console.Print(SI_SUJ_LINE+1, lm+14+16*i, "%03hX", pot2);
+                        }
+                        else {
+                            console.Print(SI_SUJ_LINE, lm+14, "   ");
+                            console.Print(SI_SUJ_LINE+1, lm+14, "   ");
+                        }
                     }
                 }
             }
