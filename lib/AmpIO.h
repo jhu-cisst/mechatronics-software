@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2026 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -52,6 +52,9 @@ public:
 
     // Return number of digital outputs (4 for QLA)
     unsigned int GetNumDouts(void) const { return NumDouts; }
+
+    // Return number of extra inputs (5 for dRAC with SUJ)
+    unsigned int GetNumExtraIn(void) const { return NumExtraIn; }
 
     // Return QLA serial number (empty string if not found)
     //   chan:  0 for QLA; 1 or 2 for DQLA
@@ -114,6 +117,10 @@ public:
     double GetMotorVoltageRatio(unsigned int index) const;
 
     uint32_t GetAnalogInput(unsigned int index) const;
+
+    uint32_t GetExtraInput(unsigned int index) const;
+
+    bool GetSiSUJPots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const;
 
     //********************** Encoder position/velocity/acceleration *****************************
 
@@ -669,12 +676,13 @@ protected:
     unsigned int NumMotors;    // Number of motors/brakes
     unsigned int NumEncoders;  // Number of encoders
     unsigned int NumDouts;     // Number of digital outputs
+    unsigned int NumExtraIn;   // Number of extra inputs (e.g., for Si SUJ)
 
     // Maximum number of channels (avoids need to dynamically allocate memory)
     enum { MAX_CHANNELS = 16 };
 
     // Maximum read and write buffer sizes (in quadlets)
-    enum { ReadBufSize_Max = 64,
+    enum { ReadBufSize_Max = 128,
            WriteBufSize_Max = 64 };
 
     // Buffer for real-time block reads. The Port class calls SetReadData to copy the
@@ -756,6 +764,7 @@ protected:
     // Firmware V7 added ENC_QTR5_OFFSET and ENC_RUN_OFFSET; in V6, the QTR5 data
     // was stuffed into unused bits in other fields.
     // Firmware V8 added MOTOR_STATUS_OFFSET.
+    // Firmware V10 added EXTRA_IN_OFFSET.
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet
@@ -771,6 +780,7 @@ protected:
     unsigned int ENC_QTR5_OFFSET; // one quadlet per channel
     unsigned int ENC_RUN_OFFSET;  // one quadlet per channel
     unsigned int MOTOR_STATUS_OFFSET;
+    unsigned int EXTRA_IN_OFFSET;
 
     // offsets of real-time write buffer contents
     unsigned int WB_HEADER_OFFSET; // write header (Firmware Rev 8+)

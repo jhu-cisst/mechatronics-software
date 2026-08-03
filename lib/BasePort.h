@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2026 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -51,7 +51,8 @@ http://www.cisst.org/cisst/license.txt.
 #define ETH_UDP_MULTICAST_DEFAULT_IP "224.0.0.100"
 
 // Some useful constants
-const unsigned long BOARD_ID_MASK = 0x0f000000;  /* Mask for board_id */
+const unsigned long BOARD_ID_MASK = 0x0f000000;      /* Mask for board_id */
+const unsigned long DRAC_HAS_SUJ_MASK = 0x00002000;  /* Mask for DRAC has_suj */
 const unsigned long QLA1_String = 0x514C4131;
 const unsigned long dRA1_String = 0x64524131;
 const unsigned long DQLA_String = 0x44514C41;
@@ -181,6 +182,9 @@ protected:
 
     // Hardware versions (e.g., QLA1)
     unsigned long HardwareVersion[BoardIO::MAX_BOARDS];
+
+    // Whether dVRK-Si has SUJ interface
+    bool SiHasSUJ[BoardIO::MAX_BOARDS];
 
     // List of supported hardware versions.
     // Static so that it can be initialized before calling constructor.
@@ -392,6 +396,13 @@ public:
      \brief Whether hardware version is valid (i.e., supported hardware)
     */
     static bool HardwareVersionValid(unsigned long hver);
+
+    /*!
+     \brief Whether dVRK-Si controller has SUJ interface
+    */
+    inline bool GetSiHasSUJ(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? SiHasSUJ[boardId] : false;
+    }
 
     // Get BroadcastReadInfo
     BroadcastReadInfo GetBroadcastReadInfo(void) const

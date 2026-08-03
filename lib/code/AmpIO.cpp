@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides, Jie Ying Wu
 
-  (C) Copyright 2011-2023 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2011-2026 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -100,9 +100,9 @@ const double VEL_PERD_OLD           = 1.0/768000;     /* Slower clock for veloci
 const double WDOG_ClockPeriod       = 256.0/(FPGA_sysclk_MHz*1e6);   /* Watchdog clock period, in seconds */
 
 uint8_t BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 0011
-                                0x2, 0xA, 0x6, 0xE,         // 0100, 0101, 0110, 0111
-                                0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
-                                0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
+                            0x2, 0xA, 0x6, 0xE,         // 0100, 0101, 0110, 0111
+                            0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
+                            0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
 static int16_t UnpackSiSUJAdc(const std::array<uint32_t, 3> &adcData, unsigned int sampleIndex)
 {
@@ -145,7 +145,7 @@ unsigned int AmpIO::GetReadNumBytes() const
         numQuads = 4 + 6*NumEncoders;
     }
     else {
-        numQuads = 4 + 2*NumMotors + 5*NumEncoders;
+        numQuads = 4 + 2*NumMotors + 5*NumEncoders + NumExtraIn;
     }
     return numQuads * sizeof(quadlet_t);
 }
@@ -174,21 +174,26 @@ void AmpIO::InitBoard(void)
         NumMotors = 10;
         NumEncoders = 7;
         NumDouts = 0;
+        // SiHasSUJ can only return true for Rev 10
+        NumExtraIn = GetSiHasSUJ() ? 5 : 0;
     }
     else if (GetHardwareVersion() == DQLA_String) {
         NumMotors = 8;
         NumEncoders = 8;
         NumDouts = 8;
+        NumExtraIn = 0;
     }
     else if (GetHardwareVersion() == BCFG_String) {
         NumMotors = 0;
         NumEncoders = 0;
         NumDouts = 0;
+        NumExtraIn = 0;
     }
     else {
         NumMotors = 4;
         NumEncoders = 4;
         NumDouts = 4;
+        NumExtraIn = 0;
     }
 
     // Check whether buffers are too small (should never happen, but if it does, would
@@ -210,6 +215,7 @@ void AmpIO::InitBoard(void)
     ENC_QTR5_OFFSET     = ENC_QTR1_OFFSET   + NumEncoders;
     ENC_RUN_OFFSET      = ENC_QTR5_OFFSET   + NumEncoders;
     MOTOR_STATUS_OFFSET = ENC_RUN_OFFSET    + NumEncoders;
+    EXTRA_IN_OFFSET     = MOTOR_STATUS_OFFSET + NumMotors;
 
     WB_HEADER_OFFSET = 0;   // only used for Firmware Rev 8+
     WB_CURR_OFFSET = (GetFirmwareVersion() < 8) ? 0 : 1;
@@ -567,6 +573,25 @@ uint32_t AmpIO::GetAnalogInput(unsigned int index) const
     buff >>= 16;                   // shift to lsb alignment
 
     return static_cast<uint32_t>(buff) & ADC_MASK;
+}
+
+uint32_t AmpIO::GetExtraInput(unsigned int index) const
+{
+    return (index < NumExtraIn) ? ReadBuffer[index + EXTRA_IN_OFFSET] : 0;
+}
+
+bool AmpIO::GetSiSUJPots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const
+{
+    if (GetSiHasSUJ()) {
+        uint32_t extra_in = GetExtraInput(index);
+        // PK TODO: check valid flags
+        //   mask for pot1 valid is 0x0000f000
+        //   mask for pot2 valid is 0xf0000000
+        pot1 = extra_in & 0x00000fff;
+        pot2 = extra_in & 0x0fff0000;
+        return true;  // if valid
+    }
+    return false;
 }
 
 int32_t AmpIO::GetEncoderPosition(unsigned int index) const
