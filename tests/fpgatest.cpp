@@ -1159,7 +1159,7 @@ int main(int argc, char **argv)
                 isVerbose = true;
             }
             else {
-                    std::cerr << "Usage: eth1394test [-pP] [-v]" << std::endl
+                    std::cerr << "Usage: fpgatest [-pP] [-v]" << std::endl
                     << "       where P = port number (default 0)" << std::endl
                     << "                 can also specify -pethP or -pudp" << std::endl
                     << "            -v   verbose output (ZynqEmioPort)" << std::endl;
