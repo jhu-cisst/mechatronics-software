@@ -884,7 +884,7 @@ int main(int argc, char** argv)
                 if (BoardList[j]->GetSiHasSUJ()) {
                     for (i = 0; i < BoardList[j]->GetNumExtraIn(); i++) {
                         uint16_t pot1, pot2;
-                        if (BoardList[j]->GetSiSUJPots(i, pot1, pot2)) {
+                        if (BoardList[j]->GetSiSUJ_Pots(i, pot1, pot2)) {
                             console.Print(SI_SUJ_LINE, lm+14+16*i, "%03hX", pot1);
                             console.Print(SI_SUJ_LINE+1, lm+14+16*i, "%03hX", pot2);
                         }

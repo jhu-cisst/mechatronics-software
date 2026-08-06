@@ -373,6 +373,14 @@ public:
     std::string GetHardwareVersionString(unsigned char boardId) const;
 
     /*!
+     \brief Get full hardware version as a string (i.e., may include dSIB for dVRK-Si SUJ)
+     \param boardId: board ID
+     \return A string that identifies the hardware version of the board connected to the FPGA (e.g., "QLA1")
+     \note Assumes that all valid (non-zero) hardware versions contain printable characters.
+    */
+    std::string GetFullHardwareVersionString(unsigned char boardId) const;
+
+    /*!
      \brief Add a hardware version to the list of supported (valid) hardware
      This method is static so that it can be called before the constructor.
     */

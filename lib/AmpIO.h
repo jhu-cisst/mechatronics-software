@@ -120,7 +120,11 @@ public:
 
     uint32_t GetExtraInput(unsigned int index) const;
 
-    bool GetSiSUJPots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const;
+    bool GetSiSUJ_Pots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const;
+
+    // Returns expected board id for Z axis pot (i.e., should equal default board id
+    // for the connect PSM or ECM). Returns BoardIO::MAX_BOARDS if invalid.
+    uint8_t GetSiSUJ_Z_Id() const;
 
     //********************** Encoder position/velocity/acceleration *****************************
 
