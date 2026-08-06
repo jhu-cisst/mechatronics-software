@@ -580,18 +580,27 @@ uint32_t AmpIO::GetExtraInput(unsigned int index) const
     return (index < NumExtraIn) ? ReadBuffer[index + EXTRA_IN_OFFSET] : 0;
 }
 
-bool AmpIO::GetSiSUJPots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const
+bool AmpIO::GetSiSUJ_Pots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const
 {
+    bool ret = false;
     if (GetSiHasSUJ()) {
         uint32_t extra_in = GetExtraInput(index);
-        // PK TODO: check valid flags
-        //   mask for pot1 valid is 0x0000f000
-        //   mask for pot2 valid is 0xf0000000
-        pot1 = extra_in & 0x00000fff;
-        pot2 = extra_in & 0x0fff0000;
-        return true;  // if valid
+        if (extra_in & VALID_BIT) {
+            pot1 = extra_in & 0x00000fff;
+            pot2 = (extra_in & 0x0fff0000)>>16;
+            ret = true;
+        }
     }
-    return false;
+    return ret;
+}
+
+uint8_t AmpIO::GetSiSUJ_Z_Id() const
+{
+    uint8_t board_id = BoardIO::MAX_BOARDS;
+    uint32_t extra_in = GetExtraInput(1);
+    if (extra_in & VALID_BIT)
+        board_id = (extra_in & 0x0000f000) >> 12;
+    return board_id;
 }
 
 int32_t AmpIO::GetEncoderPosition(unsigned int index) const

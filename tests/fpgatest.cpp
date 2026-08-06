@@ -1363,6 +1363,7 @@ int main(int argc, char **argv)
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (!FwPortIsZynq && (curPort == FwPort))
             std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
+        std::cout << "  s) Toggle Si SUJ on/off" << std::endl;
         std::cout << "  t) Run timing analysis" << std::endl;
         std::cout << "  v) Measure motor power supply voltage (QLA 1.5+)" << std::endl;
         std::cout << "  w) Test waveform buffer" << std::endl;
@@ -1611,6 +1612,24 @@ int main(int argc, char **argv)
         case 'R':
             if (!FwPortIsZynq && (curPort == FwPort))
                 ReadConfigROM(curPort, curBoardNum);
+            break;
+
+        case 's':
+            if (curBoard->GetHardwareVersion() == dRA1_String) {
+                // 0x00004000 will turn off SUJ pot check
+                write_data = 0x00004000;
+                if (curBoard->GetSiHasSUJ()) {
+                    std::cout << "Forcing SUJ not present" << std::endl;
+                    // 0x00008000 will turn off SUJ present
+                    write_data |= 0x00008000;
+                }
+                else {
+                    std::cout << "Forcing SUJ present" << std::endl;
+                    // 0x0000a000 will turn on SUJ present
+                    write_data |= 0x0000a000;
+                }
+                curPort->WriteQuadlet(curBoardNum, BoardIO::BOARD_STATUS, write_data);
+            }
             break;
 
         case 't':

@@ -349,7 +349,7 @@ bool BasePort::ScanNodes(void)
         }
         outStr << "  Node " << node << ", BoardId = " << board
                << ", " << GetFpgaVersionMajorString(board)
-               << ", Hardware = " << GetHardwareVersionString(board)
+               << ", Hardware = " << GetFullHardwareVersionString(board)
                << ", Firmware Version = " << GetFirmwareVersion(board);
 
         if (git_desc != 0) {
@@ -691,6 +691,17 @@ std::string BasePort::GetHardwareVersionString(unsigned char boardId) const
         hStr.resize(4);
     } else {
         hStr = "Invalid";
+    }
+    return hStr;
+}
+
+std::string BasePort::GetFullHardwareVersionString(unsigned char boardId) const
+{
+    std::string hStr;
+    if (boardId < BoardIO::MAX_BOARDS) {
+        hStr = GetHardwareVersionString(boardId);
+        if (GetSiHasSUJ(boardId))
+            hStr.append("+dSIB");
     }
     return hStr;
 }
