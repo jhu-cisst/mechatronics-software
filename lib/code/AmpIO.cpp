@@ -71,6 +71,11 @@ const uint32_t QLA_MV_FAULT_BIT   = 0x00008000;  /*!< Motor supply fault (read o
 const uint32_t DQLA_MV_GOOD_2   = 0x00008000;    /*!< Motor voltage good for QLA 2 (read only) */
 const uint32_t DQLA_MV_GOOD_1   = 0x00004000;    /*!< Motor voltage good for QLA 1 (read only) */
 
+// Offsets into status register (DRAC)
+const uint32_t SISUJ_DSIB_SI_PRESENT    = 0x00200000;
+const uint32_t SISUJ_DSIB_Z_SI_PRESENT  = 0x00100000;
+const uint32_t SISUJ_ESSJ_PRESENT       = 0x00008000;
+
 // Masks for feedback signals
 const uint32_t MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current adc bits */
 const uint32_t ANALOG_POS_MASK  = 0xffff0000;  /*!< Mask for analog pot ADC bits */
@@ -81,15 +86,6 @@ const uint32_t ENC_OVER_MASK    = 0x01000000;  /*!< Encoder bit overflow mask */
 const uint32_t ENC_A_MASK       = 0x10000000;  /*!< Encoder A channel mask (Rev 8+) */
 const uint32_t ENC_B_MASK       = 0x20000000;  /*!< Encoder B channel mask (Rev 8+) */
 const uint32_t ENC_I_MASK       = 0x40000000;  /*!< Encoder I channel mask (Rev 8+) */
-
-const nodeaddr_t SISUJ_Z_STATUS_ADDR    = 0xb030;  /*!< dSIB-Si Z status and pots */
-const nodeaddr_t SISUJ_ESSJ_ADC0_ADDR   = 0xa039;  /*!< ESSJ ADC packed bits [31:0] */
-const nodeaddr_t SISUJ_ESSJ_STATUS_ADDR = 0xa03c;  /*!< ESSJ status word */
-const uint32_t SISUJ_POT_MASK           = 0x00000fff;
-const uint32_t SISUJ_DSIB_SI_PRESENT    = 0x00001000;
-const uint32_t SISUJ_DSIB_Z_SI_PRESENT  = 0x00002000;
-const uint32_t SISUJ_ESSJ_PRESENT       = 0x00000001;
-const uint32_t SISUJ_ESSJ_ADC_VALID     = 0x00000002;
 
 const double FPGA_sysclk_MHz        = 49.152;         /* FPGA sysclk in MHz (from FireWire) */
 const double VEL_PERD_ESPM          = 1.0/40000000;   /* Clock period for ESPM velocity measurements (dVRK Si) */
@@ -103,18 +99,6 @@ uint8_t BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 001
                             0x2, 0xA, 0x6, 0xE,         // 0100, 0101, 0110, 0111
                             0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                             0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
-
-static int16_t UnpackSiSUJAdc(const std::array<uint32_t, 3> &adcData, unsigned int sampleIndex)
-{
-    const unsigned int bitIndex = 12 * sampleIndex;
-    const unsigned int quadIndex = bitIndex / 32;
-    const unsigned int shift = bitIndex % 32;
-    uint32_t value = adcData[quadIndex] >> shift;
-    if ((shift > 20) && (quadIndex < 2)) {
-        value |= adcData[quadIndex + 1] << (32 - shift);
-    }
-    return static_cast<int16_t>(value & SISUJ_POT_MASK);
-}
 
 AmpIO::AmpIO(uint8_t board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0), NumDouts(0),
                                      dallasState(ST_DALLAS_START), dallasTimeoutSec(10.0), collect_state(false), collect_cb(0)
@@ -592,6 +576,18 @@ bool AmpIO::GetSiSUJ_Pots(unsigned int index, uint16_t &pot1, uint16_t &pot2) co
         }
     }
     return ret;
+}
+
+bool AmpIO::GetSiSUJ_Status(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZSiPresent) const
+{
+    if (GetHardwareVersion() != dRA1_String) return false;
+
+    // Could also check for Firmware Rev 10
+    uint32_t status = GetStatus();
+    ESSJPresent = status & SISUJ_ESSJ_PRESENT;
+    dSIBSiPresent = status & SISUJ_DSIB_SI_PRESENT;
+    dSIBZSiPresent = status & SISUJ_DSIB_Z_SI_PRESENT;
+    return true;
 }
 
 uint8_t AmpIO::GetSiSUJ_Z_Id() const
@@ -2007,64 +2003,6 @@ bool AmpIO::ReadSiCurrentLoopParams(unsigned int index, SiCurrentLoopParams& par
     params.iTermLimit = read_data;
     port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE_LIMIT, read_data);
     params.dutyCycleLimit = read_data;
-    return true;
-}
-
-bool AmpIO::ReadSiSUJPositions(std::array<int16_t, 10> &positions) const
-{
-    positions.fill(-1);
-
-    if (!port) return false;
-    if (GetHardwareVersion() != dRA1_String) return false;
-
-    uint32_t sujZStatus = 0;
-    std::array<uint32_t, 3> adcData = {{0, 0, 0}};
-    uint32_t essjStatus = 0;
-
-    bool success = port->ReadQuadlet(BoardId, SISUJ_Z_STATUS_ADDR, sujZStatus);
-    for (unsigned int i = 0; i < adcData.size(); i++) {
-        success &= port->ReadQuadlet(BoardId, SISUJ_ESSJ_ADC0_ADDR + i, adcData[i]);
-    }
-    success &= port->ReadQuadlet(BoardId, SISUJ_ESSJ_STATUS_ADDR, essjStatus);
-    if (!success) return false;
-
-    const bool dSIBSiPresent = (sujZStatus & SISUJ_DSIB_SI_PRESENT) != 0;
-    const bool dSIBZSiPresent = dSIBSiPresent && ((sujZStatus & SISUJ_DSIB_Z_SI_PRESENT) != 0);
-    if (dSIBZSiPresent) {
-        positions[0] = static_cast<int16_t>(sujZStatus & SISUJ_POT_MASK);
-        positions[1] = static_cast<int16_t>((sujZStatus >> 16) & SISUJ_POT_MASK);
-    }
-
-    const bool essjPresent = (essjStatus & SISUJ_ESSJ_PRESENT) != 0;
-    const bool adcValid = (essjStatus & SISUJ_ESSJ_ADC_VALID) != 0;
-    if (essjPresent && adcValid) {
-        for (unsigned int i = 0; i < 4; i++) {
-            positions[2 + 2*i] = UnpackSiSUJAdc(adcData, i);
-            positions[3 + 2*i] = UnpackSiSUJAdc(adcData, i + 4);
-        }
-    }
-
-    return true;
-}
-
-bool AmpIO::ReadSiSUJPresence(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZSiPresent) const
-{
-    ESSJPresent = false;
-    dSIBSiPresent = false;
-    dSIBZSiPresent = false;
-
-    if (!port) return false;
-    if (GetHardwareVersion() != dRA1_String) return false;
-
-    uint32_t sujZStatus = 0;
-    uint32_t essjStatus = 0;
-    bool success = port->ReadQuadlet(BoardId, SISUJ_Z_STATUS_ADDR, sujZStatus);
-    success &= port->ReadQuadlet(BoardId, SISUJ_ESSJ_STATUS_ADDR, essjStatus);
-    if (!success) return false;
-
-    ESSJPresent = (essjStatus & SISUJ_ESSJ_PRESENT) != 0;
-    dSIBSiPresent = (sujZStatus & SISUJ_DSIB_SI_PRESENT) != 0;
-    dSIBZSiPresent = dSIBSiPresent && ((sujZStatus & SISUJ_DSIB_Z_SI_PRESENT) != 0);
     return true;
 }
 
