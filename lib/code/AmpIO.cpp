@@ -582,7 +582,8 @@ bool AmpIO::GetSiSUJ_Status(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZS
 {
     if (GetHardwareVersion() != dRA1_String) return false;
 
-    // Could also check for Firmware Rev 10
+    if (!GetSiHasSUJ()) return false;
+
     uint32_t status = GetStatus();
     ESSJPresent = status & SISUJ_ESSJ_PRESENT;
     dSIBSiPresent = status & SISUJ_DSIB_SI_PRESENT;
@@ -593,9 +594,12 @@ bool AmpIO::GetSiSUJ_Status(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZS
 uint8_t AmpIO::GetSiSUJ_Z_Id() const
 {
     uint8_t board_id = BoardIO::MAX_BOARDS;
-    uint32_t extra_in = GetExtraInput(1);
-    if (extra_in & VALID_BIT)
-        board_id = (extra_in & 0x0000f000) >> 12;
+    if (GetSiHasSUJ()) {
+        // Extra input 1 is the SUJ Z axis pot data
+        uint32_t extra_in = GetExtraInput(1);
+        if (extra_in & VALID_BIT)
+            board_id = (extra_in & 0x0000f000) >> 12;
+    }
     return board_id;
 }
 
@@ -1239,6 +1243,60 @@ bool AmpIO::ReadAmpEnableDelay(unsigned int index, uint8_t &ampdelay) const
     bool ret = ReadMotorConfig(index, cfg);
     if (ret)
         ampdelay = static_cast<uint8_t>((cfg & MCFG_AMP_ENABLE_DELAY_MASK)>>16);
+    return ret;
+}
+
+bool AmpIO::ReadExtraInput(unsigned int index, uint32_t &extra_in) const
+{
+    bool ret = false;
+    if (port && (index < NumExtraIn)) {
+        unsigned int channel = (index+1) << 4;
+        ret = port->ReadQuadlet(BoardId, channel | EXTRA_IN_REG, extra_in);
+    }
+    return ret;
+}
+
+bool AmpIO::ReadSiSUJ_Pots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const
+{
+    bool ret = false;
+    if (GetSiHasSUJ()) {
+        uint32_t extra_in;
+        if (ReadExtraInput(index, extra_in)) {
+            if (extra_in & VALID_BIT) {
+                pot1 = extra_in & 0x00000fff;
+                pot2 = (extra_in & 0x0fff0000)>>16;
+                ret = true;
+            }
+        }
+    }
+    return ret;
+}
+
+bool AmpIO::ReadSiSUJ_Status(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZSiPresent) const
+{
+    if (GetHardwareVersion() != dRA1_String) return false;
+
+    if (!GetSiHasSUJ()) return false;
+
+    uint32_t status = ReadStatus();
+    ESSJPresent = status & SISUJ_ESSJ_PRESENT;
+    dSIBSiPresent = status & SISUJ_DSIB_SI_PRESENT;
+    dSIBZSiPresent = status & SISUJ_DSIB_Z_SI_PRESENT;
+    return true;
+}
+
+bool AmpIO::ReadSiSUJ_Z_Id(uint8_t &z_id) const
+{
+    bool ret = false;
+    // Set z_id to invalid value in case return value not checked
+    z_id = BoardIO::MAX_BOARDS;
+    uint32_t extra_in;
+    if (ReadExtraInput(1, extra_in)) {
+        if (extra_in & VALID_BIT) {
+            z_id = (extra_in & 0x0000f000) >> 12;
+            ret = true;
+        }
+    }
     return ret;
 }
 
