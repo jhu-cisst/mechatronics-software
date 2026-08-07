@@ -385,6 +385,19 @@ public:
     // ReadAmpEnableDelay (calls ReadMotorConfig)
     bool ReadAmpEnableDelay(unsigned int index, uint8_t &ampdelay) const;
 
+    // Read extra input (if any)
+    bool ReadExtraInput(unsigned int index, uint32_t &extra_in) const;
+
+    // Returns status of Si SUJ (whether various required boards are present)
+    bool ReadSiSUJ_Status(bool &ESSJPresent, bool &dSIBSiPresent, bool &dSIBZSiPresent) const;
+
+    // Read Si SUJ potentiometer values
+    bool ReadSiSUJ_Pots(unsigned int index, uint16_t &pot1, uint16_t &pot2) const;
+
+    // Read expected board id for Z axis pot (i.e., should equal default board id
+    // for the connect PSM or ECM).
+    bool ReadSiSUJ_Z_Id(uint8_t &z_id) const;
+
     // ********************** WRITE Methods **********************************
 
     // Enable motor power to the entire board (it is still necessary
@@ -791,8 +804,7 @@ protected:
     enum {
         ADC_DATA_REG = 0,       // adc data register
         DAC_CTRL_REG = 1,       // dac control register
-        POT_CTRL_REG = 2,       // pot control register
-        POT_DATA_REG = 3,       // pot data register
+        EXTRA_IN_REG = 2,       // extra input (if any)
         ENC_LOAD_REG = 4,       // enc control register (preload)
         POS_DATA_REG = 5,       // enc data register (position)
         VEL_DATA_REG = 6,       // enc data register (velocity, 4/DT method)
