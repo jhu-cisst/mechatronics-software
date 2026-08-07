@@ -139,7 +139,7 @@ protected:
     bool IsAllBoardsRev4_6_;              // TRUE if all boards are Firmware Rev 4-6
     bool IsAllBoardsRev6_;                // TRUE if all boards are Firmware Rev 6 (shorter wait)
     bool IsAllBoardsRev7_;                // TRUE if all boards are Firmware Rev 7
-    bool IsAllBoardsRev8_9_;              // TRUE if all boards are Firmware Rev 8 or 9
+    bool IsAllBoardsRev8_10_;             // TRUE if all boards are Firmware Rev 8, 9 or 10
 
     size_t ReadErrorCounter_;
 
@@ -207,11 +207,11 @@ protected:
 
     // Whether all boards support broadcast with shorter wait
     bool IsBroadcastShorterWait(void) const
-    { return (IsAllBoardsRev6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_9_); }
+    { return (IsAllBoardsRev6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_10_); }
 
     // Whether a valid mix of firmware for broadcast
     bool IsBroadcastFirmwareMixValid(void) const
-    { return (IsAllBoardsRev4_6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_9_); }
+    { return (IsAllBoardsRev4_6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_10_); }
 
     // Sets default protocol based on firmware
     void SetDefaultProtocol(void);
