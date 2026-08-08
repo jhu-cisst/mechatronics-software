@@ -1007,6 +1007,7 @@ void PrintIOExp(uint32_t iodata)
 // (channel 0)
 bool QLA_IOExp_Check(AmpIO &Board, unsigned long chan = 0)
 {
+    (void)chan;
     // TODO: update for non-zero channels (DQLA)
     uint32_t iodata;
     Board.WriteIOExpander(0x1345);   // Write 0x45 to RAM

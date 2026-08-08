@@ -610,8 +610,8 @@ bool FpgaIO::ReadRTL8211F_Register(unsigned int chan, unsigned int phyAddr, unsi
     // First, wait 1 millisecond
     Amp1394_Sleep(0.001);
     // Now, loop up to 20 times until mdio interface is idle and register address matches
-    quadlet_t read_data;
-    unsigned int regAddrRead;
+    quadlet_t read_data = 0;
+    unsigned int regAddrRead = 0;
     bool isIdle = false;
     bool regAddrMatch = false;
     unsigned int i = 0;

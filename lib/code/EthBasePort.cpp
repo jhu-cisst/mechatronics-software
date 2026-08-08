@@ -322,6 +322,7 @@ bool EthBasePort::CheckDebugHeader(std::ostream &debugStream, const std::string 
 // Prints the debug data from the higher-level Ethernet module (EthernetIO)
 void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
 {
+    (void)clockPeriod;
     // Following structure must match DebugData in EthernetIO.v
     struct DebugData {
         char     header[4];        // Quad 0
@@ -535,6 +536,7 @@ void EthBasePort::PrintDebugDataRTI(std::ostream &debugStream, const quadlet_t *
 
 void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
 {
+    (void)max_quads;
     struct FrameHeader {
         uint8_t  destMac[6];
         uint8_t  srcMac[6];
@@ -1115,6 +1117,7 @@ bool EthBasePort::checkCRC(const unsigned char *packet)
     uint32_t crc_original = bswap_32(*reinterpret_cast<const uint32_t *>(packet+FW_QRESPONSE_SIZE-FW_CRC_SIZE));
     return (crc_check == crc_original);
 #else
+    (void)packet;
     return true;
 #endif
 }

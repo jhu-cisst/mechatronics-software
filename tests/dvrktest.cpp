@@ -677,6 +677,7 @@ Result TestPowerAmplifier(AmpIO **Board, BasePort *Port) {
 *   only what the test failed on.
 ****************************************************************/
 Result TestDallas(AmpIO **Board, BasePort *Port) {
+    (void)Port;
     Result result = pass;
     std::cout << "dallas ";
     logfile << "dallas ";

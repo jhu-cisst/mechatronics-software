@@ -850,6 +850,8 @@ bool TestPowerAmplifier(int curLine, AmpIO &Board, BasePort *Port, std::ofstream
 
 bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
+    (void)curLine;
+    (void)Port;
     logFile << std::endl << "=== Ethernet (KSZ8851) Test ===" << std::endl;
     if (Board.GetFirmwareVersion() < 5) {
         logFile << "   No Ethernet controller, firmware version = " << Board.GetFirmwareVersion() << std::endl;
@@ -917,6 +919,8 @@ bool TestEthernetV2(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &lo
 
 bool TestEthernetV3(int curLine, AmpIO &Board, BasePort *Port, std::ofstream &logFile)
 {
+    (void)curLine;
+    (void)Port;
     logFile << std::endl << "=== Ethernet (RTL8211F) Test ===" << std::endl;
     bool ret = true;
     for (unsigned int i = 1; i <= 2; i++) {
