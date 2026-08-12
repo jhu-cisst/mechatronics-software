@@ -1365,6 +1365,7 @@ int main(int argc, char **argv)
         if (!FwPortIsZynq && (curPort == FwPort))
             std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
         std::cout << "  s) Toggle Si SUJ on/off" << std::endl;
+        std::cout << "  S) Read SUJ data" << std::endl;
         std::cout << "  t) Run timing analysis" << std::endl;
         std::cout << "  v) Measure motor power supply voltage (QLA 1.5+)" << std::endl;
         std::cout << "  w) Test waveform buffer" << std::endl;
@@ -1517,10 +1518,14 @@ int main(int argc, char **argv)
             break;
 
         case 'b':
-            if ((curPort == FwPort) && (FwBoardList.size() > 1))
+            if ((curPort == FwPort) && (FwBoardList.size() > 1)) {
                 curBoardFw = SelectBoard(FwPortString, FwBoardList, curBoardFw);
-            else if ((curPort == EthPort) && (EthBoardList.size() > 1))
+                curBoard = curBoardFw;
+            }
+            else if ((curPort == EthPort) && (EthBoardList.size() > 1)) {
                 curBoardEth = SelectBoard(EthPortString, EthBoardList, curBoardEth);
+                curBoard = curBoardEth;
+            }
             break;
 
         case 'c':
@@ -1630,6 +1635,35 @@ int main(int argc, char **argv)
                     write_data |= 0x0000a000;
                 }
                 curPort->WriteQuadlet(curBoardNum, BoardIO::BOARD_STATUS, write_data);
+            }
+            break;
+
+        case 'S':
+            {
+                bool ESSJPresent, dSIBSiPresent, dSIBZSiPresent;
+                if (curBoard->ReadSiSUJ_Status(ESSJPresent, dSIBSiPresent, dSIBZSiPresent)) {
+                    std::cout << "ESSJ " << (ESSJPresent ? "present" : "not present") << std::endl;
+                    std::cout << "dSIB-Si " << (dSIBSiPresent ? "present" : "not present") << std::endl;
+                    std::cout << "dSIB-Z-Si " << (dSIBZSiPresent ? "present" : "not present") << std::endl;
+                }
+                else {
+                    std::cout << "Could not read Si SUJ status" << std::endl;
+                }
+                uint8_t z_id;
+                if (curBoard->ReadSiSUJ_Z_Id(z_id)) {
+                    std::cout << "SUJ Z ID: " << static_cast<unsigned int>(z_id) << std::endl;
+                }
+                unsigned int num_extra = curBoard->GetNumExtraIn();
+                uint16_t pot1, pot2;
+                for (i = 0; i < static_cast<int>(num_extra); i++) {
+                    std::cout << "SUJ " << i << " Pots: ";
+                    if (curBoard->ReadSiSUJ_Pots(i, pot1, pot2)) {
+                        std::cout << pot1 << ", " << pot2 << std::endl;
+                    }
+                    else {
+                        std::cout << "invalid" << std::endl;
+                    }
+                }
             }
             break;
 
