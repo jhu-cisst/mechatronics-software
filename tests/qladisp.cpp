@@ -135,7 +135,7 @@ bool CollectFileConvert(const char *inFilename, const char *outFilename)
     return true;
 }
 
-void UpdateStatusStrings(char *statusStr1, char *statusStr2, uint32_t statusChanged, uint32_t status)
+void UpdateStatusStrings(char *statusStr1, char *statusStr2, uint32_t statusChanged, uint32_t status, unsigned int numAmps)
 {
     if (statusChanged&0x00080000) {  // power (mv-good)
         if (status&0x00080000) {
@@ -167,8 +167,7 @@ void UpdateStatusStrings(char *statusStr1, char *statusStr2, uint32_t statusChan
             statusStr1[16] = '-';
         }
     }
-    // NOTE: hard-coded for 4 amplifiers
-    for (unsigned int i = 0; i < 4; i++) {  // amplifier status
+    for (unsigned int i = 0; i < numAmps; i++) {  // amplifier status
         uint32_t mask = (0x00000100 << i);
         if (statusChanged&mask) {
             if (status&mask) {
@@ -827,13 +826,13 @@ int main(int argc, char** argv)
                     }
                 }
                 if (AxisData[axisNum].HasMotor()) {
-                    console.Print(9, lm+10+dx, "%04X", BoardList[j]->GetMotorCurrent(i));
+                    console.Print(9, lm+10+dx, "%04X ", BoardList[j]->GetMotorCurrent(i));
                     if ((BoardList[j]->GetHardwareVersion() == dRA1_String) &&
                         (!BoardList[j]->IsCurrentFbFiltered())) {
                         // Add * to indicate that dRAC filter is disabled
                         console.Print(9, lm+14+dx, "*");
                     }
-                    console.Print(10, lm+10+dx, "%04X", MotorCurrents[axisNum-1]);
+                    console.Print(10, lm+10+dx, "%04X ", MotorCurrents[axisNum-1]);
                     if (VoltageMode[axisNum-1])
                         BoardList[j]->SetMotorVoltage(i, MotorCurrents[axisNum-1]);
                     else
@@ -880,7 +879,9 @@ int main(int argc, char** argv)
                 if (status != BoardStatusList[j]) {
                     statusChanged = status^BoardStatusList[j];
                     BoardStatusList[j] = status;
-                    UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status);
+                    unsigned int numAmps = 0;
+                    if (BoardList[j]->GetHardwareVersion() == QLA1_String) numAmps = 4;
+                    UpdateStatusStrings(statusStr1[j], statusStr2[j], statusChanged, status, numAmps);
                 }
                 console.Print(STATUS_LINE, lm+bdx, "Status: %08X   Timestamp: %08X   DigOut: %01X",
                           status, BoardList[j]->GetTimestamp(),
