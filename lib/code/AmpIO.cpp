@@ -629,8 +629,8 @@ uint8_t AmpIO::GetSiSUJ_Z_Id() const
 {
     uint8_t board_id = BoardIO::MAX_BOARDS;
     if (GetSiHasSUJ()) {
-        // Extra input 1 is the SUJ Z axis pot data
-        uint32_t extra_in = GetExtraInput(1);
+        // Extra input 0 is the SUJ Z axis pot data
+        uint32_t extra_in = GetExtraInput(0);
         if (extra_in & VALID_BIT)
             board_id = (extra_in & 0x0000f000) >> 12;
     }
@@ -1366,7 +1366,8 @@ bool AmpIO::ReadSiSUJ_Z_Id(uint8_t &z_id) const
     // Set z_id to invalid value in case return value not checked
     z_id = BoardIO::MAX_BOARDS;
     uint32_t extra_in;
-    if (ReadExtraInput(1, extra_in)) {
+    // Extra input 0 is the SUJ Z axis pot data
+    if (ReadExtraInput(0, extra_in)) {
         if (extra_in & VALID_BIT) {
             z_id = (extra_in & 0x0000f000) >> 12;
             ret = true;

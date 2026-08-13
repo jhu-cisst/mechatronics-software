@@ -294,7 +294,9 @@ public:
     // have an I/O expander
     bool IsQLAExpanded(unsigned int index = 0) const;
 
-    // Returns true if FPGA is filtering motor current feedback
+    // Returns true if FPGA is filtering motor current feedback.
+    // This only refers to digital filtering in the FPGA -- depending on
+    // the hardware, there may also be analog filters.
     bool IsCurrentFbFiltered() const;
 
     // *********************** SET Methods ***********************************
