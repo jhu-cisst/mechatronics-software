@@ -75,6 +75,8 @@ const uint32_t DQLA_MV_GOOD_1   = 0x00004000;    /*!< Motor voltage good for QLA
 const uint32_t SISUJ_DSIB_SI_PRESENT    = 0x00200000;
 const uint32_t SISUJ_DSIB_Z_SI_PRESENT  = 0x00100000;
 const uint32_t SISUJ_ESSJ_PRESENT       = 0x00008000;
+const uint32_t DRAC_CUR_FB_MASK         = 0x00000800;   // Mask for setting CUR_FB_RAW
+const uint32_t DRAC_CUR_FB_RAW          = 0x00000400;   // 1 --> disable current feedback filtering
 
 // Masks for feedback signals
 const uint32_t MOTOR_CURR_MASK  = 0x0000ffff;  /*!< Mask for motor current adc bits */
@@ -921,6 +923,19 @@ bool AmpIO::IsQLAExpanded(unsigned int index) const
     return ret;
 }
 
+// Returns true if FPGA is filtering motor current feedback
+bool AmpIO::IsCurrentFbFiltered() const
+{
+    // Currently, only dRAC has filtering
+    if (GetHardwareVersion() != dRA1_String)
+        return false;
+    // Prior to Firmware Rev 10, measured current was always filtered
+    if (GetFirmwareVersion() < 10)
+        return true;
+    // For Firmware Rev 10, depends on status register bit
+    return !(GetStatus() & DRAC_CUR_FB_RAW);
+}
+
 /*******************************************************************************
  * Set commands
  */
@@ -984,6 +999,26 @@ void AmpIO::SetSafetyRelay(bool state)
         WriteBuffer[WB_CTRL_OFFSET] |=  RELAY_BIT;
     else
         WriteBuffer[WB_CTRL_OFFSET] &= ~RELAY_BIT;
+}
+
+
+bool AmpIO::SetCurrentFbFilter(bool state)
+{
+    // Currently, only DRAC provides filtering, so
+    // we can only disable filtering (state == false)
+    if (GetHardwareVersion() != dRA1_String)
+        return !state;
+    // Prior to Rev 10, no option to disable filter,
+    // so return true only if we are trying to enable it
+    if (GetFirmwareVersion() < 10)
+        return state;
+    // Firmware Rev 10 allows filter to be enabled or disabled
+    WriteBuffer[WB_CTRL_OFFSET] |= DRAC_CUR_FB_MASK;
+    if (state)
+        WriteBuffer[WB_CTRL_OFFSET] &= ~DRAC_CUR_FB_RAW;
+    else
+        WriteBuffer[WB_CTRL_OFFSET] |= DRAC_CUR_FB_RAW;
+    return true;
 }
 
 bool AmpIO::SetMotorCurrent(unsigned int index, uint32_t sdata)

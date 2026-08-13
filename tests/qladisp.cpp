@@ -291,6 +291,7 @@ int main(int argc, char** argv)
                   << "'o': turn power on/off (board only)" << std::endl
                   << "'i': turn power on/off (axis only, requires board first)" << std::endl
                   << "'v': toggle voltage/current mode (QLA 1.5+)" << std::endl
+                  << "'f': toggle current feedback filter (dRAC)" << std::endl
                   << "'w': increment encoders" << std::endl
                   << "'s': decrement encoders" << std::endl
                   << "'=': increase motor current by about 50mA" << std::endl
@@ -570,6 +571,13 @@ int main(int argc, char** argv)
                 console.Print(5, dx, "Axis %d %c", curAxis, VoltageMode[curAxis-1] ? 'V' : 'I');
             }
         }
+        else if (c == 'f') {
+            for (j = startIndex; j < endIndex; j++) {
+                // Toggle current feedback filter. Note that this will fail (return false)
+                // unless it is DRAC with Firmware Version 10+
+                BoardList[j]->SetCurrentFbFilter(!BoardList[j]->IsCurrentFbFiltered());
+            }
+        }
         else if (c == 'w') {
             for (j = startIndex; j < endIndex; j++)
                 EncUp(*(BoardList[j]));
@@ -801,6 +809,11 @@ int main(int argc, char** argv)
                 }
                 if (AxisData[axisNum].HasMotor()) {
                     console.Print(9, lm+10+dx, "%04X", BoardList[j]->GetMotorCurrent(i));
+                    if ((BoardList[j]->GetHardwareVersion() == dRA1_String) &&
+                        (!BoardList[j]->IsCurrentFbFiltered())) {
+                        // Add * to indicate that dRAC filter is disabled
+                        console.Print(9, lm+14+dx, "*");
+                    }
                     console.Print(10, lm+10+dx, "%04X", MotorCurrents[axisNum-1]);
                     if (VoltageMode[axisNum-1])
                         BoardList[j]->SetMotorVoltage(i, MotorCurrents[axisNum-1]);

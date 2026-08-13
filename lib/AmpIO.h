@@ -277,6 +277,9 @@ public:
     // have an I/O expander
     bool IsQLAExpanded(unsigned int index = 0) const;
 
+    // Returns true if FPGA is filtering motor current feedback
+    bool IsCurrentFbFiltered() const;
+
     // *********************** SET Methods ***********************************
     // The SetXXX methods below write data to local buffers that are sent over
     // the bus via BasePort::WriteAllBoards. To immediately write to
@@ -292,6 +295,9 @@ public:
     bool SetAmpEnable(unsigned int index, bool state);
     bool SetAmpEnableMask(uint32_t mask, uint32_t state);
     void SetSafetyRelay(bool state);
+    // Enable (true) or disable (false) filter on motor current feedback;
+    // returns true if possible given hardware and firmware rev.
+    bool SetCurrentFbFilter(bool state);
 
     bool SetMotorCurrent(unsigned int index, uint32_t mcur);
     // SetMotorVoltage is for QLA/DQLA (linear amplifiers)
