@@ -102,7 +102,7 @@ uint8_t BitReverse4[16] = { 0x0, 0x8, 0x4, 0xC,         // 0000, 0001, 0010, 001
                             0x1, 0x9, 0x5, 0xD,         // 1000, 1001, 1010, 1011
                             0x3, 0xB, 0x7, 0xF };       // 1100, 1101, 1110, 1111
 
-AmpIO::AmpIO(uint8_t board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0), NumDouts(0),
+AmpIO::AmpIO(uint8_t board_id) : FpgaIO(board_id), NumMotors(0), NumEncoders(0), NumDouts(0), NumExtraIn(0), ReqMotorCmdFb(false),
                                      dallasState(ST_DALLAS_START), dallasTimeoutSec(10.0), collect_state(false), collect_cb(0)
 {
     memset(ReadBuffer, 0, sizeof(ReadBuffer));
@@ -130,8 +130,14 @@ unsigned int AmpIO::GetReadNumBytes() const
     } else if (fver == 7) {
         numQuads = 4 + 6*NumEncoders;
     }
+    else if (fver < 10) {
+        numQuads = 4 + 2*NumMotors + 5*NumEncoders;
+        // PK TEMP: following to be removed when Firmware Rev 10 released
+        numQuads += NumExtraIn;
+    }
     else {
         numQuads = 4 + 2*NumMotors + 5*NumEncoders + NumExtraIn;
+        if (HasMotorCommandFb()) numQuads += NumMotors;
     }
     return numQuads * sizeof(quadlet_t);
 }
@@ -202,6 +208,8 @@ void AmpIO::InitBoard(void)
     ENC_RUN_OFFSET      = ENC_QTR5_OFFSET   + NumEncoders;
     MOTOR_STATUS_OFFSET = ENC_RUN_OFFSET    + NumEncoders;
     EXTRA_IN_OFFSET     = MOTOR_STATUS_OFFSET + NumMotors;
+    // Offset to Motor Command (only valid if HasMotorCommandFb() return true)
+    MOTOR_CMD_FB_OFFSET = EXTRA_IN_OFFSET + NumExtraIn;
 
     WB_HEADER_OFFSET = 0;   // only used for Firmware Rev 8+
     WB_CURR_OFFSET = (GetFirmwareVersion() < 8) ? 0 : 1;
@@ -351,6 +359,30 @@ bool AmpIO::HasQLA() const
 {
     return (GetHardwareVersion() == QLA1_String) ||
            (GetHardwareVersion() == DQLA_String);
+}
+
+// Return true if Motor Command feedback available via real-time block read
+// (can only return true for Firmware Rev 10+, and only if ).
+bool AmpIO::HasMotorCommandFb() const
+{
+    return ReqMotorCmdFb && (port->GetProtocol() != BasePort::PROTOCOL_BC_QRW);
+}
+
+// Request Motor Command feedback to be included in the real-time block read
+// packet (Rev 10+). This increases the size of the packet by NumMotors quadlets.
+// Note that Motor Command feedback is not supported with the broadcast read/write
+// protocol.
+bool AmpIO::RequestMotorCommandFb(bool state)
+{
+    // Firmware less than Rev 10 does not support Motor Command feedback.
+    // Could check port protocol, but we allow the user to request motor command
+    // feedback even if the broadcast read/write protocol is currently being used.
+    // Note that HasMotorCommandFb() will return false in that case.
+    // This provides consistent behavior regardless of order of calls to
+    // BasePort::SetProtocol and RequestMotorCommandFb.
+    if (GetFirmwareVersion() >= 10)
+        ReqMotorCmdFb = state;
+    return (ReqMotorCmdFb == state);
 }
 
 uint32_t AmpIO::GetStatus(void) const
@@ -603,6 +635,14 @@ uint8_t AmpIO::GetSiSUJ_Z_Id() const
             board_id = (extra_in & 0x0000f000) >> 12;
     }
     return board_id;
+}
+
+uint32_t AmpIO::GetMotorCommandFb(unsigned int index) const
+{
+    uint32_t value = 0;
+    if (HasMotorCommandFb() && (index < NumMotors))
+        value = ReadBuffer[index + MOTOR_CMD_FB_OFFSET] | VALID_BIT;
+    return value;
 }
 
 int32_t AmpIO::GetEncoderPosition(unsigned int index) const

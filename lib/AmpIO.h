@@ -63,6 +63,17 @@ public:
     // Return true if QLA or DQLA
     bool HasQLA() const;
 
+    // Return true if Motor Command feedback available via real-time block read
+    // (can only return true for Firmware Rev 10+, and if broadcast read/write
+    // protocol not being used).
+    bool HasMotorCommandFb() const;
+
+    // Request Motor Command feedback to be included in the real-time block read
+    // packet (Rev 10+). This increases the size of the packet by NumMotors quadlets.
+    // Note that Motor Command feedback is not supported with the broadcast read/write
+    // protocol. Returns true if request is successful.
+    bool RequestMotorCommandFb(bool state);
+
     // *********************** GET Methods ***********************************
     // The GetXXX methods below return data from local buffers that were filled
     // by BasePort::ReadAllBoards. To read data immediately from the boards,
@@ -127,6 +138,12 @@ public:
     // Returns expected board id for Z axis pot (i.e., should equal default board id
     // for the connect PSM or ECM). Returns BoardIO::MAX_BOARDS if invalid.
     uint8_t GetSiSUJ_Z_Id() const;
+
+    // Get Motor Command feedback. Valid data is indicated by the most-significant bit set to 1.
+    // Returns 0 if invalid. Note that Motor Command feedback can be requested by first calling
+    // RequestMotorCommandFb, but is only available (HasMotorCommandFb returns true) with
+    // Firmware Rev 10+, and when not using the broadcast read/write protocol.
+    uint32_t GetMotorCommandFb(unsigned int index) const;
 
     //********************** Encoder position/velocity/acceleration *****************************
 
@@ -694,6 +711,8 @@ protected:
     unsigned int NumDouts;     // Number of digital outputs
     unsigned int NumExtraIn;   // Number of extra inputs (e.g., for Si SUJ)
 
+    bool ReqMotorCmdFb;    // Request motor command feedback in real-time block read
+
     // Maximum number of channels (avoids need to dynamically allocate memory)
     enum { MAX_CHANNELS = 16 };
 
@@ -780,7 +799,7 @@ protected:
     // Firmware V7 added ENC_QTR5_OFFSET and ENC_RUN_OFFSET; in V6, the QTR5 data
     // was stuffed into unused bits in other fields.
     // Firmware V8 added MOTOR_STATUS_OFFSET.
-    // Firmware V10 added EXTRA_IN_OFFSET.
+    // Firmware V10 added EXTRA_IN_OFFSET and MOTOR_CMD_FB_OFFSET.
     enum {
         TIMESTAMP_OFFSET  = 0,    // one quadlet
         STATUS_OFFSET     = 1,    // one quadlet
@@ -797,6 +816,7 @@ protected:
     unsigned int ENC_RUN_OFFSET;  // one quadlet per channel
     unsigned int MOTOR_STATUS_OFFSET;
     unsigned int EXTRA_IN_OFFSET;
+    unsigned int MOTOR_CMD_FB_OFFSET;
 
     // offsets of real-time write buffer contents
     unsigned int WB_HEADER_OFFSET; // write header (Firmware Rev 8+)

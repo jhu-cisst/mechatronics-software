@@ -192,6 +192,7 @@ int main(int argc, char** argv)
     bool showTime = false; // whether to display time information
     bool useMaxAxis = false; // true --> use max(NumEncoders, NumMotors); false --> NumEncoders
     bool readOnly = false;   // true --> program does not call WriteAllBoards
+    bool reqMotorCmdFb = false;  // true --> request Motor Command feedback
 
     std::vector<AmpIO*> BoardList;
     std::vector<uint32_t> BoardStatusList;
@@ -234,6 +235,8 @@ int main(int argc, char** argv)
                 useMaxAxis = true;
             else if (argv[i][1] == 'r')
                 readOnly = true;
+            else if (argv[i][1] == 'c')
+                reqMotorCmdFb = true;
         }
         else {
             int bnum = atoi(argv[i]);
@@ -258,6 +261,7 @@ int main(int argc, char** argv)
                   << "            -t  displays time information" << std::endl
                   << "            -m  include motors without encoders (if any)" << std::endl
                   << "            -r  read-only (does not write to boards)" << std::endl
+                  << "            -c  include motor command feedback (if available)" << std::endl
                   << std::endl
                   << "Trying to detect boards on port:" << std::endl;
     }
@@ -356,6 +360,15 @@ int main(int argc, char** argv)
     if (!Port->SetProtocol(protocol))
         protocol = Port->GetProtocol();  // on failure, get current protocol
 
+    if (reqMotorCmdFb) {
+        for (i = 0; i < BoardList.size(); i++) {
+            if (!BoardList[i]->RequestMotorCommandFb(true)) {
+                std::cerr << "Could not request motor command feedback for board "
+                          << static_cast<unsigned int>(BoardList[i]->GetBoardId()) << std::endl;
+            }
+        }
+    }
+
     // Initialize motor currents at mid-range
     uint32_t MotorCurrents[MAX_AXES];
 
@@ -370,6 +383,7 @@ int main(int argc, char** argv)
     bool someRev7plus = false;
     bool someRev8plus = false;
     bool someSiSUJ = false;
+    bool someMotorCmdFb = false;
     BoardStatusList.clear();
     for (j = 0; j < BoardList.size(); j++) {
         uint32_t fver = BoardList[j]->GetFirmwareVersion();
@@ -377,6 +391,8 @@ int main(int argc, char** argv)
         if (fver >= 8) someRev8plus = true;
         if (BoardList[j]->GetSiHasSUJ())
             someSiSUJ = true;
+        if (BoardList[j]->HasMotorCommandFb())
+            someMotorCmdFb = true;
     }
 
     if (!readOnly) {
@@ -444,10 +460,13 @@ int main(int argc, char** argv)
     console.Print(7, lm, "Pot:");
     console.Print(8, lm, "Vel:");
     console.Print(9, lm, "Cur:");
-    console.Print(10, lm, "DAC:");
+    console.Print(10, lm, "Cmd:");   // Used to be DAC
     int nextLine = 11;
-    if (someRev8plus)
-        console.Print(nextLine++, lm, "MSt:");   // Motor status
+    if (someRev8plus) {
+        console.Print(nextLine++, lm, "MSt:");       // Motor status
+        if (someMotorCmdFb)
+            console.Print(nextLine++, lm, "CFb:");   // Motor Command feedback (Rev 10+)
+    }
     if (fullvel) {
         if (someRev7plus) {
             console.Print(nextLine++, lm, "Qtr1:");
@@ -819,12 +838,14 @@ int main(int argc, char** argv)
                         BoardList[j]->SetMotorVoltage(i, MotorCurrents[axisNum-1]);
                     else
                         BoardList[j]->SetMotorCurrent(i, MotorCurrents[axisNum-1]);
-                    if (someRev8plus) {
-                        if (fver >= 8)
-                            console.Print(11, lm+6+dx, "%08X", BoardList[j]->GetMotorStatus(i));
+                    if (someRev8plus && (fver >= 8)) {
+                        console.Print(11, lm+6+dx, "%08X", BoardList[j]->GetMotorStatus(i));
+                        if (someMotorCmdFb && (BoardList[j]->HasMotorCommandFb())) {
+                            console.Print(12, lm+6+dx, "%08X", BoardList[j]->GetMotorCommandFb(i));
+                        }
                     }
                 }
-                nextLine = someRev8plus ? 12 : 11;
+                nextLine = someMotorCmdFb ? 13 : (someRev8plus ? 12 : 11);
                 if (AxisData[axisNum].HasEncoder()) {
                     if (fullvel) {
                         if (someRev7plus) {
