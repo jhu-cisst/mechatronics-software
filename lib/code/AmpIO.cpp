@@ -573,6 +573,11 @@ double AmpIO::GetMotorVoltageRatio(unsigned int index) const
     }
     quadlet_t buff;
     buff = ReadBuffer[index+MOTOR_STATUS_OFFSET];
+    if (GetFirmwareVersion() >= 10) {
+        const uint16_t raw = buff & 0xffff;
+        const int16_t dutyCycle = static_cast<int16_t>(raw ^ 0x8000) >> 5;
+        return dutyCycle / 1023.0l;
+    }
     int16_t raw = buff & 0xffff;
     return (raw >> 5) / 1023.0l;
 }
@@ -1123,7 +1128,16 @@ bool AmpIO::SetMotorVoltageRatio(unsigned int index, double ratio)
         WriteBuffer[index+WB_CURR_OFFSET] |= VALID_BIT;
         WriteBuffer[index+WB_CURR_OFFSET] &= ~0x0FFFFFFF;
         WriteBuffer[index+WB_CURR_OFFSET] |= 1 << 24; // select voltage mode
-        WriteBuffer[index+WB_CURR_OFFSET] |= ((int)(ratio * 1023) & 0b11111111111) << 13;
+        if (GetFirmwareVersion() >= 10) {
+            // Firmware Rev 10+ accepts a 16-bit, 0x8000-centered command.
+            const uint16_t dutyCycle =
+                ((static_cast<uint16_t>(static_cast<int>(ratio * 1023)) & 0x07ff)
+                 ^ 0x0400) << 5;
+            WriteBuffer[index+WB_CURR_OFFSET] |= dutyCycle;
+        }
+        else {
+            WriteBuffer[index+WB_CURR_OFFSET] |= ((int)(ratio * 1023) & 0b11111111111) << 13;
+        }
         return true;
     } else {
         return false;
@@ -2205,6 +2219,10 @@ int16_t AmpIO::ReadDutyCycle(unsigned int index) const
     uint32_t read_data = 0;
     if (port)
         port->ReadQuadlet(BoardId, ADDR_MOTOR_CONTROL << 12 | (index + 1) << 4 | OFF_DUTY_CYCLE, read_data);
+    if (GetFirmwareVersion() >= 10) {
+        const uint16_t raw = read_data & 0xffff;
+        return static_cast<int16_t>(raw ^ 0x8000) >> 5;
+    }
     return static_cast<int16_t>(read_data);
 }
 
