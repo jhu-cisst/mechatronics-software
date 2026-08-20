@@ -139,10 +139,11 @@ public:
     // for the connect PSM or ECM). Returns BoardIO::MAX_BOARDS if invalid.
     uint8_t GetSiSUJ_Z_Id() const;
 
-    // Get Motor Command feedback. Valid data is indicated by the most-significant bit set to 1.
-    // Returns 0 if invalid. Note that Motor Command feedback can be requested by first calling
-    // RequestMotorCommandFb, but is only available (HasMotorCommandFb returns true) with
-    // Firmware Rev 10+, and when not using the broadcast read/write protocol.
+    // Get Motor Command feedback. Valid data is indicated by the most-significant bit set
+    // to 1 (this is ensured by the firmware). Returns 0 if invalid.
+    // Note that Motor Command feedback can be requested by first calling RequestMotorCommandFb,
+    // but is only available (HasMotorCommandFb returns true) with Firmware Rev 10+, and
+    // when not using the broadcast read/write protocol.
     uint32_t GetMotorCommandFb(unsigned int index) const;
 
     //********************** Encoder position/velocity/acceleration *****************************

@@ -646,7 +646,7 @@ uint32_t AmpIO::GetMotorCommandFb(unsigned int index) const
 {
     uint32_t value = 0;
     if (HasMotorCommandFb() && (index < NumMotors))
-        value = ReadBuffer[index + MOTOR_CMD_FB_OFFSET] | VALID_BIT;
+        value = ReadBuffer[index + MOTOR_CMD_FB_OFFSET];
     return value;
 }
 
