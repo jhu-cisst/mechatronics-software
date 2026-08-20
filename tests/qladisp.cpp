@@ -617,16 +617,16 @@ int main(int argc, char** argv)
                         }
                         BoardList[j]->WriteEthernetControl(ctrl);
                     }
-                    if (allOn && allOff)
-                        console.Print(STATUS_LINE-1, lm, "Fast Mode Error");
-                    else if (allOn)
-                        console.Print(STATUS_LINE-1, lm, "Fast Mode ON   ");
-                    else if (allOff)
-                        console.Print(STATUS_LINE-1, lm, "Fast Mode OFF  ");
-                    else
-                        console.Print(STATUS_LINE-1, lm, "Fast Mode Mixed");
                 }
             }
+            if (allOn && allOff)
+                console.Print(STATUS_LINE-1, lm, "               ");
+            else if (allOn)
+                console.Print(STATUS_LINE-1, lm, "Fast Mode ON   ");
+            else if (allOff)
+                console.Print(STATUS_LINE-1, lm, "Fast Mode OFF  ");
+            else
+                console.Print(STATUS_LINE-1, lm, "Fast Mode Mixed");
         }
         else if (c == 'w') {
             for (j = startIndex; j < endIndex; j++)
