@@ -596,38 +596,6 @@ int main(int argc, char** argv)
                 BoardList[j]->SetCurrentFbFilter(!BoardList[j]->IsCurrentFbFiltered());
             }
         }
-        else if ((c == 'F') && ethPort && (protocol == BasePort::PROTOCOL_BC_QRW)) {
-            // Ethernet broadcast read fastMode
-            const uint32_t ETH_CTRL_FASTMODE_MASK_V3 = 0x01000000;
-            const uint32_t ETH_STAT_FASTMODE_V3      = 0x00020000;
-            bool allOn = true;
-            bool allOff = true;
-            for (j = startIndex; j < endIndex; j++) {
-                if (BoardList[j]->GetFpgaVersionMajor() == 3) {
-                    uint32_t status;
-                    uint32_t ctrl = ETH_CTRL_FASTMODE_MASK_V3;
-                    if (BoardList[j]->ReadEthernetStatus(status)) {
-                        if (status & ETH_STAT_FASTMODE_V3) {
-                            allOn = false;
-                            ctrl &= ~ETH_STAT_FASTMODE_V3;
-                        }
-                        else {
-                            allOff = false;
-                            ctrl |= ETH_STAT_FASTMODE_V3;
-                        }
-                        BoardList[j]->WriteEthernetControl(ctrl);
-                    }
-                }
-            }
-            if (allOn && allOff)
-                console.Print(STATUS_LINE-1, lm, "               ");
-            else if (allOn)
-                console.Print(STATUS_LINE-1, lm, "Fast Mode ON   ");
-            else if (allOff)
-                console.Print(STATUS_LINE-1, lm, "Fast Mode OFF  ");
-            else
-                console.Print(STATUS_LINE-1, lm, "Fast Mode Mixed");
-        }
         else if (c == 'w') {
             for (j = startIndex; j < endIndex; j++)
                 EncUp(*(BoardList[j]));
