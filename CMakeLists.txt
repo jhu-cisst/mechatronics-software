@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2011-2025 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2011-2026 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -11,7 +11,7 @@
 
 cmake_minimum_required (VERSION 3.16)
 
-project (Amp1394 VERSION 2.3.0)
+project (Amp1394 VERSION 2.4.0)
 
 # Set the version number
 set (Amp1394_VERSION "${Amp1394_VERSION_MAJOR}.${Amp1394_VERSION_MINOR}.${Amp1394_VERSION_PATCH}")

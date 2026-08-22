@@ -1,6 +1,27 @@
 Change log
 ==========
 
+2.4.0 (2026-08-22)
+==================
+* API changes:
+  * None
+* New features:
+  * Support Firmware Rev 10, which provides the dVRK-Si SUJ potentiometer feedback (if available) in the real-time block read packet, and other features described below.
+  * `BasePort::GetSiHasSUJ` returns true if dVRK-Si controller includes SUJ interface; if so, `ScanNodes` adds "+dSIB" to displayed hardware string.
+  * `AmpIO::GetNumExtraIn` returns the number of extra inputs in real-time block read packet (5 if dVRK-Si controller has SUJ interface; 0 otherwise); `GetExtraInput` provides low-level access to the extra inputs from the real-time block read packet and `ReadExtraInput` provides this via a separate quadlet read (see next items for SUJ-related methods that parse the extra inputs to provide more meaningful information).
+  * `AmpIO::Get` methods `GetSiSUJ_Status`, `GetSiSUJ_Pots`, and `GetSiSUJ_Z_Id` return the dVRK-Si SUJ status (e.g., whether various required boards are present), the SUJ potentiometer values, and the expected board id for the Z-axis SUJ pot (for identifying cabling errors); these values are extracted from the real-time block read packet.
+  * `AmpIO::Read` methods `ReadSiSUJ_Status`, `ReadSiSUJ_Pots`, and `ReadSiSUJ_Z_Id` function the same as above, but obtain data via separate quadlet reads from the FPGA.
+  * `AmpIO::IsCurrentFbFiltered` returns true if the measured motor current is filtered on the FPGA (does not consider any possible analog filtering); call `SetCurrentFbFilter` to enable/disable the FPGA filter, on hardware that supports this feature (dVRK-Si).
+  * `AmpIO::HasMotorCommandFb` returns true if motor command feedback is available; if so, calling `RequestMotorCommandFb` adds it to the real-time block read packet, and it can be retrieved by calling `GetMotorCommandFb`.
+  * Updates to `qladisp`:
+    * Changed `DAC` to `Cmd` when displaying value sent to FPGA, since the destination is not always a DAC.
+    * Display dVRK-Si SUJ potentiometer feedback if available; note that each joint has two pots, which are shown on separate lines as `SUJ-P1` and `SUJ-P2`.
+    * Added `-c` command line option to request motor command feedback; if available, displayed as `CFb`.
+    * Added `f` key to enable/disable measured motor current filtering (dVRK-Si only); asterisk (*) added to displayed value in non-default case (i.e., when filter is disabled).
+  * Added simulation of embedded system (firmware), through a SIMULATION port (contribution from University of Verona); simulation is enabled by CMake option `Amp1394_HAS_SIM`.
+* Bug fixes:
+  * None
+
 2.3.0 (2026-01-07)
 ==================
 * API changes:

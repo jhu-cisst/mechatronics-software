@@ -132,8 +132,6 @@ unsigned int AmpIO::GetReadNumBytes() const
     }
     else if (fver < 10) {
         numQuads = 4 + 2*NumMotors + 5*NumEncoders;
-        // PK TEMP: following to be removed when Firmware Rev 10 released
-        numQuads += NumExtraIn;
     }
     else {
         numQuads = 4 + 2*NumMotors + 5*NumEncoders + NumExtraIn;
@@ -166,7 +164,7 @@ void AmpIO::InitBoard(void)
         NumMotors = 10;
         NumEncoders = 7;
         NumDouts = 0;
-        // SiHasSUJ can only return true for Rev 10
+        // SiHasSUJ can only return true for Rev 10+
         NumExtraIn = GetSiHasSUJ() ? 5 : 0;
     }
     else if (GetHardwareVersion() == DQLA_String) {
@@ -362,7 +360,8 @@ bool AmpIO::HasQLA() const
 }
 
 // Return true if Motor Command feedback available via real-time block read
-// (can only return true for Firmware Rev 10+, and only if ).
+// (can only return true for Firmware Rev 10+, and only if protocol is not
+// broadcast query-read-write).
 bool AmpIO::HasMotorCommandFb() const
 {
     return ReqMotorCmdFb && (port->GetProtocol() != BasePort::PROTOCOL_BC_QRW);

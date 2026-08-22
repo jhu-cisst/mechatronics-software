@@ -338,9 +338,8 @@ bool BasePort::ScanNodes(void)
         FpgaVersion[board] = fpga_ver;
         HardwareVersion[board] = hver;
         FirmwareVersion[board] = fver;
-        // has_suj is bit 13, DRAC_HAS_SUJ_MASK = 0x00002000
-        // could also check firmware version (fver >= 10)
-        SiHasSUJ[board] = (hver == dRA1_String) && (data & DRAC_HAS_SUJ_MASK);
+        // has_suj is bit 13, DRAC_HAS_SUJ_MASK = 0x00002000, for firmware Rev 10+
+        SiHasSUJ[board] = (hver == dRA1_String) && (fver >= 10) && (data & DRAC_HAS_SUJ_MASK);
 
         // read git description (introduced after Rev 8 release)
         uint32_t git_desc = 0;
