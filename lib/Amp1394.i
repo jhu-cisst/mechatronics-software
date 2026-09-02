@@ -55,7 +55,7 @@ uint32_t bswap32(uint32_t in);
 }
 %typemap(argout) (quadlet_t& ARGOUT_QUADLET_T)
 {
-    $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_int(*arg$argnum));
+    $result = SWIG_AppendOutput($result, SWIG_From_unsigned_SS_int(*arg$argnum));
 }
 
 %typemap(in,numinputs=0)
@@ -66,7 +66,7 @@ uint32_t bswap32(uint32_t in);
 }
 %typemap(argout) (int32_t& ARGOUT_INT32_T)
 {
-    $result = SWIG_Python_AppendOutput($result, SWIG_From_int(*arg$argnum));
+    $result = SWIG_AppendOutput($result, SWIG_From_int(*arg$argnum));
 }
 
 %typemap(in,numinputs=0)
@@ -77,7 +77,7 @@ uint32_t bswap32(uint32_t in);
 }
 %typemap(argout) (uint16_t& ARGOUT_UINT16_T)
 {
-    $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_short(*arg$argnum));
+    $result = SWIG_AppendOutput($result, SWIG_From_unsigned_SS_short(*arg$argnum));
 }
 
 // -------------------------
@@ -135,7 +135,7 @@ uint32_t bswap32(uint32_t in);
 %typemap(argout)
   (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES)
 {
-  $result = SWIG_Python_AppendOutput($result,(PyObject*)array$argnum);
+  $result = SWIG_AppendOutput($result,(PyObject*)array$argnum);
 }
 
 
