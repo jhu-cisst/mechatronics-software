@@ -330,7 +330,7 @@ bool BasePort::ScanNodes(void)
                 continue;
             }
             fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
-            if ((fver >= 10) && (data & VIVADO_BIT)) {   // PK TODO: change to 11
+            if ((fver >= 10) && (fpga_ver == 3) && (data & VIVADO_BIT)) {   // PK TODO: change to 11
                 build_system = BUILD_VIVADO;
             }
         }
