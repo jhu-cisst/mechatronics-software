@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides, Zihan Chen
 
-  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2026 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -320,7 +320,7 @@ bool BasePort::ScanNodes(void)
         }
         fver = data;
 
-        // read FPGA version (for Firmware Rev 5+) and build system (for Firmware Rev 11+)
+        // read FPGA version (for Firmware Rev 5+) and build system (for Firmware Rev 10+)
         unsigned long fpga_ver = 1;
         BuildSystemType build_system = BUILD_ISE;
         if (fver >= 5) {
@@ -330,7 +330,10 @@ bool BasePort::ScanNodes(void)
                 continue;
             }
             fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
-            if ((fver >= 10) && (fpga_ver == 3) && (data & VIVADO_BIT)) {   // PK TODO: change to 11
+            // Check if ISE or Vivado build for FPGA V3 (FPGA V1 and V2 can only be built with ISE).
+            // This bit was introduced after Firmware Rev 10, but has been 0 since Firmware Rev 9,
+            // so the following check is fine and will detect Vivado builds for Firmware Rev 10+.
+            if ((fver >= 10) && (fpga_ver == 3) && (data & VIVADO_BIT)) {
                 build_system = BUILD_VIVADO;
             }
         }
@@ -1033,7 +1036,7 @@ bool BasePort::ReadAllBoardsBroadcast(void)
                     // Note that update times should be increasing, so if our current updateTime is
                     // less than the previous max (updateFinishTime), then there must have been overflow
                     if (bcReadInfo.boardInfo[boardNum].updateTime < bcReadInfo.updateFinishTime) {
-                        // Firmware Rev 9 uses 15 bits; prior versions use 14 bits
+                        // Firmware Rev 9+ uses 15 bits; prior versions use 14 bits
                         uint16_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x4000 : 0x8000;
                         bcReadInfo.boardInfo[boardNum].updateTime += overflow_val*clkPeriod;
                         bcReadInfo.updateOverflow = true;
@@ -1089,13 +1092,13 @@ bool BasePort::ReadAllBoardsBroadcast(void)
         if (timingInfo != 0) {
             // timingInfo == 0 indicates invalid data
             if (bcReadInfo.readStartTime < bcReadInfo.updateFinishTime) {
-                // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+                // Firmware Rev 9+ uses 16 bits; prior versions use 14 bits
                 uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
                 bcReadInfo.readStartTime += overflow_val*clkPeriod;
                 bcReadInfo.readOverflow = true;
             }
             if (bcReadInfo.readFinishTime < bcReadInfo.readStartTime) {
-                // Firmware Rev 9 uses 16 bits; prior versions use 14 bits
+                // Firmware Rev 9+ uses 16 bits; prior versions use 14 bits
                 uint32_t overflow_val = (FirmwareVersion[HubBoard] < 9) ? 0x00004000 : 0x00010000;
                 bcReadInfo.readFinishTime += overflow_val*clkPeriod;
                 bcReadInfo.readOverflow = true;
@@ -1194,7 +1197,7 @@ bool BasePort::WriteAllBoards(void)
                 BoardList[board]->InitWriteBuffer();
             }
             else {
-                // Rev 7 firmware: write DAC (x4) and Status/Control register
+                // Rev 7+ firmware: write DAC (x4) and Status/Control register
                 BoardList[board]->GetWriteData(buf, 0, numQuads);
                 bool ret = WriteBlock(board, 0, buf, numBytes);
                 BoardList[board]->SetWriteValid(ret);
