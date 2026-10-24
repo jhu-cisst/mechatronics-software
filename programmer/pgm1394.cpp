@@ -32,7 +32,7 @@ const unsigned int SECTOR_SIZE = 65536;
 // Maximum number of bytes in one line of MCS file
 const unsigned int MAX_LINE = 16;
 
-int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
+int GetMenuChoice(AmpIO &Board, const std::string &mcsName, bool fileOk)
 {
 #ifndef _MSC_VER
     struct termios savedTerm, newTerm;
@@ -61,13 +61,15 @@ int GetMenuChoice(AmpIO &Board, const std::string &mcsName)
 
         std::cout << "0) Exit programmer" << std::endl;
         if (!fpgaV3) {
-            std::cout << "1) Program PROM" << std::endl
-                      << "2) Verify PROM" << std::endl
-                      << "3) Read PROM data" << std::endl
-                      << "4) Program FPGA SN" << std::endl
-                      << "5) Program QLA SN" << std::endl
-                      << "6) Read FPGA SN" << std::endl
-                      << "7) Read QLA SN" << std::endl;
+            if (fileOk) {
+                std::cout << "1) Program PROM" << std::endl
+                          << "2) Verify PROM" << std::endl;
+            }
+            std::cout     << "3) Read PROM data" << std::endl
+                          << "4) Program FPGA SN" << std::endl
+                          << "5) Program QLA SN" << std::endl
+                          << "6) Read FPGA SN" << std::endl
+                          << "7) Read QLA SN" << std::endl;
             if (fver >= 7)
                 std::cout << "8) Reboot FPGA and exit" << std::endl;
             else
@@ -470,7 +472,6 @@ int main(int argc, char** argv)
     int result = RESULT_OK;
     int board = BoardIO::MAX_BOARDS;
     std::string mcsName;
-    std::string mcsNameAlt;
     std::string sn;
     bool auto_mode = false;
     std::string hwList;
@@ -530,11 +531,9 @@ int main(int argc, char** argv)
         unsigned int fpgaVer = Board.GetFpgaVersionMajor();
         if (fpgaVer == 1) {
             mcsName = std::string("FPGA1394V1-QLA.mcs");
-            mcsNameAlt = std::string("FPGA1394-QLA.mcs");
         }
         else if (fpgaVer == 2) {
             mcsName = std::string("FPGA1394V2-QLA.mcs");
-            mcsNameAlt = std::string("FPGA1394Eth-QLA.mcs");
         }
         else if (fpgaVer != 3) {
             std::cerr << "Unsupported FPGA (Version = " << fpgaVer << ")" << std::endl;
@@ -542,21 +541,15 @@ int main(int argc, char** argv)
         }
     }
     mcsFile promFile;
+    bool fileOk = false;
     if (!mcsName.empty()) {
-        bool fileOk = promFile.OpenFile(mcsName);
-        if ((!fileOk) && (!mcsNameAlt.empty())) {
-            fileOk = promFile.OpenFile(mcsNameAlt);
-            if (fileOk) {
-                mcsName = mcsNameAlt;
-                std::cerr << "Switched to alternate filename " << mcsNameAlt << std::endl;
-            }
-        }
+        fileOk = promFile.OpenFile(mcsName);
         if (!fileOk) {
-            std::cerr << "Failed to open PROM file: " << mcsName;
-            if (!mcsNameAlt.empty())
-                std::cerr << " or " << mcsNameAlt;
-            std::cout << std::endl;
-            return RESULT_NO_PROM_FILE;
+            std::cerr << "Failed to open PROM file: " << mcsName << std::endl;
+            if ((args_found == 2) || (auto_mode)) {
+                // Exit if user-specified MCS file not found, or if no MCS file in auto mode
+                return RESULT_NO_PROM_FILE;
+            }
         }
     }
 
@@ -590,13 +583,13 @@ int main(int argc, char** argv)
 
 
     while (!done) {
-        int c = GetMenuChoice(Board, mcsName);
+        int c = GetMenuChoice(Board, mcsName, fileOk);
         switch (c) {
         case 0:
             done = true;
             break;
         case 1:
-            if (!fpgaV3) {
+            if (!fpgaV3 && fileOk) {
                 if (PromProgramTest(Board)) {
                     std::cout << std::endl;
                     result = PromProgram(Board, promFile) ? RESULT_OK : RESULT_PROGRAM_FAILED;
@@ -608,7 +601,7 @@ int main(int argc, char** argv)
             }
             break;
         case 2:
-            if (!fpgaV3)
+            if (!fpgaV3 && fileOk)
                 result = PromVerify(Board, promFile) ? RESULT_OK : RESULT_VERIFY_FAILED;
             break;
         case 3:
@@ -669,7 +662,7 @@ int main(int argc, char** argv)
     }
 
 cleanup:
-    if (!mcsName.empty())
+    if (fileOk)
         promFile.CloseFile();
     Port->RemoveBoard(board);
     delete Port;

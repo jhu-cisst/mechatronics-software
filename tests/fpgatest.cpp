@@ -143,6 +143,7 @@ uint32_t KSZ8851CRC(const unsigned char *data, size_t len)
     return crc;
 }
 
+
 // Compute parameters to initialize multicast hash table
 void ComputeMulticastHash(unsigned char *MulticastMAC, uint8_t &regAddr, uint16_t &regData)
 {
@@ -196,6 +197,43 @@ void ComputePhyId(uint32_t oui, uint32_t model, uint32_t rev,
         std::cout << " (should be " << std::setw(4) << ref_id2 << ")";
     std::cout << ", OUI reconstructed = " << std::setw(6)
               << bswap_32(EthBasePort::BitReverse32(oui_rec)) << std::dec << std::endl;
+}
+
+void CheckVirtualPHY(BasePort *Port, unsigned int board_num)
+{
+    uint32_t cmd_list[16];
+    std::cout << "MDIO commands:" << std::endl;
+    if (Port->ReadBlock(board_num, 0x43b0, cmd_list, sizeof(cmd_list))) {
+        for (size_t i = 0; i < 16; i++) {
+            uint32_t cmd = bswap_32(cmd_list[i]);
+            std::cout << "  Cmd " << i << ": ";
+            if ((cmd & 0xc0000000) == 0x40000000) {
+                if ((cmd & 0x30000000) == 0x20000000)
+                    std::cout << "Read ";
+                else if ((cmd & 0x30000000) == 0x10000000)
+                    std::cout << "Write ";
+                else
+                    std::cout << "Error ";
+                uint32_t phy = (cmd & 0x0f800000) >> 23;
+                uint32_t reg = (cmd & 0x007c0000) >> 18;
+                uint32_t data = cmd & 0x0000ffff;
+                std::cout << "Phy " << phy << ", Reg " << reg << ", Data "
+                          << std::hex << data << std::dec << std::endl;
+            }
+            else {
+                std::cout << "Invalid" << std::endl;
+            }
+        }
+    }
+    uint32_t debug;
+    if (Port->ReadQuadlet(board_num, 0x43af, debug)) {
+        uint32_t regNew = (debug & 0x1f000000) >> 24;
+        if (regNew)
+            std::cout << "New register (not supported): " << regNew << std::endl;
+        uint32_t preamble_error = (debug & 0x000000f0) >> 4;
+        if (preamble_error)
+            std::cout << "MDIO preamble error count: " << preamble_error << std::endl;
+    }
 }
 
 // Ethernet status from FPGA register 12
@@ -1358,6 +1396,8 @@ int main(int argc, char **argv)
         std::cout << "  i) Read IPv4 address" << std::endl;
         std::cout << "  I) Clear IPv4 address" << std::endl;
         std::cout << "  m) Initialize and test I/O Expander (QLA 1.5+)" << std::endl;
+        if (fpga_ver == 3)
+            std::cout << "  M) Read PS Virtual PHY MDIO log" << std::endl;
         if (curBoardFw && curBoardEth)
             std::cout << "  p) Toggle port (" << FwPortString << " or " << EthPortString << ")" << std::endl;
         std::cout << "  P) Compute Ethernet PHY IDs" << std::endl;
@@ -1585,6 +1625,12 @@ int main(int argc, char **argv)
             else {
                 // Test I/O expander on QLA Rev 1.5+ (channel 0)
                 QLA_IOExp_Check(*curBoard);
+            }
+            break;
+
+        case 'M':    // FPGAV3 Virtual PHY MDIO
+            if (fpga_ver == 3) {
+                CheckVirtualPHY(curPort, curBoardNum);
             }
             break;
 
