@@ -31,6 +31,9 @@ http://www.cisst.org/cisst/license.txt.
 // Currently, the supported hardware (e.g., QLA1) is added in the BasePort constructor.
 std::vector<unsigned long> BasePort::SupportedHardware;
 
+// Bit mask for Vivado bit in ETH_STATUS
+const uint32_t VIVADO_BIT = 0x20000000;
+
 unsigned int BasePort::BroadcastReadInfo::IncrementSequence()
 {
     readSequence++;
@@ -317,8 +320,9 @@ bool BasePort::ScanNodes(void)
         }
         fver = data;
 
-        // read FPGA version (for Firmware Rev 5+)
+        // read FPGA version (for Firmware Rev 5+) and build system (for Firmware Rev 11+)
         unsigned long fpga_ver = 1;
+        BuildSystemType build_system = BUILD_ISE;
         if (fver >= 5) {
             if (!ReadQuadletNode(node, BoardIO::ETH_STATUS, data)) {
                 outStr << "BasePort::ScanNodes: unable to read FPGA version (ETH_STATUS) from node "
@@ -326,6 +330,9 @@ bool BasePort::ScanNodes(void)
                 continue;
             }
             fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+            if ((fver >= 10) && (data & VIVADO_BIT)) {   // PK TODO: change to 11
+                build_system = BUILD_VIVADO;
+            }
         }
 
         // read board id
@@ -338,6 +345,7 @@ bool BasePort::ScanNodes(void)
         FpgaVersion[board] = fpga_ver;
         HardwareVersion[board] = hver;
         FirmwareVersion[board] = fver;
+        BuildSystem[board] = build_system;
         // has_suj is bit 13, DRAC_HAS_SUJ_MASK = 0x00002000, for firmware Rev 10+
         SiHasSUJ[board] = (hver == dRA1_String) && (fver >= 10) && (data & DRAC_HAS_SUJ_MASK);
 
@@ -383,6 +391,9 @@ bool BasePort::ScanNodes(void)
                     outStr << "*";
                 outStr << ")";
             }
+        }
+        if (build_system == BUILD_VIVADO) {
+            outStr << " (Vivado)";
         }
         outStr << std::endl;
 
@@ -753,6 +764,17 @@ bool BasePort::HardwareVersionValid(unsigned long hver)
         }
     }
     return valid;
+}
+
+std::string BasePort::GetBuildSystemString(unsigned char boardId) const
+{
+    if (boardId < BoardIO::MAX_BOARDS) {
+        if (BuildSystem[boardId] == BUILD_ISE)
+            return std::string("ISE");
+        else if (BuildSystem[boardId] == BUILD_VIVADO)
+            return std::string("Vivado");
+    }
+    return std::string("Unknown");
 }
 
 bool BasePort::CheckFwBusGeneration(const std::string &caller, bool doScan)

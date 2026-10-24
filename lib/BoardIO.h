@@ -141,6 +141,8 @@ public:
     uint32_t GetHardwareVersion(void) const;
     std::string GetHardwareVersionString(void) const;
 
+    std::string GetBuildSystemString(void) const;
+
     // Return whether dVRK-Si controller has SUJ support
     bool GetSiHasSUJ() const;
 

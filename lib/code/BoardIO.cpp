@@ -58,6 +58,11 @@ std::string BoardIO::GetHardwareVersionString(void) const
     return (port ? port->GetHardwareVersionString(BoardId) : "");
 }
 
+std::string BoardIO::GetBuildSystemString(void) const
+{
+    return (port ? port->GetBuildSystemString(BoardId) : "");
+}
+
 bool BoardIO::GetSiHasSUJ(void) const
 {
     return (port ? port->GetSiHasSUJ(BoardId) : false);

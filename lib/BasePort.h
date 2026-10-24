@@ -183,6 +183,9 @@ protected:
     // Hardware versions (e.g., QLA1)
     unsigned long HardwareVersion[BoardIO::MAX_BOARDS];
 
+    enum BuildSystemType { BUILD_ISE, BUILD_VIVADO };
+    BuildSystemType BuildSystem[BoardIO::MAX_BOARDS];
+
     // Whether dVRK-Si has SUJ interface
     bool SiHasSUJ[BoardIO::MAX_BOARDS];
 
@@ -404,6 +407,11 @@ public:
      \brief Whether hardware version is valid (i.e., supported hardware)
     */
     static bool HardwareVersionValid(unsigned long hver);
+
+    /*!
+     \brief Get build system name (ISE or Vivado)
+    */
+    std::string GetBuildSystemString(unsigned char boardId) const;
 
     /*!
      \brief Whether dVRK-Si controller has SUJ interface
