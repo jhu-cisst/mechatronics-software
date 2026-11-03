@@ -4,7 +4,7 @@
 /*
   Author(s):  Peter Kazanzides
 
-  (C) Copyright 2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2021-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -25,16 +25,17 @@ http://www.cisst.org/cisst/license.txt.
 #include <Windows.h>
 #else
 #include <unistd.h>
-#ifdef Amp1394_HAS_CURSES
+#ifdef Amp1394Console_HAS_CURSES
 #include <curses.h>
 #else
 #include <termios.h>
+#include <sys/select.h>
 #endif
 #endif
 
 #include "Amp1394Console.h"
 
-#ifdef Amp1394_HAS_CURSES
+#ifdef Amp1394Console_HAS_CURSES
 
 // Implementation using Curses library
 
@@ -47,6 +48,7 @@ bool Amp1394Console::Init()
         noecho();              // do not echo input characters
     if (noBlock)
         nodelay(stdscr, TRUE); // getch non-blocking
+    isOk = true;
     return true;
 }
 
@@ -60,7 +62,7 @@ void Amp1394Console::Print(int row, int col, const char *cstr, ...)
     va_list args;
     va_start(args, cstr);
     wmove(stdscr, row, col);
-    vwprintw(stdscr, cstr, args);
+    vw_printw(stdscr, cstr, args);
     va_end(args);
 }
 
@@ -86,10 +88,24 @@ bool Amp1394Console::GetString(char *str, int n)
 struct Amp1394Console::ConsoleInternals {
     struct termios savedAttr;
 };
+
+// Implementation of _kbhit for non-Windows systems
+int _kbhit()
+{
+    struct timeval tv;
+    fd_set fds;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    select(STDIN_FILENO+1, &fds, 0, 0, &tv);
+    return FD_ISSET(STDIN_FILENO, &fds);
+}
 #endif
 
 bool Amp1394Console::Init()
 {
+    isOk = false;
 #ifdef _MSC_VER
     HANDLE stdscr = GetStdHandle(STD_OUTPUT_HANDLE);
     if (stdscr == INVALID_HANDLE_VALUE) {
@@ -130,6 +146,7 @@ bool Amp1394Console::Init()
     if (noEcho)
         printf("\x1b[?25l");  // Hide cursor
     printf("\x1b[2J");        // Erase screen
+    isOk = true;
     return true;
 }
 
@@ -166,14 +183,15 @@ void Amp1394Console::Refresh()
 
 int Amp1394Console::GetChar()
 {
-#ifdef _MSC_VER
     int c = -1;   // ERR in curses
-    // If blocking, or if key pressed, call _getch
-    if (!noBlock || _kbhit())
+    // If blocking, or if key pressed, get a character
+    if (!noBlock || _kbhit()) {
+#ifdef _MSC_VER
         c = noEcho ? _getch() : _getche();
 #else
-    int c = getchar();
+        c = getchar();
 #endif
+    }
     return c;
 }
 

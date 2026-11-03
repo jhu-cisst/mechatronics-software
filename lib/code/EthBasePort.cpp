@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -16,21 +16,24 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include "EthBasePort.h"
+#include "FpgaIO.h"
 #include "Amp1394Time.h"
 #include "Amp1394BSwap.h"
 #include <iomanip>
 
-#ifndef _MSC_VER
+#ifdef _MSC_VER
+#include <string>
+#else
 #include <string.h>  // for memset
 #endif
 
 // crc related
-uint32_t BitReverse32(uint32_t input);
 uint32_t crc32(uint32_t crc, const void *buf, size_t size);
 
 
-EthBasePort::EthBasePort(int portNum, std::ostream &debugStream, EthCallbackType cb):
+EthBasePort::EthBasePort(int portNum, bool forceFwBridge, std::ostream &debugStream, EthCallbackType cb):
     BasePort(portNum, debugStream),
+    useFwBridge(forceFwBridge),
     fw_tl(0),
     eth_read_callback(cb),
     ReceiveTimeout(0.02)
@@ -95,6 +98,8 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
     FpgaStatus.FwPacketDropped = (packet[0]&FwPacketDropped);
     FpgaStatus.EthInternalError = (packet[0]&EthInternalError);
     FpgaStatus.EthSummaryError = (packet[0]&EthSummaryError);
+    FpgaStatus.noForwardFlag = (packet[0]&noForwardFlag);
+    FpgaStatus.srcPort = (packet[0]&srcPortMask)>>srcPortShift;
     FpgaStatus.numStateInvalid = packet[2];
     FpgaStatus.numPacketError = packet[3];
     unsigned int FwBusGeneration_FPGA = packet[1];
@@ -104,7 +109,8 @@ void EthBasePort::ProcessExtraData(const unsigned char *packet)
     FPGA_RecvTime = bswap_16(packetW[2])/(FPGA_sysclk_MHz*1.0e6);
     FPGA_TotalTime = bswap_16(packetW[3])/(FPGA_sysclk_MHz*1.0e6);
 
-    if (FwBusGeneration_FPGA != FwBusGeneration)
+    newFwBusGeneration = FwBusGeneration_FPGA;
+    if ((FwBusGeneration_FPGA != FwBusGeneration) && !FpgaStatus.noForwardFlag)
         OnFwBusReset(FwBusGeneration_FPGA);
 }
 
@@ -114,31 +120,45 @@ bool EthBasePort::CheckEthernetHeader(const unsigned char *, bool)
     return true;
 }
 
-//TODO: fix for byteswapping
-bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode, unsigned int tl)
+void EthBasePort::GetFirewireHeaderInfo(const unsigned char *packet, nodeid_t *src_node, unsigned int *tcode,
+                                        unsigned int *tl)
+{
+    const quadlet_t *qpacket = reinterpret_cast<const quadlet_t *>(packet);
+    if (tcode) *tcode = (qpacket[0]&0x000000F0)>>4;
+    if (src_node) *src_node = (qpacket[1]>>16)&FW_NODE_MASK;
+    if (tl) *tl = (qpacket[0]>>10)&FW_TL_MASK;
+}
+
+bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length, nodeid_t node, unsigned int tcode,
+                                      unsigned int tl)
 {
     if (!checkCRC(packet)) {
         outStr << "CheckFirewirePacket: CRC error" << std::endl;
         return false;
     }
-    unsigned int tcode_recv = packet[3] >> 4;
+
+    nodeid_t src_node;
+    unsigned int tcode_recv;
+    unsigned int tl_recv;
+    GetFirewireHeaderInfo(packet, &src_node, &tcode_recv, &tl_recv);
+
     if (tcode_recv != tcode) {
         outStr << "Unexpected tcode: received = " << tcode_recv << ", expected = " << tcode << std::endl;
         return false;
     }
-    nodeid_t src_node = packet[5]&FW_NODE_MASK;
     if ((node != FW_NODE_BROADCAST) && (src_node != node)) {
         outStr << "Inconsistent source node: received = " << src_node << ", expected = " << node << std::endl;
         return false;
     }
-    unsigned int tl_recv = packet[2] >> 2;
     if (tl_recv != tl) {
-        outStr << "WARNING: received tl = " << tl_recv
-               << ", expected tl = " << tl << std::endl;
+        outStr << "Inconsistent Firewire TL: received = " << tl_recv
+               << ", expected = " << tl << std::endl;
+        return false;
     }
     // TODO: could also check QRESPONSE length
     if (tcode == BRESPONSE) {
-        size_t length_recv = static_cast<size_t>((packet[12] << 8) | packet[13]);
+        const quadlet_t *qpacket = reinterpret_cast<const quadlet_t *>(packet);
+        size_t length_recv = (qpacket[3]&0xffff0000) >> 16;
         if (length_recv != length) {
             outStr << "Inconsistent length: received = " << length_recv << ", expected = " << length << std::endl;
             return false;
@@ -147,6 +167,7 @@ bool EthBasePort::CheckFirewirePacket(const unsigned char *packet, size_t length
     return true;
 }
 
+ // Assumes "normal" byte ordering
 void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
 {
     static const char *tcode_name[16] = { "qwrite", "bwrite", "wresponse", "", "qread", "bread",
@@ -163,7 +184,7 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     out << "Firewire Packet:" << std::endl;
     out << "  dest: " << std::hex << ((packet[0]&0xffc00000)>>20)
         << ", node: " << std::dec << ((packet[0]&0x003f0000)>>16)
-        << ", tl: " << std::hex << ((packet[0]&0x0000fc00)>>10)
+        << ", tl: " << std::hex << std::setw(2) << std::setfill('0') << ((packet[0]&0x0000fc00)>>10)
         << ", rt: " << ((packet[0]&0x00000300)>>8)
         << ", tcode: " << static_cast<unsigned int>(tcode) << " (" << tcode_name[tcode] << ")"
         << ", pri: " << (packet[0]&0x0000000F) << std::endl;
@@ -212,192 +233,310 @@ void EthBasePort::PrintFirewirePacket(std::ostream &out, const quadlet_t *packet
     }
 }
 
-void EthBasePort::PrintDebug(std::ostream &debugStream, unsigned short status)
+void EthBasePort::PrintStatus(std::ostream &debugStream, uint32_t status)
 {
+    unsigned int ver = BoardIO::GetFpgaVersionMajorFromStatus(status);
     debugStream << "Status: ";
-    if (status&0x4000) debugStream << "error ";
-    if (status&0x2000) debugStream << "initOK ";
-    if (status&0x1000) debugStream << "FrameErr ";
-    if (status&0x0800) debugStream << "IPv4Err ";
-    if (status&0x0400) debugStream << "UDPErr ";
-    if (status&0x0200) debugStream << "DestErr ";
-    if (status&0x0100) debugStream << "AccessErr ";
-    if (status&0x0080) debugStream << "StateErr ";
-    if (status&0x0040) debugStream << "SendStateErr ";
-    if (status&0x0020) debugStream << "Unused ";
-    if (status&0x0010) debugStream << "UDP ";
-    if (status&0x0008) debugStream << "Link-On ";
-    else               debugStream << "Link-Off ";
-    if (status&0x0004) debugStream << "ETH-idle ";
-    int waitInfo = status&0x0003;
-    if (waitInfo == 0) debugStream << "wait-none";
-    else if (waitInfo == 1) debugStream << "wait-recv";
-    else if (waitInfo == 2) debugStream << "wait-send";
-    else debugStream << "wait-flush";
-    debugStream << std::endl;
+    if (ver == 0) {
+        debugStream << "Unknown FPGA, status = " << std::hex << status << std::dec << std::endl;
+    }
+    else if (ver == 1) {
+        // FPGA V1
+        debugStream << "No Ethernet present" << std::endl;
+    }
+    else {
+        // FPGA V2 or V3
+        if (ver == 2) {
+            if (status&FpgaIO::ETH_STAT_REQ_ERR_V2) debugStream << "error ";
+            if (status&FpgaIO::ETH_STAT_INIT_OK_V2) debugStream << "initOK ";
+        }
+        if (status & FpgaIO::ETH_STAT_FRAME_ERR)    debugStream << "FrameErr ";
+        if (status & FpgaIO::ETH_STAT_IPV4_ERR)     debugStream << "IPv4Err ";
+        if (status & FpgaIO::ETH_STAT_UDP_ERR)      debugStream << "UDPErr ";
+        if (status & FpgaIO::ETH_STAT_DEST_ERR)     debugStream << "DestErr ";
+        if (status & FpgaIO::ETH_STAT_ACCESS_ERR)   debugStream << "AccessErr ";
+        if ((ver == 2) && (status & FpgaIO::ETH_STAT_STATE_ERR_V2)) debugStream << "StateErr ";
+        if ((ver == 3) && (status & FpgaIO::ETH_STAT_CLK125_OK_V3)) debugStream << "Clk125 ";
+        if (status & FpgaIO::ETH_STAT_ETHST_ERR )   debugStream << "EthStateErr ";
+        if ((ver == 3) && (status & FpgaIO::ETH_STAT_CLK200_OK_V3)) debugStream << "Clk200 ";
+        if (status & FpgaIO::ETH_STAT_UDP)          debugStream << "UDP ";
+        if (ver == 2) {
+            if (status & FpgaIO::ETH_STAT_LINK_STAT_V2) debugStream << "Link-On ";
+            else                                        debugStream << "Link-Off ";
+            if (status & FpgaIO::ETH_STAT_IDLE_V2)  debugStream << "ETH-idle ";
+            int waitInfo = (status & FpgaIO::ETH_STAT_WAIT_MASK_V2)>>16;
+            if (waitInfo == 0) debugStream << "wait-none";
+            else if (waitInfo == 1) debugStream << "wait-recv";
+            else if (waitInfo == 2) debugStream << "wait-send";
+            else debugStream << "wait-flush";
+            debugStream << std::endl;
+        }
+        else {   // ver == 3
+            // Following bit introduced in Firmware Rev 9, but was previously 0
+            if (status & FpgaIO::ETH_STAT_PSETH_EN_V3) debugStream << "PS-Eth ";
+            debugStream << std::endl;
+            for (unsigned int port = 1; port <= 2; port++) {
+                debugStream << "Port " << port << ": ";
+                uint8_t portStatus = FpgaIO::GetEthernetPortStatusV3(status, port);
+                if (portStatus & FpgaIO::ETH_PORT_STAT_INIT_OK)   debugStream << "initOK ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_HAS_IRQ)   debugStream << "hasIRQ ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_LINK_STAT) debugStream << "Link-On ";
+                else                                              debugStream << "Link-Off ";
+                uint8_t linkSpeed = (portStatus & FpgaIO::ETH_PORT_STAT_SPEED_MASK)>>3;
+                if (linkSpeed == 0)                               debugStream << "10 Mbps ";
+                else if (linkSpeed == 1)                          debugStream << "100 Mbps ";
+                else if (linkSpeed == 2)                          debugStream << "1000 Mbps ";
+                // Following are only for Firmware Rev 8
+                if (portStatus & FpgaIO::ETH_PORT_STAT_RECV_ERR)  debugStream << "RecvErr ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_SEND_OVF)  debugStream << "SendOvf ";
+                if (portStatus & FpgaIO::ETH_PORT_STAT_PS_ETH)    debugStream << "PS-Eth ";
+                debugStream << std::endl;
+            }
+        }
+    }
 }
 
+bool EthBasePort::CheckDebugHeader(std::ostream &debugStream, const std::string &caller, const char *header,
+                                   unsigned int version)
+{
+    if (strncmp(header, "DBG", 3) != 0) {
+        debugStream << caller << ": Unexpected header string: " << header[0] << header[1]
+                    << header[2] << " (should be DBG)" << std::endl;
+        return false;
+    }
+    unsigned int debugLevel = header[3] - '0';
+    if (debugLevel == 0) {
+        debugStream << caller << ": No debug data available" << std::endl;
+        return false;
+    }
+    // Introduced debugLevel 2 with Firmware V8. Use an older version of this software for
+    // earlier versions of firmware.
+    else if (debugLevel != version) {
+        debugStream << caller << ": Unsupported debug level: " << debugLevel << " (must be "
+                    << version << ")" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+// Prints the debug data from the higher-level Ethernet module (EthernetIO)
 void EthBasePort::PrintDebugData(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
 {
+    (void)clockPeriod;
     // Following structure must match DebugData in EthernetIO.v
     struct DebugData {
         char     header[4];        // Quad 0
         uint32_t timestampBegin;   // Quad 1
-        uint16_t eth_status;       // Quad 2
-        uint8_t  node_id;
-        uint8_t  eth_errors;
-        uint8_t  isFlags;          // Quad 3
-        uint8_t  moreFlags;
-        uint8_t  retState;
-        uint8_t  state;
-        uint16_t RegISROther;      // Quad 4
+        uint32_t statusbits;       // Quad 2
+        uint16_t LengthFW;         // Quad 3
+        uint16_t quad3_high;
+        uint16_t Host_FW_Addr;     // Quad 4
         uint16_t FwCtrl;
-        uint8_t  numPacketSent;    // Quad 5
-        uint8_t  FrameCount;
-        uint16_t Host_FW_Addr;
-        uint16_t LengthFW;         // Quad 6
-        uint16_t maxCountFW;
-        uint16_t rxPktWords;       // Quad 7
-        uint16_t txPktWords;
-        uint16_t timeReceive;      // Quad 8
-        uint16_t timeSend;
-        uint16_t numPacketValid;   // Quad 9
-        uint8_t  numPacketInvalid;
-        uint8_t  runPC;
-        uint16_t numIPv4;          // Quad 10
+        uint16_t quad5_low;        // Quad 5
+        uint16_t quad5_high;
+        uint16_t numIPv4;          // Quad 6
         uint16_t numUDP;
-        uint8_t  numARP;           // Quad 11
+        uint8_t  numARP;           // Quad 7
         uint8_t  fw_bus_gen;
         uint8_t  numICMP;
+        uint8_t  br_wait_cnt;
+        uint8_t  numPacketError;   // Quad 8
         uint8_t  bwState;
-        uint8_t  numPacketError;   // Quad 12
-        uint8_t  numStateGlitch;
-        uint8_t  numIPv4Mismatch;
-        uint8_t  fw_bus_reset;
-        uint8_t  numStateInvalid;  // Quad 13
-        uint8_t  nextStateLatched;
-        uint8_t  numReset;
-        uint8_t  numSendStateInvalid;
-        uint16_t bw_left;          // Quad 14
-        uint16_t writeRequestTrigger;
-        uint8_t  errPC;            // Quad 15
-        uint8_t  errNextStateLatched;
-        uint8_t  errNextState;
-        uint8_t  errState;
+        uint16_t bw_left;
+        uint8_t  fw_wait_cnt;      // Quad 9
+        uint8_t  fwState;
+        uint16_t fw_left;
+        uint16_t port_unknown;     // Quad 10
+        uint8_t  numMulticastWrite;
+        uint8_t  quad10_high;
+        uint32_t unused[5];        // Quads 10-15
     };
     if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
         debugStream << "PrintDebugData: structure packing problem" << std::endl;
         return;
     }
     const DebugData *p = reinterpret_cast<const DebugData *>(data);
-    if (strncmp(p->header, "DBG", 3) != 0) {
-        debugStream << "Unexpected header string: " << p->header[0] << p->header[1]
-                    << p->header[2] << " (should be DBG)" << std::endl;
+    if (!CheckDebugHeader(debugStream, "PrintDebugData", p->header, 2))
         return;
-    }
-    int debugLevel = p->header[3] - '0';
-    if (debugLevel == 0) {
-        debugStream << "No debug data available" << std::endl;
-        return;
-    }
-    else if (debugLevel != 1) {
-        debugStream << "Unsupported debug level: " << debugLevel << std::endl;
-        return;
-    }
-    debugStream << "TimestampBegin: " << std::hex << p->timestampBegin << std::dec << std::endl;
-    debugStream << "FireWire node_id: " << static_cast<unsigned int>(p->node_id&0x3f) << std::endl;
-    unsigned short status = static_cast<unsigned short>(p->eth_status&0x0000ffff);
-    EthBasePort::PrintDebug(debugStream, status);
-    if (p->eth_errors&0x07) {
-       debugStream << "Eth errors: ";
-       if (p->eth_errors&0x04) debugStream << "UDPError ";
-       if (p->eth_errors&0x02) debugStream << "AccessError ";
-       if (p->eth_errors&0x01) debugStream << "IPV4Error ";
-       debugStream << std::endl;
-    }
-    if (p->eth_errors&0xC0) {
-        debugStream << "WriteRequests: ";
-        if (p->eth_errors&0x80) debugStream << "Quad ";
-        if (p->eth_errors&0x40) debugStream << "Block ";
-    }
-    if (p->eth_errors&0x20)
-        debugStream << "Block write active" << std::endl;
-    if (!(p->eth_errors&0x08))
-        debugStream << "DMA Recv busy" << std::endl;
-    if (!(p->eth_errors&0x10))
-        debugStream << "DMA Send busy" << std::endl;
-    if (p->node_id&0x40)
-        debugStream << "DMA Write requested" << std::endl;
-    if (p->node_id&0x80)
-        debugStream << "DMA Write in process" << std::endl;
-    debugStream << "State: " << static_cast<uint16_t>(p->state)
-                << ", nextState: " << (p->maxCountFW>>10)
-                << ", nextStateLatched: " << static_cast<uint16_t>(p->nextStateLatched)
-                << ", retState: " << static_cast<uint16_t> (p->retState&0x1f)
-                << ", PC: " << static_cast<uint16_t>(p->runPC) << std::endl;
-    unsigned int linkStatus = (p->retState&0x20) ? 1 : 0;
-    unsigned int eth_send_fw_req = (p->retState&0x40) ? 1 : 0;
-    unsigned int eth_send_fw_ack = (p->retState&0x80) ? 1 : 0;
-    debugStream << "eth_send_fw req " << eth_send_fw_req << ", ack " << eth_send_fw_ack << std::endl;
-    debugStream << "Flags: ";
-    if (p->moreFlags&0x80) debugStream << "doSample ";
-    if (p->moreFlags&0x40) debugStream << "inSample ";
-    if (p->moreFlags&0x20) debugStream << "isLocal ";
-    if (p->moreFlags&0x10) debugStream << "isRemote ";
-    if (p->moreFlags&0x08) debugStream << "fwPacketFresh ";
-    if (p->moreFlags&0x04) debugStream << "isBroadcast ";
-    if (p->moreFlags&0x02) debugStream << "isMulticast ";
-    if (p->moreFlags&0x01) debugStream << "IRQ ";
-    if (p->isFlags&0x80) debugStream << "isForward ";
-    if (p->isFlags&0x40) debugStream << "isInIRQ ";
-    if (p->isFlags&0x20) debugStream << "sendARP ";
-    if (p->isFlags&0x10) debugStream << "isUDP ";
-    if (p->isFlags&0x08) debugStream << "isICMP  ";
-    if (p->isFlags&0x04) debugStream << "isEcho ";
-    if (p->isFlags&0x02) debugStream << "ipv4_long ";
-    if (p->isFlags&0x01) debugStream << "ipv4_short ";
-    if (linkStatus)      debugStream << "link-on ";
+
+    debugStream << "Timestamp: " << std::hex << p->timestampBegin << std::dec << std::endl;
+    if (p->statusbits & 0x80000000) debugStream << "wrReq ";
+    if (p->statusbits & 0x20000000) debugStream << "bw_active ";
+    if (p->statusbits & 0x10000000) debugStream << "eth_send_idle ";
+    if (p->statusbits & 0x08000000) debugStream << "eth_recv_idle ";
+    if (p->statusbits & 0x04000000) debugStream << "UDPError ";
+    if (p->statusbits & 0x01000000) debugStream << "IPV4Error ";
+    if (p->statusbits & 0x00800000) debugStream << "sendBusy ";
+    if (p->statusbits & 0x00400000) debugStream << "sendRequest ";
+    if (p->statusbits & 0x00200000) debugStream << "eth_send_fw_ack ";
+    if (p->statusbits & 0x00100000) debugStream << "eth_send_fw_req ";
     debugStream << std::endl;
+    if (p->statusbits & 0x00080000) debugStream << "recvBusy ";
+    if (p->statusbits & 0x00040000) debugStream << "recvRequest ";
+    if (p->statusbits & 0x00020000) debugStream << "isLocal ";
+    if (p->statusbits & 0x00010000) debugStream << "isRemote ";
+    if (p->statusbits & 0x00008000) debugStream << "fwPacketFresh ";
+    if (p->statusbits & 0x00004000) debugStream << "isForward ";
+    if (p->statusbits & 0x00002000) debugStream << "sendARP ";
+    if (p->statusbits & 0x00001000) debugStream << "isUDP ";
+    if (p->statusbits & 0x00000800) debugStream << "isICMP  ";
+    if (p->statusbits & 0x00000400) debugStream << "isEcho ";
+    if (p->statusbits & 0x00000200) debugStream << "ipv4_long ";
+    if (p->statusbits & 0x00000100) debugStream << "ipv4_short ";
+    if (p->statusbits & 0x00000080) debugStream << "fw_bus_reset ";
+    if (p->statusbits & 0x00000040) debugStream << "ipWrite ";
+    if (p->statusbits & 0x00000020) debugStream << "hubSend ";
+    if (p->statusbits & 0x00000010) debugStream << "bcResp ";
+    debugStream << std::endl;
+    unsigned int node_id = (p->quad3_high&0xfc00) >> 10;    // node_is is upper 6 bits
+    debugStream << "FireWire node_id: " << node_id << std::endl;
+    debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
+    debugStream << "MaxCountFW: " << std::dec << (p->quad3_high&0x3ff) << std::endl;
     debugStream << "FwCtrl: " << std::hex << p->FwCtrl << std::endl;
-    debugStream << "RegISROther: " << std::hex << p->RegISROther << std::endl;
-    debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->FrameCount) << std::endl;
     debugStream << "Host FW Addr: " << std::hex << p->Host_FW_Addr << std::endl;
     debugStream << "Fw Bus Generation: " << std::dec << static_cast<uint16_t>(p->fw_bus_gen);
-    if (p->fw_bus_reset&0x01) debugStream << " fw_bus_reset";
     debugStream << std::endl;
-    debugStream << "LengthFW: " << std::dec << p->LengthFW << std::endl;
-    debugStream << "MaxCountFW: " << std::dec << static_cast<uint16_t>(p->maxCountFW&0x03ff) << std::endl;
-    debugStream << "rxPktWords: " << std::dec << (p->rxPktWords&0x0fff) << std::endl;
-    debugStream << "txPktWords: " << std::dec << (p->txPktWords&0x0fff) << std::endl;
-    debugStream << "sendState: "  << std::dec << (p->txPktWords>>12)
-                << ", next: " << (p->rxPktWords>>12) << std::endl;
-    debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
-    debugStream << "numPacketInvalid: " << std::dec << static_cast<uint16_t>(p->numPacketInvalid) << std::endl;
+    debugStream << "sendState: "   << std::dec << (p->quad5_high>>12)
+                << ", recvState: " << ((p->quad5_low&0x7000)>>12)
+                << ", nextRecv: "  << ((p->quad5_low&0x0700)>>8)
+                << ", recvCnt: " << (p->quad5_low&0x003f) << std::endl;
     debugStream << "numIPv4: " << std::dec << p->numIPv4 << std::endl;
     debugStream << "numUDP: " << std::dec << p->numUDP << std::endl;
     debugStream << "numARP: " << std::dec << static_cast<uint16_t>(p->numARP) << std::endl;
     debugStream << "numICMP: " << std::dec << static_cast<uint16_t>(p->numICMP) << std::endl;
-    debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState) << std::endl;
-    debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
-    debugStream << "numPacketError: " << std::dec << p->numPacketError << std::endl;
-    debugStream << "numIPv4Mismatch: " << std::dec << static_cast<int16_t>(p->numIPv4Mismatch) << std::endl;
-    debugStream << "numStateInvalid: " << std::dec << static_cast<uint16_t>(p->numStateInvalid)
-                << ", Send: " << static_cast<uint16_t>(p->numSendStateInvalid) << std::endl;
-    debugStream << "numStateGlitch: " << std::dec << static_cast<uint16_t>(p->numStateGlitch) << std::endl;
+    debugStream << "numMulticastWrite: " << std::dec << static_cast<uint16_t>(p->numMulticastWrite) << std::endl;
+    debugStream << "br_wait: " << std::dec << static_cast<uint16_t>(p->br_wait_cnt) << std::endl;
+    debugStream << "numPacketError: " << std::dec << static_cast<uint16_t>(p->numPacketError) << std::endl;
+    debugStream << "bwState: " << std::dec << static_cast<uint16_t>(p->bwState & 0x07);
+    if (p->bwState & 0x80) debugStream << ", bw_err";
+    debugStream << std::endl << "bw_left: " << std::dec << p->bw_left << std::endl;
+    debugStream << "fw_left: " << p->fw_left;
+    if (p->fwState & 0x80) debugStream << ", fw_err";
+    debugStream << ", fw_wait_cnt: " << static_cast<uint16_t>(p->fw_wait_cnt) << std::endl;
+    if (p->port_unknown)
+        debugStream << "Unsupported UDP port: " << p->port_unknown << std::endl;
+}
+
+// Prints the debug data from the lower-level Ethernet module (KSZ8851 for Ethernet V2)
+void EthBasePort::PrintDebugDataKSZ(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
+{
+    // Following structure must match DebugData in KSZ8851.v
+    struct DebugData {
+        char     header[4];        // Quad 0
+        uint16_t quad1_low;        // Quad 1
+        uint16_t statusbits;
+        uint8_t  runPC;            // Quad 2
+        uint8_t  nextState;
+        uint8_t  retState;
+        uint8_t  state;
+        uint16_t regISROther;      // Quad 3
+        uint16_t respBytes;
+        uint8_t  numPacketSent;    // Quad 4
+        uint8_t  frameCount;
+        uint16_t bw_wait;
+        uint16_t rxPktWords;      // Quad 5
+        uint16_t txPktWords;
+        uint16_t timeReceive;     // Quad 6
+        uint16_t timeSend;
+        uint16_t numPacketValid;  // Quad 7
+        uint8_t  numPacketInvalid;
+        uint8_t  numReset;
+        uint32_t unused[8];       // Unused (except if DEBOUNCE_STATES)
+    };
+    if (sizeof(DebugData) != 16*sizeof(quadlet_t)) {
+        debugStream << "PrintDebugDataKSZ: structure packing problem" << std::endl;
+        return;
+    }
+    const DebugData *p = reinterpret_cast<const DebugData *>(data);
+    if (!CheckDebugHeader(debugStream, "PrintDebugDataKSZ", p->header, 2))
+        return;
+
+    debugStream << "*** KSZ: ";
+    if (p->statusbits & 0x8000) debugStream << "isDMAWrite ";
+    if (p->statusbits & 0x4000) debugStream << "sendRequest ";
+    if (p->statusbits & 0x2000) debugStream << "IRQ ";
+    if (p->statusbits & 0x1000) debugStream << "isInIRQ ";
+    if (p->statusbits & 0x0800) debugStream << "link-on ";
+    debugStream << std::endl;
+    debugStream << "State: " << static_cast<uint16_t>(p->state)
+                << ", nextState: " << static_cast<uint16_t>(p->nextState)
+                << ", retState: " << static_cast<uint16_t> (p->retState)
+                << ", PC: " << static_cast<uint16_t>(p->runPC) << std::endl;
+    debugStream << "RegISROther: " << std::hex << p->regISROther << std::endl;
+    debugStream << "FrameCount: " << std::dec << static_cast<uint16_t>(p->frameCount) << std::endl;
     debugStream << "numReset: " << std::dec << static_cast<uint16_t>(p->numReset) << std::endl;
-    double bits2uS = clockPeriod*1e6;
+    debugStream << "numPacketValid: " << std::dec << p->numPacketValid << std::endl;
+    debugStream << "numPacketInvalid: " << std::dec << static_cast<uint16_t>(p->numPacketInvalid) << std::endl;
+    debugStream << "numPacketSent: " << std::dec << static_cast<uint16_t>(p->numPacketSent) << std::endl;
+    debugStream << "rxPktWords: " << std::dec << p->rxPktWords << std::endl;
+    debugStream << "txPktWords: " << std::dec << p->txPktWords << std::endl;
+    debugStream << "respBytes: " << p->respBytes << std::endl;
+    const double bits2uS = clockPeriod*1e6;
     debugStream << "timeReceive (us): " << p->timeReceive*bits2uS << std::endl;
     debugStream << "timeSend (us): " << p->timeSend*bits2uS << std::endl;
-    debugStream << "bw_left = " << std::dec << p->bw_left << ", trigger = " << p->writeRequestTrigger << std::endl;
-    //debugStream << "TimestampEnd: " << std::hex << p->timestampEnd << std::endl;
-    debugStream << "Error state: state = " << static_cast<uint16_t>(p->errState)
-                << ", nextState = " << static_cast<uint16_t>(p->errNextState)
-                << ", nextStateLatched = " << static_cast<uint16_t>(p->errNextStateLatched)
-                << ", runPC = " << static_cast<uint16_t>(p->errPC) << std::endl;
+    debugStream << "bw_wait: " << std::dec << p->bw_wait << " (" << p->bw_wait*bits2uS << " us)" << std::endl;
+}
+
+void EthBasePort::PrintDebugDataRTL(std::ostream &debugStream, const quadlet_t *data, const char *portName)
+{
+    struct DebugData {
+        uint32_t mdio_result;
+        uint16_t numIRQ;
+        uint16_t numReset;
+    };
+    const DebugData *p = reinterpret_cast<const DebugData *>(data);
+    debugStream << "*** " << portName << " (RTL8211F): " << std::endl;
+    debugStream << "numReset: " << p->numReset << ", numIRQ: " << p->numIRQ << std::endl;
+}
+
+// Prints the debug data from the lower-level real-time Ethernet interface (EthRtInterface for FPGA V3)
+void EthBasePort::PrintDebugDataRTI(std::ostream &debugStream, const quadlet_t *data, double clockPeriod)
+{
+    // Following structure must match DebugData in EthRtInterface.v
+    struct DebugData {
+        char      header[4];        // Quad 0
+        uint16_t  recv_nbytes;      // Quad 1
+        uint8_t   numRecv;
+        uint8_t   statusbits;
+        uint8_t   numSent;          // Quad 2
+        uint8_t   txStateBits;
+        uint16_t  respBytes;
+        uint16_t  timeReceive;      // Quad 3
+        uint16_t  timeSend;
+        uint16_t  quad4_low;        // Quad 4
+        uint16_t  bw_wait;
+        uint32_t  unused[3];        // Quad 5-7
+    };
+    if (sizeof(DebugData) != 8*sizeof(quadlet_t)) {
+        debugStream << "PrintDebugDataRTI: structure packing problem" << std::endl;
+        return;
+    }
+    const DebugData *p = reinterpret_cast<const DebugData *>(data);
+    if (!CheckDebugHeader(debugStream, "PrintDebugDataRTI", p->header, 3))
+        return;
+
+    debugStream << "*** RTI: ";
+    if (p->statusbits & 0x80) debugStream << "sendBusy ";
+    if (p->statusbits & 0x40) debugStream << "sendRequest ";
+    if (p->statusbits & 0x08) debugStream << "responseRequired ";
+    if (p->statusbits & 0x04) debugStream << "recvNotReady ";
+    if (p->statusbits & 0x02) debugStream << "recvReady ";
+    if (p->statusbits & 0x01) debugStream << "PortReady ";
+    debugStream << std::endl << "rxState: " << static_cast<uint16_t>((p->statusbits&0x30)>>4) << std::endl;
+    debugStream << "numPacketRecv: " << static_cast<uint16_t>(p->numRecv)
+                << ", numBytesRecv: " << p->recv_nbytes << std::endl;
+    debugStream << "numPacketSent: " << static_cast<uint16_t>(p->numSent) << std::endl;
+    debugStream << "txState: " << static_cast<uint16_t>(p->txStateBits&0x07);
+    if (p->txStateBits&0x10) debugStream << ", txStateError ";
+    debugStream << std::endl << "respBytes: " << p->respBytes << std::endl;
+    const double bits2uS = clockPeriod*1e6;
+    debugStream << "timeReceive: " << (p->timeReceive*clockPeriod) << " timeSend: " << (p->timeSend*clockPeriod) << std::endl;
+    debugStream << "bw_wait: " << std::dec << p->bw_wait << " (" << p->bw_wait*bits2uS << " us)" << std::endl;
 }
 
 void EthBasePort::PrintEthernetPacket(std::ostream &out, const quadlet_t *packet, unsigned int max_quads)
 {
+    (void)max_quads;
     struct FrameHeader {
         uint8_t  destMac[6];
         uint8_t  srcMac[6];
@@ -507,12 +646,15 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
     unsigned char *sendPacket = GenericBuffer+GetWriteQuadAlign();
     unsigned int sendPacketSize = GetPrefixOffset(WR_FW_HEADER)+FW_QREAD_SIZE;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(sendPacket, sendPacketSize, node, flags);
+
     // Make control word
     make_write_header(sendPacket, sendPacketSize, flags);
 
     // Build FireWire packet
     make_qread_packet(reinterpret_cast<quadlet_t *>(sendPacket+GetPrefixOffset(WR_FW_HEADER)), node, addr, fw_tl);
-    if (!PacketSend(sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
+    if (!PacketSend(node, sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
 
     // Invoke callback (if defined) between sending read request
@@ -541,11 +683,13 @@ bool EthBasePort::ReadQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t &dat
 
     if (!CheckEthernetHeader(recvPacket, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
+    // Byteswap Firewire header (also swaps quadlet data)
+    ByteswapQuadlets(recvPacket + GetPrefixOffset(RD_FW_HEADER), FW_QRESPONSE_SIZE);
     if (!CheckFirewirePacket(recvPacket+GetPrefixOffset(RD_FW_HEADER), 0, node, EthBasePort::QRESPONSE, fw_tl))
         return false;
 
     const quadlet_t *packet_FW = reinterpret_cast<const quadlet_t *>(recvPacket+GetPrefixOffset(RD_FW_HEADER));
-    data = bswap_32(packet_FW[3]);
+    data = packet_FW[3];
     return true;
 }
 
@@ -562,12 +706,16 @@ bool EthBasePort::WriteQuadletNode(nodeid_t node, nodeaddr_t addr, quadlet_t dat
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(packet, packetSize, node, flags);
+
+    // Make control word
     make_write_header(packet, packetSize, flags);
 
     // Build FireWire packet (also byteswaps data)
     make_qwrite_packet(reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER)), node, addr, data, fw_tl);
 
-    return PacketSend(packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
+    return PacketSend(node, packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata,
@@ -589,11 +737,15 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(sendPacket, sendPacketSize, node, flags);
+
+    // Make control word
     make_write_header(sendPacket, sendPacketSize, flags);
 
     // Build FireWire packet
     make_bread_packet(reinterpret_cast<quadlet_t *>(sendPacket+GetPrefixOffset(WR_FW_HEADER)), node, addr, nbytes, fw_tl);
-    if (!PacketSend(sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
+    if (!PacketSend(node, sendPacket, sendPacketSize, flags&FW_NODE_ETH_BROADCAST_MASK))
         return false;
 
     // Invoke callback (if defined) between sending read request
@@ -604,6 +756,12 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
         return false;
     }
 
+    return ReceiveResponseNode(node, rdata, nbytes, fw_tl);
+}
+
+bool EthBasePort::ReceiveResponseNode(nodeid_t node, quadlet_t *rdata,
+                                      unsigned int nbytes, uint8_t fw_tl, nodeid_t *src_node)
+{
     // Packet to receive
     unsigned char *packet = GenericBuffer+GetReadQuadAlign();;
     unsigned int packetSize = GetPrefixOffset(RD_FW_BDATA) + nbytes + GetReadPostfixSize();
@@ -616,9 +774,11 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 
     int nRecv = PacketReceive(packet, packetSize);
     if (nRecv != static_cast<int>(packetSize)) {
+        outStr << "ReadBlock: failed to receive read response";
         unsigned char boardId = Node2Board[node];
-        outStr << "ReadBlock: failed to receive read response from board " << (boardId&FW_NODE_MASK)
-               << ": return value = " << nRecv
+        if (boardId < BoardIO::MAX_BOARDS)
+            outStr << " from board " << static_cast<unsigned int>(boardId);
+        outStr << ": return value = " << nRecv
                << ", expected = " << packetSize << std::endl;
         return false;
     }
@@ -627,8 +787,13 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
 
     if (!CheckEthernetHeader(packet, false))
         return false;
-    if (!CheckFirewirePacket(packet+GetPrefixOffset(RD_FW_HEADER), nbytes, node, EthBasePort::BRESPONSE, fw_tl))
+    // Byteswap Firewire header
+    unsigned char *packetFw = packet + GetPrefixOffset(RD_FW_HEADER);
+    ByteswapQuadlets(packetFw, FW_BRESPONSE_HEADER_SIZE);
+    if (!CheckFirewirePacket(packetFw, nbytes, node, EthBasePort::BRESPONSE, fw_tl))
         return false;
+    if (src_node)
+        GetFirewireHeaderInfo(packetFw, src_node, 0, 0);
 
     const quadlet_t *packet_data = reinterpret_cast<const quadlet_t *>(packet+GetPrefixOffset(RD_FW_BDATA));
     if (rdata != packet_data) {
@@ -637,6 +802,16 @@ bool EthBasePort::ReadBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *rdata
     }
     return true;
 }
+
+
+void EthBasePort::ByteswapQuadlets(unsigned char *packet, unsigned int nbytes)
+{
+    quadlet_t *qp = (quadlet_t *)packet;
+    unsigned int nQuads = nbytes/sizeof(quadlet_t);
+    for (unsigned int i = 0; i < nQuads; i++)
+        qp[i] = bswap_32(qp[i]);
+}
+
 
 bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdata,
                                  unsigned int nbytes, unsigned char flags)
@@ -658,13 +833,17 @@ bool EthBasePort::WriteBlockNode(nodeid_t node, nodeaddr_t addr, quadlet_t *wdat
     // Increment transaction label
     fw_tl = (fw_tl+1)&FW_TL_MASK;
 
+    // Make Ethernet header (only needed for raw Ethernet)
+    make_ethernet_header(packet, packetSize, node, flags);
+
+    // Make control word
     make_write_header(packet, packetSize, flags);
 
     // Build FireWire packet
     make_bwrite_packet(reinterpret_cast<quadlet_t *>(packet+GetPrefixOffset(WR_FW_HEADER)), node, addr, wdata, nbytes, fw_tl);
 
     // Now, send the packet
-    return PacketSend(packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
+    return PacketSend(node, packet, packetSize, flags&FW_NODE_ETH_BROADCAST_MASK);
 }
 
 void EthBasePort::OnNoneRead(void)
@@ -680,7 +859,14 @@ void EthBasePort::OnNoneWritten(void)
 void EthBasePort::OnFwBusReset(unsigned int FwBusGeneration_FPGA)
 {
     outStr << "Firewire bus reset, FPGA = " << std::dec << FwBusGeneration_FPGA << ", PC = " << FwBusGeneration << std::endl;
-    newFwBusGeneration = FwBusGeneration_FPGA;
+}
+
+bool EthBasePort::CheckFwBusGeneration(const std::string &caller, bool doScan)
+{
+    bool ret = true;
+    if (useFwBridge)
+        ret = BasePort::CheckFwBusGeneration(caller, doScan);
+    return ret;
 }
 
 bool EthBasePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
@@ -690,6 +876,16 @@ bool EthBasePort::WriteBroadcastOutput(quadlet_t *buffer, unsigned int size)
 
 bool EthBasePort::WriteBroadcastReadRequest(unsigned int seq)
 {
+    if (!useFwBridge) {
+        // Ethernet-only system automatically sends a response packet in response to
+        // the broadcast read request, so we first flush any existing packets.
+        // When using the Ethernet/Firewire bridge, the flush happens in ReadBlockNode,
+        // which is called by BasePort::ReceiveBroadcastReadResponse.
+        int numFlushed = PacketFlushAll();
+        if (numFlushed > 0)
+            outStr << "WriteBroadcastReadRequest: flushed " << numFlushed << " packets"
+                   << ", seq = " << seq << std::endl;
+    }
     quadlet_t bcReqData = (seq << 16) | BoardInUseMask_;
     return WriteQuadlet(FW_NODE_BROADCAST, 0x1800, bcReqData);
 }
@@ -697,10 +893,61 @@ bool EthBasePort::WriteBroadcastReadRequest(unsigned int seq)
 void EthBasePort::WaitBroadcastRead(void)
 {
     // Wait for all boards to respond with data
-    // Shorter wait: 10 + 5 * Nb us, where Nb is number of boards used in this configuration
-    // Standard wait: 5 + 5 * Nn us, where Nn is the total number of nodes on the FireWire bus
-    double waitTime_uS = 10.0 + 5.0*NumOfBoards_;
+    // Ethernet/Firewire bridge: 10 + 10 * (Nb-1) us, where Nb is number of boards used in this configuration
+    // Ethernet-only: 3 + 38 * (Nb-1) us, based on measurements, assuming contiguous Ethernet chain
+    // Note that for Ethernet-only, it is not necessary to wait because the FPGA sends the broadcast read
+    // response packet when all data is ready. Thus, the only advantage to waiting here is that we avoid
+    // possible timeouts when receiving the response packet.
+    double waitTime_uS = useFwBridge ? (10.0 + 10.0*(NumOfBoards_-1)) : (3.0 + 38.0*(NumOfBoards_-1));
+    // Check the most recent measured update time, and use that if it is longer than
+    // the computed waitTime_uS.
+    double bcUpdateTime_uS = (bcReadInfo.updateFinishTime-bcReadInfo.updateStartTime)*1e6;
+    if (bcUpdateTime_uS > waitTime_uS)
+        waitTime_uS = bcUpdateTime_uS;
     Amp1394_Sleep(waitTime_uS*1e-6);
+}
+
+bool EthBasePort::ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes)
+{
+    bool ret;
+    if (useFwBridge) {
+        ret = BasePort::ReceiveBroadcastReadResponse(rdata, nbytes);
+    }
+    else {
+        nodeid_t src_node;
+        // Use FW_NODE_BROADCAST because we do not care which board responds
+        ret = ReceiveResponseNode(FW_NODE_BROADCAST, rdata, nbytes, fw_tl, &src_node);
+        if (ret) {
+            unsigned char newHubBoard = Node2Board[src_node];
+            if (newHubBoard >= BoardIO::MAX_BOARDS) {
+                // Should not happen
+                outStr << "ReceiveBroadcastReadResponse: invalid source node " << src_node << std::endl;
+            }
+            else if (newHubBoard != HubBoard) {
+                // Not printing message because current hub board is shown in qladisp
+                // outStr << "ReceiveBroadcastReadResponse: changing hub board from "
+                //        << static_cast<unsigned int>(HubBoard) << " to "
+                //        << static_cast<unsigned int>(newHubBoard) << std::endl;
+                HubBoard = newHubBoard;
+            }
+        }
+        else {
+            outStr << "ReceiveBroadcastReadResponse failed -- reading from board" << std::endl;
+            ret = BasePort::ReceiveBroadcastReadResponse(rdata, nbytes);
+        }
+    }
+    return ret;
+}
+
+bool EthBasePort::isBroadcastReadOrdered(void) const
+{
+    return useFwBridge;
+}
+
+double EthBasePort::GetBroadcastReadClockPeriod(void) const
+{
+    return useFwBridge ? BasePort::GetBroadcastReadClockPeriod()  // 49.152 MHz for Ethernet/Firewire
+                       : (1.0e-6/125.0);                          // 125 MHz for Ethernet-only
 }
 
 void EthBasePort::PromDelay(void) const
@@ -713,11 +960,15 @@ void EthBasePort::PromDelay(void) const
 // Protected
 // ---------------------------------------------------------
 
+void EthBasePort::make_ethernet_header(unsigned char *, unsigned int, nodeid_t, unsigned char)
+{
+}
+
 void EthBasePort::make_write_header(unsigned char *packet, unsigned int, unsigned char flags)
 {
     unsigned int ctrlOffset = GetPrefixOffset(WR_CTRL);
     packet[ctrlOffset] = 0;
-    if (flags&FW_NODE_NOFORWARD_MASK) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
+    if ((flags&FW_NODE_NOFORWARD_MASK) || !useFwBridge) packet[ctrlOffset] |= FW_CTRL_NOFORWARD;
     packet[ctrlOffset+1] = FwBusGeneration;
 }
 
@@ -801,6 +1052,61 @@ void EthBasePort::make_bwrite_packet(quadlet_t *packet, nodeid_t node, nodeaddr_
 #endif
 }
 
+// Default gap_count (also the maximum)
+const unsigned char gap_count_default = 63;
+
+// Hard-coded gap_counts based on number of nodes on bus, assuming worst case (i.e., a single long chain)
+static unsigned char gap_counts[25] = { 63,                 // 0 nodes (should not happen)
+                                         5,  7,  8, 10, 13, 16, 18, 21,     // 1-8  nodes
+                                        24, 26, 29, 32, 35, 37, 40, 43,     // 9-16 nodes
+                                        46, 48, 51, 54, 57, 59, 62, 63 };   // 17-24 nodes
+
+bool EthBasePort::OptimizeFirewireGapCount()
+{
+    // Broadcast to all boards to initiate read of PHY register 1
+    quadlet_t data = 1;
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
+        outStr << "OptimizeFirewireGapCount: failed to broadcast PHY command" << std::endl;
+        return false;
+    }
+    // Now, read each node to get the gap count
+    unsigned char gap_count_min = gap_count_default;
+    unsigned char gap_count_max = 0;
+    for (unsigned int node = 0; node < NumOfNodes_; node++) {
+        if (!ReadQuadletNode(node, BoardIO::FW_PHY_RESP, data))
+            return false;
+        unsigned char gap_count = static_cast<unsigned char>(data) & 0x3f;
+        if (gap_count < gap_count_min)
+            gap_count_min = gap_count;
+        if (gap_count > gap_count_max)
+            gap_count_max = gap_count;
+    }
+    if (gap_count_min == gap_count_max) {
+        std::cout << "OptimizeFirewireGapCount: current gap count is "
+                  << static_cast<unsigned int>(gap_count_min) << std::endl;
+    }
+    else if (gap_count_min != gap_count_max)
+        std::cout << "OptimizeFirewireGapCount: inconsistent gap counts ("
+                  << static_cast<unsigned int>(gap_count_min) << "-"
+                  << static_cast<unsigned int>(gap_count_max) << ")" << std::endl;
+    // Update the gap count if it is inconsistent, or if the gap count is the default value of 63,
+    // which would indicate that it has not yet been set (e.g., there is PC connected via Firewire).
+    if ((gap_count_min != gap_count_max) || (gap_count_min == gap_count_default)) {
+        unsigned char gap_count_new = gap_count_default;
+        if (NumOfNodes_ < 25)
+            gap_count_new = gap_counts[NumOfNodes_];
+        std::cout << "OptimizeFirewireGapCount: updating gap count to "
+                  << static_cast<unsigned int>(gap_count_new) << std::endl;
+        // Set bit 12 to indicate write; addr (1) in bits 11-8, data (gap_count) in bits 7-0
+        data = 0x00001100 | static_cast<quadlet_t>(gap_count_new);
+        if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data)) {
+            outStr << "OptimizeFirewireGapCount: failed to broadcast PHY command" << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
 bool EthBasePort::checkCRC(const unsigned char *packet)
 {
     // Eliminate CRC checking of FireWire packets received via Ethernet
@@ -811,6 +1117,7 @@ bool EthBasePort::checkCRC(const unsigned char *packet)
     uint32_t crc_original = bswap_32(*reinterpret_cast<const uint32_t *>(packet+FW_QRESPONSE_SIZE-FW_CRC_SIZE));
     return (crc_check == crc_original);
 #else
+    (void)packet;
     return true;
 #endif
 }
@@ -820,16 +1127,16 @@ bool EthBasePort::checkCRC(const unsigned char *packet)
 //online check: http://www.lammertbies.nl/comm/info/crc-calculation.html
 static uint32_t crc32_tab[] = {
   0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
-  0xe963a535, 0x9e6495a3,	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
+  0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
   0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91, 0x1db71064, 0x6ab020f2,
-  0xf3b97148, 0x84be41de,	0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7,
-  0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec,	0x14015c4f, 0x63066cd9,
-  0xfa0f3d63, 0x8d080df5,	0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172,
-  0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b,	0x35b5a8fa, 0x42b2986c,
-  0xdbbbc9d6, 0xacbcf940,	0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
+  0xf3b97148, 0x84be41de, 0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7,
+  0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec, 0x14015c4f, 0x63066cd9,
+  0xfa0f3d63, 0x8d080df5, 0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172,
+  0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b, 0x35b5a8fa, 0x42b2986c,
+  0xdbbbc9d6, 0xacbcf940, 0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
   0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116, 0x21b4f4b5, 0x56b3c423,
   0xcfba9599, 0xb8bda50f, 0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924,
-  0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d,	0x76dc4190, 0x01db7106,
+  0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d, 0x76dc4190, 0x01db7106,
   0x98d220bc, 0xefd5102a, 0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433,
   0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818, 0x7f6a0dbb, 0x086d3d2d,
   0x91646c97, 0xe6635c01, 0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e,
@@ -884,7 +1191,7 @@ static const unsigned char BitReverseTable[] =
 };
 
 
-uint32_t BitReverse32(uint32_t input)
+uint32_t EthBasePort::BitReverse32(uint32_t input)
 {
     unsigned char inputs[4];
     inputs[0] = BitReverseTable[input & 0x000000ff];

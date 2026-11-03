@@ -5,10 +5,9 @@
     
 /*Put headers and other declarations here*/
 #include "AmpIORevision.h"
+#include "Amp1394Time.h"
 #include "AmpIO.h"
 #include "EthUdpPort.h"
-
-typedef AmpIO::EncoderVelocityData EncoderVelocityData;
 
 #if Amp1394_HAS_RAW1394
   #include "FirewirePort.h"
@@ -18,13 +17,13 @@ typedef AmpIO::EncoderVelocityData EncoderVelocityData;
   #include "EthRawPort.h"
 #endif
 
-#ifdef _MSC_VER
-#include <stdlib.h>
-inline uint16_t bswap_16(uint16_t data) { return _byteswap_ushort(data); }
-inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
-#else
-#include <byteswap.h>
+#if Amp1394_HAS_EMIO
+  #include "ZynqEmioPort.h"
 #endif
+
+#include "PortFactory.h"
+
+#include "Amp1394BSwap.h"
 
 uint16_t bswap16(uint16_t in) {
     return bswap_16(in);
@@ -56,7 +55,7 @@ uint32_t bswap32(uint32_t in);
 }
 %typemap(argout) (quadlet_t& ARGOUT_QUADLET_T)
 {
-    $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_int(*arg$argnum));
+    $result = SWIG_AppendOutput($result, SWIG_From_unsigned_SS_int(*arg$argnum));
 }
 
 %typemap(in,numinputs=0)
@@ -67,7 +66,7 @@ uint32_t bswap32(uint32_t in);
 }
 %typemap(argout) (int32_t& ARGOUT_INT32_T)
 {
-    $result = SWIG_Python_AppendOutput($result, SWIG_From_int(*arg$argnum));
+    $result = SWIG_AppendOutput($result, SWIG_From_int(*arg$argnum));
 }
 
 %typemap(in,numinputs=0)
@@ -78,7 +77,7 @@ uint32_t bswap32(uint32_t in);
 }
 %typemap(argout) (uint16_t& ARGOUT_UINT16_T)
 {
-    $result = SWIG_Python_AppendOutput($result, SWIG_From_unsigned_SS_short(*arg$argnum));
+    $result = SWIG_AppendOutput($result, SWIG_From_unsigned_SS_short(*arg$argnum));
 }
 
 // -------------------------
@@ -136,21 +135,21 @@ uint32_t bswap32(uint32_t in);
 %typemap(argout)
   (quadlet_t* ARGOUT_ARRAY1, unsigned int NBYTES)
 {
-  $result = SWIG_Python_AppendOutput($result,(PyObject*)array$argnum);
+  $result = SWIG_AppendOutput($result,(PyObject*)array$argnum);
 }
 
 
 
 // AmpIO class
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &rdata};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &rdata};
 // ReadDoutControl
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsHigh};
-%apply AmpIO_UInt16& ARGOUT_UINT16_T {AmpIO_UInt16 &countsLow};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &countsHigh};
+%apply uint16_t& ARGOUT_UINT16_T {uint16_t &countsLow};
 // ReadEncoderPreload
-%apply AmpIO_Int32& ARGOUT_INT32_T {AmpIO_Int32 &sdata};
+%apply int32_t& ARGOUT_INT32_T {int32_t &sdata};
 
-%ignore AmpIO::ReadKSZ8851Reg(AmpIO_UInt8 addr, AmpIO_UInt8 &rdata);
-%ignore AmpIO::WriteKSZ8851Reg(AmpIO_UInt8,AmpIO_UInt8 const &);
+%ignore FpgaIO::ReadKSZ8851Reg(uint8_t addr, uint8_t &rdata);
+%ignore FpgaIO::WriteKSZ8851Reg(uint8_t, uint8_t const &);
 
 %import "AmpIORevision.h"
 
@@ -159,7 +158,11 @@ uint32_t bswap32(uint32_t in);
 %constant int VERSION_PATCH = Amp1394_VERSION_PATCH;
 %constant std::string VERSION = Amp1394_VERSION;
 
+%include "Amp1394Types.h"
+%include "Amp1394Time.h"
+%include "EncoderVelocity.h"
 %include "BoardIO.h"
+%include "FpgaIO.h"
 %include "AmpIO.h"
 
 %apply (int* IN_ARRAY1, int DIM1) {(int* data, int size)};
@@ -175,3 +178,7 @@ uint32_t bswap32(uint32_t in);
 #if Amp1394_HAS_PCAP
   %include "EthRawPort.h"
 #endif
+#if Amp1394_HAS_EMIO
+  %include "ZynqEmioPort.h"
+#endif
+%include "PortFactory.h"

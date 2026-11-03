@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -44,8 +44,8 @@ http://www.cisst.org/cisst/license.txt.
 #include <unistd.h>
 #endif
 
-EthRawPort::EthRawPort(int portNum, std::ostream &debugStream, EthCallbackType cb):
-    EthBasePort(portNum, debugStream, cb)
+EthRawPort::EthRawPort(int portNum, bool forceFwBridge, std::ostream &debugStream, EthCallbackType cb):
+    EthBasePort(portNum, forceFwBridge, debugStream, cb)
 {
     if (Init())
         outStr << "Initialization done" << std::endl;
@@ -69,6 +69,7 @@ bool EthRawPort::Init(void)
     ReceiveTimeout = 0.1;
 
     // Ethernet initialization
+    outStr << pcap_lib_version() << std::endl;
     pcap_if_t* alldevs;
     char errbuf[PCAP_ERRBUF_SIZE];
     if ((pcap_findalldevs(&alldevs, errbuf)) == -1) {
@@ -100,16 +101,67 @@ bool EthRawPort::Init(void)
 
     // Open pcap handle
     handle = NULL;
+
+    // For pcap versions >= 1.5.0, need to set immediate mode;
+    // otherwise, code can hang waiting for packets (e.g., when
+    // trying to read from a board that does not exist on the bus).
+    // In this case, we manually call pcap_create, pcap_set_snaplen,
+    // pcap_set_promisc, pcap_set_timeout and pcap_activate rather
+    // than calling pcap_open_live, so we can include the call to
+    // pcap_set_immediate_mode.
+    //
+    // The PCAP_HAS_IMMEDIATE_MODE compiler definition is set by
+    // CMake (check_cxx_source_compiles).
+
+#ifdef PCAP_HAS_IMMEDIATE_MODE
+    handle = pcap_create(dev->name, errbuf);
+    if (handle == NULL)
+    {
+        outStr << "ERROR: Couldn't create device: "<< dev->name <<std::endl;
+        return false;
+    }
+    if (pcap_set_snaplen(handle, BUFSIZ) < 0) {
+        outStr << "ERRROR: Couldn't set pcap snaplen" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_set_promisc(handle, 0) < 0) {
+        outStr << "ERRROR: Couldn't set pcap promisc" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_set_timeout(handle, 1) < 0) {
+        outStr << "ERRROR: Couldn't set pcap timeout" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_set_immediate_mode(handle, 1) != 0) {
+        outStr << "ERROR: Could not set pcap immediate mode" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+    if (pcap_activate(handle) < 0) {
+        outStr << "ERROR: Could not active pcap" << std::endl;
+        pcap_close(handle);
+        handle = NULL;
+        return false;
+    }
+#else
     handle = pcap_open_live(dev->name,
                             BUFSIZ,  // data buffer size
                             0,       // turn off promisc mode
                             1,       // read timeout 1 ms
                             errbuf); // error buffer
-    if(handle == NULL)
+    if (handle == NULL)
     {
         outStr << "ERROR: Couldn't open device: "<< dev->name <<std::endl;
         return false;
     }
+#endif
 
     // initialize ethernet header (FA-61-OE is CID assigned to LCSR by IEEE)
     uint8_t eth_dst[6];
@@ -179,15 +231,15 @@ bool EthRawPort::Init(void)
        << (int)eth_src[0] << ":" << (int)eth_src[1] << ":" << (int)eth_src[2] << ":"
        << (int)eth_src[3] << ":" << (int)eth_src[4] << ":" << (int)eth_src[5];
 
-    std::cout << "pcap filter = " << ss_filter.str() << "\n";
+    outStr << "pcap filter = " << ss_filter.str() << std::endl;
 
     if (pcap_compile(handle, &fp, ss_filter.str().c_str(), 0, PCAP_NETMASK_UNKNOWN) == -1) {
-        outStr << "ERROR: could not parse filter " << ss_filter.str() << "\n";
+        outStr << "ERROR: could not parse filter " << ss_filter.str() << std::endl;
         return false;
     }
 
     if (pcap_setfilter(handle, &fp) == -1) {
-        outStr << "ERROR: could not install filter " << ss_filter.str() << "\n";
+        outStr << "ERROR: could not install filter " << ss_filter.str() << std::endl;
         return false;
     }
 
@@ -198,8 +250,11 @@ bool EthRawPort::Init(void)
 
     bool ret = ScanNodes();
 
-    if (ret)
+    if (ret) {
         SetDefaultProtocol();
+        if (useFwBridge)
+            OptimizeFirewireGapCount();
+    }
 
 #if 0
     if (!ret) {
@@ -220,12 +275,13 @@ nodeid_t EthRawPort::InitNodes(void)
     quadlet_t data = 0x0;   // initialize data to 0
 
     // Check hardware version of hub board
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, 4, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK))) {
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::HARDWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to read hardware version for hub/bridge board" << std::endl;
         return 0;
     }
-    if (data != QLA1_String) {
-        outStr << "InitNodes: hub board is not a QLA board, data = " << std::hex << data << std::endl;
+    if (!HardwareVersionValid(data)) {
+        outStr << "InitNodes: hub board is not a supported board, data = " << std::hex << data << std::endl;
         return 0;
     }
 
@@ -237,19 +293,52 @@ nodeid_t EthRawPort::InitNodes(void)
     // Firewire bus master (i.e., only FPGA/QLA boards on the Firewire bus), this allows each board
     // to obtain its Firewire node id.
     data = 0;
-    if (!WriteQuadletNode(FW_NODE_BROADCAST, 1, data, FW_NODE_ETH_BROADCAST_MASK)) {
+    if (!WriteQuadletNode(FW_NODE_BROADCAST, BoardIO::FW_PHY_REQ, data, FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to broadcast PHY command" << std::endl;
         return 0;
     }
+    Amp1394_Sleep(0.01);
 
-    // Find board id for first board (i.e., one connected by Ethernet)
-    if (!ReadQuadletNode(FW_NODE_BROADCAST, 0, data, (FW_NODE_ETH_BROADCAST_MASK|FW_NODE_NOFORWARD_MASK)))  {
+    // Find board id for first board (i.e., one connected by Ethernet) by FireWire and Ethernet broadcast
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::BOARD_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
         outStr << "InitNodes: failed to read board id for hub/bridge board" << std::endl;
         return 0;
     }
     // board_id is bits 27-24, BOARD_ID_MASK = 0x0f000000
     HubBoard = (data & BOARD_ID_MASK) >> 24;
     outStr << "InitNodes: found hub board: " << static_cast<int>(HubBoard) << std::endl;
+
+    // read firmware version
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::FIRMWARE_VERSION, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: unable to read firmware version from hub/bridge board" << std::endl;
+        return 0;
+    }
+    unsigned long fver = data;
+    FirmwareVersion[HubBoard] = data;
+
+    // Get FPGA version of Hub board
+    if (!ReadQuadletNode(FW_NODE_BROADCAST, BoardIO::ETH_STATUS, data,
+                         FW_NODE_NOFORWARD_MASK | FW_NODE_ETH_BROADCAST_MASK)) {
+        outStr << "InitNodes: failed to read Ethernet status from hub/bridge board" << std::endl;
+        return 0;
+    }
+    unsigned long fpga_ver = BoardIO::GetFpgaVersionMajorFromStatus(data);
+    FpgaVersion[HubBoard] = fpga_ver;
+
+    if (!useFwBridge && ((fpga_ver != 3) || (fver < 9))) {
+        if (fpga_ver != 3)
+            outStr << "InitNodes: hub board is FPGA V" << fpga_ver;
+        else if (fver < 9)
+            outStr << "InitNodes: hub board has Firmware Rev " << fver;
+        outStr << ", using Ethernet/Firewire bridge" << std::endl;
+        useFwBridge = true;
+    }
+    else if (useFwBridge)
+        outStr << "InitNodes: using Ethernet/Firewire bridge" << std::endl;
+    else
+        outStr << "InitNodes: using Ethernet network" << std::endl;
 
     // Scan for up to 16 nodes on bus
     return BoardIO::MAX_BOARDS;
@@ -283,10 +372,10 @@ unsigned int EthRawPort::GetMaxWriteDataSize(void) const
     return ETH_RAW_FRAME_MAX_SIZE - GetPrefixOffset(WR_FW_BDATA) - GetWritePostfixSize();
 }
 
-bool EthRawPort::PacketSend(unsigned char *packet, size_t nbytes, bool)
+bool EthRawPort::PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool)
 {
     if (pcap_sendpacket(handle, packet, nbytes) != 0)  {
-        outStr << "ERROR: PCAP send packet failed" << std::endl;
+        outStr << "ERROR: PCAP send packet failed to node " << node << std::endl;
         return false;
     }
     return true;
@@ -353,7 +442,7 @@ int EthRawPort::PacketFlushAll(void)
 
 bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthernetBroadcast)
 {
-    if (!useEthernetBroadcast && (packet[11] != HubBoard)) {
+    if (!useEthernetBroadcast && useFwBridge && (packet[11] != HubBoard)) {
         outStr << "WARNING: Packet not from node " << static_cast<unsigned int>(HubBoard) << " (src lsb is "
                << static_cast<unsigned int>(packet[11]) << ")" << std::endl;
         return false;
@@ -361,21 +450,17 @@ bool EthRawPort::CheckEthernetHeader(const unsigned char *packet, bool useEthern
     return true;
 }
 
-void EthRawPort::make_write_header(unsigned char *packet, unsigned int nBytes, unsigned char flags)
-{
-    make_ethernet_header(packet, nBytes, flags);
-    EthBasePort::make_write_header(packet, nBytes, flags);
-}
-
-void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, unsigned char flags)
+void EthRawPort::make_ethernet_header(unsigned char *packet, unsigned int numBytes, nodeid_t node, unsigned char flags)
 {
     memcpy(packet, frame_hdr, ETH_FRAME_LENGTH_OFFSET);  // Copy header except length field
-    if (flags&FW_NODE_ETH_BROADCAST_MASK) {      // multicast
+    if ((flags&FW_NODE_ETH_BROADCAST_MASK) || (!useFwBridge && (node == FW_NODE_BROADCAST))) {      // multicast
         packet[0] |= 0x01;    // set multicast destination address
         packet[5] = 0xff;     // keep multicast address
     }
     else {
-        packet[5] = HubBoard;     // last byte of dest address is board id
+        // last byte of dest address is board id; when using Ethernet/Firewire bridge, this is the HubBoard;
+        // otherwise it is the node (in Ethernet-only network, node-id and board-id are identical)
+        packet[5] = useFwBridge ? HubBoard : node;
     }
     // length field (big endian 16-bit integer)
     *reinterpret_cast<uint16_t *>(packet+ETH_FRAME_LENGTH_OFFSET) = bswap_16(numBytes-ETH_FRAME_HEADER_SIZE);

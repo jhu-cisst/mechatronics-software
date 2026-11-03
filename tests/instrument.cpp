@@ -3,12 +3,16 @@
 
 /******************************************************************************
  *
- * (C) Copyright 2018-2020 Johns Hopkins University (JHU), All Rights Reserved.
+ * (C) Copyright 2018-2023 Johns Hopkins University (JHU), All Rights Reserved.
  *
  * This program is used to read the Dallas DS2505 chip inside a da Vinci instrument
  * via its 1-wire interface. The 1-wire interface is implemented in the FPGA,
- * using bi-redirection digital port DOUT3, available with QLA Rev 1.4+.
- * It depends on the AmpIO library (which depends on libraw1394 and/or pcap).
+ * using either the direct 1-wire interface or an external DS2480B driver chip.
+ * The direct 1-wire interface uses bi-redirectional digital port DOUT3,
+ * which is available with QLA Rev 1.4+. The external DS2480B driver chip is
+ * located either on the dMIB (Rev F+) or on an external dongle.
+ * This program depends on the AmpIO library (which may depend on libraw1394
+ * and/or pcap).
  *
  * Usage: instrument [-pP] <board num>
  *        where P is the Firewire port number (default 0),
@@ -22,13 +26,7 @@
 #include <fstream>
 
 #include <Amp1394/AmpIORevision.h>
-#if Amp1394_HAS_RAW1394
-#include "FirewirePort.h"
-#endif
-#if Amp1394_HAS_PCAP
-#include "EthRawPort.h"
-#endif
-#include "EthUdpPort.h"
+#include "PortFactory.h"
 #include "AmpIO.h"
 
 void PrintDebugStream(std::stringstream &debugStream)
@@ -43,25 +41,16 @@ void PrintDebugStream(std::stringstream &debugStream)
 int main(int argc, char** argv)
 {
     int i;
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType desiredPort = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType desiredPort = BasePort::PORT_ETH_UDP;
-#endif
-    int port = 0;
     int board = 0;
-    std::string IPaddr(ETH_UDP_DEFAULT_IP);
+
+    std::string portDescription = BasePort::DefaultPort();
 
     if (argc > 1) {
         int args_found = 0;
         for (i = 1; i < argc; i++) {
             if (argv[i][0] == '-') {
                 if (argv[i][1] == 'p') {
-                    if (!BasePort::ParseOptions(argv[i]+2, desiredPort, port, IPaddr)) {
-                        std::cerr << "Failed to parse option: " << argv[i] << std::endl;
-                        return 0;
-                    }
-                    std::cerr << "Selected port: " << BasePort::PortTypeString(desiredPort) << std::endl;
+                    portDescription = argv[i]+2;
                 }
                 else {
                     std::cerr << "Usage: instrument <board-num> [-pP]" << std::endl
@@ -80,53 +69,42 @@ int main(int argc, char** argv)
     }
 
     std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
-    BasePort *Port = 0;
-    if (desiredPort == BasePort::PORT_FIREWIRE) {
-#if Amp1394_HAS_RAW1394
-        Port = new FirewirePort(port, debugStream);
-#else
-        std::cerr << "FireWire not available (set Amp1394_HAS_RAW1394 in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    else if (desiredPort == BasePort::PORT_ETH_UDP) {
-        Port = new EthUdpPort(port, IPaddr, debugStream);
-    }
-    else if (desiredPort == BasePort::PORT_ETH_RAW) {
-#if Amp1394_HAS_PCAP
-        Port = new EthRawPort(port, debugStream);
-#else
-        std::cerr << "Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
-        return -1;
-#endif
-    }
-    if (!Port || !Port->IsOK()) {
+    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
+    if (!Port) {
         PrintDebugStream(debugStream);
-        std::cerr << "Failed to initialize " << BasePort::PortTypeString(desiredPort) << std::endl;
+        std::cerr << "Failed to create port using: " << portDescription << std::endl;
         return -1;
     }
+    if (!Port->IsOK()) {
+        PrintDebugStream(debugStream);
+        std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
+        return -1;
+    }
+
     AmpIO Board(board);
     Port->AddBoard(&Board);
 
-    AmpIO_UInt32 fver = Board.GetFirmwareVersion();
+    uint32_t fver = Board.GetFirmwareVersion();
     if (fver < 7) {
         std::cerr << "Instrument read requires firmware version 7+ (detected version " << fver << ")" << std::endl;
+        Port->RemoveBoard(board);
+        delete Port;
         return -1;
     }
-    AmpIO_UInt32 status = Board.ReadStatus();
-    // Check whether bi-directional I/O is available
-    if ((status & 0x00300000) != 0x00300000) {
-        std::cerr << "QLA does not support bidirectional I/O (QLA Rev 1.4+ required)" << std::endl;
-        return -1;
-    }
+    uint32_t status = Board.ReadStatus();
 
     // Now, we try to read the Dallas chip. This will also populate the status field.
     unsigned char buffer[2048];  // Buffer for entire contents of DS2505 memory (2 Kbytes)
     bool ret = Board.DallasReadMemory(0, (unsigned char *) buffer, sizeof(buffer));
     if (!Board.DallasReadStatus(status)) {
         std::cerr << "Failed to read DS2505 status" << std::endl;
+        Port->RemoveBoard(board);
+        delete Port;
         return -1;
     }
+    // No longer need these
+    Port->RemoveBoard(board);
+    delete Port;
     if ((status & 0x00000001) != 0x00000001) {
         std::cerr << "DS2505 interface not enabled (hardware problem)" << std::endl;
         return -1;
@@ -146,8 +124,11 @@ int main(int argc, char** argv)
                   << " (DS2505 should be 0x0B)" << std::endl;
         return -1;
     }
-    unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
-    std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;
+    bool useDS2480B = (status & 0x00008000) == 0x00008000;
+    if (!useDS2480B) {
+        unsigned char rise_time = static_cast<unsigned char>((status&0x00FF0000)>>16);
+        std::cout << "Measured rise time: " << (rise_time/49.152) << " microseconds" << std::endl;
+    }
     if (!ret) {
         std::cerr << "Failed to read instrument memory" << std::endl;
         return -1;
@@ -162,7 +143,5 @@ int main(int argc, char** argv)
         return -1;
     }
     outFile.close();
-    Port->RemoveBoard(board);
-    delete Port;
     return 0;
 }

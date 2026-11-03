@@ -4,7 +4,7 @@
 /*
   Author(s):  Anton Deguet
 
-  (C) Copyright 2014-2020 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2023 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -24,21 +24,26 @@ http://www.cisst.org/cisst/license.txt.
 #if Amp1394_HAS_PCAP
 #include "EthRawPort.h"
 #endif
+#if Amp1394_HAS_EMIO
+#include "ZynqEmioPort.h"
+#endif
+#if Amp1394_HAS_SIM
+#include "sim/SimulationPort.h"
+#endif
+
 #include "EthUdpPort.h"
+
 
 BasePort * PortFactory(const char * args, std::ostream & debugStream)
 {
     BasePort * port = 0;
     int portNumber = 0;
     std::string IPaddr = ETH_UDP_DEFAULT_IP;
+    bool fwBridge = false;
 
-#if Amp1394_HAS_RAW1394
-    BasePort::PortType portType = BasePort::PORT_FIREWIRE;
-#else
-    BasePort::PortType portType = BasePort::PORT_ETH_UDP;
-#endif
+    BasePort::PortType portType = BasePort::DefaultPortType();
 
-    if (!BasePort::ParseOptions(args, portType, portNumber, IPaddr)) {
+    if (!BasePort::ParseOptions(args, portType, portNumber, IPaddr, fwBridge)) {
         debugStream << "PortFactory: Failed to parse option: " << args << std::endl;
         return port;
     }
@@ -54,17 +59,33 @@ BasePort * PortFactory(const char * args, std::ostream & debugStream)
         break;
 
     case BasePort::PORT_ETH_UDP:
-        port = new EthUdpPort(portNumber, IPaddr, debugStream);
+        port = new EthUdpPort(portNumber, IPaddr, fwBridge, debugStream);
         break;
     
     case BasePort::PORT_ETH_RAW:
 #if Amp1394_HAS_PCAP
-        port = new EthRawPort(portNumber, debugStream);
+        port = new EthRawPort(portNumber, fwBridge, debugStream);
 #else
         debugStream << "PortFactory: Raw Ethernet not available (set Amp1394_HAS_PCAP in CMake)" << std::endl;
 #endif
         break;
 
+    case BasePort::PORT_ZYNQ_EMIO:
+#if Amp1394_HAS_EMIO
+        port = new ZynqEmioPort(portNumber, debugStream);
+#else
+        debugStream << "PortFactory: Zynq EMIO not available" << std::endl;
+#endif
+        break;
+
+    case BasePort::PORT_SIMULATION:
+#if Amp1394_HAS_SIM
+        port = new SimulationPort(-1, debugStream);
+#else
+        debugStream << "PortFactory: Simulation port not available (set Amp1394_HAS_SIM in CMake)" << std::endl;
+#endif
+        break;
+        
     default:
         debugStream << "PortFactory: Unsupported port type" << std::endl;
         break;

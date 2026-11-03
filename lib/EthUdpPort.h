@@ -4,7 +4,7 @@
 /*
   Author(s):  Zihan Chen, Peter Kazanzides
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -34,7 +34,7 @@ class EthUdpPort : public EthBasePort
 protected:
     SocketInternals *sockPtr;   // OS-specific internals
     std::string ServerIP;       // IP address of server (string)
-    unsigned long IP_addr;      // IP address of server (32-bit number)
+    std::string MulticastIP;    // IP address for multicast (string)
     unsigned short UDP_port;    // Port on server (FPGA)
 
     //! Initialize EthUdp port
@@ -48,7 +48,7 @@ protected:
     nodeid_t InitNodes(void);
 
     // Send packet via UDP
-    bool PacketSend(unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
+    bool PacketSend(nodeid_t node, unsigned char *packet, size_t nbytes, bool useEthernetBroadcast);
 
     // Receive packet via UDP
     int PacketReceive(unsigned char *packet, size_t nbytes);
@@ -59,9 +59,13 @@ protected:
 public:
 
     EthUdpPort(int portNum, const std::string &serverIP = ETH_UDP_DEFAULT_IP,
+               bool forceFwBridge = false,
                std::ostream &debugStream = std::cerr, EthCallbackType cb = 0);
 
     ~EthUdpPort();
+
+    std::string GetMultiCastIP() const { return MulticastIP; }
+    bool SetMulticastIP(const std::string &multicast);
 
     //****************** BasePort virtual methods ***********************
 

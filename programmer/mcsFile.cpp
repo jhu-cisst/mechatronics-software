@@ -2,6 +2,7 @@
 /* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
 
 #include <iostream>
+#include <iomanip>
 #include <string.h>
 
 #include "mcsFile.h"
@@ -166,4 +167,38 @@ void mcsFile::CloseFile()
 {
     std::cout << "Processed " << line_num << " lines" << std::endl;
     file.close();
+}
+
+void mcsFile::WriteSectorHeader(std::ofstream &file, unsigned int num)
+{
+    file << std::hex << std::setfill('0') << std::uppercase;
+    file << ":" << std::hex << "02000004";
+    unsigned long csum_computed = 0x02 + 0x04;
+    file << std::setw(4) << static_cast<unsigned short>(num);
+    csum_computed += num&0x000000ff;
+    csum_computed += (num&0x0000ff00)>>8;
+    csum_computed = (~csum_computed+1)&0x000000ff;
+    file << std::setw(2) << csum_computed << std::endl;
+}
+
+void mcsFile::WriteDataLine(std::ofstream &file, unsigned long addr, unsigned char *bytes, unsigned int numBytes)
+{
+    if (numBytes == 0) return;
+    file << ":" << std::setw(2) << numBytes;
+    unsigned long csum_computed = numBytes;
+    file << std::setw(4) << static_cast<unsigned short>(addr);
+    csum_computed += addr&0x000000ff;
+    csum_computed += (addr&0x0000ff00)>>8;
+    file << "00";   // type = RECORD_DATA
+    for (unsigned int i = 0; i < numBytes; i++) {
+        csum_computed += bytes[i];
+        file << std::setw(2) << (unsigned int) bytes[i];
+    }
+    csum_computed = (~csum_computed+1)&0x000000ff;
+    file << std::setw(2) << csum_computed << std::endl;
+}
+
+void mcsFile::WriteEOF(std::ofstream &file)
+{
+    file << ":00000001FF" << std::endl;
 }

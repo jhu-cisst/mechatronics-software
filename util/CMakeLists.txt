@@ -1,5 +1,5 @@
 #
-# (C) Copyright 2012-2019 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2012-2024 Johns Hopkins University (JHU), All Rights Reserved.
 #
 # --- begin cisst license - do not edit ---
 #
@@ -9,9 +9,7 @@
 #
 # --- end cisst license ---
 
-# Backward compatibility
-cmake_minimum_required (VERSION 2.6)
-project (Amp1394Utils)
+project (Amp1394Utils VERSION 2.1.0)
 
 if (NOT EXECUTABLE_OUTPUT_PATH)
    set (EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR})

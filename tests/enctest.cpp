@@ -355,7 +355,7 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
         // If initDir==0 (no direction change) or we have already changed direction,
         // then check whether against the position limit.
         if (((dir == 1) && ((pos+dir) > (pf+TINY))) || ((dir == -1) && ((pos+dir) < (pf-TINY)))) {
-            int endPos = static_cast<int>(pf) + ((dir == -1) ? (1-TINY) : 0);
+            int endPos = static_cast<int>(pf + ((dir == -1) ? (1-TINY) : 0));
             if (pos != endPos) {
                 std::cout << "ConstantAccel: end position not reached, pos = " << pos << ", pf = "
                           << pf << ", dir = " << dir << std::endl;
@@ -399,7 +399,7 @@ double ConstantAccel::CalculateNextTime(double tCur, int &pos, int &curDir)
         return tCur;
     }
     else {
-        int endPos = static_cast<int>(pf) + ((dir == -1) ? (1-TINY) : 0);
+        int endPos = static_cast<int>(pf + ((dir == -1) ? (1-TINY) : 0));
         if (pos != endPos) {
             std::cout << "ConstantAccel: end position not reached, pos = " << pos << ", pf = "
                       << pf << ", dir = " << dir << std::endl;
@@ -528,9 +528,9 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
     int lastDir = 0;
     double t = 0.0;
     double lastT = 0.0;
-    const AmpIO_UInt32 max_ticks = 0x007fffff;   // 23 bits
-    AmpIO_UInt32 minTicks = max_ticks;
-    AmpIO_UInt32 maxTicks = 0;
+    const uint32_t max_ticks = 0x007fffff;   // 23 bits
+    uint32_t minTicks = max_ticks;
+    uint32_t maxTicks = 0;
     unsigned int i;
     encList.clear();
     encList.push_back(EncTime(0.0, 0));
@@ -542,7 +542,7 @@ unsigned int MotionTrajectory::CreateWaveform(quadlet_t *waveform, unsigned int 
             std::cout << "CreateWaveform: i = " << i << ", invalid direction" << std::endl;
             break;
         }
-        AmpIO_UInt32 ticks = static_cast<AmpIO_UInt32>((t-lastT)/dt + 0.5);
+        uint32_t ticks = static_cast<uint32_t>((t-lastT)/dt + 0.5);
         lastT = t;
         while (ticks > max_ticks) {
             // If we exceed max_ticks (23 bits) add waveform table entries that maintain
@@ -615,6 +615,30 @@ std::string GetEdgeString(unsigned char edges)
     return str;
 }
 
+// Derived class to enable data access
+class EncoderVelocityLocal : public EncoderVelocity
+{
+public:
+    EncoderVelocityLocal() : EncoderVelocity() {}
+    ~EncoderVelocityLocal() {}
+
+    void PrintFlags(std::ofstream &outFile) const;
+};
+
+void EncoderVelocityLocal::PrintFlags(std::ofstream &outFile) const
+{
+    if (velOverflow)   outFile << " VEL_OVF";
+    if (dirChange)     outFile << " DIR_CHG";
+    if (encError)      outFile << " ENC_ERR";
+    if (qtr1Overflow)  outFile << " Q1_OVF";
+    if (qtr5Overflow)  outFile << " Q5_OVF";
+    if (qtr1Edges!= qtr5Edges) {
+        outFile << " EDGES(" << GetEdgeString(qtr1Edges)
+                << ":" <<  GetEdgeString(qtr5Edges) << ")";
+    }
+    if (runOverflow) outFile << " RUN_OVF";
+}
+
 // Data collected from board
 struct EncData {
     int mpos;
@@ -623,7 +647,7 @@ struct EncData {
     double maccel;
     double run;
     double ts;
-    AmpIO::EncoderVelocityData encVelData;
+    EncoderVelocityLocal encVelData;
 };
 
 void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
@@ -701,7 +725,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
     double tf, pf, vf, af;
     motion.GetFinalValues(tf, pf, vf, af);
     // Overestimates datasize because the actual loop time will be less than loopTime.
-    size_t dataSize = tf/loopTime;
+    size_t dataSize = static_cast<size_t>(tf/loopTime);
     measuredData.reserve(dataSize);
 
     EncData encData;
@@ -775,7 +799,7 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
                 epos = encData.mpos;
             }
             // For now, consider first few encoder transitions when computing time difference
-            if ((rtime > 0.0) && (!encData.encVelData.runOverflow) && (curIndex < 10)) {
+            if ((rtime > 0.0) && (!encData.encVelData.IsRunningCounterOverflow()) && (curIndex < 10)) {
                 double timeDiff = clkTime-(rtime+encData.run);
                 sumDiff += timeDiff;
                 numDiff++;
@@ -799,19 +823,11 @@ void TestEncoderVelocity(BasePort *port, AmpIO *board, MotionTrajectory &motion)
         double rpos, rvel, raccel;
         if (motion.GetValuesAtTime(clkTime, rpos, rvel, raccel)) {
             outFile << clkTime << ", " << encData.mpos << ", " << encData.mvel << ", " << encData.mvelpred << ", " << encData.maccel << ", "
-                    << encData.run << ", " << rpos << ", " << rvel << ", " << raccel << ", " << encData.ts
-                    << ", " << encData.encVelData.velPeriod << ", " << encData.encVelData.qtr1Period
-                    << ", " << encData.encVelData.qtr5Period << ", ";
-            if (encData.encVelData.velOverflow)   outFile << " VEL_OVF";
-            if (encData.encVelData.dirChange)     outFile << " DIR_CHG";
-            if (encData.encVelData.encError)      outFile << " ENC_ERR";
-            if (encData.encVelData.qtr1Overflow)  outFile << " Q1_OVF";
-            if (encData.encVelData.qtr5Overflow)  outFile << " Q5_OVF";
-            if (encData.encVelData.qtr1Edges!= encData.encVelData.qtr5Edges) {
-                outFile << " EDGES(" << GetEdgeString(encData.encVelData.qtr1Edges)
-                        << ":" <<  GetEdgeString(encData.encVelData.qtr5Edges) << ")";
-            }
-            if (encData.encVelData.runOverflow)  outFile << " RUN_OVF";
+                    << encData.run << ", " << rpos << ", " << rvel << ", " << raccel << ", " << encData.ts << ", "
+                    << encData.encVelData.GetEncoderVelocityPeriod() << ", "
+                    << encData.encVelData.GetEncoderQuarter1Period() << ", "
+                    << encData.encVelData.GetEncoderQuarter5Period() << ", ";
+            encData.encVelData.PrintFlags(outFile);
             outFile << std::endl;
         }
         else

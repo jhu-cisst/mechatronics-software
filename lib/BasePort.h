@@ -4,7 +4,7 @@
 /*
   Author(s):  Long Qian, Zihan Chen
 
-  (C) Copyright 2014-2021 Johns Hopkins University (JHU), All Rights Reserved.
+  (C) Copyright 2014-2026 Johns Hopkins University (JHU), All Rights Reserved.
 
 --- begin cisst license - do not edit ---
 
@@ -19,6 +19,7 @@ http://www.cisst.org/cisst/license.txt.
 #define __BasePort_H__
 
 #include <iostream>
+#include <vector>
 #include "BoardIO.h"
 
 /*
@@ -38,18 +39,24 @@ http://www.cisst.org/cisst/license.txt.
  * should not be more than MAX_BOARDS+1 nodes on the bus (+1 for PC) unless other
  * FireWire device are connected.
  *
- * There are three concrete derived classes:
+ * There are four concrete derived classes:
  *     FirewirePort:  sends FireWire packets via FireWire
  *     EthUdpPort:    sends FireWire packets via Ethernet UDP
  *     EthRawPort:    sends FireWire packets via raw Ethernet frames (using PCAP)
+ *     ZynqEmioPort:  sends FireWire packets via Zynq EMIO interface
  */
 
 // Defined here for static methods ParseOptions and DefaultPort
-#define ETH_UDP_DEFAULT_IP "169.254.0.100"
+#define ETH_UDP_DEFAULT_IP           "169.254.0.100"
+#define ETH_UDP_MULTICAST_DEFAULT_IP "224.0.0.100"
 
 // Some useful constants
-const unsigned long BOARD_ID_MASK    = 0x0f000000;  /* Mask for board_id */
+const unsigned long BOARD_ID_MASK = 0x0f000000;      /* Mask for board_id */
+const unsigned long DRAC_HAS_SUJ_MASK = 0x00002000;  /* Mask for DRAC has_suj */
 const unsigned long QLA1_String = 0x514C4131;
+const unsigned long dRA1_String = 0x64524131;
+const unsigned long DQLA_String = 0x44514C41;
+const unsigned long BCFG_String = 0x42434647;
 
 // Maximum possible data size in bytes; this should only be used for sizing static buffers;
 // the actual limit is port-specific and generally less than this.
@@ -58,9 +65,9 @@ const unsigned int MAX_POSSIBLE_DATA_SIZE = 2048;
 // The FireWire node number is represented by an unsigned char (8 bits), but only 6
 // bits are used for the node number (0-63). The Ethernet/FireWire bridge protocol
 // uses the upper two bits as flags to indicate whether the packet should be sent
-// via Ethernet broadcast (0x80) and whether the Ethernet/FireWire bridge should
+// via Ethernet broadcast/multicast (0x80) and whether the Ethernet/FireWire bridge should
 // not forward (0x40) the received packet to other boards via FireWire.
-const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast
+const unsigned char FW_NODE_ETH_BROADCAST_MASK = 0x80;   // Mask for Ethernet broadcast or multicast
 const unsigned char FW_NODE_NOFORWARD_MASK     = 0x40;   // Mask to prevent forwarding by Ethernet/FireWire bridge
 const unsigned char FW_NODE_FLAGS_MASK         = 0xc0;   // Mask for above flags
 const unsigned char FW_NODE_MASK               = 0x3f;   // Mask for valid FireWire node numbers (0-63)
@@ -74,7 +81,7 @@ public:
 
     enum { MAX_NODES = 64 };     // maximum number of nodes (IEEE-1394 limit)
 
-    enum PortType { PORT_FIREWIRE, PORT_ETH_UDP, PORT_ETH_RAW };
+    enum PortType { PORT_FIREWIRE, PORT_ETH_UDP, PORT_ETH_RAW, PORT_ZYNQ_EMIO, PORT_SIMULATION };
 
     // Protocol types:
     //   PROTOCOL_SEQ_RW      sequential (individual) read and write to each board
@@ -86,33 +93,53 @@ public:
     // With Firmware V7+, each FPGA starts a timer when it receives the broadcast query command
     // sent by the host PC. The following times are relative to this timer.
     struct BroadcastReadInfo {
+        unsigned int readSizeQuads;   // Read size in quadlets
         unsigned int readSequence;    // The sequence number sent with the broadcast query command
+        double updateStartTime;       // When the FPGA started updating the hub data
+        double updateFinishTime;      // When the FPGA finished updating the hub data
+        bool   updateOverflow;        // Whether timer overflow was detected during data update
         double readStartTime;         // When the PC started reading the hub feedback data
         double readFinishTime;        // When the PC finished reading the hub feedback data
+        bool   readOverflow;          // Whether timer overflow was detected during gap or read
+        double gapTime;               // Time between update finish and read start
+        double gapTimeMin;            // Minimum gap time
+        double gapTimeMax;            // Maximum gap time
         struct BroadcastBoardInfo {   // For each board:
             bool inUse;               //   Whether board is participating in broadcast read
+            bool updated;             //   Whether successfully updated
+            unsigned int blockNum;    //   Block number that contained board data
+            unsigned int blockSize;   //   Number of quadlets from this board
             unsigned int sequence;    //   The sequence number received (should be same as readSequence)
+            bool seq_error;           //   Sequence error mismatch on FPGA
             double updateTime;        //   When the hub feedback data was updated
 
-            BroadcastBoardInfo() : inUse(false), sequence(0), updateTime(0.0) {}
+            BroadcastBoardInfo() : inUse(false), updated(false), blockNum(0), blockSize(0), sequence(0),
+                                   seq_error(false), updateTime(0.0) {}
             ~BroadcastBoardInfo() {}
         };
         BroadcastBoardInfo boardInfo[BoardIO::MAX_BOARDS];
 
-        BroadcastReadInfo() : readSequence(0), readStartTime(0.0), readFinishTime(0.0) {}
+        BroadcastReadInfo() : readSizeQuads(0), readSequence(0), updateStartTime(0.0), updateFinishTime(0.0),
+                              updateOverflow(false), readStartTime(0.0), readFinishTime(0.0), readOverflow(false),
+                              gapTime(0.0) { Clear(); }
         ~BroadcastReadInfo() {}
-        void PrintTiming(std::ostream &outStr, bool newLine = true) const;
+        unsigned int IncrementSequence();
+        void PrepareForRead();
+        void PrintTiming(std::ostream &outStr) const;
+        void Clear(void)
+        { gapTimeMin = 1.0; gapTimeMax = 0.0; }
     };
 
 protected:
     // Stream for debugging output (default is std::cerr)
     std::ostream &outStr;
-    ProtocolType Protocol_;         // protocol type in use
-    bool IsAllBoardsBroadcastCapable_;   // TRUE if all nodes bc capable
-    bool IsAllBoardsBroadcastShorterWait_;   // TRUE if all nodes bc capable and support shorter wait
-    bool IsNoBoardsBroadcastShorterWait_;    // TRUE if no nodes support the shorter wait
-    bool IsAllBoardsRev7_;                   // TRUE if all boards are Firmware Rev 7
-    bool IsNoBoardsRev7_;                    // TRUE if no boards are Firmware Rev 7
+    ProtocolType Protocol_;               // protocol type in use
+    bool IsAllBoardsBroadcastCapable_;    // TRUE if all nodes bc capable (Firmware Rev 4+)
+    bool IsAllBoardsRev4_5_;              // TRUE if all boards are Firmware Rev 4 or 5
+    bool IsAllBoardsRev4_6_;              // TRUE if all boards are Firmware Rev 4-6
+    bool IsAllBoardsRev6_;                // TRUE if all boards are Firmware Rev 6 (shorter wait)
+    bool IsAllBoardsRev7_;                // TRUE if all boards are Firmware Rev 7
+    bool IsAllBoardsRev8_10_;             // TRUE if all boards are Firmware Rev 8, 9 or 10
 
     size_t ReadErrorCounter_;
 
@@ -150,15 +177,44 @@ protected:
     // Firmware versions
     unsigned long FirmwareVersion[BoardIO::MAX_BOARDS];
 
+    // FPGA versions
+    unsigned int FpgaVersion[BoardIO::MAX_BOARDS];
+
+    // Hardware versions (e.g., QLA1)
+    unsigned long HardwareVersion[BoardIO::MAX_BOARDS];
+
+    enum BuildSystemType { BUILD_ISE, BUILD_VIVADO };
+    BuildSystemType BuildSystem[BoardIO::MAX_BOARDS];
+
+    // Whether dVRK-Si has SUJ interface
+    bool SiHasSUJ[BoardIO::MAX_BOARDS];
+
+    // List of supported hardware versions.
+    // Static so that it can be initialized before calling constructor.
+    static std::vector<unsigned long> SupportedHardware;
+
     // Mappings between board numbers and node numbers
     unsigned char Node2Board[MAX_NODES];
     nodeid_t Board2Node[BoardIO::MAX_BOARDS];
+
+    // Returns true if Node2Board has a valid entry, which indicates that
+    // the node has been initialized.
+    bool isNodeValid(nodeid_t node) const
+    { return (Node2Board[node] < BoardIO::MAX_BOARDS); }
 
     // Initialize port (called by constructor and Reset)
     virtual bool Init(void) = 0;
 
     // Cleanup port (called by destructor and Reset)
     virtual void Cleanup(void) = 0;
+
+    // Whether all boards support broadcast with shorter wait
+    bool IsBroadcastShorterWait(void) const
+    { return (IsAllBoardsRev6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_10_); }
+
+    // Whether a valid mix of firmware for broadcast
+    bool IsBroadcastFirmwareMixValid(void) const
+    { return (IsAllBoardsRev4_6_ || IsAllBoardsRev7_ || IsAllBoardsRev8_10_); }
 
     // Sets default protocol based on firmware
     void SetDefaultProtocol(void);
@@ -170,6 +226,9 @@ protected:
     // the real-time read and write.
     void SetReadBufferBroadcast(void);
     void SetWriteBufferBroadcast(void);
+
+    // Return expected size for broadcast read, in quadlets
+    unsigned int GetBroadcastReadSizeQuads(void) const;
 
     // Convenience function
     void SetReadInvalid(void);
@@ -213,6 +272,21 @@ public:
 
     // Get protocol
     ProtocolType GetProtocol(void) const { return Protocol_; }
+
+    inline std::string GetProtocolString(void) const {
+        return BasePort::ProtocolString(GetProtocol());
+    }
+
+    // Return string version of protocol
+    static std::string ProtocolString(ProtocolType protocol);
+
+    // Helper function for parsing protocol as string
+    // Return true is protocol is one of:
+    // - "sequential-read-write" or "srw" and sets type to PROTOCOL_SEQ_RW
+    // - "sequential-read-broadcast-write" or "srbw" and sets type to PROTOCOL_SEQ_R_BC_W
+    // - "broadcast-read-write", "brw", "broadcast-query-read-write" or "bqrw" and sets type to PROTOCOL_BC_QRW
+    static bool ParseProtocol(const char * arg, ProtocolType & protocol,
+                              std::ostream & ostr = std::cerr);
 
     // Set protocol type
     bool SetProtocol(ProtocolType prot);
@@ -261,12 +335,98 @@ public:
      \param boardId: board ID (rotary switch value)
      \return unsigned long: firmware version number
     */
-    unsigned long GetFirmwareVersion(unsigned char boardId) const
-    { return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0; }
+    inline unsigned long GetFirmwareVersion(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? FirmwareVersion[boardId] : 0;
+    }
+
+    /*!
+     \brief Get FPGA major version
+
+     \param boardId: board ID (rotary switch value)
+     \return unsigned int: FPGA major version (1, 2 or 3)
+    */
+    inline unsigned int GetFpgaVersionMajor(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? FpgaVersion[boardId] : 0;
+    }
+
+    /*!
+     \brief Get FPGA major version as a string
+     \param boardId: board ID
+     \return A string that identifies the FPGA major version, "FPGA_V1", "FPGA_V2", or "FPGA_V3".
+             If version could not be identified, returns "FPGA_V?".
+    */
+    std::string GetFpgaVersionMajorString(unsigned char boardId) const;
+
+    /*!
+     \brief Get hardware version
+     \param boardId: board ID
+     \return unsigned long: hardware version (a 32-bit value that identifies the type of board
+             connected to the FPGA).
+    */
+    inline unsigned long GetHardwareVersion(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? HardwareVersion[boardId] : 0;
+    }
+
+    /*!
+     \brief Get hardware version as a string
+     \param boardId: board ID
+     \return A string that identifies the hardware version of the board connected to the FPGA (e.g., "QLA1")
+     \note Assumes that all valid (non-zero) hardware versions contain printable characters.
+    */
+    std::string GetHardwareVersionString(unsigned char boardId) const;
+
+    /*!
+     \brief Get full hardware version as a string (i.e., may include dSIB for dVRK-Si SUJ)
+     \param boardId: board ID
+     \return A string that identifies the hardware version of the board connected to the FPGA (e.g., "QLA1")
+     \note Assumes that all valid (non-zero) hardware versions contain printable characters.
+    */
+    std::string GetFullHardwareVersionString(unsigned char boardId) const;
+
+    /*!
+     \brief Add a hardware version to the list of supported (valid) hardware
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersion(unsigned long hver);
+
+    /*!
+     \brief Add a hardware version (specified as a 4-character string)
+            to the list of supported (valid) hardware.
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersionString(const std::string &hStr);
+
+    /*!
+     \brief Add comma-separated hardware versions (specified as 4-character strings)
+            to the list of supported (valid) hardware.
+     This method is static so that it can be called before the constructor.
+    */
+    static void AddHardwareVersionStringList(const std::string &hStr);
+
+    /*!
+     \brief Whether hardware version is valid (i.e., supported hardware)
+    */
+    static bool HardwareVersionValid(unsigned long hver);
+
+    /*!
+     \brief Get build system name (ISE or Vivado)
+    */
+    std::string GetBuildSystemString(unsigned char boardId) const;
+
+    /*!
+     \brief Whether dVRK-Si controller has SUJ interface
+    */
+    inline bool GetSiHasSUJ(unsigned char boardId) const {
+        return (boardId < BoardIO::MAX_BOARDS) ? SiHasSUJ[boardId] : false;
+    }
 
     // Get BroadcastReadInfo
     BroadcastReadInfo GetBroadcastReadInfo(void) const
     { return bcReadInfo; }
+
+    // Clear gapTime min/max
+    void ClearBroadcastReadInfo(void)
+    {  bcReadInfo.Clear(); }
 
     // Return string version of PortType
     static std::string PortTypeString(PortType portType);
@@ -274,13 +434,16 @@ public:
     // Helper function for parsing command line options.
     // In particular, this is typically called after a certain option, such as -p, is
     // recognized and it parses the rest of that option string:
-    // N                for FireWire, where N is the port number (backward compatibility)
-    // fw:N             for FireWire, where N is the port number
-    // eth:N            for raw Ethernet (PCAP), where N is the port number
-    // udp:xx.xx.xx.xx  for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    // N                  for FireWire, where N is the port number (backward compatibility)
+    // fw:N               for FireWire, where N is the port number
+    // eth:N              for raw Ethernet (PCAP), where N is the port number
+    // ethfw:N            as above, forcing bridge to FireWire if possible
+    // udp:xx.xx.xx.xx    for UDP, where xx.xx.xx.xx is the (optional) server IP address
+    // udpfw:xx.xx.xx.xx  as above, forcing bridge to FireWire if possible
     static bool ParseOptions(const char *arg, PortType &portType, int &portNum, std::string &IPaddr,
-                             std::ostream &ostr = std::cerr);
+                             bool &fwBridge, std::ostream &ostr = std::cerr);
 
+    static PortType DefaultPortType(void);
     static std::string DefaultPort(void);
 
     //*********************** Pure virtual methods **********************************
@@ -347,6 +510,14 @@ public:
     // Read all boards broadcasting
     virtual bool ReadAllBoardsBroadcast(void);
 
+    // Returns true if broadcast read packet contains boards in sequential order,
+    // starting with lowest numbered board
+    virtual bool isBroadcastReadOrdered(void) const { return true; }
+
+    // Return clock period used for broadcast read timing measurements
+    // 49.152 MHz, except 125 MHz when using FPGA V3 Ethernet-only
+    virtual double GetBroadcastReadClockPeriod(void) const;
+
     // Write to all boards
     virtual bool WriteAllBoards(void);
 
@@ -386,6 +557,14 @@ public:
      \brief Wait for broadcast read data to be available
     */
     virtual void WaitBroadcastRead(void) = 0;
+
+    /*!
+     \brief Receive the broadcast read response. This is usually a block read from
+            address 0x1000 (Hub memory); in the case of Ethernet-only, it receives
+            a response from an FPGA board some time after WriteBroadcastReadRequest
+            is issued.
+    */
+    virtual bool ReceiveBroadcastReadResponse(quadlet_t *rdata, unsigned int nbytes);
 
     /*!
      \brief Add delay (if needed) for PROM I/O operations
