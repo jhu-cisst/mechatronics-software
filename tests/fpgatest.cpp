@@ -29,6 +29,93 @@
 const uint32_t VALID_BIT        = 0x80000000;  /*!< High bit of 32-bit word */
 const uint32_t DAC_MASK         = 0x0000ffff;  /*!< Mask for 16-bit DAC values */
 
+
+void check_motor_config(AmpIO *curBoard)
+{
+    uint32_t mconfig;
+    for (unsigned int i = 0; i < curBoard->GetNumMotors(); i++) {
+        curBoard->ReadMotorConfig(i, mconfig);
+        std::cout << "Axis " << i << ":" << std::endl
+                  << "  motor config: " << std::hex << mconfig << std::dec << std::endl;
+        if (mconfig & AmpIO::MCFG_DIG_CUR_CONFIG)
+            std::cout << "  digital current control configured" << std::endl;
+        if (mconfig & AmpIO::MCFG_DIG_CUR_ACTIVE)
+            std::cout << "  digital current control active" << std::endl;
+    }
+}
+
+// Configure parameters for digital current control of axes 1-4 of PSM
+// Following parameters were previously hard-coded in CtrlCur.v
+void config_current_control(AmpIO *curBoard)
+{
+    curBoard->WriteCtrlCurrCO_cmd(0, 32788);
+    curBoard->WriteCtrlCurrCO_cmd(1, 32739);
+    curBoard->WriteCtrlCurrCO_cmd(2, 32830);
+    curBoard->WriteCtrlCurrCO_cmd(3, 32798);
+    curBoard->WriteCtrlCurrCO_fbBits(0, 32781);
+    curBoard->WriteCtrlCurrCO_fbBits(1, 32862);
+    curBoard->WriteCtrlCurrCO_fbBits(2, 32861);
+    curBoard->WriteCtrlCurrCO_fbBits(3, 32692);
+    curBoard->WriteCtrlCurrKp(0, 349);  // Kp_effective = 0.0426
+    curBoard->WriteCtrlCurrKp(1, 349);
+    curBoard->WriteCtrlCurrKp(2, 561);  // Kp_effective = 0.0685
+    curBoard->WriteCtrlCurrKp(3, 561);
+    curBoard->WriteCtrlCurrKiT(0, 59);  // Ki_eff = 827
+    curBoard->WriteCtrlCurrKiT(1, 59);
+    curBoard->WriteCtrlCurrKiT(2, 76);  // Ki_eff = 1069
+    curBoard->WriteCtrlCurrKiT(3, 76);
+    curBoard->WriteCtrlCurrKdT(0, 0);
+    curBoard->WriteCtrlCurrKdT(1, 0);
+    curBoard->WriteCtrlCurrKdT(2, 0);
+    curBoard->WriteCtrlCurrKdT(3, 0);
+    curBoard->WriteCtrlNshiftCurrKp(0, 13);
+    curBoard->WriteCtrlNshiftCurrKp(1, 13);
+    curBoard->WriteCtrlNshiftCurrKp(2, 13);
+    curBoard->WriteCtrlNshiftCurrKp(3, 13);
+    curBoard->WriteCtrlNshiftCurrKiT(0, 13);
+    curBoard->WriteCtrlNshiftCurrKiT(1, 13);
+    curBoard->WriteCtrlNshiftCurrKiT(2, 13);
+    curBoard->WriteCtrlNshiftCurrKiT(3, 13);
+    curBoard->WriteCtrlNshiftCurrKdT(0, 13);
+    curBoard->WriteCtrlNshiftCurrKdT(1, 13);
+    curBoard->WriteCtrlNshiftCurrKdT(2, 13);
+    curBoard->WriteCtrlNshiftCurrKdT(3, 13);
+}
+
+// Configure parameters for digital position control (on FPGA) of axes 1-4 of PSM
+// Following parameters were previously hard-coded in CtrlCur.v
+void config_position_control(AmpIO *curBoard)
+{
+    curBoard->WriteCtrlPosKp(0, 15904);
+    curBoard->WriteCtrlPosKp(1, 17696);
+    curBoard->WriteCtrlPosKp(2,  6991);
+    curBoard->WriteCtrlPosKp(3, 16000);
+    curBoard->WriteCtrlPosKiT(0, 1);
+    curBoard->WriteCtrlPosKiT(1, 2);
+    curBoard->WriteCtrlPosKiT(2, 3);
+    curBoard->WriteCtrlPosKiT(3, 3);
+    curBoard->WriteCtrlPosKdT(0, 256);
+    curBoard->WriteCtrlPosKdT(1, 276);
+    curBoard->WriteCtrlPosKdT(2, 27961);
+    curBoard->WriteCtrlPosKdT(3, 16000);
+    curBoard->WriteCtrlPosCF_out(0, 1);
+    curBoard->WriteCtrlPosCF_out(1, 1);
+    curBoard->WriteCtrlPosCF_out(2, 1);
+    curBoard->WriteCtrlPosCF_out(3, 1);
+    curBoard->WriteCtrlNshiftPosKp(0, 10);
+    curBoard->WriteCtrlNshiftPosKp(1, 10);
+    curBoard->WriteCtrlNshiftPosKp(2, 10);
+    curBoard->WriteCtrlNshiftPosKp(3, 11);
+    curBoard->WriteCtrlNshiftPosKiT(0, 15);
+    curBoard->WriteCtrlNshiftPosKiT(1, 15);
+    curBoard->WriteCtrlNshiftPosKiT(2, 13);
+    curBoard->WriteCtrlNshiftPosKiT(3, 13);
+    curBoard->WriteCtrlNshiftPosKdT(0, 0);
+    curBoard->WriteCtrlNshiftPosKdT(1, 0);
+    curBoard->WriteCtrlNshiftPosKdT(2, 6);
+    curBoard->WriteCtrlNshiftPosKdT(3, 11);
+}
+
 // CRC16-CCIT (also called CRC-ITU)
 const uint16_t crc16_table[256] = {
 	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -1659,6 +1746,16 @@ int main(int argc, char **argv)
         case 'r':
             if (curPort->IsOK())
                 curPort->CheckFwBusGeneration(curPortString, true);
+            break;
+
+        case 'Q':
+            // QLA digital control
+            check_motor_config(curBoard);
+            // Motor current controller
+            config_current_control(curBoard);
+            // Motor position controller
+            config_position_control(curBoard);
+            check_motor_config(curBoard);
             break;
 
         case 'R':

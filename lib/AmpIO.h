@@ -396,6 +396,9 @@ public:
                  over FireWire/Ethernet; invalid motor index
      */
     enum MotorConfigBitMask {
+        MCFG_DIG_CUR_CONFIG  = 0x08000000,           // 1 -> digital current control configured (QLA 1.5+)
+        MCFG_SET_DIG_CUR     = 0x08000000,           // 1 -> write new value of DIG_CUR_ACTIVE (QLA 1.5+)
+        MCFG_DIG_CUR_ACTIVE  = 0x04000000,           // 1 -> digital current control active (QLA 1.5+)
         MCFG_VOLTAGE_CONTROL = 0x02000000,           // 1 -> voltage control available (QLA 1.5+)
         MCFG_CURRENT_CONTROL = 0x01000000,           // 1 -> current control available (QLA)
         MCFG_SET_AMP_DELAY   = 0x02000000,           // 1 -> write new value of amplifier delay (QLA 1.5+)

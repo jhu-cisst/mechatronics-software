@@ -294,6 +294,7 @@ int main(int argc, char** argv)
                   << "'o': turn power on/off (board only)" << std::endl
                   << "'i': turn power on/off (axis only, requires board first)" << std::endl
                   << "'v': toggle voltage/current mode (QLA 1.5+)" << std::endl
+                  << "'Q': toggle digital current control mode (QLA 1.5+)" << std::endl
                   << "'f': toggle current feedback filter (dRAC)" << std::endl
                   << "'w': increment encoders" << std::endl
                   << "'s': decrement encoders" << std::endl
@@ -587,6 +588,25 @@ int main(int argc, char** argv)
                 unsigned int dx = lm+6+(curAxis-1)*13;
                 if (curAxis >= 10) dx--;
                 console.Print(5, dx, "Axis %d %c", curAxis, VoltageMode[curAxis-1] ? 'V' : 'I');
+            }
+        }
+        else if (c == 'Q') {
+            // For now, only allow one axis at a time
+            if (curAxis != 0) {
+                uint32_t mconfig;
+                unsigned int dx = lm+6+(curAxis-1)*13 + 8;
+                BoardList[curBoardIndex]->ReadMotorConfig(curAxisIndex, mconfig);
+                if (mconfig & AmpIO::MCFG_DIG_CUR_ACTIVE) {
+                    // Turn digital control off
+                    mconfig = AmpIO::MCFG_SET_DIG_CUR;
+                    console.Print(5, dx, " ");
+                }
+                else if (mconfig & AmpIO::MCFG_DIG_CUR_CONFIG) {
+                    // Turn digital control on, if it is configured
+                    mconfig = AmpIO::MCFG_SET_DIG_CUR | AmpIO::MCFG_DIG_CUR_ACTIVE;
+                    console.Print(5, dx, "d");   // indicate with a 'd' after 'V' or 'I'
+                }
+                BoardList[curBoardIndex]->WriteMotorConfig(curAxisIndex, mconfig);
             }
         }
         else if (c == 'f') {
