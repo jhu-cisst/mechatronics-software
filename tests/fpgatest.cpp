@@ -44,76 +44,98 @@ void check_motor_config(AmpIO *curBoard)
     }
 }
 
-// Configure parameters for digital current control of axes 1-4 of PSM
 // Following parameters were previously hard-coded in CtrlCur.v
+uint16_t CurrCO_cmd[4] = { 32788, 32739, 32830, 32798 };
+uint16_t CurrCO_fbBits[4] = {32781, 32862, 32861, 32692 };
+uint16_t CurrKp[4] = { 349, 349, 561, 561 };   // Kp_effective = 0.0426, 0.0685
+uint16_t CurrKiT[4] = {59, 59, 76, 76 };       // Ki_eff = 827, 1069
+
+// Configure parameters for digital current control of axes 1-4 of PSM
 void config_current_control(AmpIO *curBoard)
 {
-    curBoard->WriteCtrlCurrCO_cmd(0, 32788);
-    curBoard->WriteCtrlCurrCO_cmd(1, 32739);
-    curBoard->WriteCtrlCurrCO_cmd(2, 32830);
-    curBoard->WriteCtrlCurrCO_cmd(3, 32798);
-    curBoard->WriteCtrlCurrCO_fbBits(0, 32781);
-    curBoard->WriteCtrlCurrCO_fbBits(1, 32862);
-    curBoard->WriteCtrlCurrCO_fbBits(2, 32861);
-    curBoard->WriteCtrlCurrCO_fbBits(3, 32692);
-    curBoard->WriteCtrlCurrKp(0, 349);  // Kp_effective = 0.0426
-    curBoard->WriteCtrlCurrKp(1, 349);
-    curBoard->WriteCtrlCurrKp(2, 561);  // Kp_effective = 0.0685
-    curBoard->WriteCtrlCurrKp(3, 561);
-    curBoard->WriteCtrlCurrKiT(0, 59);  // Ki_eff = 827
-    curBoard->WriteCtrlCurrKiT(1, 59);
-    curBoard->WriteCtrlCurrKiT(2, 76);  // Ki_eff = 1069
-    curBoard->WriteCtrlCurrKiT(3, 76);
-    curBoard->WriteCtrlCurrKdT(0, 0);
-    curBoard->WriteCtrlCurrKdT(1, 0);
-    curBoard->WriteCtrlCurrKdT(2, 0);
-    curBoard->WriteCtrlCurrKdT(3, 0);
-    curBoard->WriteCtrlNshiftCurrKp(0, 13);
-    curBoard->WriteCtrlNshiftCurrKp(1, 13);
-    curBoard->WriteCtrlNshiftCurrKp(2, 13);
-    curBoard->WriteCtrlNshiftCurrKp(3, 13);
-    curBoard->WriteCtrlNshiftCurrKiT(0, 13);
-    curBoard->WriteCtrlNshiftCurrKiT(1, 13);
-    curBoard->WriteCtrlNshiftCurrKiT(2, 13);
-    curBoard->WriteCtrlNshiftCurrKiT(3, 13);
-    curBoard->WriteCtrlNshiftCurrKdT(0, 13);
-    curBoard->WriteCtrlNshiftCurrKdT(1, 13);
-    curBoard->WriteCtrlNshiftCurrKdT(2, 13);
-    curBoard->WriteCtrlNshiftCurrKdT(3, 13);
+    for (unsigned int i = 0; i < 4; i++) {
+        curBoard->WriteCtrlCurrCO_cmd(i, CurrCO_cmd[i]);
+        curBoard->WriteCtrlCurrCO_fbBits(i, CurrCO_fbBits[i]);
+        curBoard->WriteCtrlCurrKp(i, CurrKp[i]);
+        curBoard->WriteCtrlCurrKiT(i, CurrKiT[i]);
+        curBoard->WriteCtrlCurrKdT(i, 0);
+        curBoard->WriteCtrlNshiftCurrKp(i, 13);
+        curBoard->WriteCtrlNshiftCurrKiT(i, 13);
+        curBoard->WriteCtrlNshiftCurrKdT(i, 13);
+    }
+}
+
+void check_current_control_config(AmpIO *curBoard)
+{
+    uint16_t bits16;
+    uint8_t bits8;
+    unsigned int num_error = 0;
+    for (unsigned int i = 0; i < 4; i++) {
+        curBoard->ReadCtrlCurrCO_cmd(i, bits16);
+        if (bits16 != CurrCO_cmd[i]) {
+            std::cout << "Channel " << i << ", CO_cmd" << std::endl;
+            num_error++;
+        }
+        curBoard->ReadCtrlCurrCO_fbBits(i, bits16);
+        if (bits16 != CurrCO_fbBits[i]) {
+            std::cout << "Channel " << i << ", CO_fbBits" << std::endl;
+            num_error++;
+        }
+        curBoard->ReadCtrlCurrKp(i, bits16);
+        if (bits16 != CurrKp[i]) {
+            std::cout << "Channel " << i << ", CurrKp" << std::endl;
+            num_error++;
+        }
+        curBoard->ReadCtrlCurrKiT(i, bits16);
+        if (bits16 != CurrKiT[i]) {
+            std::cout << "Channel " << i << ", CurrKiT" << std::endl;
+            num_error++;
+        }
+        curBoard->ReadCtrlCurrKdT(i, bits16);
+        if (bits16 != 0) {
+            std::cout << "Channel " << i << ", CurrKdT" << std::endl;
+            num_error++;
+        }
+        curBoard->ReadCtrlNshiftCurrKp(i, bits8);
+        if (bits8 != 13) {
+            std::cout << "Channel " << i << ", NshiftCurrKp" << std::endl;
+            num_error++;
+        }
+        curBoard->ReadCtrlNshiftCurrKiT(i, bits8);
+        if (bits8 != 13) {
+            std::cout << "Channel " << i << ", NshiftCurrKiT" << std::endl;
+            num_error++;
+        }
+        curBoard->ReadCtrlNshiftCurrKdT(i, bits8);
+        if (bits8 != 13) {
+            std::cout << "Channel " << i << ", NshiftCurrKdT" << std::endl;
+            num_error++;
+        }
+    }
+    std::cout << "Total current controller config errors: " << num_error << std::endl;
 }
 
 // Configure parameters for digital position control (on FPGA) of axes 1-4 of PSM
 // Following parameters were previously hard-coded in CtrlCur.v
+
+uint16_t PosKp[4] = { 15904, 17696, 6991, 16000 };
+uint16_t PosKiT[4] = { 1, 2, 3, 3 };
+uint16_t PosKdT[4] = { 256, 276, 27961, 16000 };
+uint8_t NshiftPosKp[4] = { 10, 10, 10, 11 };
+uint8_t NshiftPosKiT[4] = { 15, 15, 13, 13 };
+uint8_t NshiftPosKdT[4] = { 0, 0, 6, 11 };
+
 void config_position_control(AmpIO *curBoard)
 {
-    curBoard->WriteCtrlPosKp(0, 15904);
-    curBoard->WriteCtrlPosKp(1, 17696);
-    curBoard->WriteCtrlPosKp(2,  6991);
-    curBoard->WriteCtrlPosKp(3, 16000);
-    curBoard->WriteCtrlPosKiT(0, 1);
-    curBoard->WriteCtrlPosKiT(1, 2);
-    curBoard->WriteCtrlPosKiT(2, 3);
-    curBoard->WriteCtrlPosKiT(3, 3);
-    curBoard->WriteCtrlPosKdT(0, 256);
-    curBoard->WriteCtrlPosKdT(1, 276);
-    curBoard->WriteCtrlPosKdT(2, 27961);
-    curBoard->WriteCtrlPosKdT(3, 16000);
-    curBoard->WriteCtrlPosCF_out(0, 1);
-    curBoard->WriteCtrlPosCF_out(1, 1);
-    curBoard->WriteCtrlPosCF_out(2, 1);
-    curBoard->WriteCtrlPosCF_out(3, 1);
-    curBoard->WriteCtrlNshiftPosKp(0, 10);
-    curBoard->WriteCtrlNshiftPosKp(1, 10);
-    curBoard->WriteCtrlNshiftPosKp(2, 10);
-    curBoard->WriteCtrlNshiftPosKp(3, 11);
-    curBoard->WriteCtrlNshiftPosKiT(0, 15);
-    curBoard->WriteCtrlNshiftPosKiT(1, 15);
-    curBoard->WriteCtrlNshiftPosKiT(2, 13);
-    curBoard->WriteCtrlNshiftPosKiT(3, 13);
-    curBoard->WriteCtrlNshiftPosKdT(0, 0);
-    curBoard->WriteCtrlNshiftPosKdT(1, 0);
-    curBoard->WriteCtrlNshiftPosKdT(2, 6);
-    curBoard->WriteCtrlNshiftPosKdT(3, 11);
+    for (unsigned int i = 0; i < 4; i++) {
+        curBoard->WriteCtrlPosKp(i, PosKp[i]);
+        curBoard->WriteCtrlPosKiT(i, PosKiT[i]);
+        curBoard->WriteCtrlPosKdT(i, PosKdT[i]);
+        curBoard->WriteCtrlPosCF_out(i, 1);
+        curBoard->WriteCtrlNshiftPosKp(i, NshiftPosKp[i]);
+        curBoard->WriteCtrlNshiftPosKiT(i, NshiftPosKiT[i]);
+        curBoard->WriteCtrlNshiftPosKdT(i, NshiftPosKdT[i]);
+    }
 }
 
 // CRC16-CCIT (also called CRC-ITU)
@@ -1488,6 +1510,7 @@ int main(int argc, char **argv)
         if (curBoardFw && curBoardEth)
             std::cout << "  p) Toggle port (" << FwPortString << " or " << EthPortString << ")" << std::endl;
         std::cout << "  P) Compute Ethernet PHY IDs" << std::endl;
+        std::cout << "  Q) Configure QLA digital controller (QLA 1.5+)" << std::endl;
         std::cout << "  r) Check Firewire bus generation and rescan if needed" << std::endl;
         if (!FwPortIsZynq && (curPort == FwPort))
             std::cout << "  R) Read Firewire Configuration ROM" << std::endl;
@@ -1743,11 +1766,6 @@ int main(int argc, char **argv)
             ComputePhyId(0xfa610e, 0x01, 0x0, "JHU LCSR", 0, 0);
             break;
 
-        case 'r':
-            if (curPort->IsOK())
-                curPort->CheckFwBusGeneration(curPortString, true);
-            break;
-
         case 'Q':
             // QLA digital control
             check_motor_config(curBoard);
@@ -1756,6 +1774,11 @@ int main(int argc, char **argv)
             // Motor position controller
             config_position_control(curBoard);
             check_motor_config(curBoard);
+            break;
+
+        case 'r':
+            if (curPort->IsOK())
+                curPort->CheckFwBusGeneration(curPortString, true);
             break;
 
         case 'R':
