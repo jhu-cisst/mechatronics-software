@@ -73,42 +73,42 @@ void check_current_control_config(AmpIO *curBoard)
     for (unsigned int i = 0; i < 4; i++) {
         curBoard->ReadCtrlCurrCO_cmd(i, bits16);
         if (bits16 != CurrCO_cmd[i]) {
-            std::cout << "Channel " << i << ", CO_cmd" << std::endl;
+            std::cout << "Channel " << i << ", CO_cmd, got " << bits16 << ", expected " << CurrCO_cmd[i] << std::endl;
             num_error++;
         }
         curBoard->ReadCtrlCurrCO_fbBits(i, bits16);
         if (bits16 != CurrCO_fbBits[i]) {
-            std::cout << "Channel " << i << ", CO_fbBits" << std::endl;
+            std::cout << "Channel " << i << ", CO_fbBits, got " << bits16 << ", expected " << CurrCO_fbBits[i] << std::endl;
             num_error++;
         }
         curBoard->ReadCtrlCurrKp(i, bits16);
         if (bits16 != CurrKp[i]) {
-            std::cout << "Channel " << i << ", CurrKp" << std::endl;
+            std::cout << "Channel " << i << ", CurrKp, got " << bits16 << ", expected " << CurrKp[i] << std::endl;
             num_error++;
         }
         curBoard->ReadCtrlCurrKiT(i, bits16);
         if (bits16 != CurrKiT[i]) {
-            std::cout << "Channel " << i << ", CurrKiT" << std::endl;
+            std::cout << "Channel " << i << ", CurrKiT, got " << bits16 << ", expected " << CurrKiT[i] << std::endl;
             num_error++;
         }
         curBoard->ReadCtrlCurrKdT(i, bits16);
         if (bits16 != 0) {
-            std::cout << "Channel " << i << ", CurrKdT" << std::endl;
+            std::cout << "Channel " << i << ", CurrKdT, got " << bits16 << ", expected 0" << std::endl;
             num_error++;
         }
         curBoard->ReadCtrlNshiftCurrKp(i, bits8);
         if (bits8 != 13) {
-            std::cout << "Channel " << i << ", NshiftCurrKp" << std::endl;
+            std::cout << "Channel " << i << ", NshiftCurrKp, got " << static_cast<int>(bits8) << ", expected 13 " << std::endl;
             num_error++;
         }
         curBoard->ReadCtrlNshiftCurrKiT(i, bits8);
         if (bits8 != 13) {
-            std::cout << "Channel " << i << ", NshiftCurrKiT" << std::endl;
+            std::cout << "Channel " << i << ", NshiftCurrKiT, got " << static_cast<int>(bits8) << ", expected 13 " << std::endl;
             num_error++;
         }
         curBoard->ReadCtrlNshiftCurrKdT(i, bits8);
         if (bits8 != 13) {
-            std::cout << "Channel " << i << ", NshiftCurrKdT" << std::endl;
+            std::cout << "Channel " << i << ", NshiftCurrKdT, got " << static_cast<int>(bits8) << ", expected 13 " << std::endl;
             num_error++;
         }
     }
@@ -1771,6 +1771,7 @@ int main(int argc, char **argv)
             check_motor_config(curBoard);
             // Motor current controller
             config_current_control(curBoard);
+            check_current_control_config(curBoard);
             // Motor position controller
             config_position_control(curBoard);
             check_motor_config(curBoard);
