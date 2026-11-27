@@ -19,7 +19,7 @@ Documentation for the software is on the [wiki](http://github.com/jhu-cisst/mech
 This project may be licensed under either of:
 
 * [CISST license](./LICENSE-CISST)
-* [MIT license](./LICENSE-MIT)
+* [MIT license](./LICENSE)
 
 # Compilation status
 
