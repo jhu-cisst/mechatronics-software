@@ -14,6 +14,13 @@ The following directories are included:
 
 Documentation for the software is on the [wiki](http://github.com/jhu-cisst/mechatronics-software/wiki).
 
+# License
+
+This project may be licensed under either of:
+
+* [CISST license](./LICENSE-CISST)
+* [MIT license](./LICENSE)
+
 # Compilation status
 
 Linux gcc/clang and Windows cl for both Debug and Release configurations:<br>
